@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "heaton-life"
+version = "0.0.1"
+description = "Emergence algorithms: cellular automata, Lenia, fractals, boids, and reaction-diffusion."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Jeff Heaton" }]
+keywords = ["cellular-automata", "lenia", "fractals", "boids", "reaction-diffusion", "mergelife", "emergence", "artificial-life"]
+dependencies = [
+    "numpy>=1.24",
+    "pillow>=10.0",
+]
+
+[project.optional-dependencies]
+playground = ["PyQt6>=6.6"]
+precision = ["gmpy2>=2.1"]   # fast deep-zoom reference orbits; mpmath fallback is built in
+video = ["imageio[ffmpeg]>=2.31"]
+fast = ["numba>=0.59"]
+dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
+
+# GUI entry point (uncomment when heaton_life.playground lands — Phase 2):
+# [project.gui-scripts]
+# heaton-life = "heaton_life.playground.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/heaton_life"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+strict = true
+packages = ["heaton_life"]
+mypy_path = "src"
