@@ -1,0 +1,28 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_00032.png",
+      "step": 32
+    },
+    {
+      "file": "state_00064.png",
+      "step": 64
+    }
+  ],
+  "family": "lifelike",
+  "params": {
+    "boundary": "torus",
+    "density": 0.35,
+    "height": 16,
+    "init": "array",
+    "rule": "B3/S23",
+    "seed": 0,
+    "width": 16
+  },
+  "spec_version": "0.1.0",
+  "tier": "bit-exact"
+}
