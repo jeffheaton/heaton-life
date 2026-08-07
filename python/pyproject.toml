@@ -22,9 +22,8 @@ video = ["imageio[ffmpeg]>=2.31"]
 fast = ["numba>=0.59"]
 dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
 
-# GUI entry point (uncomment when heaton_life.playground lands — Phase 2):
-# [project.gui-scripts]
-# heaton-life = "heaton_life.playground.__main__:main"
+[project.gui-scripts]
+heaton-life = "heaton_life.playground:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/heaton_life"]

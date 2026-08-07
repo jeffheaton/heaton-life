@@ -16,13 +16,20 @@ from heaton_life.init import blob, single, soup
 
 @dataclasses.dataclass(frozen=True)
 class LifeLikeParams(Params):
-    rule: str = "B3/S23"
-    width: int = 256
-    height: int = 256
-    init: str = "soup"
-    density: float = 0.35
-    seed: int = 0
-    boundary: str = "torus"
+    # Field metadata documents the spec'd ranges/choices; UIs build forms from it.
+    rule: str = dataclasses.field(default="B3/S23", metadata={"label": "Rule (B/S)"})
+    width: int = dataclasses.field(default=256, metadata={"min": 8, "max": 2048})
+    height: int = dataclasses.field(default=256, metadata={"min": 8, "max": 2048})
+    init: str = dataclasses.field(
+        default="soup", metadata={"choices": ["soup", "blob", "single"]}
+    )
+    density: float = dataclasses.field(
+        default=0.35, metadata={"min": 0.0, "max": 1.0, "step": 0.01}
+    )
+    seed: int = dataclasses.field(
+        default=0, metadata={"min": 0, "max": 4294967295, "role": "seed"}
+    )
+    boundary: str = dataclasses.field(default="torus", metadata={"choices": ["torus", "dead"]})
 
 
 class LifeLike:

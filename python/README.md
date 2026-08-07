@@ -33,8 +33,12 @@ img = frac.render((1920, 1080), hl.Viewport(
 ## Playground
 
 ```bash
-python -m heaton_life.playground   # once Phase 2 lands
+pip install -e ".[playground]"
+heaton-life                        # or: python -m heaton_life.playground
 ```
+
+Space = play/pause, N = single step, R = reset, Ctrl+S = save PNG. The parameter
+form is generated from each family's params dataclass — new families get a UI for free.
 
 ## Layout
 

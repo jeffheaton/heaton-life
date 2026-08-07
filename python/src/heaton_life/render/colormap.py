@@ -14,6 +14,11 @@ _ANCHORS: dict[str, list[tuple[int, int, int]]] = {
 }
 
 
+def list_colormaps() -> list[str]:
+    """Names of the built-in colormaps."""
+    return sorted(_ANCHORS)
+
+
 def get_colormap(name: str) -> NDArray[np.uint8]:
     """Return a (256, 3) uint8 LUT for a named colormap."""
     try:

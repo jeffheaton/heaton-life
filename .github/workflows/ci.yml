@@ -19,11 +19,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Qt system libraries (for PyQt6 offscreen)
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0
       - name: Install
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev,playground]"
       - name: Lint
         run: ruff check src tests tools
       - name: Types
         run: mypy
-      - name: Tests (includes conformance vectors)
+      - name: Tests (includes conformance vectors + offscreen playground)
         run: pytest -q
+        env:
+          QT_QPA_PLATFORM: offscreen

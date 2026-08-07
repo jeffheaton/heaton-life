@@ -19,7 +19,7 @@ The goal is one complete vertical slice that exercises every core abstraction.
 
 **Done when:** `hl.render.animate(hl.ca.LifeLike("B3/S23", size=(256,256), seed=42), steps=500).save("life.gif")` works and the vector suite passes.
 
-## Phase 2 — Playground skeleton (PyQt6)
+## Phase 2 — Playground skeleton (PyQt6) ✅
 
 Built early on purpose: the playground is the library's first real consumer and will shake out API flaws while they're cheap to fix.
 
