@@ -46,15 +46,16 @@ Built early on purpose: the playground is the library's first real consumer and 
 - `lenia/`: shared ring-kernel builder; `classic.py`, then `asymptotic.py` (same engine, different update), `flow.py` last (mass-conserving bilinear reintegration). Single-channel `(H, W)` state; the kernel/FFT utilities are channel-agnostic so multi-channel is a loop, not a rewrite.
 - Playground: stamp/seed paint tools, per-family preset dropdowns.
 
-## Phase 5 — Fractals + deep zoom
+## Phase 5 — Fractals + deep zoom ✅
 
 Per `spec/deep-zoom.md` (contract already in core since Phase 1):
 
 - Escape-time engine, T0 float64 direct path; smooth coloring.
-- Perturbation + rebasing engine (T1): gmpy2/mpmath shim, cached reference orbits, NumPy lockstep iteration with fancy-indexed `Z[m]` gather; optional numba kernel.
-- `mandelbrot.py`, `julia.py`, `burning_ship.py` (diffabs), `newton.py` (T0 only).
-- Playground: click/scroll zoom + pan, progressive refinement with cancellation, "zoom movie" export.
-- Vectors: iteration-count grids (bit-exact) incl. deep-zoom cases with exported reference orbits.
+- Perturbation + rebasing engine (T1): gmpy2/mpmath shim (backends verified bit-identical), cached reference orbits, NumPy lockstep iteration with fancy-indexed `Z[m]` gather.
+- Mandelbrot, Julia, Burning Ship (diffabs), Newton (T0 only) — T1 validated against T0 (exact for Julia/Ship; Mandelbrot agreement equals T0's own 1-ulp chaos bound).
+- Playground: click/wheel zoom (cursor-anchored, Decimal-precise recentering), pan via Ctrl-click; zoom movies via `fractal.zoom_animation`.
+- Vectors: int32 iteration/root grids (bit-exact) incl. a deep-zoom case with its exported reference orbit.
+- Deferred to Phase 7: progressive refinement with cancellation (renders are single-pass), optional numba kernels.
 
 ## Phase 6 — Boids
 

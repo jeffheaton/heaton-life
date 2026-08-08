@@ -86,6 +86,7 @@ class MainWindow(QMainWindow):
         self._engine.frame_ready.connect(self._on_frame)
         self._engine.stats.connect(self._on_stats)
         self._engine.error.connect(self._on_engine_error)
+        self._engine.params_updated.connect(self._on_engine_params)
 
         # Transport (top)
         self.transport = Transport(self)
@@ -208,6 +209,11 @@ class MainWindow(QMainWindow):
         bar = self.statusBar()
         if bar is not None:
             bar.showMessage(message, 5000)
+
+    def _on_engine_params(self, params: object) -> None:
+        """Engine-side param change (click/wheel zoom): sync the form silently."""
+        if self._form is not None and isinstance(params, Params):
+            self._form.set_values(params.to_dict())
 
     # -- snapshot ------------------------------------------------------------------------
 

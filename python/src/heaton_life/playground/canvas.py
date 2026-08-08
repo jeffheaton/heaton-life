@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 from numpy.typing import NDArray
 from PyQt6.QtCore import QPoint, QRect, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QImage, QMouseEvent, QPainter, QPaintEvent
+from PyQt6.QtGui import QColor, QImage, QMouseEvent, QPainter, QPaintEvent, QWheelEvent
 from PyQt6.QtWidgets import QWidget
 
 
@@ -23,6 +23,7 @@ class Canvas(QWidget):
         self._rgb: NDArray[np.uint8] | None = None
         self._target: QRect | None = None
         self._last_paint: tuple[int, int, int] | None = None
+        self._wheel_accum = 0
         self.generation = 0
         self.setMinimumSize(320, 320)
 
@@ -77,6 +78,17 @@ class Canvas(QWidget):
 
     def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:
         self._last_paint = None
+
+    def wheelEvent(self, event: QWheelEvent | None) -> None:
+        if event is None:
+            return
+        self._wheel_accum += event.angleDelta().y()
+        if abs(self._wheel_accum) < 120:  # one notch; trackpads drip small deltas
+            return
+        code = 4 if self._wheel_accum > 0 else 5
+        self._wheel_accum = 0
+        self._last_paint = None
+        self._emit_paint(event.position().toPoint(), code)
 
     @staticmethod
     def _button_code(button: Qt.MouseButton, modifiers: Qt.KeyboardModifier) -> int:

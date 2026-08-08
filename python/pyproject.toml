@@ -13,6 +13,7 @@ keywords = ["cellular-automata", "lenia", "fractals", "boids", "reaction-diffusi
 dependencies = [
     "numpy>=1.24",
     "pillow>=10.0",
+    "mpmath>=1.3",  # deep-zoom reference orbits (pure-Python fallback; gmpy2 extra is the fast path)
 ]
 
 [project.optional-dependencies]
@@ -20,7 +21,7 @@ playground = ["PyQt6>=6.6"]
 precision = ["gmpy2>=2.1"]   # fast deep-zoom reference orbits; mpmath fallback is built in
 video = ["imageio[ffmpeg]>=2.31"]
 fast = ["numba>=0.59"]
-dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
+dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10", "gmpy2>=2.1"]
 
 [project.gui-scripts]
 heaton-life = "heaton_life.playground:main"
@@ -39,3 +40,7 @@ testpaths = ["tests"]
 strict = true
 packages = ["heaton_life"]
 mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = ["gmpy2", "mpmath"]
+ignore_missing_imports = true

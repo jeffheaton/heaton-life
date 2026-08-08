@@ -17,17 +17,20 @@ import heaton_life as hl
 
 sim = hl.ca.LifeLike("B3/S23", size=(256, 256), init="soup", seed=42)
 hl.render.animate(sim, steps=500, cmap="phosphor").save("life.gif")
-```
 
-## Intended API for later phases (aspirational — see ../ROADMAP.md for status)
-
-```python
+# Deep zoom: float64 pixelates near 1e13; this renders via perturbation + rebasing.
 frac = hl.fractal.Mandelbrot(max_iter=5000)
-img = frac.render((1920, 1080), hl.Viewport(
+field = frac.render((1920, 1080), hl.Viewport(
     center_re="-0.743643887037158704752191506114774",
     center_im="0.131825904205311970493132056385139",
-    zoom_log10=11.5,
+    zoom_log10=14.0,
 ))
+hl.render.to_image(field, cmap="fire").save("deep.png")
+
+# Zoom movie:
+hl.fractal.zoom_animation(frac, (512, 512), hl.Viewport(
+    center_re="-0.7435", center_im="0.1314", zoom_log10=4.0,
+), steps=90, cmap="fire").save("zoom.gif")
 ```
 
 ## Playground

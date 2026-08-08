@@ -19,7 +19,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from heaton_life.ca import LifeLike, Wireworld, wireworld_from_text
 from heaton_life.conformance import CODECS, TIERS, build_sim
+from heaton_life.core.bignum import reference_orbit
 from heaton_life.core.protocols import Simulation
+from heaton_life.core.viewport import Viewport
+from heaton_life.fractal import BurningShip, Julia, Mandelbrot, Newton
 from heaton_life.init import place, rle_decode
 
 SPEC_VERSION = "0.2.0"
@@ -197,7 +200,83 @@ def main() -> None:
         [0, 1, 10, 50],
     )
 
+    # -- fractals (one-shot renders: params + viewport + int32 outputs) --------------
+    write_fractal_case(
+        "mandelbrot", "home-64",
+        Mandelbrot(max_iter=500),
+        {"max_iter": 500, "escape_radius": 1000.0},
+        Viewport("-0.5", "0.0", 0.0), (64, 64),
+    )
+    write_fractal_case(
+        "mandelbrot", "deep-zoom14-48",
+        Mandelbrot(max_iter=5000),
+        {"max_iter": 5000, "escape_radius": 1000.0},
+        Viewport(
+            "-0.743643887037158704752191506114774",
+            "0.131825904205311970493132056385139",
+            14.0,
+        ),
+        (48, 48),
+        orbit_kind="mandelbrot",
+    )
+    write_fractal_case(
+        "julia", "classic-64",
+        Julia(max_iter=500),
+        {"c_re": -0.7269, "c_im": 0.1889, "max_iter": 500, "escape_radius": 1000.0},
+        Viewport("0.0", "0.0", 0.0), (64, 64),
+    )
+    write_fractal_case(
+        "burning-ship", "home-64",
+        BurningShip(max_iter=500),
+        {"max_iter": 500, "escape_radius": 1000.0},
+        Viewport("-0.5", "-0.5", -0.2), (64, 64),
+    )
+    write_fractal_case(
+        "newton", "z3-64",
+        Newton(degree=3, max_iter=60),
+        {"degree": 3, "max_iter": 60},
+        Viewport("0.0", "0.0", -0.1), (64, 64),
+    )
+
     print("done")
+
+
+def write_fractal_case(
+    family: str,
+    name: str,
+    field: Any,
+    params: dict[str, Any],
+    viewport: Viewport,
+    size: tuple[int, int],
+    orbit_kind: str | None = None,
+) -> None:
+    case_dir = VECTOR_ROOT / family / name
+    case_dir.mkdir(parents=True, exist_ok=True)
+    outputs = []
+    for kind, grid in field.outputs(size, viewport).items():
+        file = f"{kind}.i32"
+        (case_dir / file).write_bytes(np.ascontiguousarray(grid, dtype="<i4").tobytes())
+        outputs.append({"kind": kind, "file": file, "shape": list(grid.shape)})
+    meta: dict[str, Any] = {
+        "spec_version": SPEC_VERSION,
+        "family": family,
+        "tier": "bit-exact",
+        "params": params,
+        "viewport": viewport.to_dict(),
+        "size": list(size),
+        "outputs": outputs,
+    }
+    if orbit_kind is not None:
+        orbit = reference_orbit(
+            orbit_kind, viewport.center_re, viewport.center_im,
+            viewport.zoom_log10, params["max_iter"],
+        )
+        (case_dir / "orbit.c128").write_bytes(
+            np.ascontiguousarray(orbit, dtype="<c16").tobytes()
+        )
+        meta["reference_orbit"] = {"file": "orbit.c128", "length": len(orbit)}
+    (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+    print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
 
 
 if __name__ == "__main__":

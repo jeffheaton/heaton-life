@@ -98,16 +98,17 @@ def test_snapshot_png(window: MainWindow, tmp_path) -> None:
 
 
 def test_switch_family_loads_engine_and_form(window: MainWindow) -> None:
-    for key, frame_shape in [
-        ("elementary", (256, 256)),
-        ("cyclic", (256, 256)),
-        ("wireworld", (64, 64)),
-        ("mergelife", (128, 128, 3)),
-        ("grayscott", (256, 256)),
-        ("lenia-classic", (128, 128)),
-        ("lenia-asymptotic", (128, 128)),
-        ("lenia-flow", (128, 128)),
-        ("lifelike", (256, 256)),
+    for key, frame_shape, steps in [
+        ("elementary", (256, 256), True),
+        ("cyclic", (256, 256), True),
+        ("wireworld", (64, 64), True),
+        ("mergelife", (128, 128, 3), True),
+        ("grayscott", (256, 256), True),
+        ("lenia-classic", (128, 128), True),
+        ("lenia-asymptotic", (128, 128), True),
+        ("lenia-flow", (128, 128), True),
+        ("newton", (384, 384), False),  # fractals don't step
+        ("lifelike", (256, 256), True),
     ]:
         window.select_family(key)
         assert window._engine._sim is not None, key
@@ -115,7 +116,31 @@ def test_switch_family_loads_engine_and_form(window: MainWindow) -> None:
         frame = window._engine._sim.frame()
         assert frame.shape == frame_shape, key
         window._bridge.sig_step.emit()
-        assert window._engine.generation == 1, key
+        assert window._engine.generation == (1 if steps else 0), key
+
+
+def test_fractal_click_zoom_updates_params_and_form(window: MainWindow) -> None:
+    window.select_family("mandelbrot")
+    engine = window._engine
+    assert engine._params is not None
+    zoom_before = engine._params.zoom_log10  # type: ignore[attr-defined]
+    window._bridge.sig_paint.emit(96, 96, 1)  # click upper-left quadrant: recenter + zoom
+    assert engine._params.zoom_log10 == pytest.approx(zoom_before + 0.602, abs=0.01)  # type: ignore[attr-defined]
+    assert engine._params.center_re != "-0.5"  # type: ignore[attr-defined]
+    assert window._form is not None
+    # the spinbox displays 3 decimals, so the synced value is rounded
+    assert window._form.values()["zoom_log10"] == pytest.approx(
+        engine._params.zoom_log10, abs=2e-3  # type: ignore[attr-defined]
+    )
+
+
+def test_wheel_zoom_ignored_by_grid_families(window: MainWindow) -> None:
+    window.select_family("lifelike")
+    engine = window._engine
+    assert engine._sim is not None
+    before = engine._sim.state.copy()
+    window._bridge.sig_paint.emit(3, 3, 4)  # wheel code must not paint cells
+    assert np.array_equal(engine._sim.state, before)
 
 
 def test_paint_sets_cells(window: MainWindow) -> None:

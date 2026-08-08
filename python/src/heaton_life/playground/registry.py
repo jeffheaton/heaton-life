@@ -35,10 +35,24 @@ from heaton_life.lenia import (
     FlowLeniaParams,
     LeniaParams,
 )
+from heaton_life.playground.fractal_sim import (
+    BurningShipSimParams,
+    FractalSim,
+    JuliaSimParams,
+    MandelbrotSimParams,
+    NewtonSimParams,
+    make_burning_ship,
+    make_julia,
+    make_mandelbrot,
+    make_newton,
+    zoom_paint,
+)
 from heaton_life.rd import GRAY_SCOTT_PRESETS, GrayScott, GrayScottParams
 
-# Paint buttons: 1 = left, 2 = right, 3 = modifier+left.
-PaintFn = Callable[[Simulation, int, int, int], None]
+# Paint buttons: 1 = left, 2 = right, 3 = modifier+left, 4/5 = wheel in/out.
+# A paint fn may mutate in place (return None) or return a replacement Simulation
+# (fractal zoom); the engine swaps it in and echoes the new params to the form.
+PaintFn = Callable[[Simulation, int, int, int], Simulation | None]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -56,6 +70,8 @@ class Family:
     default_cmap: str
     presets: dict[str, dict[str, object]]
     paint: PaintFn | None = None
+    wheel_zoom: bool = False
+    """Route wheel events (buttons 4/5) to paint; only navigation-style families want this."""
 
 
 FAMILIES: dict[str, Family] = {}
@@ -466,6 +482,121 @@ register(
         },
         paint=_paint_lenia,
     )
+)
+
+
+# -- Fractals -----------------------------------------------------------------------------
+
+
+def _validate_fractal(params: Params) -> tuple[str, str] | None:
+    import decimal
+
+    for field in ("center_re", "center_im"):
+        try:
+            decimal.Decimal(getattr(params, field))
+        except decimal.InvalidOperation:
+            return (field, f"{field} must be a decimal number string")
+    return None
+
+
+def _register_fractal(
+    key: str,
+    label: str,
+    params_cls: type[Params],
+    make_field: Callable[[Params], object],
+    default_cmap: str,
+    presets: dict[str, dict[str, object]],
+    zoom_max: float = 290.0,
+) -> None:
+    def build(params: Params) -> Simulation:
+        return FractalSim(params, make_field)  # type: ignore[arg-type]
+
+    def paint(sim: Simulation, x: int, y: int, button: int) -> Simulation | None:
+        assert isinstance(sim, FractalSim)
+        return zoom_paint(sim, x, y, button, build, zoom_max)  # type: ignore[arg-type]
+
+    register(
+        Family(
+            key=key,
+            label=label,
+            category="Fractals",
+            params_cls=params_cls,
+            build=build,
+            hot_fields=frozenset(),  # every change re-renders; build handles all
+            hot_apply=lambda _sim, params: build(params),
+            validate=_validate_fractal,
+            default_cmap=default_cmap,
+            presets=presets,
+            paint=paint,
+            wheel_zoom=True,
+        )
+    )
+
+
+_register_fractal(
+    "mandelbrot",
+    "Mandelbrot",
+    MandelbrotSimParams,
+    make_mandelbrot,
+    "fire",
+    {
+        "Home": {},
+        "Seahorse valley": {
+            "center_re": "-0.7435",
+            "center_im": "0.1314",
+            "zoom_log10": 2.5,
+            "max_iter": 2000,
+        },
+        "Past float64 (1e14)": {
+            "center_re": "-0.743643887037158704752191506114774",
+            "center_im": "0.131825904205311970493132056385139",
+            "zoom_log10": 14.0,
+            "max_iter": 5000,
+        },
+    },
+)
+
+_register_fractal(
+    "julia",
+    "Julia",
+    JuliaSimParams,
+    make_julia,
+    "ice",
+    {
+        "Classic": {},
+        "Douady rabbit": {"c_re": -0.123, "c_im": 0.745},
+        "Dendrite (c = i)": {"c_re": 0.0, "c_im": 1.0},
+    },
+)
+
+_register_fractal(
+    "burning-ship",
+    "Burning Ship",
+    BurningShipSimParams,
+    make_burning_ship,
+    "violet",
+    {
+        "Full ship": {},
+        "Antenna armada": {
+            "center_re": "-1.755",
+            "center_im": "-0.03",
+            "zoom_log10": 1.8,
+            "max_iter": 1500,
+        },
+    },
+)
+
+_register_fractal(
+    "newton",
+    "Newton",
+    NewtonSimParams,
+    make_newton,
+    "rainbow",
+    {
+        "z³ − 1": {},
+        "z⁵ − 1": {"degree": 5},
+    },
+    zoom_max=12.0,
 )
 
 

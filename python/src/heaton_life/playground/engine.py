@@ -24,6 +24,7 @@ class SimEngine(QObject):
     frame_ready = pyqtSignal(object, int)  # rgb HxWx3 uint8, generation
     stats = pyqtSignal(int, float)  # generation, achieved steps/sec
     error = pyqtSignal(str)
+    params_updated = pyqtSignal(object)  # engine-side param change (e.g. click-zoom)
 
     def __init__(self) -> None:
         super().__init__()
@@ -120,10 +121,16 @@ class SimEngine(QObject):
         family = self._family
         if family is None or self._sim is None or family.paint is None:
             return
+        if button in (4, 5) and not family.wheel_zoom:
+            return
         try:
-            family.paint(self._sim, x, y, button)
+            replacement = family.paint(self._sim, x, y, button)
         except (IndexError, ValueError):
             return
+        if replacement is not None:
+            self._sim = replacement
+            self._params = replacement.params  # type: ignore[attr-defined]
+            self.params_updated.emit(self._params)
         self._publish(force=True)
 
     def frame_shown(self) -> None:
