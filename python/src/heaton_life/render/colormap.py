@@ -11,6 +11,19 @@ _ANCHORS: dict[str, list[tuple[int, int, int]]] = {
     "fire": [(0, 0, 0), (120, 16, 0), (255, 140, 0), (255, 255, 220)],
     "ice": [(0, 0, 0), (0, 40, 110), (70, 160, 255), (230, 250, 255)],
     "violet": [(8, 4, 16), (90, 30, 140), (200, 100, 255), (255, 240, 255)],
+    # Anchors land exactly on indices 0/85/170/255 -> Wireworld's 4 states get the
+    # classic empty/head/tail/conductor colors when frames are encoded as state*85.
+    "wireworld": [(0, 0, 0), (70, 130, 255), (255, 80, 60), (255, 210, 70)],
+    # Closed hue wheel: index 255 matches index 0, which suits cyclic CA states.
+    "rainbow": [
+        (220, 40, 40),
+        (230, 200, 40),
+        (60, 200, 70),
+        (50, 200, 220),
+        (70, 70, 230),
+        (200, 60, 220),
+        (220, 40, 40),
+    ],
 }
 
 

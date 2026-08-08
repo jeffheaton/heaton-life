@@ -43,6 +43,7 @@ class EngineBridge(QObject):
     sig_reset = pyqtSignal()
     sig_speed = pyqtSignal(int)
     sig_cmap = pyqtSignal(str)
+    sig_paint = pyqtSignal(int, int, int)
     sig_shutdown = pyqtSignal()
 
 
@@ -73,6 +74,7 @@ class MainWindow(QMainWindow):
         self._bridge.sig_reset.connect(self._engine.reset)
         self._bridge.sig_speed.connect(self._engine.set_speed)
         self._bridge.sig_cmap.connect(self._engine.set_cmap)
+        self._bridge.sig_paint.connect(self._engine.paint)
         self._bridge.sig_shutdown.connect(self._engine.shutdown)
 
         # Canvas (center)
@@ -80,6 +82,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.canvas)
         self._engine.frame_ready.connect(self.canvas.show_frame)
         self.canvas.frame_shown.connect(self._engine.frame_shown)
+        self.canvas.cell_pressed.connect(self._bridge.sig_paint.emit)
         self._engine.frame_ready.connect(self._on_frame)
         self._engine.stats.connect(self._on_stats)
         self._engine.error.connect(self._on_engine_error)
@@ -142,6 +145,7 @@ class MainWindow(QMainWindow):
 
         if self._form is not None:
             self._form_layout.removeWidget(self._form)
+            self._form.setParent(None)  # immediate: deleteLater alone leaves it painted
             self._form.deleteLater()
         self._form = ParamForm(field_specs(family.params_cls), params.to_dict())
         self._form.edited.connect(self._on_params_edited)

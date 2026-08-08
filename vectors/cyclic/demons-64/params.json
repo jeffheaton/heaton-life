@@ -1,0 +1,33 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_00001.png",
+      "step": 1
+    },
+    {
+      "file": "state_00010.png",
+      "step": 10
+    },
+    {
+      "file": "state_00050.png",
+      "step": 50
+    }
+  ],
+  "family": "cyclic",
+  "params": {
+    "height": 64,
+    "init": "soup",
+    "neighborhood": "moore",
+    "reach": 1,
+    "seed": 42,
+    "states": 14,
+    "threshold": 1,
+    "width": 64
+  },
+  "spec_version": "0.1.0",
+  "tier": "bit-exact"
+}

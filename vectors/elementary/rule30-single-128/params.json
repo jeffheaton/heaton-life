@@ -1,0 +1,32 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_00001.png",
+      "step": 1
+    },
+    {
+      "file": "state_00064.png",
+      "step": 64
+    },
+    {
+      "file": "state_00127.png",
+      "step": 127
+    }
+  ],
+  "family": "elementary",
+  "params": {
+    "boundary": "torus",
+    "density": 0.5,
+    "height": 64,
+    "init": "single",
+    "rule": 30,
+    "seed": 0,
+    "width": 128
+  },
+  "spec_version": "0.1.0",
+  "tier": "bit-exact"
+}

@@ -116,6 +116,16 @@ class SimEngine(QObject):
         if self._sim is not None:
             self._publish(force=True)
 
+    def paint(self, x: int, y: int, button: int) -> None:
+        family = self._family
+        if family is None or self._sim is None or family.paint is None:
+            return
+        try:
+            family.paint(self._sim, x, y, button)
+        except (IndexError, ValueError):
+            return
+        self._publish(force=True)
+
     def frame_shown(self) -> None:
         self._pending = max(0, self._pending - 1)
 

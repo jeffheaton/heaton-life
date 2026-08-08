@@ -1,0 +1,29 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_00001.png",
+      "step": 1
+    },
+    {
+      "file": "state_00005.png",
+      "step": 5
+    },
+    {
+      "file": "state_00020.png",
+      "step": 20
+    }
+  ],
+  "family": "wireworld",
+  "params": {
+    "boundary": "dead",
+    "height": 8,
+    "init": "array",
+    "width": 16
+  },
+  "spec_version": "0.1.0",
+  "tier": "bit-exact"
+}

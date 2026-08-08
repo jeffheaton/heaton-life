@@ -36,5 +36,9 @@ Each family gets one page structured as:
 
 - [rng.md](rng.md) — pinned PCG32 algorithm, known-answer test, draw-order convention
 - [lifelike.md](lifelike.md) — Life-like CA (bit-exact tier)
+- [elementary.md](elementary.md) — Wolfram elementary CA (bit-exact tier)
+- [cyclic.md](cyclic.md) — cyclic CA (bit-exact tier)
+- [wireworld.md](wireworld.md) — Wireworld (bit-exact tier)
+- [mergelife.md](mergelife.md) — MergeLife, byte-identical with the upstream reference engines
 - [deep-zoom.md](deep-zoom.md) — fractal precision architecture (perturbation + rebasing)
 - Remaining family pages land alongside their implementations, per [ROADMAP.md](../ROADMAP.md).

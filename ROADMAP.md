@@ -31,7 +31,7 @@ Built early on purpose: the playground is the library's first real consumer and 
 
 **Done when:** interactive Life at 512² runs at 60 fps with live-editable params.
 
-## Phase 3 — Complete the discrete CAs (bit-exact tier)
+## Phase 3 — Complete the discrete CAs (bit-exact tier) ✅
 
 - `elementary.py` (Wolfram 0–255; 1-D tape state, space-time diagram as the frame).
 - `cyclic.py` (states/threshold/range), `wireworld.py` (4-state machine + pattern files).

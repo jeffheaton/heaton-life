@@ -97,6 +97,48 @@ def test_snapshot_png(window: MainWindow, tmp_path) -> None:
         assert img.size == (256, 256)
 
 
+def test_switch_family_loads_engine_and_form(window: MainWindow) -> None:
+    for key, frame_shape in [
+        ("elementary", (256, 256)),
+        ("cyclic", (256, 256)),
+        ("wireworld", (64, 64)),
+        ("mergelife", (128, 128, 3)),
+        ("lifelike", (256, 256)),
+    ]:
+        window.select_family(key)
+        assert window._engine._sim is not None, key
+        assert window.canvas.last_rgb is not None, key
+        frame = window._engine._sim.frame()
+        assert frame.shape == frame_shape, key
+        window._bridge.sig_step.emit()
+        assert window._engine.generation == 1, key
+
+
+def test_paint_sets_cells(window: MainWindow) -> None:
+    window.select_family("lifelike")
+    engine = window._engine
+    assert engine._sim is not None
+    window._bridge.sig_paint.emit(3, 4, 1)
+    assert engine._sim.state[4, 3] == 1
+    window._bridge.sig_paint.emit(3, 4, 2)
+    assert engine._sim.state[4, 3] == 0
+    window.select_family("wireworld")
+    assert engine._sim is not None
+    window._bridge.sig_paint.emit(1, 1, 1)
+    assert engine._sim.state[1, 1] == 3  # conductor
+    window._bridge.sig_paint.emit(1, 1, 3)
+    assert engine._sim.state[1, 1] == 1  # electron head
+
+
+def test_paint_ignored_where_unsupported(window: MainWindow) -> None:
+    window.select_family("elementary")
+    engine = window._engine
+    assert engine._sim is not None
+    before = engine._sim.state.copy()
+    window._bridge.sig_paint.emit(2, 0, 1)
+    assert np.array_equal(engine._sim.state, before)
+
+
 def test_512_grid_tick_budget(window: MainWindow) -> None:
     """Phase 2 'done when': 512x512 stepping + colormap fits a 60 fps frame budget."""
     import time
