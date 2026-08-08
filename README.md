@@ -2,6 +2,9 @@
 
 Emergence algorithms — cellular automata, Lenia, fractals, boids, and reaction-diffusion — as a spec-first, multi-language library with an interactive playground.
 
+![Gallery: one tile per system](docs/gallery.png)
+*Every system in the taxonomy, rendered by `python/tools/gen_gallery.py`. Bottom right: Mandelbrot at zoom 10¹⁴ via perturbation + rebasing.*
+
 ```
 Emergence
 ├── Cellular Automata

@@ -10,11 +10,25 @@ readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Jeff Heaton" }]
 keywords = ["cellular-automata", "lenia", "fractals", "boids", "reaction-diffusion", "mergelife", "emergence", "artificial-life"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Education",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Life",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+
 dependencies = [
     "numpy>=1.24",
     "pillow>=10.0",
     "mpmath>=1.3",  # deep-zoom reference orbits (pure-Python fallback; gmpy2 extra is the fast path)
 ]
+
+[project.urls]
+Repository = "https://github.com/jeffheaton/heaton-life"
 
 [project.optional-dependencies]
 playground = ["PyQt6>=6.6"]
@@ -35,6 +49,7 @@ src = ["src", "tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["slow: long-running tests (evolver runs)"]
 
 [tool.mypy]
 strict = true

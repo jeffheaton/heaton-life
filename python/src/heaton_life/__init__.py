@@ -4,7 +4,7 @@ Spec-first, multi-language project; this is the Python implementation.
 See the repository ROADMAP.md for build order and spec/ for the algorithm contracts.
 """
 
-from heaton_life import boids, ca, core, fractal, init, lenia, rd, render
+from heaton_life import boids, ca, core, evolve, fractal, init, lenia, rd, render
 from heaton_life.core.params import Params
 from heaton_life.core.protocols import Field, Simulation
 from heaton_life.core.rng import Pcg32
@@ -22,6 +22,7 @@ __all__ = [
     "boids",
     "ca",
     "core",
+    "evolve",
     "fractal",
     "init",
     "lenia",

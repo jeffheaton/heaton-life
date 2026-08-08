@@ -27,10 +27,15 @@ field = frac.render((1920, 1080), hl.Viewport(
 ))
 hl.render.to_image(field, cmap="fire").save("deep.png")
 
-# Zoom movie:
+# Zoom movie (also .mp4 with the video extra):
 hl.fractal.zoom_animation(frac, (512, 512), hl.Viewport(
     center_re="-0.7435", center_im="0.1314", zoom_log10=4.0,
 ), steps=90, cmap="fire").save("zoom.gif")
+
+# Evolve MergeLife rules with the paper's objective — reproducible from a seed:
+from heaton_life.evolve import Evolver
+best = Evolver(size=(64, 64), population_size=20, seed=42).run(max_evals=200)
+print(best.genome, best.score)
 ```
 
 ## Playground

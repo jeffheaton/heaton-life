@@ -44,12 +44,35 @@ class Animation:
         )
 
     def save(self, path: str | Path) -> Path:
-        """Save as GIF (the only format until the video extra lands)."""
+        """Save as .gif (built in) or .mp4 (requires the video extra: imageio-ffmpeg)."""
         path = Path(path)
-        if path.suffix.lower() != ".gif":
-            raise ValueError(f"only .gif is supported for now, got {path.suffix!r}")
-        self._write_gif(path)
+        suffix = path.suffix.lower()
+        if suffix == ".gif":
+            self._write_gif(path)
+        elif suffix == ".mp4":
+            self._write_mp4(path)
+        else:
+            raise ValueError(f"unsupported format {path.suffix!r} (use .gif or .mp4)")
         return path
+
+    def _write_mp4(self, path: Path) -> None:
+        try:
+            import imageio.v2 as imageio
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                'MP4 export needs imageio-ffmpeg: pip install "heaton-life[video]"'
+            ) from exc
+        writer = imageio.get_writer(path, fps=self.fps, codec="libx264", quality=8)
+        try:
+            for image in self._images():
+                # libx264 requires even dimensions
+                width = image.width - image.width % 2
+                height = image.height - image.height % 2
+                if (width, height) != (image.width, image.height):
+                    image = image.crop((0, 0, width, height))
+                writer.append_data(np.asarray(image))
+        finally:
+            writer.close()
 
     def _repr_html_(self) -> str:
         buf = io.BytesIO()

@@ -43,6 +43,7 @@ Each family gets one page structured as:
 - [grayscott.md](grayscott.md) — Gray-Scott reaction-diffusion (ε tier)
 - [lenia.md](lenia.md) — Lenia classic / asymptotic / flow (ε tier)
 - [boids.md](boids.md) — Reynolds flocking (ε tier, point-cloud state)
+- [evolve.md](evolve.md) — the MergeLife GA and paper objective (search, not a conformance family)
 - [fractals.md](fractals.md) — escape-time + Newton conventions, pixel mapping, vector schema
 - [deep-zoom.md](deep-zoom.md) — fractal precision architecture (perturbation + rebasing)
 - Remaining family pages land alongside their implementations, per [ROADMAP.md](../ROADMAP.md).

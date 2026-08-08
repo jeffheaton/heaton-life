@@ -58,4 +58,12 @@ def test_animate_rejects_bad_args(tmp_path) -> None:
         animate(sim, steps=-1)
     anim = animate(sim, steps=1)
     with pytest.raises(ValueError):
-        anim.save(tmp_path / "out.mp4")
+        anim.save(tmp_path / "out.webm")
+
+
+def test_mp4_export(tmp_path) -> None:
+    pytest.importorskip("imageio")
+    pytest.importorskip("imageio_ffmpeg")
+    sim = LifeLike(size=(32, 32), seed=1)
+    out = animate(sim, steps=5, fps=10).save(tmp_path / "out.mp4")
+    assert out.exists() and out.stat().st_size > 0

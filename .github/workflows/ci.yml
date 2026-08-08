@@ -31,3 +31,13 @@ jobs:
         run: pytest -q
         env:
           QT_QPA_PLATFORM: offscreen
+
+  dotnet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: Tests (replays the shared conformance vectors)
+        run: dotnet test dotnet --nologo

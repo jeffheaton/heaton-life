@@ -64,12 +64,31 @@ Per `spec/deep-zoom.md` (contract already in core since Phase 1):
 - ε-tier vectors; oracle suite includes bitwise momentum conservation with zero steering.
 - Playground extras: scare/lure clicks (left shoves nearby boids away, right pulls them in).
 
-## Phase 7 — Release polish & dotnet kickoff
+## Phase 7 — Release polish & dotnet kickoff ✅
 
-- Docs + gallery notebooks, MP4 export, PyPI release, GUI entry point enabled.
-- `evolve/` seam: GA over MergeLife genomes with the paper's objective functions.
-- Spec completion pass (every family page finalized against vectors).
-- .NET port begins in `dotnet/`: PCG32 → Life-like → conformance harness first, mirroring Phase 1.
+- `evolve/`: faithful port of the paper's objective statistics (Sec. 4: steps /
+  foreground / active / largest-rect / mode-age, with the reference's exact scoring
+  formula) and GA operators (Sec. 5: digit-swap mutation, sub-rule crossover,
+  tournament selection) — with every random decision drawn from PCG32, so scoring
+  and whole evolution runs replay from a seed. `PAPER_OBJECTIVE` included.
+- MP4 export (`Animation.save("*.mp4")`, video extra); gallery generator
+  (`tools/gen_gallery.py` → `docs/gallery.png`, embedded in the README).
+- Packaging: classifiers/urls, wheel builds clean. Publishing to PyPI is a
+  release decision (account + license choice) left to the maintainer.
+- Spec completion pass: every family page + rng, deep-zoom, fractals, evolve.
+- **.NET port begun and green**: `HeatonLife.Core` (netstandard2.1) with PCG32
+  (known-answer tested) and Life-like; the xunit suite replays the shared
+  `vectors/lifelike/` byte-for-byte via a dependency-free PNG reader, and CI runs it.
+
+## Future work
+
+- .NET: remaining families in porting order (discrete CAs → continuous grids →
+  fractals → boids), then the `HeatonLife.Unity` UPM adapter.
+- Fractals: progressive refinement with cancellation in the playground; optional
+  numba kernels; floatexp tier beyond zoom 1e290; BLA iteration skipping.
+- Boids spatial hash if flocks ever need >2k; Lenia multi-channel; Orbium and
+  friends as stampable Lenia creatures; MP4/GIF export buttons in the playground.
+- PyPI release once a license is chosen.
 
 ## Cross-cutting rules
 
