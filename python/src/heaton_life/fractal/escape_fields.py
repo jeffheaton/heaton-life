@@ -79,12 +79,18 @@ class _EscapeField:
     def outputs(self, size: tuple[int, int], viewport: Viewport) -> dict[str, IntArray]:
         return {"iterations": self.iterations(size, viewport)}
 
-    def render(self, size: tuple[int, int], viewport: Viewport) -> FloatArray:
-        """Smooth-colored field in [0,1] (Field protocol); interior is 0."""
+    def render_and_counts(
+        self, size: tuple[int, int], viewport: Viewport
+    ) -> tuple[FloatArray, IntArray]:
+        """One computation, both consumers: the render and the raw counts."""
         width, height = size
         counts, final = self._compute(size, viewport)
         mu = smooth_iterations(counts, final, self.escape_radius)
-        return normalize_render(mu).reshape(height, width)
+        return normalize_render(mu).reshape(height, width), counts.reshape(height, width)
+
+    def render(self, size: tuple[int, int], viewport: Viewport) -> FloatArray:
+        """Smooth-colored field in [0,1] (Field protocol); interior is 0."""
+        return self.render_and_counts(size, viewport)[0]
 
 
 @dataclasses.dataclass(frozen=True)

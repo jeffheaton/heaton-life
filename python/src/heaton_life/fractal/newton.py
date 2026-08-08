@@ -72,9 +72,18 @@ class Newton:
         roots, iters = self.basins(size, viewport)
         return {"roots": roots, "iterations": iters}
 
+    def render_and_counts(
+        self, size: tuple[int, int], viewport: Viewport
+    ) -> tuple[FloatArray, IntArray]:
+        roots, iters = self.basins(size, viewport)
+        return self._shade(roots, iters), iters
+
     def render(self, size: tuple[int, int], viewport: Viewport) -> FloatArray:
         """Hue by basin, shaded by convergence speed; unconverged pixels are 0."""
         roots, iters = self.basins(size, viewport)
+        return self._shade(roots, iters)
+
+    def _shade(self, roots: IntArray, iters: IntArray) -> FloatArray:
         converged = roots >= 0
         shade = np.zeros(roots.shape, dtype=np.float64)
         shade[converged] = 1.0 - 0.7 * (iters[converged] / self.max_iter)

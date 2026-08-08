@@ -121,6 +121,7 @@ class SimEngine(QObject):
     def single_step(self) -> None:
         if self._sim is not None:
             self._sim.step(1)
+            self._sync_params_from_sim()
             self._publish(force=True)
 
     def set_speed(self, steps_per_sec: int) -> None:
@@ -172,6 +173,7 @@ class SimEngine(QObject):
             return
         steps = max(1, round(self._speed * self._timer.interval() / 1000))
         self._sim.step(steps)
+        self._sync_params_from_sim()
         self._stat_steps += steps
         self._publish()
         now = time.perf_counter()
@@ -180,6 +182,13 @@ class SimEngine(QObject):
             self.stats.emit(self.generation, self._stat_steps / elapsed)
             self._stat_steps = 0
             self._stat_t0 = now
+
+    def _sync_params_from_sim(self) -> None:
+        """Sims that advance their own params (fractal autozoom) get echoed to the form."""
+        sim_params = getattr(self._sim, "params", None)
+        if sim_params is not None and sim_params != self._params:
+            self._params = sim_params
+            self.params_updated.emit(sim_params)
 
     def _reset_stats(self) -> None:
         self._stat_steps = 0

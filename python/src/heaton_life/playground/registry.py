@@ -604,7 +604,7 @@ def _register_fractal(
     zoom_max: float = 290.0,
 ) -> None:
     def build(params: Params) -> Simulation:
-        return FractalSim(params, make_field)  # type: ignore[arg-type]
+        return FractalSim(params, make_field, zoom_max=zoom_max)  # type: ignore[arg-type]
 
     def paint(sim: Simulation, x: int, y: int, button: int) -> Simulation | None:
         assert isinstance(sim, FractalSim)

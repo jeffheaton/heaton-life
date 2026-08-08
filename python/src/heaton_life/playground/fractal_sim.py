@@ -102,24 +102,86 @@ def make_newton(p: Params) -> _RenderField:
     return Newton(degree=p.degree, max_iter=p.max_iter)
 
 
-class FractalSim:
-    """Simulation-protocol adapter around a Field; render is lazy and cached."""
+AUTOZOOM_ZOOM_PER_STEP = 0.02  # decades of magnification per step (speed slider throttles)
+_AUTOZOOM_DRIFT = Decimal("0.2")  # fraction of the way toward the target per step
 
-    def __init__(self, params: Params, make_field: Callable[[Params], _RenderField]) -> None:
+
+class FractalSim:
+    """Simulation-protocol adapter around a Field; render is lazy and cached.
+
+    step() is autozoom: drift the center toward nearby boundary structure (the
+    highest escape counts — never the black interior) and zoom in a notch. Play
+    starts it, Pause stops it, the speed slider sets the dive rate.
+    """
+
+    def __init__(
+        self,
+        params: Params,
+        make_field: Callable[[Params], _RenderField],
+        *,
+        zoom_max: float = 290.0,
+    ) -> None:
         self.params = params
+        self.zoom_max = zoom_max
         self._make_field = make_field
         self._field = make_field(params)
         self._frame: NDArray[np.float64] | None = None
+        self._counts: NDArray[np.int32] | None = None
+        self._generation = 0
 
     def step(self, n: int = 1) -> None:
-        pass  # fractals don't evolve; zoom/params changes re-render
+        self._generation += n
+        p: Any = self.params
+        old_zoom = float(p.zoom_log10)
+        if old_zoom >= self.zoom_max:
+            return
+        new_zoom = min(old_zoom + AUTOZOOM_ZOOM_PER_STEP * n, self.zoom_max)
+        target = self._find_target()
+        if target is None:  # nothing non-black to chase: hold center, keep zooming
+            self.params = p.replace(zoom_log10=new_zoom)
+        else:
+            x, y = target
+            with localcontext() as ctx:
+                ctx.prec = max(int(old_zoom), 0) + 40
+                pixel = (
+                    Decimal(4) / (Decimal(10) ** Decimal(repr(old_zoom))) / Decimal(p.width)
+                )
+                off_x = (Decimal(x) + Decimal("0.5") - Decimal(p.width) / 2) * pixel
+                off_y = (Decimal(y) + Decimal("0.5") - Decimal(p.height) / 2) * pixel
+                new_re = Decimal(p.center_re) + off_x * _AUTOZOOM_DRIFT
+                new_im = Decimal(p.center_im) - off_y * _AUTOZOOM_DRIFT
+            self.params = p.replace(
+                center_re=str(new_re), center_im=str(new_im), zoom_log10=new_zoom
+            )
+        self._frame = None  # counts stay until the next render refreshes them
+
+    def _find_target(self) -> tuple[int, int] | None:
+        """Nearest-to-center pixel among the top escape counts (boundary huggers).
+
+        Threshold is relative to the frame's max count — a percentile collapses to
+        the mode when most escaped pixels tie at a low count, which would stop the
+        drift dead.
+        """
+        counts = self._counts
+        if counts is None:
+            return None
+        escaped = counts > 0
+        if not escaped.any():
+            return None
+        threshold = 0.9 * float(counts.max())
+        ys, xs = np.nonzero(escaped & (counts >= threshold))
+        height, width = counts.shape
+        d2 = (xs - width / 2.0) ** 2 + (ys - height / 2.0) ** 2
+        nearest = int(np.argmin(d2))
+        return int(xs[nearest]), int(ys[nearest])
 
     def reset(self, seed: int | None = None) -> None:
         self._frame = None
+        self._generation = 0
 
     @property
     def generation(self) -> int:
-        return 0
+        return self._generation
 
     @property
     def state(self) -> NDArray[np.float64]:
@@ -129,7 +191,11 @@ class FractalSim:
         if self._frame is None:
             p: Any = self.params
             viewport = Viewport(p.center_re, p.center_im, p.zoom_log10)
-            self._frame = self._field.render((p.width, p.height), viewport)
+            render_and_counts = getattr(self._field, "render_and_counts", None)
+            if callable(render_and_counts):
+                self._frame, self._counts = render_and_counts((p.width, p.height), viewport)
+            else:
+                self._frame = self._field.render((p.width, p.height), viewport)
         return self._frame
 
 

@@ -107,7 +107,7 @@ def test_switch_family_loads_engine_and_form(window: MainWindow) -> None:
         ("lenia-classic", (128, 128), True),
         ("lenia-asymptotic", (128, 128), True),
         ("lenia-flow", (128, 128), True),
-        ("newton", (384, 384), False),  # fractals don't step
+        ("newton", (384, 384), True),  # fractal step = autozoom
         ("boids", (256, 256), True),
         ("lifelike", (256, 256), True),
     ]:
@@ -196,6 +196,19 @@ def test_cell_display_scale(window: MainWindow) -> None:
     canvas.set_display_scale(0)  # back to fit
     canvas.grab()
     assert canvas._target.width() > 64, "fit mode should upscale a small grid"
+
+
+def test_autozoom_play_advances_viewport_and_syncs_form(window: MainWindow) -> None:
+    window.select_family("mandelbrot")
+    engine = window._engine
+    window._bridge.sig_run.emit(True)
+    for _ in range(3):
+        engine._tick()
+    window._bridge.sig_run.emit(False)
+    assert engine._params is not None
+    assert engine._params.zoom_log10 > 0.0  # type: ignore[attr-defined]
+    assert window._form is not None
+    assert window._form.values()["zoom_log10"] > 0.0
 
 
 def test_wheel_zoom_ignored_by_grid_families(window: MainWindow) -> None:
