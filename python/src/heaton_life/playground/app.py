@@ -37,7 +37,8 @@ class EngineBridge(QObject):
     """GUI-side signal bundle; queued connections carry these into the engine thread."""
 
     sig_load = pyqtSignal(str, object, str)  # family key, Params, cmap
-    sig_params = pyqtSignal(object)  # Params
+    sig_params = pyqtSignal(object)  # Params (hot/cold logic applies)
+    sig_params_reset = pyqtSignal(object)  # Params, always with a fresh grid (presets)
     sig_run = pyqtSignal(bool)
     sig_step = pyqtSignal()
     sig_reset = pyqtSignal()
@@ -69,6 +70,7 @@ class MainWindow(QMainWindow):
             self._engine.start()
         self._bridge.sig_load.connect(self._engine.load)
         self._bridge.sig_params.connect(self._engine.set_params)
+        self._bridge.sig_params_reset.connect(self._engine.set_params_reset)
         self._bridge.sig_run.connect(self._engine.set_running)
         self._bridge.sig_step.connect(self._engine.single_step)
         self._bridge.sig_reset.connect(self._engine.reset)
@@ -97,6 +99,7 @@ class MainWindow(QMainWindow):
         self.transport.reset_clicked.connect(self._bridge.sig_reset.emit)
         self.transport.speed_changed.connect(self._bridge.sig_speed.emit)
         self.transport.cmap_changed.connect(self._bridge.sig_cmap.emit)
+        self.transport.cell_scale_changed.connect(self.canvas.set_display_scale)
         self.transport.snapshot_clicked.connect(self._snapshot_dialog)
 
         # Family tree (left dock)
@@ -195,7 +198,7 @@ class MainWindow(QMainWindow):
         form.set_values(dict(overrides))
         merged = family.params_cls().to_dict() | form.values()
         params = family.params_cls.from_dict(merged)
-        self._bridge.sig_params.emit(params)
+        self._bridge.sig_params_reset.emit(params)  # presets always start a fresh grid
 
     # -- engine feedback -----------------------------------------------------------------
 

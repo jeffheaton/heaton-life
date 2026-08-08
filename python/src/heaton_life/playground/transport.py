@@ -22,6 +22,7 @@ class Transport(QToolBar):
     reset_clicked = pyqtSignal()
     speed_changed = pyqtSignal(int)  # steps/second
     cmap_changed = pyqtSignal(str)
+    cell_scale_changed = pyqtSignal(int)  # displayed pixels per grid cell; 0 = fit
     snapshot_clicked = pyqtSignal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -70,6 +71,15 @@ class Transport(QToolBar):
         self.addWidget(self._cmaps)
 
         self.addSeparator()
+        self.addWidget(QLabel(" Cell "))
+        self._cell = QComboBox()
+        self._cell.addItem("Fit", 0)
+        for k in (1, 2, 3, 4, 6, 8, 12, 16):
+            self._cell.addItem(f"{k} px", k)
+        self._cell.currentIndexChanged.connect(self._on_cell_scale)
+        self.addWidget(self._cell)
+
+        self.addSeparator()
         snapshot = self.addAction(
             style.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton), "Save PNG…"
         )
@@ -102,3 +112,7 @@ class Transport(QToolBar):
         speed = slider_to_speed(value)
         self._speed_label.setText(f" {speed} st/s ")
         self.speed_changed.emit(speed)
+
+    def _on_cell_scale(self, index: int) -> None:
+        data = self._cell.itemData(index)
+        self.cell_scale_changed.emit(int(data) if data is not None else 0)

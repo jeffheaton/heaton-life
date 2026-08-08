@@ -708,9 +708,15 @@ register(
         default_cmap="gray",  # unused: MergeLife frames are RGB passthrough
         presets={
             "Red World (paper)": {"genome": "e542-5f79-9341-f31e-6c6b-7f08-8773-7068"},
-            "1c48-9004…": {"genome": "1c48-9004-8831-41be-2804-8f50-9901-db18"},
-            "7e18-62ac…": {"genome": "7e18-62ac-5c42-109e-45a1-9ff2-b7d8-64a1"},
-            "2152-9b71…": {"genome": "2152-9b71-abb7-162a-45ff-dd03-fe15-957e"},
+            "1c48-9004-8831-41be-2804-8f50-9901-db18": {
+                "genome": "1c48-9004-8831-41be-2804-8f50-9901-db18"
+            },
+            "7e18-62ac-5c42-109e-45a1-9ff2-b7d8-64a1": {
+                "genome": "7e18-62ac-5c42-109e-45a1-9ff2-b7d8-64a1"
+            },
+            "2152-9b71-abb7-162a-45ff-dd03-fe15-957e": {
+                "genome": "2152-9b71-abb7-162a-45ff-dd03-fe15-957e"
+            },
         },
         paint=_paint_mergelife,
     )

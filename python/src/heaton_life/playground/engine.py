@@ -87,6 +87,20 @@ class SimEngine(QObject):
         self._params = params
         self._publish(force=True)
 
+    def set_params_reset(self, params: Params) -> None:
+        """Apply params with a fresh grid (preset selection): always a cold rebuild."""
+        family = self._family
+        if family is None:
+            return
+        try:
+            self._sim = family.build(params)
+        except (ValueError, TypeError) as exc:
+            self.error.emit(str(exc))
+            return
+        self._params = params
+        self._reset_stats()
+        self._publish(force=True)
+
     def reset(self) -> None:
         """Rebuild from current params — same seed, same run (determinism on display)."""
         if self._family is None or self._params is None:

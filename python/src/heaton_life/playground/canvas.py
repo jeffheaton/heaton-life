@@ -33,6 +33,7 @@ class Canvas(QWidget):
         self._last_paint: tuple[int, int, int] | None = None
         self._wheel_accum = 0
         self._overlay: dict[str, object] | None = None
+        self._display_scale = 0  # pixels per grid cell; 0 = fit to widget
         self.generation = 0
         self.setMinimumSize(320, 320)
 
@@ -57,14 +58,23 @@ class Canvas(QWidget):
         self._overlay = payload if isinstance(payload, dict) else None
         self.update()
 
+    def set_display_scale(self, scale: int) -> None:
+        """Fixed pixels per grid cell (1 = native resolution); 0 returns to fit."""
+        self._display_scale = max(0, scale)
+        self.update()
+
     def paintEvent(self, event: QPaintEvent | None) -> None:
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor(18, 18, 22))
         if self._image is None:
             return
         iw, ih = self._image.width(), self._image.height()
-        scale = min(self.width() / iw, self.height() / ih)
-        tw, th = max(1, int(iw * scale)), max(1, int(ih * scale))
+        if self._display_scale > 0:
+            tw, th = iw * self._display_scale, ih * self._display_scale
+        else:
+            scale = min(self.width() / iw, self.height() / ih)
+            tw, th = max(1, int(iw * scale)), max(1, int(ih * scale))
+        # Centered; a fixed scale larger than the widget simply crops at the edges.
         self._target = QRect((self.width() - tw) // 2, (self.height() - th) // 2, tw, th)
         painter.drawImage(self._target, self._image)  # no smoothing hint -> nearest-neighbor
         if self._overlay is not None:

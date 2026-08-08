@@ -154,6 +154,42 @@ def test_boids_scare_paint_changes_velocities(window: MainWindow) -> None:
     assert not np.array_equal(before, after), "scare click should shove nearby boids"
 
 
+def test_preset_apply_resets_grid(window: MainWindow) -> None:
+    window.select_family("mergelife")
+    engine = window._engine
+    assert engine._sim is not None
+    window._bridge.sig_step.emit()
+    assert engine.generation == 1
+    index = 1  # first real preset ("Red World (paper)")
+    window._presets.setCurrentIndex(index)
+    window._on_preset(index)
+    assert engine.generation == 0, "preset selection must start a fresh grid"
+    assert engine._params is not None
+    assert engine._params.genome == "e542-5f79-9341-f31e-6c6b-7f08-8773-7068"  # type: ignore[attr-defined]
+
+
+def test_mergelife_preset_labels_not_truncated(window: MainWindow) -> None:
+    from heaton_life.playground.registry import FAMILIES
+
+    for name in FAMILIES["mergelife"].presets:
+        assert "…" not in name and "..." not in name
+
+
+def test_cell_display_scale(window: MainWindow) -> None:
+    window.select_family("wireworld")  # 64x64 grid
+    canvas = window.canvas
+    canvas.set_display_scale(2)
+    canvas.grab()  # force a paint pass
+    assert canvas._target is not None
+    assert canvas._target.width() == 128 and canvas._target.height() == 128
+    canvas.set_display_scale(1)
+    canvas.grab()
+    assert canvas._target.width() == 64, "1 px per cell = native resolution"
+    canvas.set_display_scale(0)  # back to fit
+    canvas.grab()
+    assert canvas._target.width() > 64, "fit mode should upscale a small grid"
+
+
 def test_wheel_zoom_ignored_by_grid_families(window: MainWindow) -> None:
     window.select_family("lifelike")
     engine = window._engine
