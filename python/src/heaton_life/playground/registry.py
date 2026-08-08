@@ -28,6 +28,14 @@ from heaton_life.ca.rulestring import parse_rule
 from heaton_life.core.neighbors import Boundary
 from heaton_life.core.params import Params
 from heaton_life.core.protocols import Simulation
+from heaton_life.lenia import (
+    AsymptoticLenia,
+    ClassicLenia,
+    FlowLenia,
+    FlowLeniaParams,
+    LeniaParams,
+)
+from heaton_life.rd import GRAY_SCOTT_PRESETS, GrayScott, GrayScottParams
 
 # Paint buttons: 1 = left, 2 = right, 3 = modifier+left.
 PaintFn = Callable[[Simulation, int, int, int], None]
@@ -281,6 +289,184 @@ def _validate_mergelife(params: Params) -> tuple[str, str] | None:
 
 def _paint_mergelife(sim: Simulation, x: int, y: int, button: int) -> None:
     sim.state[y, x] = (0, 0, 0) if button == 2 else (255, 255, 255)
+
+
+# -- Gray-Scott ---------------------------------------------------------------------------
+
+
+def _build_grayscott(params: Params) -> Simulation:
+    assert isinstance(params, GrayScottParams)
+    return GrayScott.from_params(params)
+
+
+def _hot_grayscott(sim: Simulation, params: Params) -> Simulation:
+    assert isinstance(params, GrayScottParams)
+    return GrayScott(
+        size=(params.width, params.height),
+        du=params.du,
+        dv=params.dv,
+        feed=params.feed,
+        kill=params.kill,
+        dt=params.dt,
+        init=np.asarray(sim.state, dtype=np.float64),
+        spots=params.spots,
+        seed=params.seed,
+    )
+
+
+def _paint_grayscott(sim: Simulation, x: int, y: int, button: int) -> None:
+    u, v = sim.state[0], sim.state[1]
+    half = 3
+    ys = slice(max(0, y - half), y + half + 1)
+    xs = slice(max(0, x - half), x + half + 1)
+    if button == 2:
+        u[ys, xs] = 1.0
+        v[ys, xs] = 0.0
+    else:
+        u[ys, xs] = 0.5
+        v[ys, xs] = 0.25
+
+
+register(
+    Family(
+        key="grayscott",
+        label="Gray-Scott",
+        category="Reaction-Diffusion",
+        params_cls=GrayScottParams,
+        build=_build_grayscott,
+        hot_fields=frozenset({"du", "dv", "feed", "kill", "dt"}),
+        hot_apply=_hot_grayscott,
+        validate=_no_validate,
+        default_cmap="fire",
+        presets={name: dict(fk) for name, fk in GRAY_SCOTT_PRESETS.items()},
+        paint=_paint_grayscott,
+    )
+)
+
+
+# -- Lenia (classic / asymptotic / flow) ---------------------------------------------------
+
+
+def _paint_lenia(sim: Simulation, x: int, y: int, button: int) -> None:
+    a = sim.state
+    height, width = a.shape
+    r = 6
+    ys = slice(max(0, y - r), min(height, y + r + 1))
+    xs = slice(max(0, x - r), min(width, x + r + 1))
+    if button == 2:
+        a[ys, xs] = 0.0
+    else:
+        yy, xx = np.mgrid[ys, xs]
+        bump = np.exp(-((xx - x) ** 2 + (yy - y) ** 2) / (2.0 * (r / 2.0) ** 2))
+        np.clip(a[ys, xs] + bump, 0.0, 1.0, out=a[ys, xs])
+
+
+def _lenia_kwargs(params: LeniaParams, state: np.ndarray) -> dict[str, object]:
+    return {
+        "size": (params.width, params.height),
+        "radius": params.radius,
+        "mu": params.mu,
+        "sigma": params.sigma,
+        "dt": params.dt,
+        "init": state,
+        "blobs": params.blobs,
+        "density": params.density,
+        "seed": params.seed,
+    }
+
+
+def _build_lenia_classic(params: Params) -> Simulation:
+    assert isinstance(params, LeniaParams)
+    return ClassicLenia.from_params(params)
+
+
+def _hot_lenia_classic(sim: Simulation, params: Params) -> Simulation:
+    assert isinstance(params, LeniaParams)
+    return ClassicLenia(**_lenia_kwargs(params, np.asarray(sim.state)))  # type: ignore[arg-type]
+
+
+def _build_lenia_asymptotic(params: Params) -> Simulation:
+    assert isinstance(params, LeniaParams)
+    return AsymptoticLenia.from_params(params)
+
+
+def _hot_lenia_asymptotic(sim: Simulation, params: Params) -> Simulation:
+    assert isinstance(params, LeniaParams)
+    return AsymptoticLenia(**_lenia_kwargs(params, np.asarray(sim.state)))  # type: ignore[arg-type]
+
+
+def _build_lenia_flow(params: Params) -> Simulation:
+    assert isinstance(params, FlowLeniaParams)
+    return FlowLenia.from_params(params)
+
+
+def _hot_lenia_flow(sim: Simulation, params: Params) -> Simulation:
+    assert isinstance(params, FlowLeniaParams)
+    kwargs = _lenia_kwargs(params, np.asarray(sim.state))
+    kwargs["theta"] = params.theta
+    return FlowLenia(**kwargs)  # type: ignore[arg-type]
+
+
+_LENIA_HOT = frozenset({"radius", "mu", "sigma", "dt"})
+
+register(
+    Family(
+        key="lenia-classic",
+        label="Classic",
+        category="Lenia",
+        params_cls=LeniaParams,
+        build=_build_lenia_classic,
+        hot_fields=_LENIA_HOT,
+        hot_apply=_hot_lenia_classic,
+        validate=_no_validate,
+        default_cmap="ice",
+        presets={
+            "Standard soup": {},
+            "Sparse solitons": {"blobs": 20},
+            "Cool spots": {"mu": 0.13, "sigma": 0.014},
+        },
+        paint=_paint_lenia,
+    )
+)
+
+register(
+    Family(
+        key="lenia-asymptotic",
+        label="Asymptotic",
+        category="Lenia",
+        params_cls=LeniaParams,
+        build=_build_lenia_asymptotic,
+        hot_fields=_LENIA_HOT,
+        hot_apply=_hot_lenia_asymptotic,
+        validate=_no_validate,
+        default_cmap="violet",
+        presets={
+            "Standard": {},
+            "Soft (wide sigma)": {"sigma": 0.02},
+        },
+        paint=_paint_lenia,
+    )
+)
+
+register(
+    Family(
+        key="lenia-flow",
+        label="Flow",
+        category="Lenia",
+        params_cls=FlowLeniaParams,
+        build=_build_lenia_flow,
+        hot_fields=_LENIA_HOT | {"theta"},
+        hot_apply=_hot_lenia_flow,
+        validate=_no_validate,
+        default_cmap="phosphor",
+        presets={
+            "Clumping soup": {},
+            "Fine grains": {"sigma": 0.05},
+            "Sparse drift": {"density": 0.2, "mu": 0.15, "sigma": 0.05},
+        },
+        paint=_paint_lenia,
+    )
+)
 
 
 register(

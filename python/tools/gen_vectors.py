@@ -11,17 +11,18 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from heaton_life.ca import LifeLike, Wireworld, wireworld_from_text
-from heaton_life.conformance import build_sim, state_to_image
+from heaton_life.conformance import CODECS, TIERS, build_sim
 from heaton_life.core.protocols import Simulation
 from heaton_life.init import place, rle_decode
 
-SPEC_VERSION = "0.1.0"
+SPEC_VERSION = "0.2.0"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VECTOR_ROOT = REPO_ROOT / "vectors"
 
@@ -29,23 +30,31 @@ GLIDER_RLE = "x = 3, y = 3, rule = B3/S23\nbob$2bo$3o!"
 
 
 def write_case(family: str, name: str, sim: Simulation, steps: list[int]) -> None:
+    codec = CODECS[family]
+    tier, epsilon = TIERS[family]
     case_dir = VECTOR_ROOT / family / name
     case_dir.mkdir(parents=True, exist_ok=True)
-    checkpoints = []
+    checkpoints: list[dict[str, Any]] = []
     current = 0
     for step in steps:
         sim.step(step - current)
         current = step
-        file = f"state_{step:05d}.png"
-        state_to_image(family, np.asarray(sim.state)).save(case_dir / file)
-        checkpoints.append({"step": step, "file": file})
-    meta = {
+        state = np.asarray(sim.state)
+        file = f"state_{step:05d}.{codec.ext}"
+        (case_dir / file).write_bytes(codec.encode(state))
+        entry: dict[str, Any] = {"step": step, "file": file}
+        if codec.ext == "f64":
+            entry["shape"] = list(state.shape)
+        checkpoints.append(entry)
+    meta: dict[str, Any] = {
         "spec_version": SPEC_VERSION,
         "family": family,
-        "tier": "bit-exact",
+        "tier": tier,
         "params": sim.params.to_dict(),  # type: ignore[attr-defined]
         "checkpoints": checkpoints,
     }
+    if epsilon is not None:
+        meta["epsilon"] = epsilon
     (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
     print(f"wrote {case_dir.relative_to(REPO_ROOT)} (steps {steps})")
 
@@ -145,6 +154,46 @@ def main() -> None:
                 "seed": 5,
             },
         ),
+        [0, 1, 10, 50],
+    )
+
+    # -- grayscott -----------------------------------------------------------------
+    write_case(
+        "grayscott",
+        "mitosis-center-64",
+        build_sim(
+            "grayscott",
+            {"feed": 0.0367, "kill": 0.0649, "width": 64, "height": 64, "init": "center"},
+        ),
+        [0, 1, 100, 500],
+    )
+    write_case(
+        "grayscott",
+        "coral-spots-64",
+        build_sim(
+            "grayscott",
+            {"feed": 0.0545, "kill": 0.062, "width": 64, "height": 64, "seed": 3},
+        ),
+        [0, 1, 100, 500],
+    )
+
+    # -- lenia ---------------------------------------------------------------------
+    write_case(
+        "lenia-classic",
+        "blobs-64",
+        build_sim("lenia-classic", {"width": 64, "height": 64, "seed": 7}),
+        [0, 1, 10, 50],
+    )
+    write_case(
+        "lenia-asymptotic",
+        "blobs-64",
+        build_sim("lenia-asymptotic", {"width": 64, "height": 64, "seed": 7}),
+        [0, 1, 10, 50],
+    )
+    write_case(
+        "lenia-flow",
+        "soup-64",
+        build_sim("lenia-flow", {"width": 64, "height": 64, "seed": 7}),
         [0, 1, 10, 50],
     )
 

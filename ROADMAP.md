@@ -39,12 +39,12 @@ Built early on purpose: the playground is the library's first real consumer and 
 - Playground: paint-cells brush, per-family preset dropdowns.
 - Spec pages + bit-exact vectors for all five CAs.
 
-## Phase 4 — Continuous grids (ε tier)
+## Phase 4 — Continuous grids (ε tier) ✅
 
-- `core/`: Euler integrator + dt, FFT convolution utility, double-buffered grid container for in-place stencils.
-- `rd/gray_scott.py` first (plain 5-point stencil — proves the continuous path without FFT), with named presets (mitosis, coral, worms…).
-- `lenia/`: shared ring-kernel builder; `classic.py`, then `asymptotic.py` (same engine, different update), `flow.py` last (mass-conserving advection — the odd one out). Arrays shaped `(C, H, W)` from the start so multi-channel isn't a rewrite.
-- Playground: stamp/seed tools, preset browser.
+- `core/`: dt-scaled explicit Euler updates with spec'd operation order, 5-point Laplacian + torus gradient stencils, FFT convolution utility.
+- `rd/gray_scott.py` first (plain 5-point stencil — proves the continuous path without FFT), with named presets (mitosis, coral, worms…) — all verified pattern-forming.
+- `lenia/`: shared ring-kernel builder; `classic.py`, then `asymptotic.py` (same engine, different update), `flow.py` last (mass-conserving bilinear reintegration). Single-channel `(H, W)` state; the kernel/FFT utilities are channel-agnostic so multi-channel is a loop, not a rewrite.
+- Playground: stamp/seed paint tools, per-family preset dropdowns.
 
 ## Phase 5 — Fractals + deep zoom
 

@@ -26,6 +26,7 @@ class FieldSpec:
     choices: tuple[str, ...]
     role: str | None
     """"seed" fields get a randomize button; more roles later."""
+    decimals: int = 3
 
 
 def field_specs(params_cls: type[Params]) -> list[FieldSpec]:
@@ -61,6 +62,7 @@ def field_specs(params_cls: type[Params]) -> list[FieldSpec]:
                 step=float(meta.get("step", step)),
                 choices=choices,
                 role=meta.get("role"),
+                decimals=int(meta.get("decimals", 3)),
             )
         )
     return specs

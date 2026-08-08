@@ -103,6 +103,10 @@ def test_switch_family_loads_engine_and_form(window: MainWindow) -> None:
         ("cyclic", (256, 256)),
         ("wireworld", (64, 64)),
         ("mergelife", (128, 128, 3)),
+        ("grayscott", (256, 256)),
+        ("lenia-classic", (128, 128)),
+        ("lenia-asymptotic", (128, 128)),
+        ("lenia-flow", (128, 128)),
         ("lifelike", (256, 256)),
     ]:
         window.select_family(key)

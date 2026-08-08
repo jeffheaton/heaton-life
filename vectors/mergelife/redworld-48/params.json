@@ -25,6 +25,6 @@
     "seed": 5,
     "width": 48
   },
-  "spec_version": "0.1.0",
+  "spec_version": "0.2.0",
   "tier": "bit-exact"
 }

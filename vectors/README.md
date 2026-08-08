@@ -13,7 +13,9 @@ vectors/<family>/<case-name>/
 ```
 
 - Discrete grids → PNG (lossless, human-viewable, both stacks read it).
-- Float fields → raw little-endian f64 + shape/order metadata in `params.json`.
+- Float fields → raw little-endian f64 (C order); each checkpoint entry carries `"shape"`,
+  and the case's `params.json` carries `"epsilon"` (max abs deviation for cross-language
+  replay; same-language replay is exact).
 - Fractal cases → viewport JSON + iteration-count grids (+ reference orbit as raw f64 pairs for deep-zoom cases).
 
 Vectors are versioned with the spec: `params.json` carries `"spec_version"`. Regenerating a vector requires a spec-change justification in the PR.

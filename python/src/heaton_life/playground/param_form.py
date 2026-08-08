@@ -80,7 +80,7 @@ class ParamForm(QWidget):
             dspin = QDoubleSpinBox()
             dspin.setRange(spec.minimum, spec.maximum)
             dspin.setSingleStep(spec.step)
-            dspin.setDecimals(3)
+            dspin.setDecimals(spec.decimals)
             dspin.setValue(float(value))
             dspin.valueChanged.connect(self._touch)
             return dspin

@@ -1,8 +1,9 @@
-"""Conformance runner: replays every case in vectors/ and compares states exactly.
+"""Conformance runner: replays every case in vectors/ and compares states.
 
-The same vectors are (will be) consumed by the .NET implementation; discrete CA
-families are bit-exact by spec. Family-specific PNG codecs live in
-heaton_life.conformance and are part of the cross-language contract.
+Discrete CA families are bit-exact; float families compare within the case's
+epsilon (same-language replay is exact anyway — the ε is headroom for the .NET
+implementation's FFT/libm differences). Codecs live in heaton_life.conformance
+and are part of the cross-language contract.
 """
 
 import json
@@ -10,9 +11,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from PIL import Image
 
-from heaton_life.conformance import CODECS, build_sim, image_to_state
+from heaton_life.conformance import CODECS, build_sim, bytes_to_state
 
 VECTOR_ROOT = Path(__file__).resolve().parents[2] / "vectors"
 CASES = sorted(
@@ -32,9 +32,9 @@ def test_vector(case: Path) -> None:
     family = meta["family"]
 
     initial = None
+    first = meta["checkpoints"][0]
     if meta["params"].get("init") == "array":
-        with Image.open(case_dir / meta["checkpoints"][0]["file"]) as img:
-            initial = image_to_state(family, img)
+        initial = bytes_to_state(family, (case_dir / first["file"]).read_bytes(), first.get("shape"))
     sim = build_sim(family, meta["params"], initial)
 
     current = 0
@@ -42,8 +42,16 @@ def test_vector(case: Path) -> None:
         step, file = checkpoint["step"], checkpoint["file"]
         sim.step(step - current)
         current = step
-        with Image.open(case_dir / file) as img:
-            expected = image_to_state(family, img)
-        assert np.array_equal(sim.state, expected), (
-            f"{family}/{case_dir.name}: state mismatch at step {step}"
-        )
+        expected = bytes_to_state(family, (case_dir / file).read_bytes(), checkpoint.get("shape"))
+        state = np.asarray(sim.state)
+        if meta["tier"] == "bit-exact":
+            assert np.array_equal(state, expected), (
+                f"{family}/{case_dir.name}: state mismatch at step {step}"
+            )
+        else:
+            epsilon = float(meta["epsilon"])
+            deviation = float(np.max(np.abs(state - expected)))
+            assert deviation <= epsilon, (
+                f"{family}/{case_dir.name}: max deviation {deviation:.3e} > {epsilon:.1e} "
+                f"at step {step}"
+            )
