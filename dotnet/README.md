@@ -1,12 +1,38 @@
-# heaton-life — .NET implementation (placeholder)
+# heaton-life — .NET implementation
 
-Planned; work starts once the Python implementation and spec v0 stabilize.
+The C# port, mirroring the Python implementation family by family against the
+shared specs and conformance vectors. **No native plugins — pure C# only**, so
+Unity IL2CPP/WebGL/mobile all work.
 
-## Planned shape
+## Status
 
-- **`HeatonLife.Core`** — engine-agnostic class library targeting `netstandard2.1` (the profile Unity supports). Flat 1-D row-major arrays (`float[]`, `byte[]`), zero-allocation step/render API (`void Step(int n)`, `void WriteFrame(Span<Color32>)`), managed FFT for Lenia so WebGL keeps working.
-- **`HeatonLife.Unity`** — thin UPM package (source + asmdef, installable via git URL): MonoBehaviour wrappers, `[Serializable]` param structs for Inspector editing, frame upload via `Texture2D.GetRawTextureData<Color32>`.
-- **Conformance** — the test suite runs the shared vectors in [`../vectors/`](../vectors/). Discrete CAs must match the Python implementation bit-for-bit; float families within spec'd ε.
-- **Deep zoom** — the perturbation loop is plain doubles (portable as-is); the high-precision reference orbit uses fixed-point over `System.Numerics.BigInteger`, or consumes orbits exported in the vectors. See [`../spec/deep-zoom.md`](../spec/deep-zoom.md).
+| Piece | State |
+|---|---|
+| `Pcg32` (spec/rng.md, known-answer tested) | ✅ |
+| Life-like CA + soup init | ✅ bit-exact against `vectors/lifelike/` |
+| Elementary, Cyclic, Wireworld, MergeLife | next (MergeLife can also replay `vectors/mergelife-upstream/`) |
+| Gray-Scott, Lenia ×3, Boids (ε tier) | planned |
+| Fractals (perturbation loop is plain doubles; orbits consumable from vectors) | planned |
+| `HeatonLife.Unity` UPM adapter | planned |
 
-No native plugins — pure C# only, so IL2CPP/WebGL/mobile all work.
+## Layout
+
+- `src/HeatonLife.Core/` — engine-agnostic class library, `netstandard2.1`
+  (the profile Unity supports). Flat 1-D row-major arrays, zero-allocation
+  step API; grids share the exact memory layout of the Python arrays and the
+  vector files.
+- `tests/HeatonLife.Core.Tests/` — xunit; includes a dependency-free reader
+  for the vector PNGs (8-bit grayscale) and the conformance runner that replays
+  `../vectors/` byte-for-byte.
+
+## Running
+
+```bash
+dotnet test dotnet
+```
+
+## Porting order (mirrors the Python phases)
+
+RNG → Life-like → remaining discrete CAs → continuous grids → fractals → boids,
+each landing only with its conformance replay green. The spec (`../spec/`) is the
+authority; when C# and Python disagree, the vectors decide.

@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/HeatonLife.Core/HeatonLife.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/HeatonLife.Core.Tests/HeatonLife.Core.Tests.csproj" />
+  </Folder>
+</Solution>
