@@ -111,6 +111,16 @@ def test_newton_basins() -> None:
     assert set(np.unique(roots5[roots5 >= 0])) == {0, 1, 2, 3, 4}
 
 
+def test_deep_render_keeps_contrast() -> None:
+    # Counts cluster near max_iter at depth; per-frame stretching must keep the
+    # palette in play rather than going monochrome.
+    field = Mandelbrot(max_iter=5000)
+    img = field.render((48, 48), Viewport(SEAHORSE_RE, SEAHORSE_IM, 14.0))
+    escaped_values = img[img > 0]
+    assert escaped_values.size > 100
+    assert escaped_values.max() - escaped_values.min() > 0.5, "deep frame lost contrast"
+
+
 def test_zoom_animation_frame_count() -> None:
     anim = zoom_animation(
         Mandelbrot(max_iter=100),

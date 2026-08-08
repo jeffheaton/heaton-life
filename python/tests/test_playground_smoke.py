@@ -120,14 +120,22 @@ def test_switch_family_loads_engine_and_form(window: MainWindow) -> None:
         assert window._engine.generation == (1 if steps else 0), key
 
 
-def test_fractal_click_zoom_updates_params_and_form(window: MainWindow) -> None:
+def test_fractal_click_recenters_without_zooming(window: MainWindow) -> None:
     window.select_family("mandelbrot")
     engine = window._engine
     assert engine._params is not None
     zoom_before = engine._params.zoom_log10  # type: ignore[attr-defined]
-    window._bridge.sig_paint.emit(96, 96, 1)  # click upper-left quadrant: recenter + zoom
-    assert engine._params.zoom_log10 == pytest.approx(zoom_before + 0.602, abs=0.01)  # type: ignore[attr-defined]
+    window._bridge.sig_paint.emit(96, 96, 1)  # plain click: recenter only
+    assert engine._params.zoom_log10 == zoom_before  # type: ignore[attr-defined]
     assert engine._params.center_re != "-0.5"  # type: ignore[attr-defined]
+
+    window._bridge.sig_paint.emit(192, 192, 3)  # Ctrl+click: recenter + zoom in x4
+    assert engine._params.zoom_log10 == pytest.approx(zoom_before + 0.602, abs=0.01)  # type: ignore[attr-defined]
+
+    zoom_mid = engine._params.zoom_log10  # type: ignore[attr-defined]
+    window._bridge.sig_paint.emit(100, 100, 4)  # wheel: anchored zoom in x2
+    assert engine._params.zoom_log10 == pytest.approx(zoom_mid + 0.301, abs=0.01)  # type: ignore[attr-defined]
+
     assert window._form is not None
     # the spinbox displays 3 decimals, so the synced value is rounded
     assert window._form.values()["zoom_log10"] == pytest.approx(

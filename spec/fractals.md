@@ -18,7 +18,10 @@ Deep-zoom architecture (tiers, perturbation, rebasing): [deep-zoom.md](deep-zoom
 
 `counts[i] = n`, the 1-based iteration at which |z| first exceeds `escape_radius`
 (default 1000); `−1` if it never does within `max_iter`. Smooth (presentation only):
-`mu = n + 1 − log2(log|z| / log R)`.
+`mu = n + 1 − log2(log|z| / log R)`, then per-frame contrast stretching between the
+1st/99th escaped percentiles for display — deep frames cluster counts near
+`max_iter`, and an absolute mapping would render monochrome. Only `counts` is a
+conformance output.
 
 ## Family updates
 

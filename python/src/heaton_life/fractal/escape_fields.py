@@ -84,7 +84,7 @@ class _EscapeField:
         width, height = size
         counts, final = self._compute(size, viewport)
         mu = smooth_iterations(counts, final, self.escape_radius)
-        return normalize_render(mu, self.max_iter).reshape(height, width)
+        return normalize_render(mu).reshape(height, width)
 
 
 @dataclasses.dataclass(frozen=True)

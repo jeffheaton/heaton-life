@@ -145,13 +145,13 @@ def zoom_paint(
     build: Callable[[Params], FractalSim],
     zoom_max: float,
 ) -> FractalSim | None:
-    """Click/wheel navigation. 1: recenter+in x4; 2: out x4 (keep center);
-    3: recenter only; 4/5: wheel in/out x2 anchored at the cursor."""
+    """Click/wheel navigation. 1: recenter (zoom unchanged); 2: out x4 (keep center);
+    3 (Ctrl+click): recenter + in x4; 4/5: wheel in/out x2 anchored at the cursor."""
     if button not in (1, 2, 3, 4, 5):
         return None
     p: Any = sim.params
     old_zoom = float(p.zoom_log10)
-    delta = {1: _LOG4, 2: -_LOG4, 3: 0.0, 4: _LOG2, 5: -_LOG2}[button]
+    delta = {1: 0.0, 2: -_LOG4, 3: _LOG4, 4: _LOG2, 5: -_LOG2}[button]
     new_zoom = min(max(old_zoom + delta, -2.0), zoom_max)
 
     with localcontext() as ctx:

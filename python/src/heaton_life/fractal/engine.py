@@ -93,7 +93,23 @@ def smooth_iterations(
     return mu
 
 
-def normalize_render(mu: FloatArray, max_iter: int) -> FloatArray:
-    """Map smooth iterations to [0,1] for colormapping; interior stays 0 (black)."""
-    result: FloatArray = np.sqrt(np.clip(mu / max_iter, 0.0, 1.0))
+def normalize_render(mu: FloatArray) -> FloatArray:
+    """Map smooth iterations to [0,1] for colormapping; interior stays 0 (black).
+
+    Per-frame percentile contrast stretch: deep zooms cluster all escape counts in
+    a narrow band near max_iter, so an absolute mu/max_iter mapping goes monochrome.
+    Stretching between the frame's 1st and 99th escaped percentiles keeps the full
+    palette in play at any depth (presentation only — counts are the conformance
+    output and are untouched).
+    """
+    values = np.zeros(mu.shape, dtype=np.float64)
+    escaped = mu > 0
+    if escaped.any():
+        lo, hi = np.percentile(mu[escaped], [1.0, 99.0])
+        if hi <= lo:
+            values[escaped] = 0.6  # featureless frame: one mid tone
+        else:
+            # floor keeps escaped pixels distinguishable from the black interior
+            values[escaped] = np.clip((mu[escaped] - lo) / (hi - lo), 0.02, 1.0)
+    result: FloatArray = np.sqrt(values)
     return result
