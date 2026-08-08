@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>HeatonLife</RootNamespace>
     <Description>Emergence algorithms: cellular automata, Lenia, fractals, boids, reaction-diffusion. Spec-first port of heaton-life; conforms to the shared vectors.</Description>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
   </PropertyGroup>
 
 </Project>

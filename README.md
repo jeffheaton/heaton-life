@@ -48,5 +48,9 @@ Emergence
 ## Status
 
 Every family in the taxonomy is implemented in Python with specs, conformance
-vectors, and playground support (Phases 1–6 ✅). Next: Phase 7 polish and the
-.NET port — see [ROADMAP.md](ROADMAP.md).
+vectors, and playground support; the .NET port is underway with Life-like already
+bit-exact against the shared vectors. See [ROADMAP.md](ROADMAP.md).
+
+## License
+
+[Apache-2.0](LICENSE).

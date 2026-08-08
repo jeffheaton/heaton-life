@@ -8,6 +8,8 @@ version = "0.0.1"
 description = "Emergence algorithms: cellular automata, Lenia, fractals, boids, and reaction-diffusion."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 authors = [{ name = "Jeff Heaton" }]
 keywords = ["cellular-automata", "lenia", "fractals", "boids", "reaction-diffusion", "mergelife", "emergence", "artificial-life"]
 classifiers = [
