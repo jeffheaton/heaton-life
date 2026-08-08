@@ -29,6 +29,7 @@ import numpy as np
 from numpy.typing import NDArray
 from PIL import Image
 
+from heaton_life.boids import Boids, BoidsParams
 from heaton_life.ca import (
     Cyclic,
     CyclicParams,
@@ -189,6 +190,7 @@ CODECS: dict[str, Codec] = {
         lambda p: AsymptoticLenia.from_params(LeniaParams.from_dict(p))
     ),
     "lenia-flow": _Float64(lambda p: FlowLenia.from_params(FlowLeniaParams.from_dict(p))),
+    "boids": _Float64(lambda p: Boids.from_params(BoidsParams.from_dict(p))),
 }
 
 # (tier, epsilon): epsilon is the max absolute deviation for cross-language replay.
@@ -202,6 +204,7 @@ TIERS: dict[str, tuple[str, float | None]] = {
     "lenia-classic": ("epsilon", 1e-6),
     "lenia-asymptotic": ("epsilon", 1e-6),
     "lenia-flow": ("epsilon", 1e-6),
+    "boids": ("epsilon", 1e-6),
 }
 
 

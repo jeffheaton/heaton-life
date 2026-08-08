@@ -44,4 +44,6 @@ Emergence
 
 ## Status
 
-Early scaffold — see [ROADMAP.md](ROADMAP.md) for the build order.
+Every family in the taxonomy is implemented in Python with specs, conformance
+vectors, and playground support (Phases 1–6 ✅). Next: Phase 7 polish and the
+.NET port — see [ROADMAP.md](ROADMAP.md).

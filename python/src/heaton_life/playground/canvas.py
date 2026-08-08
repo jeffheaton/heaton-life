@@ -8,8 +8,16 @@ from __future__ import annotations
 
 import numpy as np
 from numpy.typing import NDArray
-from PyQt6.QtCore import QPoint, QRect, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QImage, QMouseEvent, QPainter, QPaintEvent, QWheelEvent
+from PyQt6.QtCore import QPoint, QPointF, QRect, Qt, pyqtSignal
+from PyQt6.QtGui import (
+    QColor,
+    QImage,
+    QMouseEvent,
+    QPainter,
+    QPaintEvent,
+    QPolygonF,
+    QWheelEvent,
+)
 from PyQt6.QtWidgets import QWidget
 
 
@@ -24,6 +32,7 @@ class Canvas(QWidget):
         self._target: QRect | None = None
         self._last_paint: tuple[int, int, int] | None = None
         self._wheel_accum = 0
+        self._overlay: dict[str, object] | None = None
         self.generation = 0
         self.setMinimumSize(320, 320)
 
@@ -43,6 +52,11 @@ class Canvas(QWidget):
         self.update()
         self.frame_shown.emit()
 
+    def show_overlay(self, payload: object) -> None:
+        """Point-cloud overlay from the engine (boids triangles), or None to clear."""
+        self._overlay = payload if isinstance(payload, dict) else None
+        self.update()
+
     def paintEvent(self, event: QPaintEvent | None) -> None:
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor(18, 18, 22))
@@ -53,6 +67,42 @@ class Canvas(QWidget):
         tw, th = max(1, int(iw * scale)), max(1, int(ih * scale))
         self._target = QRect((self.width() - tw) // 2, (self.height() - th) // 2, tw, th)
         painter.drawImage(self._target, self._image)  # no smoothing hint -> nearest-neighbor
+        if self._overlay is not None:
+            self._paint_overlay(painter, self._target)
+
+    def _paint_overlay(self, painter: QPainter, target: QRect) -> None:
+        assert self._overlay is not None
+        points = np.asarray(self._overlay["points"], dtype=np.float64)
+        world = self._overlay["world"]
+        assert isinstance(world, tuple)
+        if points.size == 0:
+            return
+        sx = target.width() / float(world[0])
+        sy = target.height() / float(world[1])
+        cx = target.x() + points[:, 0] * sx
+        cy = target.y() + points[:, 1] * sy
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        color = QColor(255, 205, 110)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color)
+        heading = np.arctan2(points[:, 3], points[:, 2])
+        size = max(2.2 * sx, 3.0)
+        nose_x = cx + np.cos(heading) * size
+        nose_y = cy + np.sin(heading) * size
+        left_x = cx + np.cos(heading + 2.5) * size * 0.7
+        left_y = cy + np.sin(heading + 2.5) * size * 0.7
+        right_x = cx + np.cos(heading - 2.5) * size * 0.7
+        right_y = cy + np.sin(heading - 2.5) * size * 0.7
+        for i in range(points.shape[0]):
+            painter.drawPolygon(
+                QPolygonF(
+                    [
+                        QPointF(nose_x[i], nose_y[i]),
+                        QPointF(left_x[i], left_y[i]),
+                        QPointF(right_x[i], right_y[i]),
+                    ]
+                )
+            )
 
     # -- painting ------------------------------------------------------------------------
 

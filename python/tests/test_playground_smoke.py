@@ -108,6 +108,7 @@ def test_switch_family_loads_engine_and_form(window: MainWindow) -> None:
         ("lenia-asymptotic", (128, 128), True),
         ("lenia-flow", (128, 128), True),
         ("newton", (384, 384), False),  # fractals don't step
+        ("boids", (256, 256), True),
         ("lifelike", (256, 256), True),
     ]:
         window.select_family(key)
@@ -132,6 +133,25 @@ def test_fractal_click_zoom_updates_params_and_form(window: MainWindow) -> None:
     assert window._form.values()["zoom_log10"] == pytest.approx(
         engine._params.zoom_log10, abs=2e-3  # type: ignore[attr-defined]
     )
+
+
+def test_boids_overlay_arrives_and_clears(window: MainWindow) -> None:
+    window.select_family("boids")
+    assert window.canvas._overlay is not None
+    points = np.asarray(window.canvas._overlay["points"])
+    assert points.shape[1] == 4
+    window.select_family("lifelike")
+    assert window.canvas._overlay is None, "grid families must clear the overlay"
+
+
+def test_boids_scare_paint_changes_velocities(window: MainWindow) -> None:
+    window.select_family("boids")
+    engine = window._engine
+    assert engine._sim is not None
+    before = np.asarray(engine._sim.state)[:, 2:4].copy()
+    window._bridge.sig_paint.emit(128, 128, 1)
+    after = np.asarray(engine._sim.state)[:, 2:4]
+    assert not np.array_equal(before, after), "scare click should shove nearby boids"
 
 
 def test_wheel_zoom_ignored_by_grid_families(window: MainWindow) -> None:

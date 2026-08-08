@@ -81,6 +81,7 @@ class MainWindow(QMainWindow):
         self.canvas = Canvas()
         self.setCentralWidget(self.canvas)
         self._engine.frame_ready.connect(self.canvas.show_frame)
+        self._engine.overlay_ready.connect(self.canvas.show_overlay)
         self.canvas.frame_shown.connect(self._engine.frame_shown)
         self.canvas.cell_pressed.connect(self._bridge.sig_paint.emit)
         self._engine.frame_ready.connect(self._on_frame)

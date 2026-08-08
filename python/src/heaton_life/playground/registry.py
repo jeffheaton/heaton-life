@@ -11,6 +11,7 @@ from collections.abc import Callable
 
 import numpy as np
 
+from heaton_life.boids import Boids, BoidsParams
 from heaton_life.ca import (
     Cyclic,
     CyclicParams,
@@ -481,6 +482,100 @@ register(
             "Sparse drift": {"density": 0.2, "mu": 0.15, "sigma": 0.05},
         },
         paint=_paint_lenia,
+    )
+)
+
+
+# -- Boids --------------------------------------------------------------------------------
+
+
+def _build_boids(params: Params) -> Simulation:
+    assert isinstance(params, BoidsParams)
+    return Boids.from_params(params)
+
+
+def _hot_boids(sim: Simulation, params: Params) -> Simulation:
+    assert isinstance(params, BoidsParams)
+    return Boids(
+        params.count,
+        size=(params.width, params.height),
+        perception=params.perception,
+        separation_radius=params.separation_radius,
+        w_separation=params.w_separation,
+        w_alignment=params.w_alignment,
+        w_cohesion=params.w_cohesion,
+        max_speed=params.max_speed,
+        min_speed=params.min_speed,
+        max_force=params.max_force,
+        boundary=params.boundary,
+        init=np.asarray(sim.state, dtype=np.float64),
+        seed=params.seed,
+    )
+
+
+def _paint_boids(sim: Simulation, x: int, y: int, button: int) -> None:
+    """Left: scare boids away from the click; right: lure them toward it."""
+    if button not in (1, 2, 3):
+        return
+    state = np.asarray(sim.state)
+    p = sim.params  # type: ignore[attr-defined]
+    offset = state[:, 0:2] - np.array([float(x), float(y)])
+    size = np.array([float(p.width), float(p.height)])
+    if p.boundary == "wrap":
+        offset -= size * np.round(offset / size)
+    dist = np.sqrt((offset**2).sum(axis=1, keepdims=True))
+    nearby = (dist[:, 0] > 0.0) & (dist[:, 0] < 48.0)
+    if not nearby.any():
+        return
+    direction = offset[nearby] / dist[nearby]
+    if button == 2:
+        direction = -direction
+    state[nearby, 2:4] += direction * p.max_speed * 0.8
+
+
+register(
+    Family(
+        key="boids",
+        label="Reynolds",
+        category="Boids",
+        params_cls=BoidsParams,
+        build=_build_boids,
+        hot_fields=frozenset(
+            {
+                "perception",
+                "separation_radius",
+                "w_separation",
+                "w_alignment",
+                "w_cohesion",
+                "max_speed",
+                "min_speed",
+                "max_force",
+                "boundary",
+            }
+        ),
+        hot_apply=_hot_boids,
+        validate=_no_validate,
+        default_cmap="phosphor",
+        presets={
+            "Flocking": {},
+            "Murmuration": {
+                "count": 700,
+                "perception": 16.0,
+                "w_alignment": 1.3,
+                "w_cohesion": 0.7,
+                "w_separation": 1.6,
+                "max_speed": 3.5,
+            },
+            "Tight schools": {
+                "count": 400,
+                "perception": 10.0,
+                "separation_radius": 4.0,
+                "w_cohesion": 1.6,
+                "max_speed": 2.5,
+            },
+            "Aviary (bounce)": {"count": 250, "boundary": "bounce"},
+        },
+        paint=_paint_boids,
     )
 )
 

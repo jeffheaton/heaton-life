@@ -200,6 +200,14 @@ def main() -> None:
         [0, 1, 10, 50],
     )
 
+    # -- boids ---------------------------------------------------------------------
+    write_case(
+        "boids",
+        "flock-64",
+        build_sim("boids", {"count": 40, "width": 64, "height": 64, "seed": 3}),
+        [0, 1, 10, 50],
+    )
+
     # -- fractals (one-shot renders: params + viewport + int32 outputs) --------------
     write_fractal_case(
         "mandelbrot", "home-64",

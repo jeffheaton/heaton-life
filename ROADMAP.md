@@ -57,11 +57,12 @@ Per `spec/deep-zoom.md` (contract already in core since Phase 1):
 - Vectors: int32 iteration/root grids (bit-exact) incl. a deep-zoom case with its exported reference orbit.
 - Deferred to Phase 7: progressive refinement with cancellation (renders are single-pass), optional numba kernels.
 
-## Phase 6 — Boids
+## Phase 6 — Boids ✅
 
-- `boids/reynolds.py`: vectorized separation/alignment/cohesion, perception radius, wrap/bounce boundaries; uniform spatial hash when N > ~2k.
-- Rasterized `frame()` for the shared pipeline **plus** a playground vector overlay (oriented triangles, optional trails) — the first non-grid renderer, proving `state` ≠ `frame`.
-- ε-tier vectors (momentum conservation with zero steering as the oracle).
+- `boids/reynolds.py`: vectorized separation/alignment/cohesion, perception radius, wrap/bounce boundaries. O(N²) neighbors spec'd and capped at 2k boids; a spatial hash is future work if bigger flocks are ever needed.
+- Rasterized `frame()` for the shared pipeline **plus** a playground vector overlay (oriented triangles) — the first non-grid renderer, proving `state` ≠ `frame`. Trails skipped.
+- ε-tier vectors; oracle suite includes bitwise momentum conservation with zero steering.
+- Playground extras: scare/lure clicks (left shoves nearby boids away, right pulls them in).
 
 ## Phase 7 — Release polish & dotnet kickoff
 

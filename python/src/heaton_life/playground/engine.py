@@ -25,6 +25,7 @@ class SimEngine(QObject):
     stats = pyqtSignal(int, float)  # generation, achieved steps/sec
     error = pyqtSignal(str)
     params_updated = pyqtSignal(object)  # engine-side param change (e.g. click-zoom)
+    overlay_ready = pyqtSignal(object)  # point-cloud overlay payload, or None
 
     def __init__(self) -> None:
         super().__init__()
@@ -178,3 +179,5 @@ class SimEngine(QObject):
         rgb = apply_colormap(self._sim.frame(), self._lut)
         self._pending += 1
         self.frame_ready.emit(rgb, self.generation)
+        overlay_fn = getattr(self._sim, "overlay", None)
+        self.overlay_ready.emit(overlay_fn() if callable(overlay_fn) else None)
