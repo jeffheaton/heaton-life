@@ -1,0 +1,22 @@
+{
+  "family": "render",
+  "input": {
+    "file": "state.png"
+  },
+  "kind": "frame",
+  "output": {
+    "file": "frame.png",
+    "shape": [
+      16,
+      16
+    ]
+  },
+  "params": {
+    "boundary": "dead",
+    "height": 16,
+    "width": 16
+  },
+  "sim_family": "wireworld",
+  "spec_version": "0.2.0",
+  "tier": "bit-exact"
+}

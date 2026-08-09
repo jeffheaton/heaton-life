@@ -10,10 +10,14 @@ Unity IL2CPP/WebGL/mobile all work.
 |---|---|
 | `Pcg32` (spec/rng.md, known-answer tested) | ✅ |
 | Life-like CA + soup init | ✅ bit-exact against `vectors/lifelike/` |
-| Elementary, Cyclic, Wireworld, MergeLife | next (MergeLife can also replay `vectors/mergelife-upstream/`) |
-| Gray-Scott, Lenia ×3, Boids (ε tier) | planned |
-| Fractals (perturbation loop is plain doubles; orbits consumable from vectors) | planned |
-| `HeatonLife.Unity` UPM adapter | planned |
+| Elementary, Cyclic, Wireworld, MergeLife | ✅ bit-exact; MergeLife also replays `vectors/mergelife-upstream/` (byte-identical with the upstream engines) |
+| Gray-Scott, Lenia ×3, Boids (ε tier) | ✅ within ε (pure-C# radix-2/Bluestein FFT for Lenia) |
+| Fractals (T0 float64 + T1 perturbation consuming vector orbits) | ✅ bit-exact incl. the zoom-1e14 deep-zoom replay |
+| Colormaps / render (spec/render.md) | ✅ byte-identical LUTs, frame indexing, per-family `WriteFrame` (incl. boids rasterizer + fractal smooth coloring), RGB/RGBA32 output |
+| `ISimulation` + frame-source interfaces | ✅ the polymorphic surface a host (playground/Unity) drives |
+| Evolve: paper objective + GA (spec/evolve.md) | ✅ bit-exact, incl. a replayed end-to-end mini evolution run |
+| Patterns: RLE (both dialects), transforms, extract/stamp (spec/patterns.md) | ✅ bit-exact, Golly-compatible |
+| `HeatonLife.Unity` UPM adapter | next |
 
 ## Layout
 
@@ -33,6 +37,9 @@ dotnet test dotnet
 
 ## Porting order (mirrors the Python phases)
 
-RNG → Life-like → remaining discrete CAs → continuous grids → fractals → boids,
-each landing only with its conformance replay green. The spec (`../spec/`) is the
-authority; when C# and Python disagree, the vectors decide.
+RNG → Life-like → remaining discrete CAs → continuous grids → fractals → boids →
+render → evolve — **complete**; every stage landed with its conformance replay
+green. The spec (`../spec/`) is the authority; when C# and Python disagree, the
+vectors decide. Reference-orbit *generation* (bignum) stays on the Python side;
+the C# perturbation tier consumes precomputed orbits. Next: the
+`HeatonLife.Unity` UPM adapter.

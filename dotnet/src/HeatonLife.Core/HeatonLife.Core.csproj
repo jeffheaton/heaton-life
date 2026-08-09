@@ -7,6 +7,14 @@
     <RootNamespace>HeatonLife</RootNamespace>
     <Description>Emergence algorithms: cellular automata, Lenia, fractals, boids, reaction-diffusion. Spec-first port of heaton-life; conforms to the shared vectors.</Description>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <!-- Ship IntelliSense docs alongside the DLL (Unity reads the .xml next to it).
+         CS1591 stays off: undocumented public members are fine; spec-relevant docs exist. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="HeatonLife.Core.Tests" />
+  </ItemGroup>
 
 </Project>

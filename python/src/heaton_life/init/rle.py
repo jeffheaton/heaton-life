@@ -1,7 +1,10 @@
 """Run Length Encoded pattern files — the interchange format of the Life community.
 
-Supports the two-state dialect: ``b`` dead, ``o`` alive, ``$`` end of row, ``!`` end,
-optional run counts, ``#`` comment lines, and the ``x = …, y = …[, rule = …]`` header.
+Golly-compatible, both dialects (spec/patterns.md): two-state ``b``/``o`` and
+extended multi-state ``.``/``A``–``X`` (states 1–24), ``$`` end of row, ``!`` end,
+optional run counts, ``#`` comment lines, and the ``x = …, y = …[, rule = …]``
+header. Encoding is canonical: two-state grids emit ``b``/``o``; grids with any
+cell ≥ 2 emit ``.``/letters; cells above 24 are unencodable.
 """
 
 from __future__ import annotations
@@ -14,6 +17,7 @@ from numpy.typing import NDArray
 _HEADER = re.compile(
     r"x\s*=\s*(\d+)\s*,\s*y\s*=\s*(\d+)(?:\s*,\s*rule\s*=\s*(\S+))?", re.IGNORECASE
 )
+_LIFELIKE_RULE = re.compile(r"^[Bb][0-8]*/[Ss][0-8]*$")
 
 
 def rle_decode(text: str) -> tuple[NDArray[np.uint8], str | None]:
@@ -33,16 +37,28 @@ def rle_decode(text: str) -> tuple[NDArray[np.uint8], str | None]:
         declared_w = declared_h = 0
         body = "".join(lines)
 
+    # Dialect detection (spec/patterns.md): uppercase B/O are dead/alive in
+    # two-state files but states 2/15 in extended RLE. Extended iff the body
+    # holds '.', any state letter other than B/O, or a non-Life-like rule.
+    extended = (
+        "." in body
+        or any("A" <= ch <= "X" and ch not in ("B", "O") for ch in body)
+        or (rule is not None and not _LIFELIKE_RULE.match(rule))
+    )
+
     rows: list[list[int]] = [[]]
     count = 0
     for ch in body:
         if ch.isdigit():
             count = count * 10 + int(ch)
-        elif ch in ("b", "B"):
+        elif ch == "b" or ch == "." or (not extended and ch == "B"):
             rows[-1].extend([0] * max(count, 1))
             count = 0
-        elif ch in ("o", "O"):
+        elif ch == "o" or (not extended and ch == "O"):
             rows[-1].extend([1] * max(count, 1))
+            count = 0
+        elif extended and "A" <= ch <= "X":  # states 1..24 (B = 2, O = 15)
+            rows[-1].extend([ord(ch) - ord("A") + 1] * max(count, 1))
             count = 0
         elif ch == "$":
             rows.extend([] for _ in range(max(count, 1)))
@@ -68,8 +84,12 @@ def rle_decode(text: str) -> tuple[NDArray[np.uint8], str | None]:
 
 
 def rle_encode(grid: NDArray[np.uint8], rule: str = "B3/S23", *, line_width: int = 70) -> str:
-    """Encode a 0/1 grid as RLE text."""
+    """Encode a grid as canonical RLE; dialect chosen by content (spec/patterns.md)."""
     height, width = grid.shape
+    top = int(grid.max(initial=0))
+    if top > 24:
+        raise ValueError(f"cell value {top} not RLE-encodable (extended RLE tops out at 24)")
+    multistate = top > 1
     tokens: list[str] = []
     for y in range(height):
         run_val = -1
@@ -79,11 +99,11 @@ def rle_encode(grid: NDArray[np.uint8], rule: str = "B3/S23", *, line_width: int
             if v == run_val:
                 run_len += 1
             else:
-                if run_len and not (run_val == 0 and x == 0):
-                    tokens.append(_run(run_len, run_val))
+                if run_len:
+                    tokens.append(_run(run_len, run_val, multistate))
                 run_val, run_len = v, 1
-        if run_val == 1:  # trailing dead runs in a row are omitted by convention
-            tokens.append(_run(run_len, run_val))
+        if run_val > 0:  # trailing dead runs in a row are omitted by convention
+            tokens.append(_run(run_len, run_val, multistate))
         tokens.append("$" if y < height - 1 else "!")
 
     body_lines: list[str] = []
@@ -98,8 +118,11 @@ def rle_encode(grid: NDArray[np.uint8], rule: str = "B3/S23", *, line_width: int
     return "\n".join([header, *body_lines]) + "\n"
 
 
-def _run(length: int, value: int) -> str:
-    tag = "o" if value else "b"
+def _run(length: int, value: int, multistate: bool) -> str:
+    if multistate:
+        tag = "." if value == 0 else chr(ord("A") + value - 1)
+    else:
+        tag = "o" if value else "b"
     return tag if length == 1 else f"{length}{tag}"
 
 

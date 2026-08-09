@@ -1,7 +1,9 @@
 # Evolving MergeLife rules (paper Secs. 4-5)
 
-Not a conformance family — a search procedure over the [MergeLife](mergelife.md)
-genome space, ported from the reference trainer (github.com/jeffheaton/mergelife).
+A search procedure over the [MergeLife](mergelife.md) genome space, ported from
+the reference trainer (github.com/jeffheaton/mergelife). Because every random
+decision is PCG32-seeded, it is *also* a conformance family: scoring and whole
+runs replay bit-exact across languages (see Conformance below).
 
 ## Objective statistics (Sec. 4)
 
@@ -42,3 +44,20 @@ The reference uses numpy's global RNG. This implementation draws every random
 decision — lattice seeds, operator choices, cut points — from PCG32 streams, so
 `score_genome(...)` and entire `Evolver` runs replay exactly from their seed.
 Scores are comparable with the reference trainer's, but runs are reproducible.
+
+The trainer's own stream is `Pcg32(seed, seq=1)` (sequence 1, distinct from the
+lattice-seeding stream); evaluation `i` scores with lattice seed
+`seed + i * eval_cycles`, and cycle `j` of a scoring call runs from `seed + j`.
+
+## Conformance
+
+Bit-exact tier (integer statistics; plain-double scoring). Vectors in
+[`../vectors/evolve/`](../vectors/evolve/):
+
+- `objective-*` — per-cycle run statistics `(steps, foreground, active, rect,
+  mage, score)` and the `(max_score, total_steps)` summary for seeded runs of a
+  fixed genome, stored raw (`.f64`).
+- `operators-seeded` — successive `mutate` / `crossover` / `tournament_select`
+  results from fixed PCG32 seeds (strings and indices in `params.json`).
+- `mini-run-24` — a complete small `Evolver` run: best genome, its score, the
+  evaluation count, and the final population, all pinned.

@@ -1,0 +1,25 @@
+{
+  "expected": {
+    "file": "expected.png",
+    "shape": [
+      2,
+      2
+    ]
+  },
+  "family": "patterns",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      4,
+      4
+    ]
+  },
+  "height": 2,
+  "kind": "extract",
+  "spec_version": "0.2.0",
+  "tier": "bit-exact",
+  "torus": false,
+  "width": 2,
+  "x": 3,
+  "y": 3
+}

@@ -1,0 +1,28 @@
+{
+  "epsilon": 1e-09,
+  "family": "render",
+  "kind": "fractal-render",
+  "output": {
+    "file": "render.f64",
+    "shape": [
+      64,
+      64
+    ]
+  },
+  "params": {
+    "escape_radius": 1000.0,
+    "max_iter": 500
+  },
+  "sim_family": "mandelbrot",
+  "size": [
+    64,
+    64
+  ],
+  "spec_version": "0.2.0",
+  "tier": "epsilon",
+  "viewport": {
+    "center_im": "0.0",
+    "center_re": "-0.5",
+    "zoom_log10": 0.0
+  }
+}

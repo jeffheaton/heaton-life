@@ -1,0 +1,31 @@
+{
+  "family": "render",
+  "input": {
+    "file": "state.f64",
+    "shape": [
+      2,
+      48,
+      48
+    ]
+  },
+  "kind": "frame",
+  "output": {
+    "file": "frame.f64",
+    "shape": [
+      48,
+      48
+    ]
+  },
+  "params": {
+    "dt": 1.0,
+    "du": 0.16,
+    "dv": 0.08,
+    "feed": 0.0367,
+    "height": 48,
+    "kill": 0.0649,
+    "width": 48
+  },
+  "sim_family": "grayscott",
+  "spec_version": "0.2.0",
+  "tier": "bit-exact"
+}

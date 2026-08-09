@@ -1,0 +1,16 @@
+{
+  "family": "png-io",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      4,
+      5,
+      3
+    ]
+  },
+  "input": "input.png",
+  "kind": "decode",
+  "scale": 1,
+  "spec_version": "0.2.0",
+  "tier": "bit-exact"
+}

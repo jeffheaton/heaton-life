@@ -1,0 +1,27 @@
+{
+  "background": 7,
+  "expected": {
+    "file": "expected.png",
+    "shape": [
+      5,
+      6
+    ]
+  },
+  "family": "patterns",
+  "grid_height": 5,
+  "grid_width": 6,
+  "kind": "stamp",
+  "pattern": {
+    "file": "pattern.png",
+    "shape": [
+      3,
+      3
+    ]
+  },
+  "spec_version": "0.2.0",
+  "tier": "bit-exact",
+  "torus": true,
+  "transparent": false,
+  "x": 1,
+  "y": 1
+}

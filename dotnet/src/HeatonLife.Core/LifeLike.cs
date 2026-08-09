@@ -13,7 +13,7 @@ namespace HeatonLife
     /// byte grid (0/1), index = y * Width + x — the same memory layout as the
     /// Python implementation and the conformance vectors. Bit-exact tier.
     /// </summary>
-    public sealed class LifeLike
+    public sealed class LifeLike : IIndexedFrameSource
     {
         private readonly bool[] _birth;
         private readonly bool[] _survive;
@@ -41,15 +41,20 @@ namespace HeatonLife
             Boundary = boundary;
             _cells = new byte[width * height];
             _scratch = new byte[width * height];
+            SeedSoup(0.35, 0); // the Python constructor's default init
         }
 
         /// <summary>Soup init per spec: PCG32 seq 0, row-major draws, alive iff draw &lt; floor(density * 2^32).</summary>
         public void SeedSoup(double density, uint seed)
         {
-            var rng = new Pcg32(seed);
-            ulong threshold = (ulong)(density * 4294967296.0);
-            for (int i = 0; i < _cells.Length; i++)
-                _cells[i] = (byte)(rng.NextU32() < threshold ? 1 : 0);
+            Seeding.Soup(_cells, density, seed);
+            Generation = 0;
+        }
+
+        /// <summary>Blob init per spec: soup restricted to a centered disk (radius as a fraction of min dimension).</summary>
+        public void SeedBlob(double density, uint seed, double radius = 0.25)
+        {
+            Seeding.Blob(_cells, Width, Height, density, radius, seed);
             Generation = 0;
         }
 
@@ -63,11 +68,43 @@ namespace HeatonLife
             Generation = 0;
         }
 
+        /// <summary>Restore a saved state at a given generation (catalog loads).</summary>
+        public void SetState(ReadOnlySpan<byte> cells, int generation)
+        {
+            SetState(cells);
+            Generation = generation;
+        }
+
+        /// <summary>Paint one cell in place (0/1); does not reset the generation.</summary>
+        public void SetCell(int x, int y, byte value)
+        {
+            if (x < 0 || x >= Width || y < 0 || y >= Height)
+                throw new ArgumentOutOfRangeException($"cell ({x}, {y}) outside {Width}x{Height}");
+            _cells[y * Width + x] = (byte)(value > 0 ? 1 : 0);
+        }
+
         public void Step(int n = 1)
         {
             for (int s = 0; s < n; s++)
                 StepOnce();
             Generation += n;
+        }
+
+        /// <summary>Frame per spec/render.md: palette index = state * 255.</summary>
+        public void WriteFrame(byte[] frame)
+        {
+            if (frame.Length != _cells.Length)
+                throw new ArgumentException($"expected {_cells.Length} bytes, got {frame.Length}");
+            for (int i = 0; i < _cells.Length; i++)
+                frame[i] = (byte)(_cells[i] * 255);
+        }
+
+        /// <summary>Allocating convenience for <see cref="WriteFrame"/>.</summary>
+        public byte[] Frame()
+        {
+            var frame = new byte[_cells.Length];
+            WriteFrame(frame);
+            return frame;
         }
 
         private void StepOnce()

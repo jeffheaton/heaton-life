@@ -22,7 +22,7 @@ Each family gets one page structured as:
 
 | Tier | Families | Test |
 |---|---|---|
-| Bit-exact | Life-like, Elementary, Cyclic, Wireworld, MergeLife, fractal iteration counts | state equality after N steps |
+| Bit-exact | Life-like, Elementary, Cyclic, Wireworld, MergeLife, fractal iteration counts, colormaps, evolve | state equality after N steps |
 | ε-tolerance | Lenia ×3, Gray-Scott, Boids, smooth coloring | max abs deviation < ε + fingerprints |
 
 ## Conventions
@@ -46,4 +46,7 @@ Each family gets one page structured as:
 - [evolve.md](evolve.md) — the MergeLife GA and paper objective (search, not a conformance family)
 - [fractals.md](fractals.md) — escape-time + Newton conventions, pixel mapping, vector schema
 - [deep-zoom.md](deep-zoom.md) — fractal precision architecture (perturbation + rebasing)
+- [render.md](render.md) — colormap LUT construction and frame indexing (bit-exact tier)
+- [patterns.md](patterns.md) — pattern model, RLE dialects, transforms, extract/stamp, family-bound compatibility
+- [png-io.md](png-io.md) — MergeLife PNG import/export at integer scale; grid-level bit-exact contract (PNG bytes are per-encoder)
 - Remaining family pages land alongside their implementations, per [ROADMAP.md](../ROADMAP.md).

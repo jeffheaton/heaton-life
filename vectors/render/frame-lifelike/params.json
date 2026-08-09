@@ -1,0 +1,23 @@
+{
+  "family": "render",
+  "input": {
+    "file": "state.png"
+  },
+  "kind": "frame",
+  "output": {
+    "file": "frame.png",
+    "shape": [
+      32,
+      32
+    ]
+  },
+  "params": {
+    "boundary": "torus",
+    "height": 32,
+    "rule": "B3/S23",
+    "width": 32
+  },
+  "sim_family": "lifelike",
+  "spec_version": "0.2.0",
+  "tier": "bit-exact"
+}

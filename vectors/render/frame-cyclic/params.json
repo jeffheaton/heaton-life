@@ -1,0 +1,25 @@
+{
+  "family": "render",
+  "input": {
+    "file": "state.png"
+  },
+  "kind": "frame",
+  "output": {
+    "file": "frame.png",
+    "shape": [
+      32,
+      32
+    ]
+  },
+  "params": {
+    "height": 32,
+    "neighborhood": "moore",
+    "reach": 1,
+    "states": 14,
+    "threshold": 1,
+    "width": 32
+  },
+  "sim_family": "cyclic",
+  "spec_version": "0.2.0",
+  "tier": "bit-exact"
+}

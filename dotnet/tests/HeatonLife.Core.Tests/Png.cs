@@ -5,14 +5,14 @@ using System.IO.Compression;
 namespace HeatonLife.Tests
 {
     /// <summary>
-    /// Minimal reader for the conformance vectors' PNGs: 8-bit grayscale,
+    /// Minimal reader for the conformance vectors' PNGs: 8-bit grayscale or RGB,
     /// non-interlaced (exactly what the Python side writes). Deliberately
     /// dependency-free — "both stacks read the vectors" should not hinge on an
     /// image library.
     /// </summary>
-    public static class PngGray
+    public static class Png
     {
-        public static (int Width, int Height, byte[] Pixels) Read(string path)
+        public static (int Width, int Height, int Channels, byte[] Pixels) Read(string path)
         {
             byte[] data = File.ReadAllBytes(path);
             if (data.Length < 8 || data[0] != 0x89 || data[1] != (byte)'P')
@@ -45,9 +45,15 @@ namespace HeatonLife.Tests
                 }
                 pos = body + length + 4; // skip CRC
             }
-            if (bitDepth != 8 || colorType != 0)
-                throw new InvalidDataException(
-                    $"vector PNGs are 8-bit grayscale; got depth={bitDepth} color={colorType}");
+            int channels = colorType switch
+            {
+                0 => 1, // grayscale
+                2 => 3, // RGB
+                _ => throw new InvalidDataException(
+                    $"vector PNGs are 8-bit grayscale or RGB; got color type {colorType}"),
+            };
+            if (bitDepth != 8)
+                throw new InvalidDataException($"vector PNGs are 8-bit; got depth={bitDepth}");
 
             idat.Position = 0;
             using var inflate = new ZLibStream(idat, CompressionMode.Decompress);
@@ -55,19 +61,20 @@ namespace HeatonLife.Tests
             inflate.CopyTo(raw);
             byte[] scanlines = raw.ToArray();
 
-            var pixels = new byte[width * height];
-            var previous = new byte[width];
+            int stride = width * channels;
+            var pixels = new byte[stride * height];
+            var previous = new byte[stride];
             for (int y = 0; y < height; y++)
             {
-                int offset = y * (width + 1);
+                int offset = y * (stride + 1);
                 byte filter = scanlines[offset];
-                var row = new byte[width];
-                for (int x = 0; x < width; x++)
+                var row = new byte[stride];
+                for (int x = 0; x < stride; x++)
                 {
                     byte value = scanlines[offset + 1 + x];
-                    byte left = x > 0 ? row[x - 1] : (byte)0;
+                    byte left = x >= channels ? row[x - channels] : (byte)0;
                     byte up = previous[x];
-                    byte upLeft = x > 0 ? previous[x - 1] : (byte)0;
+                    byte upLeft = x >= channels ? previous[x - channels] : (byte)0;
                     row[x] = filter switch
                     {
                         0 => value,
@@ -78,10 +85,10 @@ namespace HeatonLife.Tests
                         _ => throw new InvalidDataException($"unknown PNG filter {filter}"),
                     };
                 }
-                Array.Copy(row, 0, pixels, y * width, width);
+                Array.Copy(row, 0, pixels, y * stride, stride);
                 previous = row;
             }
-            return (width, height, pixels);
+            return (width, height, channels, pixels);
         }
 
         private static byte Paeth(byte a, byte b, byte c)

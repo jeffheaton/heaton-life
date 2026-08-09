@@ -1,0 +1,16 @@
+{
+  "canonical": "canonical.rle",
+  "family": "patterns",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      3,
+      3
+    ]
+  },
+  "input": "input.rle",
+  "kind": "rle",
+  "rule": "B3/S23",
+  "spec_version": "0.2.0",
+  "tier": "bit-exact"
+}
