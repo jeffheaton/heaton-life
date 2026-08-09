@@ -35,7 +35,8 @@ Emergence
 | [`spec/`](spec/) | Language-neutral algorithm specifications — the source of truth both implementations conform to |
 | [`vectors/`](vectors/) | Golden conformance vectors (params + expected states) shared by all implementations |
 | [`python/`](python/) | Python implementation (NumPy) + PyQt6 playground app |
-| [`dotnet/`](dotnet/) | C#/.NET implementation (netstandard2.1 core + Unity adapter) — placeholder, coming after spec v0 |
+| [`dotnet/`](dotnet/) | C#/.NET implementation (netstandard2.1 core, full parity with Python) |
+| [`heaton-life-unity/`](heaton-life-unity/) | Unity app + embedded HeatonLife package (source-synced from `dotnet/`, conformance-gated in-editor) |
 | [`ROADMAP.md`](ROADMAP.md) | Phased implementation plan |
 
 ## Design principles
@@ -48,8 +49,10 @@ Emergence
 ## Status
 
 Every family in the taxonomy is implemented in Python with specs, conformance
-vectors, and playground support; the .NET port is underway with Life-like already
-bit-exact against the shared vectors. See [ROADMAP.md](ROADMAP.md).
+vectors, and playground support. The .NET port has reached full library parity:
+every family, the colormap pipeline, and the MergeLife evolver replay the shared
+vectors (bit-exact tiers exactly, ε tiers within tolerance; MergeLife is
+byte-identical with the upstream engines). See [ROADMAP.md](ROADMAP.md).
 
 ## License
 

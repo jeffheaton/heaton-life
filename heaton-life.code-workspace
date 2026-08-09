@@ -1,0 +1,98 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		// Python subproject lives in python/ with its venv at python/.venv
+		"python.defaultInterpreterPath": "${workspaceFolder}/python/.venv/bin/python",
+		"python.analysis.extraPaths": ["python/src"],
+		"python.testing.pytestEnabled": true,
+		"python.testing.unittestEnabled": false,
+		"python.testing.cwd": "${workspaceFolder}/python",
+		"mypy-type-checker.cwd": "${workspaceFolder}/python",
+		"[python]": {
+			"editor.defaultFormatter": "charliermarsh.ruff",
+			"editor.rulers": [100]
+		},
+		// .NET subproject
+		"dotnet.defaultSolution": "dotnet/HeatonLife.slnx",
+		// Keep tool caches and build output out of the explorer, search, and watcher
+		"files.exclude": {
+			"**/__pycache__": true,
+			"**/.pytest_cache": true,
+			"**/.mypy_cache": true,
+			"**/.ruff_cache": true,
+			"**/.DS_Store": true,
+			"dotnet/**/bin": true,
+			"dotnet/**/obj": true
+		},
+		"search.exclude": {
+			"python/.venv": true
+		},
+		"files.watcherExclude": {
+			"python/.venv/**": true,
+			"**/__pycache__/**": true,
+			"dotnet/**/bin/**": true,
+			"dotnet/**/obj/**": true
+		}
+	},
+	"extensions": {
+		"recommendations": [
+			"ms-python.python",
+			"ms-python.vscode-pylance",
+			"charliermarsh.ruff",
+			"ms-python.mypy-type-checker",
+			"ms-dotnettools.csdevkit"
+		]
+	},
+	"launch": {
+		"configurations": [
+			{
+				"name": "Playground (PyQt6)",
+				"type": "debugpy",
+				"request": "launch",
+				"module": "heaton_life.playground",
+				"cwd": "${workspaceFolder}/python",
+				"console": "integratedTerminal"
+			}
+		]
+	},
+	// Mirrors the CI jobs (.github/workflows/ci.yml)
+	"tasks": {
+		"version": "2.0.0",
+		"tasks": [
+			{
+				"label": "python: pytest",
+				"type": "shell",
+				"command": "${workspaceFolder}/python/.venv/bin/pytest -q",
+				"options": { "cwd": "${workspaceFolder}/python" },
+				"group": { "kind": "test", "isDefault": true },
+				"problemMatcher": []
+			},
+			{
+				"label": "python: ruff check",
+				"type": "shell",
+				"command": "${workspaceFolder}/python/.venv/bin/ruff check src tests tools",
+				"options": { "cwd": "${workspaceFolder}/python" },
+				"problemMatcher": []
+			},
+			{
+				"label": "python: mypy",
+				"type": "shell",
+				"command": "${workspaceFolder}/python/.venv/bin/mypy",
+				"options": { "cwd": "${workspaceFolder}/python" },
+				"problemMatcher": []
+			},
+			{
+				"label": "dotnet: test",
+				"type": "shell",
+				"command": "dotnet test --nologo",
+				"options": { "cwd": "${workspaceFolder}/dotnet" },
+				"group": "test",
+				"problemMatcher": []
+			}
+		]
+	}
+}

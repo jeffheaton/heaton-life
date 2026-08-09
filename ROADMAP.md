@@ -82,8 +82,10 @@ Per `spec/deep-zoom.md` (contract already in core since Phase 1):
 
 ## Future work
 
-- .NET: remaining families in porting order (discrete CAs → continuous grids →
-  fractals → boids), then the `HeatonLife.Unity` UPM adapter.
+- .NET: library parity is complete — all families, colormaps (spec/render.md),
+  and the evolver (spec/evolve.md) conform to the shared vectors. Next: the
+  `HeatonLife.Unity` UPM adapter. Reference-orbit generation (bignum) remains
+  Python-side; C# consumes precomputed orbits.
 - Fractals: progressive refinement with cancellation in the playground; optional
   numba kernels; floatexp tier beyond zoom 1e290; BLA iteration skipping.
 - Boids spatial hash if flocks ever need >2k; Lenia multi-channel; Orbium and
