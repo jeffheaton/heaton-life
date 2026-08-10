@@ -23,8 +23,8 @@ from heaton_life.ca import (
     MergeLifeParams,
     Wireworld,
     WireworldParams,
-    parse_genome_error,
 )
+from heaton_life.ca.mergelife import parse_rule_error
 from heaton_life.ca.rulestring import parse_rule
 from heaton_life.core.neighbors import Boundary
 from heaton_life.core.params import Params
@@ -289,7 +289,7 @@ def _build_mergelife(params: Params) -> Simulation:
 def _hot_mergelife(sim: Simulation, params: Params) -> Simulation:
     assert isinstance(params, MergeLifeParams)
     return MergeLife(
-        params.genome,
+        params.rule,
         size=(params.width, params.height),
         init=np.asarray(sim.state, dtype=np.uint8),
         seed=params.seed,
@@ -298,9 +298,9 @@ def _hot_mergelife(sim: Simulation, params: Params) -> Simulation:
 
 def _validate_mergelife(params: Params) -> tuple[str, str] | None:
     assert isinstance(params, MergeLifeParams)
-    message = parse_genome_error(params.genome)
+    message = parse_rule_error(params.rule)
     if message is not None:
-        return ("genome", message)
+        return ("rule", message)
     return None
 
 
@@ -702,20 +702,20 @@ register(
         category="Cellular Automata",
         params_cls=MergeLifeParams,
         build=_build_mergelife,
-        hot_fields=frozenset({"genome"}),
+        hot_fields=frozenset({"rule"}),
         hot_apply=_hot_mergelife,
         validate=_validate_mergelife,
         default_cmap="gray",  # unused: MergeLife frames are RGB passthrough
         presets={
-            "Red World (paper)": {"genome": "e542-5f79-9341-f31e-6c6b-7f08-8773-7068"},
+            "Red World (paper)": {"rule": "e542-5f79-9341-f31e-6c6b-7f08-8773-7068"},
             "1c48-9004-8831-41be-2804-8f50-9901-db18": {
-                "genome": "1c48-9004-8831-41be-2804-8f50-9901-db18"
+                "rule": "1c48-9004-8831-41be-2804-8f50-9901-db18"
             },
             "7e18-62ac-5c42-109e-45a1-9ff2-b7d8-64a1": {
-                "genome": "7e18-62ac-5c42-109e-45a1-9ff2-b7d8-64a1"
+                "rule": "7e18-62ac-5c42-109e-45a1-9ff2-b7d8-64a1"
             },
             "2152-9b71-abb7-162a-45ff-dd03-fe15-957e": {
-                "genome": "2152-9b71-abb7-162a-45ff-dd03-fe15-957e"
+                "rule": "2152-9b71-abb7-162a-45ff-dd03-fe15-957e"
             },
         },
         paint=_paint_mergelife,

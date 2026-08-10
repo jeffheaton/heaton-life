@@ -8,17 +8,24 @@ namespace HeatonLife
         public double CRe { get; }
         public double CIm { get; }
         public int MaxIter { get; }
+
+        /// <summary>Row-parallel worker count; output is identical for any value.</summary>
+        public int Workers { get; }
         public double EscapeRadius { get; }
 
         public Julia(
-            double cRe = -0.7269, double cIm = 0.1889, int maxIter = 500, double escapeRadius = 1000.0)
+            double cRe = -0.7269, double cIm = 0.1889, int maxIter = 500,
+            double escapeRadius = 1000.0, int workers = 1)
         {
             if (maxIter < 1)
                 throw new ArgumentException("max_iter must be positive");
+            if (workers < 1)
+                throw new ArgumentException("workers must be positive");
             CRe = cRe;
             CIm = cIm;
             MaxIter = maxIter;
             EscapeRadius = escapeRadius;
+            Workers = workers;
         }
 
         /// <summary>T0 (direct float64) escape counts into <paramref name="counts"/>. Zoom &lt;= 1e12.</summary>
@@ -99,7 +106,7 @@ namespace HeatonLife
             double centerIm = t1 ? 0.0 : viewport.CenterImDouble;
             double r2 = EscapeRadius * EscapeRadius;
             double logR = Math.Log(EscapeRadius);
-            for (int y = 0; y < height; y++)
+            void Row(int y)
             {
                 double oy = FractalEngine.OffsetIm(y, height, ps);
                 for (int x = 0; x < width; x++)
@@ -118,6 +125,8 @@ namespace HeatonLife
                         mu[y * width + x] = FractalEngine.SmoothMu(count, fr, fi, logR);
                 }
             }
+
+            FractalEngine.ForRows(height, Workers, Row);
         }
     }
 }

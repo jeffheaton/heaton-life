@@ -16,7 +16,7 @@ namespace HeatonLife.Tests
                 new Elementary(30, 16, 8),
                 new Cyclic(4, 16, 16),
                 new Wireworld(16, 16),
-                new MergeLife(MergeLife.DefaultGenome, 16, 16),
+                new MergeLife(MergeLife.DefaultRule, 16, 16),
                 new GrayScott(16, 16),
                 new ClassicLenia(32, 32, radius: 8),
                 new AsymptoticLenia(32, 32, radius: 8),
@@ -74,8 +74,8 @@ namespace HeatonLife.Tests
             cyclicExplicit.SeedSoup(0);
             Assert.Equal(cyclicExplicit.State.ToArray(), cyclic.State.ToArray());
 
-            var mergelife = new MergeLife(MergeLife.DefaultGenome, 24, 24);
-            var mergelifeExplicit = new MergeLife(MergeLife.DefaultGenome, 24, 24);
+            var mergelife = new MergeLife(MergeLife.DefaultRule, 24, 24);
+            var mergelifeExplicit = new MergeLife(MergeLife.DefaultRule, 24, 24);
             mergelifeExplicit.SeedSoup(0);
             Assert.Equal(mergelifeExplicit.State.ToArray(), mergelife.State.ToArray());
 

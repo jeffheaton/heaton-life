@@ -8,6 +8,7 @@ Usage: .venv/bin/python tools/gen_vectors.py
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import sys
 from pathlib import Path
@@ -60,6 +61,34 @@ def write_case(family: str, name: str, sim: Simulation, steps: list[int]) -> Non
         meta["epsilon"] = epsilon
     (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
     print(f"wrote {case_dir.relative_to(REPO_ROOT)} (steps {steps})")
+
+
+def gen_mergelife_decode() -> None:
+    """spec/mergelife.md "Decoded rule table" — display-ready rows, bit-exact."""
+    from heaton_life.ca.mergelife import decode_rule
+
+    cases = [
+        ("red-world", "e542-5f79-9341-f31e-6c6b-7f08-8773-7068"),
+        ("promoted-and-negative", "ff40-00c0-8020-407f-2081-6001-a0ff-e080"),
+        ("tied-limits", "1010-1020-1030-1040-1050-1060-1070-1080"),
+    ]
+    for name, rule in cases:
+        rows = []
+        for row in decode_rule(rule):
+            entry = dataclasses.asdict(row)
+            entry["target_rgb"] = list(entry["target_rgb"])
+            rows.append(entry)
+        case_dir = VECTOR_ROOT / "mergelife-decode" / name
+        case_dir.mkdir(parents=True, exist_ok=True)
+        meta = {
+            "family": "mergelife-decode",
+            "case": name,
+            "tier": "bit-exact",
+            "rule": rule,
+            "expected_rows": rows,
+        }
+        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+        print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
 
 
 def main() -> None:
@@ -143,6 +172,8 @@ def main() -> None:
     )
     grid = place(junction, (16, 8), at=(1, 2))
     write_case("wireworld", "junction-16", Wireworld(size=(16, 8), init=grid), [0, 1, 5, 20])
+
+    gen_mergelife_decode()
 
     # -- mergelife -----------------------------------------------------------------
     write_case(

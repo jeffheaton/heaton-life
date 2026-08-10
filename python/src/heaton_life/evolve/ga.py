@@ -12,7 +12,7 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Callable, Sequence
 
-from heaton_life.ca import random_genome
+from heaton_life.ca.mergelife import random_rule
 from heaton_life.core.rng import Pcg32
 from heaton_life.evolve.objective import PAPER_OBJECTIVE, ObjectiveRule, score_genome
 
@@ -131,7 +131,7 @@ class Evolver:
     def run(self, max_evals: int) -> Candidate:
         """Seed a random population, then evolve until max_evals or patience runs out."""
         while len(self.population) < self.population_size and self.evals < max_evals:
-            self._admit(random_genome(self.rng.next_u32()))
+            self._admit(random_rule(self.rng.next_u32()))
         while self.evals < max_evals and self.no_improvement <= self.patience:
             scores = [c.score for c in self.population]
             if len(scores) > 1 and (self.rng.next_u32() / 4294967296.0) < self.crossover_rate:

@@ -6,13 +6,21 @@ Per the upstream contract, the LCG and FNV-1a helpers are implemented independen
 here in the test harness; only the engine under test is shared code.
 """
 
+import dataclasses
+import json
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from heaton_life.ca import MergeLife, canonical_genome, parse_genome_error, random_genome
-from heaton_life.ca.mergelife import compile_rule
+from heaton_life.ca.mergelife import (
+    MergeLife,
+    canonical_rule,
+    compile_rule,
+    decode_rule,
+    parse_rule_error,
+    random_rule,
+)
 
 UPSTREAM = Path(__file__).resolve().parents[2] / "vectors" / "mergelife-upstream" / "vectors.txt"
 
@@ -54,15 +62,15 @@ def test_upstream_conformance(
     assert fnv1a64(sim.state.tobytes()) == digest
 
 
-def test_genome_canonicalization() -> None:
+def test_rule_canonicalization() -> None:
     mixed = "E542-5F79-9341-F31E-6C6B-7F08-8773-7068"
-    assert canonical_genome(mixed) == "e542-5f79-9341-f31e-6c6b-7f08-8773-7068"
-    assert canonical_genome(mixed.replace("-", "")) == canonical_genome(mixed)
+    assert canonical_rule(mixed) == "e542-5f79-9341-f31e-6c6b-7f08-8773-7068"
+    assert canonical_rule(mixed.replace("-", "")) == canonical_rule(mixed)
 
 
 @pytest.mark.parametrize("bad", ["", "e542", "zz42-" * 8, "e542-5f79-9341-f31e-6c6b-7f08-8773"])
-def test_invalid_genome(bad: str) -> None:
-    assert parse_genome_error(bad) is not None
+def test_invalid_rule(bad: str) -> None:
+    assert parse_rule_error(bad) is not None
     with pytest.raises(ValueError):
         MergeLife(bad, size=(8, 8))
 
@@ -75,7 +83,7 @@ def test_rule_compilation_details() -> None:
     assert max(limits) == 2048
     assert min(limits) == 0
     first = rule[0]
-    assert first[0] == 0  # 0x00 * 8, stable sort keeps genome order among ties
+    assert first[0] == 0  # 0x00 * 8, stable sort keeps rule order among ties
     top = next(e for e in rule if e[0] == 2048)
     assert top[1] == pytest.approx(127 / 127.0)
 
@@ -98,9 +106,53 @@ def test_step_changes_grid() -> None:
     assert not np.array_equal(sim.state, before)
 
 
-def test_random_genome_is_valid_and_deterministic() -> None:
-    g1 = random_genome(42)
-    g2 = random_genome(42)
+def test_decode_rule_red_world() -> None:
+    rows = decode_rule("e542-5f79-9341-f31e-6c6b-7f08-8773-7068")
+    assert len(rows) == 8
+    first = rows[0]  # the HeatonCA Rule-tab top row
+    assert (first.limit, first.range_low, first.range_high) == (760, 0, 759)
+    assert (first.color_index, first.color_name) == (1, "Red")
+    assert (first.target_index, first.target_name) == (1, "Red")
+    assert first.target_rgb == (255, 0, 0)
+    assert (first.range_byte, first.percent_byte) == (0x5F, 0x79)
+    assert int(first.percent * 100) == 95
+    last = rows[-1]
+    assert (last.limit, last.color_name) == (1944, "Yellow")
+    assert int(last.percent * 100) == 23  # truncation, not rounding
+
+
+def test_decode_rule_negative_swaps_target_and_keeps_raw_octets() -> None:
+    rows = decode_rule("ff40-00c0-8020-407f-2081-6001-a0ff-e080")
+    by_index = {r.color_index: r for r in rows}
+    promoted = by_index[0]
+    assert promoted.limit == 2048
+    assert promoted.range_byte == 0xFF  # raw, not limit/8
+    neg = by_index[1]
+    assert neg.percent == -0.5
+    assert (neg.color_name, neg.target_name) == ("Red", "Green")
+    assert neg.percent_byte == -64
+    wrap = by_index[7]
+    assert wrap.percent == -1.0
+    assert (wrap.target_index, wrap.target_name) == (0, "Black")
+
+
+def test_decode_vectors_replay() -> None:
+    root = Path(__file__).resolve().parents[2] / "vectors" / "mergelife-decode"
+    cases = sorted(root.iterdir())
+    assert cases, "mergelife-decode vectors missing"
+    for case_dir in cases:
+        meta = json.loads((case_dir / "params.json").read_text())
+        rows = decode_rule(meta["rule"])
+        assert len(rows) == len(meta["expected_rows"])
+        for row, expected in zip(rows, meta["expected_rows"]):
+            got = dataclasses.asdict(row)
+            got["target_rgb"] = list(got["target_rgb"])
+            assert got == expected, f"{case_dir.name}: row {expected['color_index']}"
+
+
+def test_random_rule_is_valid_and_deterministic() -> None:
+    g1 = random_rule(42)
+    g2 = random_rule(42)
     assert g1 == g2
-    assert parse_genome_error(g1) is None
-    assert random_genome(43) != g1
+    assert parse_rule_error(g1) is None
+    assert random_rule(43) != g1

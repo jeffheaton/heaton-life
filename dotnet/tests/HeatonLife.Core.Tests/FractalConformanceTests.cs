@@ -49,18 +49,26 @@ namespace HeatonLife.Tests
                 Assert.Equal(orbitMeta.GetProperty("length").GetInt32(), orbitRe.Length);
             }
 
-            var produced = ComputeOutputs(family, p, viewport, width, height, orbitRe, orbitIm);
-            foreach (var output in root.GetProperty("outputs").EnumerateArray())
+            // Serial and parallel must both match the vectors byte-for-byte
+            // (spec/fractals.md "Parallel rendering"): 5 workers deliberately does
+            // not divide the vector heights evenly.
+            foreach (int workers in new[] { 1, 5 })
             {
-                string kind = output.GetProperty("kind").GetString()!;
-                int[] expected = ReadI32(Path.Combine(caseDir, output.GetProperty("file").GetString()!));
-                long shapeLen = 1;
-                foreach (var dim in output.GetProperty("shape").EnumerateArray())
-                    shapeLen *= dim.GetInt64();
-                Assert.Equal(shapeLen, expected.Length);
-                Assert.True(
-                    produced[kind].AsSpan().SequenceEqual(expected),
-                    $"{family}/{caseName}: {kind} mismatch");
+                var produced = ComputeOutputs(
+                    family, p, viewport, width, height, orbitRe, orbitIm, workers);
+                foreach (var output in root.GetProperty("outputs").EnumerateArray())
+                {
+                    string kind = output.GetProperty("kind").GetString()!;
+                    int[] expected = ReadI32(
+                        Path.Combine(caseDir, output.GetProperty("file").GetString()!));
+                    long shapeLen = 1;
+                    foreach (var dim in output.GetProperty("shape").EnumerateArray())
+                        shapeLen *= dim.GetInt64();
+                    Assert.Equal(shapeLen, expected.Length);
+                    Assert.True(
+                        produced[kind].AsSpan().SequenceEqual(expected),
+                        $"{family}/{caseName}: {kind} mismatch (workers={workers})");
+                }
             }
         }
 
@@ -71,7 +79,8 @@ namespace HeatonLife.Tests
             int width,
             int height,
             double[]? orbitRe,
-            double[]? orbitIm)
+            double[]? orbitIm,
+            int workers)
         {
             switch (family)
             {
@@ -79,7 +88,8 @@ namespace HeatonLife.Tests
                 {
                     var field = new Mandelbrot(
                         p.GetProperty("max_iter").GetInt32(),
-                        p.GetProperty("escape_radius").GetDouble());
+                        p.GetProperty("escape_radius").GetDouble(),
+                        workers);
                     int[] iterations = orbitRe != null
                         ? field.Iterations(width, height, viewport, orbitRe, orbitIm!)
                         : field.Iterations(width, height, viewport);
@@ -91,7 +101,8 @@ namespace HeatonLife.Tests
                         p.GetProperty("c_re").GetDouble(),
                         p.GetProperty("c_im").GetDouble(),
                         p.GetProperty("max_iter").GetInt32(),
-                        p.GetProperty("escape_radius").GetDouble());
+                        p.GetProperty("escape_radius").GetDouble(),
+                        workers);
                     int[] iterations = orbitRe != null
                         ? field.Iterations(width, height, viewport, orbitRe, orbitIm!)
                         : field.Iterations(width, height, viewport);
@@ -101,7 +112,8 @@ namespace HeatonLife.Tests
                 {
                     var field = new BurningShip(
                         p.GetProperty("max_iter").GetInt32(),
-                        p.GetProperty("escape_radius").GetDouble());
+                        p.GetProperty("escape_radius").GetDouble(),
+                        workers);
                     int[] iterations = orbitRe != null
                         ? field.Iterations(width, height, viewport, orbitRe, orbitIm!)
                         : field.Iterations(width, height, viewport);
@@ -111,7 +123,8 @@ namespace HeatonLife.Tests
                 {
                     var field = new Newton(
                         p.GetProperty("degree").GetInt32(),
-                        p.GetProperty("max_iter").GetInt32());
+                        p.GetProperty("max_iter").GetInt32(),
+                        workers);
                     var (roots, iterations) = field.Basins(width, height, viewport);
                     return new Dictionary<string, int[]>
                     {

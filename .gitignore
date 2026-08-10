@@ -44,6 +44,7 @@ heaton-life-unity/.vsconfig
 # Unity crash artifacts
 sysinfo.txt
 *.stackdump
+mono_crash.*.json
 
 # OS / editors
 .DS_Store

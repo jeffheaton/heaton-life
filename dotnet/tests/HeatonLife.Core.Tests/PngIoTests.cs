@@ -35,7 +35,7 @@ namespace HeatonLife.Tests
         [Fact]
         public void MergeLifeExportsItsLattice()
         {
-            var sim = new MergeLife(MergeLife.DefaultGenome, 16, 16);
+            var sim = new MergeLife(MergeLife.DefaultRule, 16, 16);
             sim.SeedSoup(3);
             byte[] png = sim.ToPng(4);
             byte[] decoded = PngGrid.DecodeRgb(png, 4, out int width, out int height);

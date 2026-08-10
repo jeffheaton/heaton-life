@@ -19,10 +19,16 @@ namespace HeatonLife
         public int Degree { get; }
         public int MaxIter { get; }
 
-        public Newton(int degree = 3, int maxIter = 60)
+        /// <summary>Row-parallel worker count; output is identical for any value.</summary>
+        public int Workers { get; }
+
+        public Newton(int degree = 3, int maxIter = 60, int workers = 1)
         {
             if (degree < 2)
                 throw new ArgumentException("degree must be >= 2");
+            if (workers < 1)
+                throw new ArgumentException("workers must be positive");
+            Workers = workers;
             Degree = degree;
             MaxIter = maxIter;
             _rootRe = new double[degree];
@@ -45,7 +51,7 @@ namespace HeatonLife
             double centerRe = viewport.CenterReDouble;
             double centerIm = viewport.CenterImDouble;
             const double tol2 = Tolerance * Tolerance;
-            for (int y = 0; y < height; y++)
+            void Row(int y)
             {
                 double z0i = FractalEngine.OffsetIm(y, height, ps) + centerIm;
                 for (int x = 0; x < width; x++)
@@ -54,6 +60,8 @@ namespace HeatonLife
                     (roots[y * width + x], iterations[y * width + x]) = Pixel(z0r, z0i, tol2);
                 }
             }
+
+            FractalEngine.ForRows(height, Workers, Row);
         }
 
         /// <summary>(root_index, iterations), each row-major (height, width), -1 where unconverged.</summary>

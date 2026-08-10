@@ -35,7 +35,7 @@ Built early on purpose: the playground is the library's first real consumer and 
 
 - `elementary.py` (Wolfram 0–255; 1-D tape state, space-time diagram as the frame).
 - `cyclic.py` (states/threshold/range), `wireworld.py` (4-state machine + pattern files).
-- `mergelife.py`: hex-genome parse/format, update rule specified in integer math, random-genome helper.
+- `mergelife.py`: hex-rule parse/format, update rule specified in integer math, random-rule helper.
 - Playground: paint-cells brush, per-family preset dropdowns.
 - Spec pages + bit-exact vectors for all five CAs.
 

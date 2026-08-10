@@ -18,7 +18,7 @@ from numpy.typing import NDArray
 from heaton_life.core.params import Params
 from heaton_life.core.rng import Pcg32
 
-# The eight key colors: corners of the RGB cube, in genome order.
+# The eight key colors: corners of the RGB cube, in rule order.
 COLOR_TABLE = np.array(
     [
         [0, 0, 0],  # black
@@ -33,15 +33,15 @@ COLOR_TABLE = np.array(
     dtype=np.int64,
 )
 
-_GENOME = re.compile(r"^[0-9a-f]{32}$")
+_RULE = re.compile(r"^[0-9a-f]{32}$")
 
 
-def parse_genome(genome: str) -> list[tuple[int, int]]:
-    """Hex genome -> eight (range_byte, percent_byte) pairs; percent is a signed byte."""
-    text = genome.strip().lower().replace("-", "")
-    if not _GENOME.match(text):
+def parse_rule(rule: str) -> list[tuple[int, int]]:
+    """Hex rule -> eight (range_byte, percent_byte) pairs; percent is a signed byte."""
+    text = rule.strip().lower().replace("-", "")
+    if not _RULE.match(text):
         raise ValueError(
-            f"invalid MergeLife genome {genome!r} (expected 8 dash-separated groups of 4 hex digits)"
+            f"invalid MergeLife rule {rule!r} (expected 8 dash-separated groups of 4 hex digits)"
         )
     pairs: list[tuple[int, int]] = []
     for i in range(8):
@@ -53,41 +53,93 @@ def parse_genome(genome: str) -> list[tuple[int, int]]:
     return pairs
 
 
-def parse_genome_error(genome: str) -> str | None:
-    """Validation helper: the parse error message, or None if the genome is valid."""
+def parse_rule_error(rule: str) -> str | None:
+    """Validation helper: the parse error message, or None if the rule is valid."""
     try:
-        parse_genome(genome)
+        parse_rule(rule)
     except ValueError as exc:
         return str(exc)
     return None
 
 
-def canonical_genome(genome: str) -> str:
+def canonical_rule(rule: str) -> str:
     """Normalize to the canonical lowercase dashed form."""
-    parse_genome(genome)
-    text = genome.strip().lower().replace("-", "")
+    parse_rule(rule)
+    text = rule.strip().lower().replace("-", "")
     return "-".join(text[i * 4 : i * 4 + 4] for i in range(8))
 
 
-def compile_rule(genome: str) -> list[tuple[int, float, int]]:
-    """Genome -> sub-rules (limit, percent, color_index), stably sorted by limit alone.
+def compile_rule(rule: str) -> list[tuple[int, float, int]]:
+    """Rule -> sub-rules (limit, percent, color_index), stably sorted by limit alone.
 
     limit = range_byte * 8, with the full-range value 2040 promoted to 2048 so the
     top sub-rule catches every neighbor count. percent = pct/127 if positive else
     pct/128, giving [-1.0, 1.0].
     """
     entries: list[tuple[int, float, int]] = []
-    for index, (rng, pct) in enumerate(parse_genome(genome)):
+    for index, (rng, pct) in enumerate(parse_rule(rule)):
         limit = rng * 8
         if limit == 2040:
             limit = 2048
         percent = pct / 127.0 if pct > 0 else pct / 128.0
         entries.append((limit, percent, index))
-    return sorted(entries, key=lambda e: e[0])  # stable: ties keep genome order
+    return sorted(entries, key=lambda e: e[0])  # stable: ties keep rule order
 
 
-def random_genome(seed: int) -> str:
-    """A random genome from PCG32 (UI convenience; not part of the upstream contract)."""
+COLOR_NAMES = ("Black", "Red", "Green", "Yellow", "Blue", "Purple", "Cyan", "White")
+
+
+@dataclasses.dataclass(frozen=True)
+class DecodedSubRule:
+    """One row of the rule-lab table — spec/mergelife.md "Decoded rule table"."""
+
+    limit: int
+    range_low: int
+    range_high: int
+    percent: float
+    color_index: int
+    color_name: str
+    target_index: int
+    target_name: str
+    target_rgb: tuple[int, int, int]
+    range_byte: int
+    percent_byte: int
+
+
+def decode_rule(rule: str) -> list[DecodedSubRule]:
+    """The 8 sub-rules as display-ready rows, in compiled (sorted) order.
+
+    Carries the raw octets alongside the compiled values: HeatonCA re-derives
+    octet 1 from the promoted limit (2048/8 = 0x100) — the raw byte is 0xff.
+    """
+    raw = parse_rule(rule)
+    rows: list[DecodedSubRule] = []
+    low = 0
+    for limit, percent, index in compile_rule(rule):
+        range_byte, percent_byte = raw[index]
+        target = (index + 1) % len(COLOR_NAMES) if percent < 0 else index
+        r, g, b = (int(c) for c in COLOR_TABLE[target])
+        rows.append(
+            DecodedSubRule(
+                limit=limit,
+                range_low=low,
+                range_high=limit - 1,
+                percent=percent,
+                color_index=index,
+                color_name=COLOR_NAMES[index],
+                target_index=target,
+                target_name=COLOR_NAMES[target],
+                target_rgb=(r, g, b),
+                range_byte=range_byte,
+                percent_byte=percent_byte,
+            )
+        )
+        low = limit
+    return rows
+
+
+def random_rule(seed: int) -> str:
+    """A random rule from PCG32 (UI convenience; not part of the upstream contract)."""
     rng = Pcg32(seed)
     groups = []
     for _ in range(8):
@@ -99,9 +151,9 @@ def random_genome(seed: int) -> str:
 
 @dataclasses.dataclass(frozen=True)
 class MergeLifeParams(Params):
-    genome: str = dataclasses.field(
+    rule: str = dataclasses.field(
         default="e542-5f79-9341-f31e-6c6b-7f08-8773-7068",  # "Red World" (paper)
-        metadata={"label": "Genome"},
+        metadata={"label": "Rule"},
     )
     width: int = dataclasses.field(default=128, metadata={"min": 8, "max": 1024})
     height: int = dataclasses.field(default=128, metadata={"min": 8, "max": 1024})
@@ -116,7 +168,7 @@ class MergeLife:
 
     def __init__(
         self,
-        genome: str = "e542-5f79-9341-f31e-6c6b-7f08-8773-7068",
+        rule: str = "e542-5f79-9341-f31e-6c6b-7f08-8773-7068",
         *,
         size: tuple[int, int] = (128, 128),
         init: str | NDArray[np.uint8] = "soup",
@@ -134,13 +186,13 @@ class MergeLife:
         else:
             init_name = init
         self.params = MergeLifeParams(
-            genome=canonical_genome(genome),
+            rule=canonical_rule(rule),
             width=width,
             height=height,
             init=init_name,
             seed=seed,
         )
-        self._rule = compile_rule(self.params.genome)
+        self._rule = compile_rule(self.params.rule)
         self._generation = 0
         self._state: NDArray[np.uint8]
         self.reset()
@@ -150,7 +202,7 @@ class MergeLife:
         if params.init == "array":
             raise ValueError("params with init='array' need the array: MergeLife(init=...)")
         return cls(
-            params.genome,
+            params.rule,
             size=(params.width, params.height),
             init=params.init,
             seed=params.seed,

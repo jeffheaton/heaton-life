@@ -141,7 +141,7 @@ namespace HeatonLife
         public Candidate Run(int maxEvals)
         {
             while (Population.Count < PopulationSize && Evals < maxEvals)
-                Admit(MergeLife.RandomGenome(_rng.NextU32()));
+                Admit(MergeLife.RandomRule(_rng.NextU32()));
             while (Evals < maxEvals && NoImprovement <= Patience)
             {
                 var scores = CurrentScores();

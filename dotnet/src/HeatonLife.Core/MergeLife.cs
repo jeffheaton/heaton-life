@@ -13,10 +13,10 @@ namespace HeatonLife
     /// </summary>
     public sealed class MergeLife : IRgbFrameSource
     {
-        /// <summary>"Red World", the paper's showcase genome — the Python default.</summary>
-        public const string DefaultGenome = "e542-5f79-9341-f31e-6c6b-7f08-8773-7068";
+        /// <summary>"Red World", the paper's showcase rule — the Python default.</summary>
+        public const string DefaultRule = "e542-5f79-9341-f31e-6c6b-7f08-8773-7068";
 
-        // The eight key colors: corners of the RGB cube, in genome order
+        // The eight key colors: corners of the RGB cube, in rule order
         // (black, red, green, yellow, blue, purple, cyan, white).
         private static readonly int[][] ColorTable =
         {
@@ -36,7 +36,7 @@ namespace HeatonLife
         private readonly int[] _avg;
         private readonly int[] _hist = new int[256];
 
-        public string Genome { get; }
+        public string Rule { get; }
         public int Width { get; }
         public int Height { get; }
         public int Generation { get; private set; }
@@ -44,14 +44,14 @@ namespace HeatonLife
         /// <summary>Row-major RGB bytes, index = (y * Width + x) * 3 + channel.</summary>
         public ReadOnlySpan<byte> State => _cells;
 
-        public MergeLife(string genome, int width, int height)
+        public MergeLife(string rule, int width, int height)
         {
-            Genome = CanonicalGenome(genome);
+            Rule = CanonicalRule(rule);
             Width = width;
             Height = height;
             // Resolve the negative-percent flip once: the reference applies it at every
             // update (|pct| toward the *next* key color); pre-resolving is equivalent.
-            var compiled = CompileRule(Genome);
+            var compiled = CompileRule(Rule);
             _rule = new (int, double, int)[compiled.Length];
             for (int i = 0; i < compiled.Length; i++)
             {
@@ -67,13 +67,13 @@ namespace HeatonLife
             SeedSoup(0); // the Python constructor's default init
         }
 
-        /// <summary>Hex genome -> eight (range_byte, percent_byte) pairs; percent is a signed byte.</summary>
-        public static (int Range, int Percent)[] ParseGenome(string genome)
+        /// <summary>Hex rule -> eight (range_byte, percent_byte) pairs; percent is a signed byte.</summary>
+        public static (int Range, int Percent)[] ParseRule(string rule)
         {
-            string text = Normalize(genome);
+            string text = Normalize(rule);
             if (!IsHex32(text))
                 throw new ArgumentException(
-                    $"invalid MergeLife genome '{genome}' (expected 8 dash-separated groups of 4 hex digits)");
+                    $"invalid MergeLife rule '{rule}' (expected 8 dash-separated groups of 4 hex digits)");
             var pairs = new (int, int)[8];
             for (int i = 0; i < 8; i++)
             {
@@ -86,12 +86,12 @@ namespace HeatonLife
             return pairs;
         }
 
-        /// <summary>Validation helper: the parse error message, or null if the genome is valid.</summary>
-        public static string? GenomeError(string genome)
+        /// <summary>Validation helper: the parse error message, or null if the rule is valid.</summary>
+        public static string? RuleError(string rule)
         {
             try
             {
-                ParseGenome(genome);
+                ParseRule(rule);
             }
             catch (ArgumentException exc)
             {
@@ -101,10 +101,10 @@ namespace HeatonLife
         }
 
         /// <summary>Normalize to the canonical lowercase dashed form.</summary>
-        public static string CanonicalGenome(string genome)
+        public static string CanonicalRule(string rule)
         {
-            ParseGenome(genome);
-            string text = Normalize(genome);
+            ParseRule(rule);
+            string text = Normalize(rule);
             var groups = new string[8];
             for (int i = 0; i < 8; i++)
                 groups[i] = text.Substring(i * 4, 4);
@@ -112,15 +112,15 @@ namespace HeatonLife
         }
 
         /// <summary>
-        /// Genome -> sub-rules (limit, percent, color_index), stably sorted by limit alone
-        /// (ties keep genome order). limit = range_byte * 8, with the full-range value 2040
+        /// Rule -> sub-rules (limit, percent, color_index), stably sorted by limit alone
+        /// (ties keep rule order). limit = range_byte * 8, with the full-range value 2040
         /// promoted to 2048 so the top sub-rule catches every neighbor count. percent =
         /// pct/127 if positive else pct/128, giving [-1.0, 1.0]; negative percents are
         /// preserved here and resolved at application time, matching the Python compile_rule.
         /// </summary>
-        public static (int Limit, double Percent, int ColorIndex)[] CompileRule(string genome)
+        public static (int Limit, double Percent, int ColorIndex)[] CompileRule(string rule)
         {
-            var pairs = ParseGenome(genome);
+            var pairs = ParseRule(rule);
             var entries = new (int Limit, double Percent, int ColorIndex)[8];
             for (int i = 0; i < 8; i++)
             {
@@ -131,15 +131,82 @@ namespace HeatonLife
                 double percent = pct > 0 ? pct / 127.0 : pct / 128.0;
                 entries[i] = (limit, percent, i);
             }
-            // Stable sort by limit alone: ColorIndex is the genome position, so it breaks
+            // Stable sort by limit alone: ColorIndex is the rule position, so it breaks
             // ties exactly the way Python's stable sorted() does.
             Array.Sort(entries, (a, b) =>
                 a.Limit != b.Limit ? a.Limit.CompareTo(b.Limit) : a.ColorIndex.CompareTo(b.ColorIndex));
             return entries;
         }
 
-        /// <summary>A random genome from PCG32 (UI convenience; not part of the upstream contract).</summary>
-        public static string RandomGenome(uint seed)
+        /// <summary>Key-color names in rule order — spec/mergelife.md "Decoded rule table".</summary>
+        public static readonly string[] ColorNames =
+        {
+            "Black", "Red", "Green", "Yellow", "Blue", "Purple", "Cyan", "White",
+        };
+
+        /// <summary>One row of the rule-lab table — spec/mergelife.md "Decoded rule table".</summary>
+        public readonly struct DecodedSubRule
+        {
+            public readonly int Limit;
+            public readonly int RangeLow;
+            public readonly int RangeHigh;
+            public readonly double Percent;
+            public readonly int ColorIndex;
+            public readonly string ColorName;
+            public readonly int TargetIndex;
+            public readonly string TargetName;
+            public readonly byte TargetR;
+            public readonly byte TargetG;
+            public readonly byte TargetB;
+            public readonly byte RangeByte;
+            public readonly sbyte PercentByte;
+
+            public DecodedSubRule(
+                int limit, int rangeLow, int rangeHigh, double percent,
+                int colorIndex, int targetIndex, byte rangeByte, sbyte percentByte)
+            {
+                Limit = limit;
+                RangeLow = rangeLow;
+                RangeHigh = rangeHigh;
+                Percent = percent;
+                ColorIndex = colorIndex;
+                ColorName = ColorNames[colorIndex];
+                TargetIndex = targetIndex;
+                TargetName = ColorNames[targetIndex];
+                TargetR = (byte)ColorTable[targetIndex][0];
+                TargetG = (byte)ColorTable[targetIndex][1];
+                TargetB = (byte)ColorTable[targetIndex][2];
+                RangeByte = rangeByte;
+                PercentByte = percentByte;
+            }
+        }
+
+        /// <summary>
+        /// The 8 sub-rules as display-ready rows, in compiled (sorted) order —
+        /// spec/mergelife.md "Decoded rule table". Carries the raw octets alongside
+        /// the compiled values: HeatonCA re-derives octet 1 from the promoted limit
+        /// (2048/8 = 0x100) — the raw byte is 0xff.
+        /// </summary>
+        public static DecodedSubRule[] DecodeRule(string rule)
+        {
+            var raw = ParseRule(rule);
+            var compiled = CompileRule(rule);
+            var rows = new DecodedSubRule[8];
+            int low = 0;
+            for (int i = 0; i < 8; i++)
+            {
+                var (limit, percent, index) = compiled[i];
+                var (range, pct) = raw[index];
+                int target = percent < 0 ? (index + 1) % ColorNames.Length : index;
+                rows[i] = new DecodedSubRule(
+                    limit, low, limit - 1, percent, index, target, (byte)range, (sbyte)pct);
+                low = limit;
+            }
+            return rows;
+        }
+
+        /// <summary>A random rule from PCG32 (UI convenience; not part of the upstream contract).</summary>
+        public static string RandomRule(uint seed)
         {
             var rng = new Pcg32(seed);
             var sb = new StringBuilder();
@@ -154,8 +221,8 @@ namespace HeatonLife
             return sb.ToString();
         }
 
-        private static string Normalize(string genome) =>
-            genome.Trim().ToLowerInvariant().Replace("-", "");
+        private static string Normalize(string rule) =>
+            rule.Trim().ToLowerInvariant().Replace("-", "");
 
         private static bool IsHex32(string text)
         {

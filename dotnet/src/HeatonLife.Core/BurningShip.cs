@@ -9,10 +9,16 @@ namespace HeatonLife
     public sealed class BurningShip
     {
         public int MaxIter { get; }
+
+        /// <summary>Row-parallel worker count; output is identical for any value.</summary>
+        public int Workers { get; }
         public double EscapeRadius { get; }
 
-        public BurningShip(int maxIter = 500, double escapeRadius = 1000.0)
+        public BurningShip(int maxIter = 500, double escapeRadius = 1000.0, int workers = 1)
         {
+            if (workers < 1)
+                throw new ArgumentException("workers must be positive");
+            Workers = workers;
             if (maxIter < 1)
                 throw new ArgumentException("max_iter must be positive");
             MaxIter = maxIter;
@@ -97,7 +103,7 @@ namespace HeatonLife
             double centerIm = t1 ? 0.0 : viewport.CenterImDouble;
             double r2 = EscapeRadius * EscapeRadius;
             double logR = Math.Log(EscapeRadius);
-            for (int y = 0; y < height; y++)
+            void Row(int y)
             {
                 double oy = FractalEngine.OffsetIm(y, height, ps);
                 for (int x = 0; x < width; x++)
@@ -116,6 +122,8 @@ namespace HeatonLife
                         mu[y * width + x] = FractalEngine.SmoothMu(count, fr, fi, logR);
                 }
             }
+
+            FractalEngine.ForRows(height, Workers, Row);
         }
     }
 }

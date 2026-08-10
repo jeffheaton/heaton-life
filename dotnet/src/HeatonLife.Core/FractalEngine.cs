@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 
 namespace HeatonLife
 {
@@ -151,6 +152,27 @@ namespace HeatonLife
         /// 99th escaped percentiles, floor 0.02, then sqrt. Presentation only — counts
         /// are the conformance output and are untouched.
         /// </summary>
+        /// <summary>
+        /// Row-parallel driver for the per-pixel loops (spec/fractals.md "Parallel
+        /// rendering"): every pixel is independent and rows write disjoint slices,
+        /// so the output is bit-identical for any worker count or schedule.
+        /// workers &lt;= 1 runs the plain serial loop.
+        /// </summary>
+        public static void ForRows(int height, int workers, Action<int> row)
+        {
+            if (workers <= 1 || height <= 1)
+            {
+                for (int y = 0; y < height; y++)
+                    row(y);
+                return;
+            }
+            var options = new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Math.Min(workers, height),
+            };
+            Parallel.For(0, height, options, row);
+        }
+
         public static double[] NormalizeRender(double[] mu)
         {
             var result = new double[mu.Length];

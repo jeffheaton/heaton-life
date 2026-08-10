@@ -173,7 +173,7 @@ def test_preset_apply_resets_grid(window: MainWindow) -> None:
     window._on_preset(index)
     assert engine.generation == 0, "preset selection must start a fresh grid"
     assert engine._params is not None
-    assert engine._params.genome == "e542-5f79-9341-f31e-6c6b-7f08-8773-7068"  # type: ignore[attr-defined]
+    assert engine._params.rule == "e542-5f79-9341-f31e-6c6b-7f08-8773-7068"  # type: ignore[attr-defined]
 
 
 def test_mergelife_preset_labels_not_truncated(window: MainWindow) -> None:

@@ -51,6 +51,20 @@ a few percent of pixels — by exactly as much as T0 disagrees with itself under
 1-ulp input perturbation. Conformance therefore always compares like against like:
 the vector's tier is whatever the viewport's zoom selects.
 
+## Parallel rendering
+
+Implementations may split the per-pixel loops across worker threads, keyed by an
+explicit `workers` knob (C#: the `workers` constructor argument, default 1 =
+serial). The contract: **output is bit-identical for every worker count and
+schedule.** This holds by construction — every pixel's computation is
+independent, workers own disjoint rows of the output buffers, and no RNG is
+drawn during rendering. Serial stages stay serial: the T1 reference orbit is
+computed once before pixels fan out, and `NormalizeRender`'s percentile stretch
+runs on the finished `mu` buffer. Conformance suites replay the same vectors at
+`workers = 1` and `workers > 1`; both must match byte-for-byte. Python renders
+whole-array through NumPy and takes no knob — parallelism is a host-side
+performance detail, never an algorithm change.
+
 ## Vector schema (one-shot renders; no time axis)
 
 ```json

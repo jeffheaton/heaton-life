@@ -150,9 +150,12 @@ class _Rgb:
             return np.asarray(img.convert("RGB")).astype(np.uint8)
 
     def build(self, params: dict[str, Any], initial: StateArray | None) -> Simulation:
-        p = MergeLifeParams.from_dict(params)
+        # The vector JSON key stays "genome" (frozen cross-language format);
+        # the API calls it the rule (spec/mergelife.md terminology).
+        mapped = {("rule" if k == "genome" else k): v for k, v in params.items()}
+        p = MergeLifeParams.from_dict(mapped)
         if initial is not None:
-            return MergeLife(p.genome, size=(p.width, p.height), init=initial, seed=p.seed)
+            return MergeLife(p.rule, size=(p.width, p.height), init=initial, seed=p.seed)
         return MergeLife.from_params(p)
 
 

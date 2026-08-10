@@ -27,7 +27,7 @@ A pattern is `(family, width, height, cells, rule)`:
   Elementary, boids, and fractals have no patterns (a space-time diagram, a
   point cloud, and a coordinate view are not cell regions).
 - `rule` — the origin context, informative: the rulestring (life-like), states
-  count (cyclic), or genome (mergelife). Stamping into the same family under a
+  count (cyclic), or MergeLife rule. Stamping into the same family under a
   *different* rule is allowed — that is the point of a zoo — but implementations
   surface the origin rule so the user knows the pattern's home.
 
