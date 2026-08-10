@@ -1,0 +1,37 @@
+{
+  "family": "render",
+  "input": {
+    "file": "state.f64",
+    "shape": [
+      5,
+      6
+    ]
+  },
+  "kind": "frame",
+  "output": {
+    "file": "frame.f64",
+    "shape": [
+      12,
+      16
+    ]
+  },
+  "params": {
+    "boundary": "wrap",
+    "count": 5,
+    "depth": 48,
+    "dimensions": 3,
+    "height": 12,
+    "max_force": 0.08,
+    "max_speed": 3.0,
+    "min_speed": 1.0,
+    "perception": 12.0,
+    "separation_radius": 6.0,
+    "w_alignment": 1.0,
+    "w_cohesion": 1.0,
+    "w_separation": 1.5,
+    "width": 16
+  },
+  "sim_family": "boids",
+  "spec_version": "0.2.0",
+  "tier": "bit-exact"
+}

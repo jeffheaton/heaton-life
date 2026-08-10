@@ -115,3 +115,97 @@ def test_rejects_bad_inputs() -> None:
     sim = make(1, init=np.array([[1.0, 1.0, 1.0, 0.0]]))
     with pytest.raises(ValueError):
         Boids.from_params(sim.params)
+    with pytest.raises(ValueError):
+        Boids(5, dimensions=4)  # the math wouldn't care, the UI does
+    with pytest.raises(ValueError):
+        Boids(5, dimensions=3, init=np.zeros((5, 4)))  # 3D wants (5, 6)
+
+
+# -- d = 3 (same algorithm, one more component) --------------------------------------
+
+
+def test_3d_seeding_launches_at_exact_speed() -> None:
+    sim = Boids(64, dimensions=3, size=(64, 64), depth=48, seed=5)
+    assert sim.state.shape == (64, 6)
+    launch = (sim.params.min_speed + sim.params.max_speed) / 2.0
+    speed = np.sqrt((sim.state[:, 3:6] ** 2).sum(axis=1))
+    assert speed == pytest.approx(launch, abs=1e-12), "sphere direction is unit-norm"
+    assert (sim.state[:, 2] >= 0).all() and (sim.state[:, 2] < 48).all()
+
+
+def test_3d_zero_steering_conserves_momentum_exactly() -> None:
+    sim = Boids(
+        50, dimensions=3, size=(96, 96), depth=96,
+        w_separation=0.0, w_alignment=0.0, w_cohesion=0.0, seed=4,
+    )
+    vel0 = sim.state[:, 3:6].copy()
+    sim.step(50)
+    assert np.array_equal(sim.state[:, 3:6], vel0)
+
+
+def test_3d_wrap_keeps_positions_in_world() -> None:
+    sim = Boids(80, dimensions=3, size=(96, 64), depth=48, seed=1)
+    sim.step(60)
+    assert (sim.state[:, 0] >= 0).all() and (sim.state[:, 0] < 96).all()
+    assert (sim.state[:, 1] >= 0).all() and (sim.state[:, 1] < 64).all()
+    assert (sim.state[:, 2] >= 0).all() and (sim.state[:, 2] < 48).all()
+
+
+def test_3d_bounce_reflects_z() -> None:
+    state = np.array([[64.0, 64.0, 126.5, 0.0, 0.0, 3.0]])  # heading out the far wall
+    sim = Boids(
+        1, dimensions=3, size=(128, 128), depth=128, boundary="bounce",
+        w_separation=0.0, w_alignment=0.0, w_cohesion=0.0, init=state,
+    )
+    sim.step()
+    assert sim.state[0, 2] <= 128.0
+    assert sim.state[0, 5] < 0.0, "z-velocity must flip on bounce"
+
+
+def test_3d_cohesion_pulls_together_in_z() -> None:
+    state = np.array([
+        [64.0, 64.0, 40.0, 1.0, 0.0, 0.0],
+        [64.0, 64.0, 60.0, -1.0, 0.0, 0.0],
+    ])
+    sim = Boids(
+        2, dimensions=3, size=(128, 128), depth=128, w_cohesion=1.0,
+        w_separation=0.0, w_alignment=0.0, perception=30.0, init=state,
+    )
+    d0 = abs(sim.state[0, 2] - sim.state[1, 2])
+    sim.step(10)
+    assert abs(sim.state[0, 2] - sim.state[1, 2]) < d0
+
+
+def test_3d_speed_clamps_hold_under_steering() -> None:
+    sim = Boids(80, dimensions=3, size=(96, 96), depth=96, seed=6)
+    sim.step(30)
+    speed = np.sqrt((sim.state[:, 3:6] ** 2).sum(axis=1))
+    p = sim.params
+    assert (speed <= p.max_speed + 1e-9).all()
+    assert (speed >= p.min_speed - 1e-9).all()
+
+
+def test_3d_frame_is_depth_cued() -> None:
+    # Two lone boids at the same x/y offset pattern, one near, one far: the
+    # near dot must be brighter (b = 0.3 + 0.7*(1 - z/depth)).
+    state = np.array([
+        [16.0, 16.0, 4.0, 1.0, 0.0, 0.0],
+        [48.0, 48.0, 60.0, 1.0, 0.0, 0.0],
+    ])
+    sim = Boids(
+        2, dimensions=3, size=(64, 64), depth=64,
+        w_separation=0.0, w_alignment=0.0, w_cohesion=0.0, init=state,
+    )
+    frame = sim.frame()
+    assert frame.shape == (64, 64)
+    near, far = frame[16, 16], frame[48, 48]
+    assert near > far > 0.0
+    assert near == pytest.approx(0.3 + 0.7 * (1.0 - 4.0 / 64.0))
+
+
+def test_3d_determinism_and_roundtrip() -> None:
+    a = Boids(40, dimensions=3, size=(64, 64), depth=64, seed=9)
+    b = Boids.from_params(BoidsParams.from_json(a.params.to_json()))
+    a.step(20)
+    b.step(20)
+    assert np.array_equal(a.state, b.state)

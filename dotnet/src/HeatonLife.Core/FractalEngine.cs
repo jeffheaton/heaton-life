@@ -1,5 +1,4 @@
 using System;
-using System.Threading.Tasks;
 
 namespace HeatonLife
 {
@@ -147,32 +146,19 @@ namespace HeatonLife
         }
 
         /// <summary>
+        /// Row-parallel driver for the per-pixel loops (spec/fractals.md "Parallel
+        /// rendering"): every pixel is independent and rows write disjoint slices,
+        /// so the output is bit-identical for any worker count or schedule.
+        /// </summary>
+        public static void ForRows(int height, int workers, Action<int> row) =>
+            Parallelism.For(height, workers, row);
+
+        /// <summary>
         /// Map smooth iterations to [0, 1] for colormapping; interior stays 0
         /// (spec/render.md). Per-frame percentile contrast stretch between the 1st and
         /// 99th escaped percentiles, floor 0.02, then sqrt. Presentation only — counts
         /// are the conformance output and are untouched.
         /// </summary>
-        /// <summary>
-        /// Row-parallel driver for the per-pixel loops (spec/fractals.md "Parallel
-        /// rendering"): every pixel is independent and rows write disjoint slices,
-        /// so the output is bit-identical for any worker count or schedule.
-        /// workers &lt;= 1 runs the plain serial loop.
-        /// </summary>
-        public static void ForRows(int height, int workers, Action<int> row)
-        {
-            if (workers <= 1 || height <= 1)
-            {
-                for (int y = 0; y < height; y++)
-                    row(y);
-                return;
-            }
-            var options = new ParallelOptions
-            {
-                MaxDegreeOfParallelism = Math.Min(workers, height),
-            };
-            Parallel.For(0, height, options, row);
-        }
-
         public static double[] NormalizeRender(double[] mu)
         {
             var result = new double[mu.Length];

@@ -126,30 +126,36 @@ namespace HeatonLife.Tests
         private static void RunMiniEvolution(string caseDir, JsonElement root, JsonElement p)
         {
             Assert.Equal("paper", p.GetProperty("objective").GetString());
-            var evolver = new Evolver(
-                p.GetProperty("width").GetInt32(),
-                p.GetProperty("height").GetInt32(),
-                p.GetProperty("population_size").GetInt32(),
-                p.GetProperty("crossover_rate").GetDouble(),
-                p.GetProperty("tournament_rounds").GetInt32(),
-                p.GetProperty("eval_cycles").GetInt32(),
-                p.GetProperty("patience").GetInt32(),
-                p.GetProperty("max_steps").GetInt32(),
-                p.GetProperty("seed").GetUInt64());
-            var best = evolver.Run(p.GetProperty("max_evals").GetInt32());
+            // Serial and parallel evaluation must both match the vectors
+            // (spec/evolve.md "Parallel evaluation").
+            foreach (int workers in new[] { 1, 5 })
+            {
+                var evolver = new Evolver(
+                    p.GetProperty("width").GetInt32(),
+                    p.GetProperty("height").GetInt32(),
+                    p.GetProperty("population_size").GetInt32(),
+                    p.GetProperty("crossover_rate").GetDouble(),
+                    p.GetProperty("tournament_rounds").GetInt32(),
+                    p.GetProperty("eval_cycles").GetInt32(),
+                    p.GetProperty("patience").GetInt32(),
+                    p.GetProperty("max_steps").GetInt32(),
+                    p.GetProperty("seed").GetUInt64(),
+                    workers: workers);
+                var best = evolver.Run(p.GetProperty("max_evals").GetInt32());
 
-            var expected = root.GetProperty("expected");
-            Assert.Equal(expected.GetProperty("best_genome").GetString(), best.Genome);
-            Assert.Equal(expected.GetProperty("evals").GetInt32(), evolver.Evals);
-            var expectedPopulation = expected.GetProperty("population");
-            Assert.Equal(expectedPopulation.GetArrayLength(), evolver.Population.Count);
-            for (int i = 0; i < evolver.Population.Count; i++)
-                Assert.Equal(expectedPopulation[i].GetString(), evolver.Population[i].Genome);
-            double[] expectedBest = ReadF64(
-                Path.Combine(
-                    caseDir,
-                    expected.GetProperty("best_score").GetProperty("file").GetString()!));
-            Assert.Equal(expectedBest[0], best.Score);
+                var expected = root.GetProperty("expected");
+                Assert.Equal(expected.GetProperty("best_genome").GetString(), best.Genome);
+                Assert.Equal(expected.GetProperty("evals").GetInt32(), evolver.Evals);
+                var expectedPopulation = expected.GetProperty("population");
+                Assert.Equal(expectedPopulation.GetArrayLength(), evolver.Population.Count);
+                for (int i = 0; i < evolver.Population.Count; i++)
+                    Assert.Equal(expectedPopulation[i].GetString(), evolver.Population[i].Genome);
+                double[] expectedBest = ReadF64(
+                    Path.Combine(
+                        caseDir,
+                        expected.GetProperty("best_score").GetProperty("file").GetString()!));
+                Assert.Equal(expectedBest[0], best.Score);
+            }
         }
 
         private static double[] ReadF64(string path)

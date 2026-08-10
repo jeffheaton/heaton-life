@@ -107,6 +107,9 @@ namespace HeatonLife
         public ulong Seed { get; }
         public List<Candidate> Population { get; } = new List<Candidate>();
         public Candidate? Best { get; private set; }
+
+        /// <summary>Worker count for objective evaluation; results are identical for any value.</summary>
+        public int Workers { get; }
         public int Evals { get; private set; }
         public int NoImprovement { get; private set; }
 
@@ -121,8 +124,10 @@ namespace HeatonLife
             int maxSteps = 1000,
             ulong seed = 0,
             IReadOnlyList<ObjectiveRule>? objective = null,
-            Action<Evolver>? onProgress = null)
+            Action<Evolver>? onProgress = null,
+            int workers = 1)
         {
+            Workers = workers;
             Width = width;
             Height = height;
             PopulationSize = populationSize;
@@ -209,7 +214,8 @@ namespace HeatonLife
                 Width,
                 Height,
                 Seed + (ulong)(Evals * EvalCycles),
-                MaxSteps);
+                MaxSteps,
+                Workers);
             Evals++;
             var candidate = new Candidate(genome, score);
             _onProgress?.Invoke(this);

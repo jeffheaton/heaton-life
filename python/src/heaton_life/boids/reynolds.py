@@ -1,13 +1,17 @@
-"""Reynolds boids — spec/boids.md.
+"""Reynolds boids, d-dimensional — spec/boids.md.
 
-State is a point cloud, not a grid: (N, 4) float64 rows of [x, y, vx, vy] in world
-units (the world is width x height, matching the rasterized frame). Neighbors are
-O(N^2) with minimum-image wrapped distances; count is capped where that stops
-being reasonable (a spatial hash arrives if flocks ever need >2k).
+State is a point cloud, not a grid: (N, 2*d) float64 rows of positions then
+velocities in world units (the box is width x height for d=2, plus depth for
+d=3). One algorithm for every d: the step math is written over components and
+never names an axis; only seeding and the frame projection are per-dimension
+recipes (an angle does not generalize by component). Neighbors are O(N^2) with
+minimum-image wrapped distances; count is capped where that stops being
+reasonable (a spatial hash arrives if flocks ever need >2k).
 
 The frame() rasterization is the proof of the state != frame split: the same
-simulation feeds the shared colormap/GIF pipeline as soft dots, while the
-playground draws oriented triangles from the raw state.
+simulation feeds the shared colormap/GIF pipeline as soft dots (d=3 projects
+orthographically with a depth-cue brightness), while the playground draws
+oriented triangles from the raw state.
 """
 
 from __future__ import annotations
@@ -30,8 +34,10 @@ _DOT = [(0, 0, 1.0), (-1, 0, 0.55), (1, 0, 0.55), (0, -1, 0.55), (0, 1, 0.55),
 @dataclasses.dataclass(frozen=True)
 class BoidsParams(Params):
     count: int = dataclasses.field(default=300, metadata={"min": 2, "max": 2000})
+    dimensions: int = dataclasses.field(default=2, metadata={"min": 2, "max": 3})
     width: int = dataclasses.field(default=256, metadata={"min": 64, "max": 1024})
     height: int = dataclasses.field(default=256, metadata={"min": 64, "max": 1024})
+    depth: int = dataclasses.field(default=256, metadata={"min": 64, "max": 1024})
     perception: float = dataclasses.field(
         default=12.0, metadata={"min": 2.0, "max": 64.0, "step": 1.0}
     )
@@ -64,13 +70,19 @@ class BoidsParams(Params):
 
 
 class Boids:
-    """A Reynolds flock. State is float64 (count, 4): [x, y, vx, vy] per boid."""
+    """A Reynolds flock in d dimensions.
+
+    State is float64 (count, 2*d): positions then velocities per boid — the
+    historical [x, y, vx, vy] for d=2, [x, y, z, vx, vy, vz] for d=3.
+    """
 
     def __init__(
         self,
         count: int = 300,
         *,
+        dimensions: int = 2,
         size: tuple[int, int] = (256, 256),
+        depth: int = 256,
         perception: float = 12.0,
         separation_radius: float = 6.0,
         w_separation: float = 1.5,
@@ -85,19 +97,25 @@ class Boids:
     ) -> None:
         if boundary not in ("wrap", "bounce"):
             raise ValueError(f"unknown boundary: {boundary!r}")
+        if dimensions not in (2, 3):
+            raise ValueError(f"dimensions must be 2 or 3, got {dimensions}")
         width, height = size
         self._initial: FloatArray | None = None
         if isinstance(init, np.ndarray):
-            if init.shape != (count, 4):
-                raise ValueError(f"init array shape {init.shape} does not match ({count}, 4)")
+            if init.shape != (count, 2 * dimensions):
+                raise ValueError(
+                    f"init array shape {init.shape} does not match ({count}, {2 * dimensions})"
+                )
             self._initial = init.astype(np.float64)
             init_name = "array"
         else:
             init_name = init
         self.params = BoidsParams(
             count=count,
+            dimensions=dimensions,
             width=width,
             height=height,
+            depth=depth,
             perception=perception,
             separation_radius=separation_radius,
             w_separation=w_separation,
@@ -120,7 +138,9 @@ class Boids:
             raise ValueError("params with init='array' need the array: Boids(init=...)")
         return cls(
             params.count,
+            dimensions=params.dimensions,
             size=(params.width, params.height),
+            depth=params.depth,
             perception=params.perception,
             separation_radius=params.separation_radius,
             w_separation=params.w_separation,
@@ -142,16 +162,32 @@ class Boids:
             assert self._initial is not None
             self._state = self._initial.copy()
         elif p.init == "random":
-            # 3 draws per boid: x, y, heading; launch speed = (min+max)/2.
+            # Per-dimension recipes (spec "Initialization"): an angle does not
+            # generalize by component, so each d has an explicit draw order.
             rng = Pcg32(p.seed)
-            state = np.empty((p.count, 4), dtype=np.float64)
+            state = np.empty((p.count, 2 * p.dimensions), dtype=np.float64)
             launch = (p.min_speed + p.max_speed) / 2.0
-            for i in range(p.count):
-                state[i, 0] = rng.next_u32() / 4294967296.0 * p.width
-                state[i, 1] = rng.next_u32() / 4294967296.0 * p.height
-                angle = rng.next_u32() / 4294967296.0 * 2.0 * np.pi
-                state[i, 2] = np.cos(angle) * launch
-                state[i, 3] = np.sin(angle) * launch
+            if p.dimensions == 2:
+                # 3 draws per boid: x, y, heading — the historical byte stream.
+                for i in range(p.count):
+                    state[i, 0] = rng.next_u32() / 4294967296.0 * p.width
+                    state[i, 1] = rng.next_u32() / 4294967296.0 * p.height
+                    angle = rng.next_u32() / 4294967296.0 * 2.0 * np.pi
+                    state[i, 2] = np.cos(angle) * launch
+                    state[i, 3] = np.sin(angle) * launch
+            else:
+                # 5 draws per boid: x, y, z, azimuth, w = cos(polar) — a uniform
+                # sphere direction in closed form, no rejection sampling.
+                for i in range(p.count):
+                    state[i, 0] = rng.next_u32() / 4294967296.0 * p.width
+                    state[i, 1] = rng.next_u32() / 4294967296.0 * p.height
+                    state[i, 2] = rng.next_u32() / 4294967296.0 * p.depth
+                    azimuth = rng.next_u32() / 4294967296.0 * 2.0 * np.pi
+                    w = rng.next_u32() / 4294967296.0 * 2.0 - 1.0
+                    ring = np.sqrt(1.0 - w * w)
+                    state[i, 3] = ring * np.cos(azimuth) * launch
+                    state[i, 4] = ring * np.sin(azimuth) * launch
+                    state[i, 5] = w * launch
             self._state = state
         else:
             raise ValueError(f"unknown init strategy: {p.init!r}")
@@ -171,19 +207,31 @@ class Boids:
         return self._generation
 
     def frame(self) -> FloatArray:
-        """Rasterize to (height, width) soft dots for the shared render pipeline."""
+        """Rasterize to (height, width) soft dots for the shared render pipeline.
+
+        d=3 projects orthographically along z with a depth-cue brightness
+        (spec "Frame": b = 0.3 + 0.7*(1 - z/depth), z = 0 nearest/brightest).
+        """
         p = self.params
         img = np.zeros((p.height, p.width), dtype=np.float64)
         px = self._state[:, 0].astype(np.int64) % p.width
         py = self._state[:, 1].astype(np.int64) % p.height
+        if p.dimensions == 3:
+            cue = 0.3 + 0.7 * (1.0 - self._state[:, 2] / p.depth)
+        else:
+            cue = np.ones(p.count, dtype=np.float64)
         for dy, dx, weight in _DOT:
-            np.add.at(img, ((py + dy) % p.height, (px + dx) % p.width), weight)
+            np.add.at(img, ((py + dy) % p.height, (px + dx) % p.width), weight * cue)
         result: FloatArray = np.clip(img, 0.0, 1.0)
         return result
 
     def overlay(self) -> dict[str, object]:
         """Raw point cloud for vector rendering (playground triangles)."""
-        return {"points": self._state.copy(), "world": (self.params.width, self.params.height)}
+        return {
+            "points": self._state.copy(),
+            "world": (self.params.width, self.params.height),
+            "dimensions": self.params.dimensions,
+        }
 
 
 def _steer(direction: FloatArray, vel: FloatArray, max_speed: float, max_force: float) -> FloatArray:
@@ -199,9 +247,13 @@ def _steer(direction: FloatArray, vel: FloatArray, max_speed: float, max_force: 
 
 
 def _step_once(state: FloatArray, p: BoidsParams) -> FloatArray:
-    pos = state[:, 0:2]
-    vel = state[:, 2:4]
-    size = np.array([p.width, p.height], dtype=np.float64)
+    # Dimension-generic (spec "Update"): every operation below is over the d
+    # components; d=2 slices exactly the historical [x, y, vx, vy] layout.
+    dim = p.dimensions
+    pos = state[:, 0:dim]
+    vel = state[:, dim : 2 * dim]
+    box = [float(p.width), float(p.height), float(p.depth)][:dim]
+    size = np.array(box, dtype=np.float64)
 
     delta = pos[None, :, :] - pos[:, None, :]  # delta[i, j] = pos_j - pos_i
     if p.boundary == "wrap":
@@ -234,8 +286,8 @@ def _step_once(state: FloatArray, p: BoidsParams) -> FloatArray:
     new_pos = pos + new_vel
     if p.boundary == "wrap":
         new_pos = new_pos % size
-    else:  # bounce: reflect position and flip velocity at the walls
-        for axis in (0, 1):
+    else:  # bounce: reflect position and flip velocity at the walls, per axis
+        for axis in range(dim):
             low = new_pos[:, axis] < 0.0
             new_pos[low, axis] = -new_pos[low, axis]
             new_vel[low, axis] = -new_vel[low, axis]

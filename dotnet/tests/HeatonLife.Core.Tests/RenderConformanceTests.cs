@@ -140,7 +140,9 @@ namespace HeatonLife.Tests
                         p.GetProperty("max_force").GetDouble(),
                         p.GetProperty("boundary").GetString() == "bounce"
                             ? BoidsBoundary.Bounce
-                            : BoidsBoundary.Wrap);
+                            : BoidsBoundary.Wrap,
+                        p.TryGetProperty("dimensions", out var dims) ? dims.GetInt32() : 2,
+                        p.TryGetProperty("depth", out var boidsDepth) ? boidsDepth.GetInt32() : 256);
                     sim.SetState(ReadF64(Path.Combine(caseDir, inputFile)));
                     AssertFloatFrame(caseName, caseDir, outputFile, sim.Frame());
                     break;

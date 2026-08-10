@@ -498,7 +498,9 @@ def _hot_boids(sim: Simulation, params: Params) -> Simulation:
     assert isinstance(params, BoidsParams)
     return Boids(
         params.count,
+        dimensions=params.dimensions,
         size=(params.width, params.height),
+        depth=params.depth,
         perception=params.perception,
         separation_radius=params.separation_radius,
         w_separation=params.w_separation,
@@ -530,7 +532,10 @@ def _paint_boids(sim: Simulation, x: int, y: int, button: int) -> None:
     direction = offset[nearby] / dist[nearby]
     if button == 2:
         direction = -direction
-    state[nearby, 2:4] += direction * p.max_speed * 0.8
+    # Velocities start at column d; the click is 2D, so scare/lure acts in the
+    # x/y plane and leaves any z motion alone.
+    d = p.dimensions
+    state[nearby, d : d + 2] += direction * p.max_speed * 0.8
 
 
 register(
@@ -574,6 +579,7 @@ register(
                 "max_speed": 2.5,
             },
             "Aviary (bounce)": {"count": 250, "boundary": "bounce"},
+            "Deep flock (3D)": {"dimensions": 3, "count": 400, "perception": 14.0},
         },
         paint=_paint_boids,
     )

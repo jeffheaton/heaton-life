@@ -214,7 +214,10 @@ namespace HeatonLife.Tests
                         p.GetProperty("max_force").GetDouble(),
                         p.GetProperty("boundary").GetString() == "bounce"
                             ? BoidsBoundary.Bounce
-                            : BoidsBoundary.Wrap);
+                            : BoidsBoundary.Wrap,
+                        // Older 2D cases predate these keys.
+                        p.TryGetProperty("dimensions", out var dims) ? dims.GetInt32() : 2,
+                        p.TryGetProperty("depth", out var boidsDepth) ? boidsDepth.GetInt32() : 256);
                     if (init == "random")
                         sim.SeedRandom(p.GetProperty("seed").GetUInt32());
                     else

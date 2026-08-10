@@ -9,11 +9,15 @@ namespace HeatonLife
     }
 
     /// <summary>
-    /// Reynolds boids (spec/boids.md). State is a point cloud, not a grid: flat
-    /// float64 rows of [x, y, vx, vy], Count*4 values, in world units. Neighbors are
-    /// O(N^2) with minimum-image wrapped distances. Weighted separation/alignment/
-    /// cohesion steering with force and speed clamps, expression-for-expression with
-    /// the NumPy reference. ε tier (1e-6).
+    /// Reynolds boids in d dimensions (spec/boids.md). State is a point cloud,
+    /// not a grid: flat float64 rows of positions then velocities, Count*(2*d)
+    /// values, in world units — the historical [x, y, vx, vy] for d=2,
+    /// [x, y, z, vx, vy, vz] for d=3. One algorithm for every d: the step is a
+    /// loop over components and never names an axis; only seeding and the frame
+    /// projection are per-dimension recipes. Neighbors are O(N^2) with
+    /// minimum-image wrapped distances. Weighted separation/alignment/cohesion
+    /// steering with force and speed clamps, expression-for-expression with the
+    /// NumPy reference. ε tier (1e-6).
     /// </summary>
     public sealed class Boids : IFloatFrameSource
     {
@@ -26,10 +30,14 @@ namespace HeatonLife
         };
         private double[] _state;
         private double[] _scratch;
+        private readonly double[] _size; // world box per axis, Dimensions entries
+        private readonly int _stride;    // 2 * Dimensions values per boid
 
         public int Count { get; }
+        public int Dimensions { get; }
         public int Width { get; }
         public int Height { get; }
+        public int Depth { get; }
         public double Perception { get; }
         public double SeparationRadius { get; }
         public double WSeparation { get; }
@@ -41,7 +49,7 @@ namespace HeatonLife
         public BoidsBoundary Boundary { get; }
         public int Generation { get; private set; }
 
-        /// <summary>Flat (Count, 4) rows: [x, y, vx, vy] per boid.</summary>
+        /// <summary>Flat (Count, 2*Dimensions) rows: positions then velocities per boid.</summary>
         public ReadOnlySpan<double> State => _state;
 
         public Boids(
@@ -56,13 +64,20 @@ namespace HeatonLife
             double maxSpeed = 3.0,
             double minSpeed = 1.0,
             double maxForce = 0.08,
-            BoidsBoundary boundary = BoidsBoundary.Wrap)
+            BoidsBoundary boundary = BoidsBoundary.Wrap,
+            int dimensions = 2,
+            int depth = 256)
         {
             if (count < 1)
                 throw new ArgumentOutOfRangeException(nameof(count));
+            if (dimensions != 2 && dimensions != 3)
+                throw new ArgumentOutOfRangeException(
+                    nameof(dimensions), "dimensions must be 2 or 3");
             Count = count;
+            Dimensions = dimensions;
             Width = width;
             Height = height;
+            Depth = depth;
             Perception = perception;
             SeparationRadius = separationRadius;
             WSeparation = wSeparation;
@@ -72,31 +87,56 @@ namespace HeatonLife
             MinSpeed = minSpeed;
             MaxForce = maxForce;
             Boundary = boundary;
-            _state = new double[count * 4];
-            _scratch = new double[count * 4];
+            _stride = 2 * dimensions;
+            _size = dimensions == 2
+                ? new[] { (double)width, height }
+                : new[] { (double)width, height, depth };
+            _state = new double[count * _stride];
+            _scratch = new double[count * _stride];
             SeedRandom(0);
         }
 
         /// <summary>
-        /// Random init per spec: 3 PCG32 draws per boid — x (fraction of Width),
-        /// y (fraction of Height), heading angle — launch speed = (min + max) / 2.
+        /// Random init per spec "Initialization" — per-dimension draw recipes
+        /// (an angle does not generalize by component), launch = (min+max)/2:
+        /// d=2 is 3 draws per boid (x, y, heading), the historical byte stream;
+        /// d=3 is 5 draws (x, y, z, azimuth, w = cos(polar)) — a uniform sphere
+        /// direction in closed form, no rejection sampling.
         /// </summary>
         public void SeedRandom(uint seed)
         {
             var rng = new Pcg32(seed);
             double launch = (MinSpeed + MaxSpeed) / 2.0;
-            for (int i = 0; i < Count; i++)
+            if (Dimensions == 2)
             {
-                _state[i * 4 + 0] = rng.NextU32() / 4294967296.0 * Width;
-                _state[i * 4 + 1] = rng.NextU32() / 4294967296.0 * Height;
-                double angle = rng.NextU32() / 4294967296.0 * 2.0 * Math.PI;
-                _state[i * 4 + 2] = Math.Cos(angle) * launch;
-                _state[i * 4 + 3] = Math.Sin(angle) * launch;
+                for (int i = 0; i < Count; i++)
+                {
+                    _state[i * 4 + 0] = rng.NextU32() / 4294967296.0 * Width;
+                    _state[i * 4 + 1] = rng.NextU32() / 4294967296.0 * Height;
+                    double angle = rng.NextU32() / 4294967296.0 * 2.0 * Math.PI;
+                    _state[i * 4 + 2] = Math.Cos(angle) * launch;
+                    _state[i * 4 + 3] = Math.Sin(angle) * launch;
+                }
+            }
+            else
+            {
+                for (int i = 0; i < Count; i++)
+                {
+                    _state[i * 6 + 0] = rng.NextU32() / 4294967296.0 * Width;
+                    _state[i * 6 + 1] = rng.NextU32() / 4294967296.0 * Height;
+                    _state[i * 6 + 2] = rng.NextU32() / 4294967296.0 * Depth;
+                    double azimuth = rng.NextU32() / 4294967296.0 * 2.0 * Math.PI;
+                    double w = rng.NextU32() / 4294967296.0 * 2.0 - 1.0;
+                    double ring = Math.Sqrt(1.0 - w * w);
+                    _state[i * 6 + 3] = ring * Math.Cos(azimuth) * launch;
+                    _state[i * 6 + 4] = ring * Math.Sin(azimuth) * launch;
+                    _state[i * 6 + 5] = w * launch;
+                }
             }
             Generation = 0;
         }
 
-        /// <summary>Load an explicit (Count, 4) state, rows of [x, y, vx, vy].</summary>
+        /// <summary>Load an explicit (Count, 2*Dimensions) state.</summary>
         public void SetState(ReadOnlySpan<double> state)
         {
             if (state.Length != _state.Length)
@@ -112,15 +152,32 @@ namespace HeatonLife
             Generation = generation;
         }
 
-        /// <summary>Overwrite one boid's [x, y, vx, vy] in place; does not reset the generation.</summary>
+        /// <summary>Overwrite one 2D boid's [x, y, vx, vy] in place; does not reset the generation.</summary>
         public void SetBoid(int index, double x, double y, double vx, double vy)
         {
+            if (Dimensions != 2)
+                throw new InvalidOperationException("2D SetBoid on a 3D flock — pass z and vz");
             if (index < 0 || index >= Count)
                 throw new ArgumentOutOfRangeException(nameof(index));
             _state[index * 4 + 0] = x;
             _state[index * 4 + 1] = y;
             _state[index * 4 + 2] = vx;
             _state[index * 4 + 3] = vy;
+        }
+
+        /// <summary>Overwrite one 3D boid's [x, y, z, vx, vy, vz] in place.</summary>
+        public void SetBoid(int index, double x, double y, double z, double vx, double vy, double vz)
+        {
+            if (Dimensions != 3)
+                throw new InvalidOperationException("3D SetBoid on a 2D flock");
+            if (index < 0 || index >= Count)
+                throw new ArgumentOutOfRangeException(nameof(index));
+            _state[index * 6 + 0] = x;
+            _state[index * 6 + 1] = y;
+            _state[index * 6 + 2] = z;
+            _state[index * 6 + 3] = vx;
+            _state[index * 6 + 4] = vy;
+            _state[index * 6 + 5] = vz;
         }
 
         public void Step(int n = 1)
@@ -131,9 +188,11 @@ namespace HeatonLife
         }
 
         /// <summary>
-        /// Frame per spec/render.md: rasterize to (Height, Width) soft dots — kernel
-        /// pass by pass, boids in index order within each pass, then clip to [0, 1].
-        /// Pixel = truncate(position) with floored wrap, matching the reference.
+        /// Frame per spec: rasterize to (Height, Width) soft dots — kernel pass by
+        /// pass, boids in index order within each pass, then clip to [0, 1]. Pixel =
+        /// truncate(position) with floored wrap. d=3 projects orthographically along
+        /// z, each boid's kernel scaled by the depth cue b = 0.3 + 0.7*(1 - z/Depth)
+        /// (z = 0 nearest, brightest), matching the reference.
         /// </summary>
         public void WriteFrame(double[] frame)
         {
@@ -145,11 +204,15 @@ namespace HeatonLife
             {
                 for (int i = 0; i < Count; i++)
                 {
-                    long px = FloorModInt((long)_state[i * 4 + 0], Width);
-                    long py = FloorModInt((long)_state[i * 4 + 1], Height);
+                    int row = i * _stride;
+                    long px = FloorModInt((long)_state[row + 0], Width);
+                    long py = FloorModInt((long)_state[row + 1], Height);
                     long y = FloorModInt(py + dy, Height);
                     long x = FloorModInt(px + dx, Width);
-                    frame[y * Width + x] += weight;
+                    double cue = Dimensions == 3
+                        ? 0.3 + 0.7 * (1.0 - _state[row + 2] / Depth)
+                        : 1.0;
+                    frame[y * Width + x] += weight * cue;
                 }
             }
             for (int i = 0; i < cells; i++)
@@ -173,113 +236,148 @@ namespace HeatonLife
         private void StepOnce()
         {
             int n = Count;
-            double w = Width, h = Height;
+            int dim = Dimensions;
+            int stride = _stride;
             bool wrap = Boundary == BoidsBoundary.Wrap;
             double perception2 = Perception * Perception;
             double separation2 = SeparationRadius * SeparationRadius;
 
+            // Per-boid temporaries, one component per axis (stack: zero-alloc step).
+            Span<double> delta = stackalloc double[3];
+            Span<double> sumOff = stackalloc double[3];
+            Span<double> sumVel = stackalloc double[3];
+            Span<double> sep = stackalloc double[3];
+            Span<double> veli = stackalloc double[3];
+            Span<double> steer = stackalloc double[3];
+            Span<double> acc = stackalloc double[3];
+            Span<double> newVel = stackalloc double[3];
+
             for (int i = 0; i < n; i++)
             {
-                double xi = _state[i * 4 + 0], yi = _state[i * 4 + 1];
-                double vxi = _state[i * 4 + 2], vyi = _state[i * 4 + 3];
+                int baseI = i * stride;
+                for (int a = 0; a < dim; a++)
+                {
+                    sumOff[a] = 0.0;
+                    sumVel[a] = 0.0;
+                    sep[a] = 0.0;
+                    veli[a] = _state[baseI + dim + a];
+                }
 
                 int neighbors = 0;
-                double sumOffX = 0.0, sumOffY = 0.0;
-                double sumVelX = 0.0, sumVelY = 0.0;
-                double sepX = 0.0, sepY = 0.0;
                 for (int j = 0; j < n; j++)
                 {
-                    // delta = pos_j - pos_i, minimum image on the torus when wrapping
-                    double dx = _state[j * 4 + 0] - xi;
-                    double dy = _state[j * 4 + 1] - yi;
-                    if (wrap)
+                    int baseJ = j * stride;
+                    // delta = pos_j - pos_i, minimum image per axis when wrapping
+                    double d2 = 0.0;
+                    for (int a = 0; a < dim; a++)
                     {
-                        dx -= w * Math.Round(dx / w); // banker's rounding, matching np.round
-                        dy -= h * Math.Round(dy / h);
+                        double da = _state[baseJ + a] - _state[baseI + a];
+                        if (wrap)
+                            da -= _size[a] * Math.Round(da / _size[a]); // banker's, matching np.round
+                        delta[a] = da;
+                        d2 += da * da;
                     }
-                    double d2 = dx * dx + dy * dy;
                     if (d2 > 0.0 && d2 <= perception2)
                     {
                         neighbors++;
-                        sumOffX += dx;
-                        sumOffY += dy;
-                        sumVelX += _state[j * 4 + 2];
-                        sumVelY += _state[j * 4 + 3];
+                        for (int a = 0; a < dim; a++)
+                        {
+                            sumOff[a] += delta[a];
+                            sumVel[a] += _state[baseJ + dim + a];
+                        }
                     }
                     if (d2 > 0.0 && d2 <= separation2)
                     {
                         double denom = Math.Max(d2, 1e-12);
-                        sepX += -dx / denom;
-                        sepY += -dy / denom;
+                        for (int a = 0; a < dim; a++)
+                            sep[a] += -delta[a] / denom;
                     }
                 }
                 double count = Math.Max(neighbors, 1);
-                double meanOffX = sumOffX / count, meanOffY = sumOffY / count;
-                double meanVelX = sumVelX / count, meanVelY = sumVelY / count;
+                for (int a = 0; a < dim; a++)
+                {
+                    sumOff[a] /= count; // mean_offset
+                    sumVel[a] /= count; // mean_vel
+                }
 
-                var (s1x, s1y) = Steer(sepX, sepY, vxi, vyi);
-                var (s2x, s2y) = Steer(meanVelX, meanVelY, vxi, vyi);
-                var (s3x, s3y) = Steer(meanOffX, meanOffY, vxi, vyi);
-                double accX = WSeparation * s1x + WAlignment * s2x + WCohesion * s3x;
-                double accY = WSeparation * s1y + WAlignment * s2y + WCohesion * s3y;
+                // acc = w_sep*steer(separation) + w_align*steer(mean_vel) + w_coh*steer(mean_offset)
+                for (int a = 0; a < dim; a++)
+                    acc[a] = 0.0;
+                Steer(sep, veli, dim, steer);
+                for (int a = 0; a < dim; a++)
+                    acc[a] += WSeparation * steer[a];
+                Steer(sumVel, veli, dim, steer);
+                for (int a = 0; a < dim; a++)
+                    acc[a] += WAlignment * steer[a];
+                Steer(sumOff, veli, dim, steer);
+                for (int a = 0; a < dim; a++)
+                    acc[a] += WCohesion * steer[a];
 
-                double nvx = vxi + accX;
-                double nvy = vyi + accY;
-                double speed = Math.Sqrt(nvx * nvx + nvy * nvy);
+                double speed2 = 0.0;
+                for (int a = 0; a < dim; a++)
+                {
+                    newVel[a] = veli[a] + acc[a];
+                    speed2 += newVel[a] * newVel[a];
+                }
+                double speed = Math.Sqrt(speed2);
                 if (speed > MaxSpeed)
                 {
-                    nvx = nvx / speed * MaxSpeed;
-                    nvy = nvy / speed * MaxSpeed;
+                    for (int a = 0; a < dim; a++)
+                        newVel[a] = newVel[a] / speed * MaxSpeed;
                 }
                 if (speed > 0.0 && speed < MinSpeed) // original speed, like the reference
                 {
-                    nvx = nvx / speed * MinSpeed;
-                    nvy = nvy / speed * MinSpeed;
+                    for (int a = 0; a < dim; a++)
+                        newVel[a] = newVel[a] / speed * MinSpeed;
                 }
 
-                double nx = xi + nvx;
-                double ny = yi + nvy;
-                if (wrap)
+                for (int a = 0; a < dim; a++)
                 {
-                    nx = Mod(nx, w);
-                    ny = Mod(ny, h);
+                    double np = _state[baseI + a] + newVel[a];
+                    if (wrap)
+                    {
+                        np = Mod(np, _size[a]);
+                    }
+                    else
+                    {
+                        // bounce: reflect position and flip velocity at the walls
+                        if (np < 0.0) { np = -np; newVel[a] = -newVel[a]; }
+                        if (np > _size[a]) { np = 2.0 * _size[a] - np; newVel[a] = -newVel[a]; }
+                        np = Math.Clamp(np, 0.0, _size[a] - 1e-9);
+                    }
+                    _scratch[baseI + a] = np;
+                    _scratch[baseI + dim + a] = newVel[a];
                 }
-                else
-                {
-                    // bounce: reflect position and flip velocity at the walls
-                    if (nx < 0.0) { nx = -nx; nvx = -nvx; }
-                    if (nx > w) { nx = 2.0 * w - nx; nvx = -nvx; }
-                    if (ny < 0.0) { ny = -ny; nvy = -nvy; }
-                    if (ny > h) { ny = 2.0 * h - ny; nvy = -nvy; }
-                    nx = Math.Clamp(nx, 0.0, w - 1e-9);
-                    ny = Math.Clamp(ny, 0.0, h - 1e-9);
-                }
-
-                _scratch[i * 4 + 0] = nx;
-                _scratch[i * 4 + 1] = ny;
-                _scratch[i * 4 + 2] = nvx;
-                _scratch[i * 4 + 3] = nvy;
             }
             (_state, _scratch) = (_scratch, _state);
         }
 
         /// <summary>Reynolds steering: desired = normalize(direction)*max_speed; clip force to max_force.</summary>
-        private (double X, double Y) Steer(double dirX, double dirY, double velX, double velY)
+        private void Steer(
+            ReadOnlySpan<double> direction, ReadOnlySpan<double> vel, int dim, Span<double> result)
         {
-            double norm = Math.Sqrt(dirX * dirX + dirY * dirY);
+            double norm2 = 0.0;
+            for (int a = 0; a < dim; a++)
+                norm2 += direction[a] * direction[a];
+            double norm = Math.Sqrt(norm2);
             if (norm <= 0.0)
-                return (0.0, 0.0);
-            double desX = dirX / norm * MaxSpeed;
-            double desY = dirY / norm * MaxSpeed;
-            double steerX = desX - velX;
-            double steerY = desY - velY;
-            double force = Math.Sqrt(steerX * steerX + steerY * steerY);
+            {
+                for (int a = 0; a < dim; a++)
+                    result[a] = 0.0;
+                return;
+            }
+            double force2 = 0.0;
+            for (int a = 0; a < dim; a++)
+            {
+                result[a] = direction[a] / norm * MaxSpeed - vel[a];
+                force2 += result[a] * result[a];
+            }
+            double force = Math.Sqrt(force2);
             if (force > MaxForce)
             {
-                steerX = steerX / force * MaxForce;
-                steerY = steerY / force * MaxForce;
+                for (int a = 0; a < dim; a++)
+                    result[a] = result[a] / force * MaxForce;
             }
-            return (steerX, steerY);
         }
 
         /// <summary>Floored modulo (result in [0, m) for m &gt; 0), matching np.mod.</summary>

@@ -60,7 +60,8 @@ def _build_sim(sim_family: str, p: dict[str, Any], initial: np.ndarray) -> Any:
         )
     if sim_family == "boids":
         return Boids(
-            p["count"], size=size, perception=p["perception"],
+            p["count"], dimensions=p.get("dimensions", 2), size=size,
+            depth=p.get("depth", 256), perception=p["perception"],
             separation_radius=p["separation_radius"], w_separation=p["w_separation"],
             w_alignment=p["w_alignment"], w_cohesion=p["w_cohesion"],
             max_speed=p["max_speed"], min_speed=p["min_speed"],

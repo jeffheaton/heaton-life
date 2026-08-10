@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-heaton-life is a spec-first, multi-language library of emergence algorithms — cellular automata (MergeLife, Life-like, Elementary, Cyclic, Wireworld), Lenia ×3, fractals (Mandelbrot/Julia/Burning Ship/Newton with perturbation deep zoom), Reynolds boids, and Gray-Scott reaction-diffusion — plus rendering, and the MergeLife genetic evolver. Monorepo components:
+heaton-life is a spec-first, multi-language library of emergence algorithms — cellular automata (MergeLife, Life-like, Elementary, Cyclic, Wireworld), Lenia ×3, fractals (Mandelbrot/Julia/Burning Ship/Newton with perturbation deep zoom), Reynolds boids (one d-dimensional algorithm, 2D and 3D), and Gray-Scott reaction-diffusion — plus rendering, and the MergeLife genetic evolver. Monorepo components:
 
 - **`spec/`** — language-neutral algorithm specifications; the source of truth all implementations conform to
 - **`vectors/`** — golden conformance vectors (params + expected states) shared by every implementation

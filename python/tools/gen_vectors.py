@@ -238,6 +238,15 @@ def main() -> None:
         build_sim("boids", {"count": 40, "width": 64, "height": 64, "seed": 3}),
         [0, 1, 10, 50],
     )
+    write_case(
+        "boids",
+        "flock3d-64",
+        build_sim("boids", {
+            "count": 40, "dimensions": 3,
+            "width": 64, "height": 64, "depth": 64, "seed": 3,
+        }),
+        [0, 1, 10, 50],
+    )
 
     # -- fractals (one-shot renders: params + viewport + int32 outputs) --------------
     write_fractal_case(
@@ -506,6 +515,32 @@ def write_frame_cases() -> None:
             "max_force": 0.08, "boundary": "wrap",
         },
         boids,
+        float_frame=True,
+    )
+
+    # 3D projection: handcrafted z values spanning the depth cue (z=0 full
+    # brightness → z near depth dimmest), same overlap/wrap coverage.
+    boid3d_state = np.array(
+        [
+            [0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+            [15.9, 11.2, 47.0, -1.0, 0.5, 0.2],
+            [7.5, 6.25, 24.0, 0.0, 1.0, -0.3],
+            [8.2, 6.9, 12.0, 0.5, -0.5, 0.7],
+            [0.4, 11.9, 36.0, 2.0, 2.0, 1.0],
+        ],
+        dtype=np.float64,
+    )
+    boids3d = Boids(5, dimensions=3, size=(16, 12), depth=48, init=boid3d_state)
+    frame_case(
+        "frame-boids3d",
+        "boids",
+        {
+            "count": 5, "dimensions": 3, "width": 16, "height": 12, "depth": 48,
+            "perception": 12.0, "separation_radius": 6.0, "w_separation": 1.5,
+            "w_alignment": 1.0, "w_cohesion": 1.0, "max_speed": 3.0,
+            "min_speed": 1.0, "max_force": 0.08, "boundary": "wrap",
+        },
+        boids3d,
         float_frame=True,
     )
 

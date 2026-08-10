@@ -128,17 +128,29 @@ namespace HeatonLife
             int width,
             int height,
             ulong seed,
-            int maxSteps = MaxSteps)
+            int maxSteps = MaxSteps,
+            int workers = 1)
         {
-            double best = double.NegativeInfinity;
-            int steps = 0;
-            for (int i = 0; i < cycles; i++)
+            // Cycle runs are independent (cycle i seeds from seed + i), so they
+            // parallelize into per-index slots; the reduction below reads the
+            // slots in index order — output is identical for any worker count
+            // (spec/evolve.md "Parallel evaluation").
+            var scores = new double[cycles];
+            var steps = new int[cycles];
+            Parallelism.For(cycles, workers, i =>
             {
                 var stats = RunOnce(genome, width, height, seed + (ulong)i, maxSteps);
-                best = Math.Max(best, ScoreStats(stats, objective));
-                steps += (int)stats.Steps;
+                scores[i] = ScoreStats(stats, objective);
+                steps[i] = (int)stats.Steps;
+            });
+            double best = double.NegativeInfinity;
+            int total = 0;
+            for (int i = 0; i < cycles; i++)
+            {
+                best = Math.Max(best, scores[i]);
+                total += steps[i];
             }
-            return (best, steps);
+            return (best, total);
         }
 
         /// <summary>Area of the largest axis-aligned all-true rectangle (histogram-stack method).</summary>

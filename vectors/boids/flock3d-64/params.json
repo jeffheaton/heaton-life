@@ -1,0 +1,58 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.f64",
+      "shape": [
+        40,
+        6
+      ],
+      "step": 0
+    },
+    {
+      "file": "state_00001.f64",
+      "shape": [
+        40,
+        6
+      ],
+      "step": 1
+    },
+    {
+      "file": "state_00010.f64",
+      "shape": [
+        40,
+        6
+      ],
+      "step": 10
+    },
+    {
+      "file": "state_00050.f64",
+      "shape": [
+        40,
+        6
+      ],
+      "step": 50
+    }
+  ],
+  "epsilon": 1e-06,
+  "family": "boids",
+  "params": {
+    "boundary": "wrap",
+    "count": 40,
+    "depth": 64,
+    "dimensions": 3,
+    "height": 64,
+    "init": "random",
+    "max_force": 0.08,
+    "max_speed": 3.0,
+    "min_speed": 1.0,
+    "perception": 12.0,
+    "seed": 3,
+    "separation_radius": 6.0,
+    "w_alignment": 1.0,
+    "w_cohesion": 1.0,
+    "w_separation": 1.5,
+    "width": 64
+  },
+  "spec_version": "0.2.0",
+  "tier": "epsilon"
+}

@@ -61,3 +61,16 @@ Bit-exact tier (integer statistics; plain-double scoring). Vectors in
   results from fixed PCG32 seeds (strings and indices in `params.json`).
 - `mini-run-24` — a complete small `Evolver` run: best genome, its score, the
   evaluation count, and the final population, all pinned.
+
+## Parallel evaluation
+
+The GA loop itself is inherently sequential (steady-state admissions share one
+PCG32 stream), but each candidate's objective cycles are independent — cycle
+*i* seeds from `seed + i` — so implementations may evaluate them across worker
+threads keyed by an explicit `workers` knob (C#: the `Evolver`/`ScoreGenome`
+argument, default 1 = serial). The contract matches the fractal one: **output
+is bit-identical for every worker count and schedule** — per-cycle results land
+in per-index slots and the reduction (max of scores, integer sum of steps)
+reads them in index order. Conformance suites replay the evolve vectors at
+`workers = 1` and `workers > 1`. Python evaluates serially and takes no knob —
+parallelism is a performance detail, never an algorithm change.
