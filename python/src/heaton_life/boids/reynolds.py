@@ -206,6 +206,26 @@ class Boids:
     def generation(self) -> int:
         return self._generation
 
+    def nudge(self, x: float, y: float, *, radius: float, strength: float) -> None:
+        """Radial velocity impulse at (x, y) — spec "Nudge (editing)".
+
+        Positive strength pushes nearby boids away (scare), negative pulls
+        them in (lure). The pointer is 2-D: the impulse acts in the x/y plane
+        and leaves any z motion alone. Editing, not physics — the generation
+        does not change.
+        """
+        p = self.params
+        offset = self._state[:, 0:2] - np.array([float(x), float(y)])
+        size = np.array([float(p.width), float(p.height)])
+        if p.boundary == "wrap":
+            offset -= size * np.round(offset / size)
+        dist = np.sqrt((offset**2).sum(axis=1, keepdims=True))
+        near = (dist[:, 0] > 0.0) & (dist[:, 0] < radius)
+        if not near.any():
+            return
+        d = p.dimensions
+        self._state[near, d : d + 2] += offset[near] / dist[near] * strength
+
     def frame(self) -> FloatArray:
         """Rasterize to (height, width) soft dots for the shared render pipeline.
 

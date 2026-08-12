@@ -159,6 +159,14 @@ namespace HeatonLife
             _state[y * Width + x] = value;
         }
 
+        /// <summary>Restore a rectangle (inclusive corners) to the family blank, 0.0 (spec/patterns.md "Clear").</summary>
+        public void ClearRect(int x0, int y0, int x1, int y1)
+        {
+            for (int y = y0; y <= y1; y++)
+                for (int x = x0; x <= x1; x++)
+                    SetCell(x, y, 0.0);
+        }
+
         public void Step(int n = 1)
         {
             for (int s = 0; s < n; s++)

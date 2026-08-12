@@ -120,5 +120,62 @@ namespace HeatonLife.Tests
             b.Step(20);
             Assert.Equal(a.State.ToArray(), b.State.ToArray());
         }
+
+        [Fact]
+        public void NudgeScaresAndLuresInPlane()
+        {
+            var sim = Make(2);
+            sim.SetState(new[]
+            {
+                64.0, 64.0, 0.0, 0.0,
+                80.0, 64.0, 0.0, 0.0,
+            });
+            sim.Nudge(60.0, 64.0, radius: 10.0, strength: 2.0);
+            Assert.Equal(2.0, sim.State[2], 12); // boid 0 (dist 4): full strength, +x
+            Assert.Equal(0.0, sim.State[3]);
+            Assert.Equal(0.0, sim.State[4 + 2]); // boid 1 (dist 20): outside the radius
+            sim.Nudge(60.0, 64.0, radius: 10.0, strength: -2.0); // a lure undoes the scare
+            Assert.Equal(0.0, sim.State[2], 12);
+        }
+
+        [Fact]
+        public void NudgeWrapsMinimumImageAndRespectsWalls()
+        {
+            // Click near the right wall: the boid across the seam is 4 units away
+            // through the wrap (not 124 across the box) and gets pushed +x.
+            var sim = Make(1);
+            sim.SetState(new[] { 2.0, 64.0, 0.0, 0.0 });
+            sim.Nudge(126.0, 64.0, radius: 10.0, strength: 1.0);
+            Assert.Equal(1.0, sim.State[2], 12);
+            // With walls the same click really is 124 units away: out of range.
+            var walls = Make(1, boundary: BoidsBoundary.Bounce);
+            walls.SetState(new[] { 2.0, 64.0, 0.0, 0.0 });
+            walls.Nudge(126.0, 64.0, radius: 10.0, strength: 1.0);
+            Assert.Equal(0.0, walls.State[2]);
+        }
+
+        [Fact]
+        public void NudgeSkipsTheExactPointAndKeepsGeneration()
+        {
+            var sim = Make(1);
+            sim.SetState(new[] { 64.0, 64.0, 1.0, 1.0 }, 3);
+            sim.Nudge(64.0, 64.0, radius: 48.0, strength: 5.0);
+            Assert.Equal(3, sim.Generation); // editing, not physics
+            Assert.Equal(1.0, sim.State[2]); // dist == 0: untouched
+            Assert.Equal(1.0, sim.State[3]);
+        }
+
+        [Fact]
+        public void NudgeLeavesZAlone()
+        {
+            var sim = new Boids(
+                1, 128, 128,
+                wSeparation: 0.0, wAlignment: 0.0, wCohesion: 0.0, dimensions: 3);
+            sim.SetState(new[] { 60.0, 64.0, 30.0, 0.0, 0.0, 0.5 });
+            sim.Nudge(56.0, 64.0, radius: 10.0, strength: 2.0);
+            Assert.Equal(2.0, sim.State[3], 12); // vx pushed
+            Assert.Equal(30.0, sim.State[2]);    // z position untouched
+            Assert.Equal(0.5, sim.State[5]);     // vz untouched
+        }
     }
 }
