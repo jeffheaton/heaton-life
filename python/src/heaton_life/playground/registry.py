@@ -519,23 +519,9 @@ def _paint_boids(sim: Simulation, x: int, y: int, button: int) -> None:
     """Left: scare boids away from the click; right: lure them toward it."""
     if button not in (1, 2, 3):
         return
-    state = np.asarray(sim.state)
-    p = sim.params  # type: ignore[attr-defined]
-    offset = state[:, 0:2] - np.array([float(x), float(y)])
-    size = np.array([float(p.width), float(p.height)])
-    if p.boundary == "wrap":
-        offset -= size * np.round(offset / size)
-    dist = np.sqrt((offset**2).sum(axis=1, keepdims=True))
-    nearby = (dist[:, 0] > 0.0) & (dist[:, 0] < 48.0)
-    if not nearby.any():
-        return
-    direction = offset[nearby] / dist[nearby]
-    if button == 2:
-        direction = -direction
-    # Velocities start at column d; the click is 2D, so scare/lure acts in the
-    # x/y plane and leaves any z motion alone.
-    d = p.dimensions
-    state[nearby, d : d + 2] += direction * p.max_speed * 0.8
+    assert isinstance(sim, Boids)
+    strength = sim.params.max_speed * 0.8
+    sim.nudge(x, y, radius=48.0, strength=-strength if button == 2 else strength)
 
 
 register(

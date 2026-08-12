@@ -209,3 +209,54 @@ def test_3d_determinism_and_roundtrip() -> None:
     a.step(20)
     b.step(20)
     assert np.array_equal(a.state, b.state)
+
+
+def test_nudge_scares_and_lures_in_plane() -> None:
+    state = np.array([[64.0, 64.0, 0.0, 0.0], [80.0, 64.0, 0.0, 0.0]])
+    sim = make(2, init=state)
+    sim.nudge(60.0, 64.0, radius=10.0, strength=2.0)
+    # Boid 0 (offset (4, 0), dist 4): pushed +x by the full strength.
+    assert sim.state[0, 2] == pytest.approx(2.0)
+    assert sim.state[0, 3] == 0.0
+    # Boid 1 (dist 20): outside the radius, untouched.
+    assert sim.state[1, 2] == 0.0
+    # A lure of the same strength undoes the scare exactly.
+    sim.nudge(60.0, 64.0, radius=10.0, strength=-2.0)
+    assert sim.state[0, 2] == pytest.approx(0.0)
+
+
+def test_nudge_skips_the_exact_point_and_keeps_generation() -> None:
+    state = np.array([[64.0, 64.0, 1.0, 1.0]])
+    sim = make(1, init=state)
+    sim.step(3)
+    generation = sim.generation
+    vel = sim.state[:, 2:4].copy()
+    sim.nudge(float(sim.state[0, 0]), float(sim.state[0, 1]), radius=48.0, strength=5.0)
+    assert sim.generation == generation  # editing, not physics
+    # dist == 0: untouched (no direction to push along).
+    assert np.array_equal(sim.state[:, 2:4], vel)
+
+
+def test_nudge_wraps_minimum_image() -> None:
+    # Click near the right wall; the boid just across the seam is 4 units away
+    # through the wrap (not 124 across the box) and gets pushed +x.
+    state = np.array([[2.0, 64.0, 0.0, 0.0]])
+    sim = make(1, init=state)
+    sim.nudge(126.0, 64.0, radius=10.0, strength=1.0)
+    assert sim.state[0, 2] == pytest.approx(1.0)
+    # With walls, the same click is 124 units away: out of range.
+    sim_walls = make(1, init=state, boundary="bounce")
+    sim_walls.nudge(126.0, 64.0, radius=10.0, strength=1.0)
+    assert sim_walls.state[0, 2] == 0.0
+
+
+def test_nudge_leaves_z_alone() -> None:
+    state = np.array([[60.0, 64.0, 30.0, 0.0, 0.0, 0.5]])
+    sim = Boids(
+        1, dimensions=3, size=(128, 128),
+        w_separation=0.0, w_alignment=0.0, w_cohesion=0.0, init=state,
+    )
+    sim.nudge(56.0, 64.0, radius=10.0, strength=2.0)
+    assert sim.state[0, 3] == pytest.approx(2.0)  # vx pushed
+    assert sim.state[0, 2] == 30.0  # z position untouched
+    assert sim.state[0, 5] == 0.5  # vz untouched

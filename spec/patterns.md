@@ -15,14 +15,14 @@ A pattern is `(family, width, height, cells, rule)`:
   conversion, only rejection.
 - `cells` — row-major, the family's cell payload:
 
-| family | cell payload | transparent cell (see Stamp) |
-|---|---|---|
-| life-like | byte 0/1 | 0 |
-| wireworld | byte 0..3 | 0 (empty) |
-| cyclic | byte 0..states−1 | 0 |
-| mergelife | RGB byte triple | — (opaque only) |
-| lenia (each variant its own family) | float64 [0,1] | 0.0 |
-| gray-scott | (u, v) float64 pair | — (opaque only) |
+| family | cell payload | transparent cell (see Stamp) | blank (see Clear) |
+|---|---|---|---|
+| life-like | byte 0/1 | 0 | 0 |
+| wireworld | byte 0..3 | 0 (empty) | 0 (empty) |
+| cyclic | byte 0..states−1 | 0 | 0 |
+| mergelife | RGB byte triple | — (opaque only) | (0, 0, 0) black |
+| lenia (each variant its own family) | float64 [0,1] | 0.0 | 0.0 |
+| gray-scott | (u, v) float64 pair | — (opaque only) | (1.0, 0.0) substrate |
 
   Elementary, boids, and fractals have no patterns (a space-time diagram, a
   point cloud, and a coordinate view are not cell regions).
@@ -91,6 +91,47 @@ the target's boundary mode:
   value (table above) are skipped, so a spaceship lands without erasing its
   surroundings; families marked opaque-only ignore the flag. Stamping does not
   reset the target's generation.
+- **Clear**`(grid, x0, y0, x1, y1)` — restores every cell of the inclusive
+  rectangle to the family **blank** (table above). The blank is a family fact,
+  not an app choice: Gray-Scott's blank is the substrate (U = 1, V = 0), not
+  zero. Clearing, like stamping, does not reset the generation.
+
+## Built-in patterns
+
+Every implementation ships the same canonical set of built-in patterns —
+code-defined encodings of public mathematical commons (authored from their
+published cell coordinates, no copied pattern files). Names, families, origin
+rules, and cells are all part of the set; the bodies below are canonical RLE
+(decode with the listed rule as the header rule). Life patterns carry their
+home rule; the HighLife replicator exists to show same-family-different-rule
+stamping.
+
+| name | family | rule | RLE body |
+|---|---|---|---|
+| Glider | life-like | B3/S23 | `bo$2bo$3o!` |
+| Lightweight spaceship | life-like | B3/S23 | `bo2bo$o$o3bo$4o!` |
+| Middleweight spaceship | life-like | B3/S23 | `3bo$bo3bo$o$o4bo$5o!` |
+| Heavyweight spaceship | life-like | B3/S23 | `3b2o$bo4bo$o$o5bo$6o!` |
+| Blinker | life-like | B3/S23 | `3o!` |
+| Toad | life-like | B3/S23 | `b3o$3o!` |
+| Beacon | life-like | B3/S23 | `2o$2o$2b2o$2b2o!` |
+| Pulsar | life-like | B3/S23 | `2b3o3b3o2$o4bobo4bo$o4bobo4bo$o4bobo4bo$2b3o3b3o2$2b3o3b3o$o4bobo4bo$o4bobo4bo$o4bobo4bo2$2b3o3b3o!` |
+| Pentadecathlon | life-like | B3/S23 | `2bo4bo$2ob4ob2o$2bo4bo!` |
+| Block | life-like | B3/S23 | `2o$2o!` |
+| Beehive | life-like | B3/S23 | `b2o$o2bo$b2o!` |
+| Loaf | life-like | B3/S23 | `b2o$o2bo$bobo$2bo!` |
+| R-pentomino | life-like | B3/S23 | `b2o$2o$bo!` |
+| Diehard | life-like | B3/S23 | `6bo$2o$bo3b3o!` |
+| Acorn | life-like | B3/S23 | `bo$3bo$2o2b3o!` |
+| Gosper glider gun | life-like | B3/S23 | `24bo$22bobo$12b2o6b2o12b2o$11bo3bo4b2o12b2o$2o8bo5bo3b2o$2o8bo3bob2o4bobo$10bo5bo7bo$11bo3bo$12b2o!` |
+| Replicator (HighLife) | life-like | B36/S23 | `2b3o$bo2bo$o3bo$o2bo$3o!` |
+| Clock | wireworld | WireWorld | `CBA3C$C4.C$6C!` |
+| Diode (passes right) | wireworld | WireWorld | `3.2C$4C.3C$3.2C!` |
+
+The set is **behavior-pinned** in every implementation's test suite: stills
+stay, oscillator periods hold, ships translate, the gun fires, the replicator
+copies itself in B36/S23, the Wireworld clock keeps circulating, and the diode
+passes electrons exactly one way.
 
 ## Conformance
 

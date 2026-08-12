@@ -45,5 +45,23 @@ namespace HeatonLife.Tests
             for (int i = 0; i < 32; i++)
                 Assert.Equal(rng.NextU32() < threshold ? 1 : 0, sim.State[i]);
         }
+
+        [Fact]
+        public void ClearRectBlanksTheRectangleOnly()
+        {
+            var sim = new LifeLike("B3/S23", 8, 8);
+            var grid = new byte[64];
+            for (int i = 0; i < 64; i++)
+                grid[i] = 1;
+            sim.SetState(grid, 7);
+            sim.ClearRect(1, 1, 3, 2);
+            for (int y = 0; y < 8; y++)
+                for (int x = 0; x < 8; x++)
+                {
+                    byte expected = (byte)(x >= 1 && x <= 3 && y >= 1 && y <= 2 ? 0 : 1);
+                    Assert.Equal(expected, sim.State[y * 8 + x]);
+                }
+            Assert.Equal(7, sim.Generation); // clearing preserves the generation
+        }
     }
 }

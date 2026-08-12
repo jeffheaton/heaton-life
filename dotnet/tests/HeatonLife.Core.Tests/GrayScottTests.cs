@@ -85,5 +85,24 @@ namespace HeatonLife.Tests
                 Assert.True(fk.Kill > 0.0 && fk.Kill < 0.08, name);
             }
         }
+
+        [Fact]
+        public void ClearRectRestoresSubstrate()
+        {
+            // The family blank is the substrate U=1, V=0 — not zero
+            // (spec/patterns.md "Clear").
+            var sim = new GrayScott(8, 8);
+            sim.SeedSpots(5, 3);
+            sim.Step(2);
+            int generation = sim.Generation;
+            sim.ClearRect(0, 0, 7, 7);
+            int cells = 8 * 8;
+            for (int i = 0; i < cells; i++)
+            {
+                Assert.Equal(1.0, sim.State[i]);         // U plane
+                Assert.Equal(0.0, sim.State[cells + i]); // V plane
+            }
+            Assert.Equal(generation, sim.Generation);
+        }
     }
 }

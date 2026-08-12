@@ -141,5 +141,59 @@ namespace HeatonLife.Tests
             Assert.Equal(40312, restored.Generation);
             Assert.Equal(saved, restored.State.ToArray());
         }
+
+        [Fact]
+        public void PlanarOpsMatchPerPlaneScalarOps()
+        {
+            // The planar helpers are layout adapters: every plane must go through
+            // the same window/transform as the scalar ops run per plane.
+            var grid = new double[]
+            {
+                1, 2, 3, 4,     // plane 0 (2x2)
+                10, 20, 30, 40, // plane 1
+            };
+            double[] pattern = Patterns.ExtractPlanes(grid, 2, 2, 2, 1, 0, 2, 2, torus: true);
+            double[] u = Patterns.Extract(
+                new ReadOnlySpan<double>(grid, 0, 4), 2, 2, 1, 1, 0, 2, 2, torus: true);
+            double[] v = Patterns.Extract(
+                new ReadOnlySpan<double>(grid, 4, 4), 2, 2, 1, 1, 0, 2, 2, torus: true);
+            for (int i = 0; i < 4; i++)
+            {
+                Assert.Equal(u[i], pattern[i]);
+                Assert.Equal(v[i], pattern[4 + i]);
+            }
+
+            double[] rotated = Patterns.Rotate90Planes(pattern, 2, 2, 2);
+            double[] flippedH = Patterns.FlipHPlanes(pattern, 2, 2, 2);
+            double[] flippedV = Patterns.FlipVPlanes(pattern, 2, 2, 2);
+            double[] ru = Patterns.Rotate90(u, 2, 2);
+            double[] hu = Patterns.FlipH(u, 2, 2);
+            double[] vu = Patterns.FlipV(u, 2, 2);
+            for (int i = 0; i < 4; i++)
+            {
+                Assert.Equal(ru[i], rotated[i]);
+                Assert.Equal(hu[i], flippedH[i]);
+                Assert.Equal(vu[i], flippedV[i]);
+            }
+
+            // Stamping the extracted pattern into a blank grid of the same size
+            // reproduces it plane for plane.
+            var target = new double[8];
+            Patterns.StampPlanes(target, 2, 2, 2, pattern, 2, 2, 0, 0, torus: true);
+            Assert.Equal(pattern, target);
+        }
+
+        [Fact]
+        public void PlanarStampClipsOnDeadBoundaries()
+        {
+            var grid = new double[2 * 9]; // 3x3, two planes
+            var pattern = new[] { 1.0, 2.0, 10.0, 20.0 }; // 2x1, two planes
+            Patterns.StampPlanes(grid, 3, 3, 2, pattern, 2, 1, 2, 0, torus: false);
+            Assert.Equal(1.0, grid[2]);      // (2,0) plane 0 landed
+            Assert.Equal(10.0, grid[9 + 2]); // (2,0) plane 1 landed with it
+            for (int i = 0; i < grid.Length; i++)
+                if (i != 2 && i != 11)
+                    Assert.Equal(0.0, grid[i]); // the (3,0) cell clipped, nothing wrapped
+        }
     }
 }

@@ -290,6 +290,96 @@ namespace HeatonLife
                 }
         }
 
+        // ---- Planar payloads (Gray-Scott state: all of plane 0, then plane 1) ----
+        //
+        // Layout adapters over the ops above: the spec defines patterns on cells
+        // ((u, v) pairs travel as one cell); these run every plane through the
+        // same window so a planar memory layout gets identical semantics.
+
+        /// <summary>
+        /// Extract from a planar grid: every plane is copied through the same
+        /// window, so the planes travel together (spec/patterns.md — Gray-Scott's
+        /// U and V move as one pattern). Result is planar with the same plane order.
+        /// </summary>
+        public static double[] ExtractPlanes(
+            ReadOnlySpan<double> grid, int gridWidth, int gridHeight, int planes,
+            int x, int y, int width, int height, bool torus)
+        {
+            int gridPlane = gridWidth * gridHeight;
+            int patternPlane = width * height;
+            var result = new double[patternPlane * planes];
+            for (int p = 0; p < planes; p++)
+            {
+                double[] plane = Extract(
+                    grid.Slice(p * gridPlane, gridPlane), gridWidth, gridHeight, 1,
+                    x, y, width, height, torus);
+                Array.Copy(plane, 0, result, p * patternPlane, patternPlane);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Write a planar pattern into a planar grid in place: torus wraps, dead
+        /// boundaries clip. Opaque only — the planar family (Gray-Scott) has no
+        /// transparent cell (spec/patterns.md).
+        /// </summary>
+        public static void StampPlanes(
+            double[] grid, int gridWidth, int gridHeight, int planes,
+            ReadOnlySpan<double> pattern, int patternWidth, int patternHeight,
+            int x, int y, bool torus)
+        {
+            int gridPlane = gridWidth * gridHeight;
+            int patternPlane = patternWidth * patternHeight;
+            for (int row = 0; row < patternHeight; row++)
+                for (int col = 0; col < patternWidth; col++)
+                {
+                    if (!TargetIndex(gridWidth, gridHeight, x + col, y + row, torus, out int dst))
+                        continue;
+                    for (int p = 0; p < planes; p++)
+                        grid[p * gridPlane + dst] =
+                            pattern[p * patternPlane + row * patternWidth + col];
+                }
+        }
+
+        /// <summary>Rotate a planar pattern clockwise, every plane together.</summary>
+        public static double[] Rotate90Planes(
+            ReadOnlySpan<double> cells, int width, int height, int planes)
+        {
+            int plane = width * height;
+            var result = new double[cells.Length];
+            for (int p = 0; p < planes; p++)
+                Array.Copy(
+                    Rotate90(cells.Slice(p * plane, plane), width, height), 0,
+                    result, p * plane, plane);
+            return result;
+        }
+
+        /// <summary>Mirror a planar pattern left-right, every plane together.</summary>
+        public static double[] FlipHPlanes(
+            ReadOnlySpan<double> cells, int width, int height, int planes)
+        {
+            int plane = width * height;
+            var result = new double[cells.Length];
+            for (int p = 0; p < planes; p++)
+                Array.Copy(
+                    FlipH(cells.Slice(p * plane, plane), width, height), 0,
+                    result, p * plane, plane);
+            return result;
+        }
+
+        /// <summary>Mirror a planar pattern top-bottom, every plane together.</summary>
+        public static double[] FlipVPlanes(
+            ReadOnlySpan<double> cells, int width, int height, int planes)
+        {
+            int plane = width * height;
+            var result = new double[cells.Length];
+            for (int p = 0; p < planes; p++)
+                Array.Copy(
+                    FlipV(cells.Slice(p * plane, plane), width, height), 0,
+                    result, p * plane, plane);
+            return result;
+        }
+
         /// <summary>
         /// The spec compatibility check: patterns are family-bound (a glider cannot
         /// enter Wireworld or MergeLife); cyclic patterns must also fit the target's

@@ -180,6 +180,34 @@ namespace HeatonLife
             _state[index * 6 + 5] = vz;
         }
 
+        /// <summary>
+        /// Radial velocity impulse at (x, y) — spec/boids.md "Nudge (editing)".
+        /// Positive strength pushes nearby boids away (scare), negative pulls
+        /// them in (lure); offsets are minimum-image wrapped on a torus. The
+        /// pointer is 2-D: the impulse acts in the x/y plane and leaves any z
+        /// motion alone. Editing, not physics — the generation is unchanged.
+        /// </summary>
+        public void Nudge(double x, double y, double radius, double strength)
+        {
+            bool wrap = Boundary == BoidsBoundary.Wrap;
+            for (int i = 0; i < Count; i++)
+            {
+                int row = i * _stride;
+                double offsetX = _state[row + 0] - x;
+                double offsetY = _state[row + 1] - y;
+                if (wrap)
+                {
+                    offsetX -= Width * Math.Round(offsetX / Width);   // banker's, matching np.round
+                    offsetY -= Height * Math.Round(offsetY / Height);
+                }
+                double dist = Math.Sqrt(offsetX * offsetX + offsetY * offsetY);
+                if (dist <= 0.0 || dist >= radius)
+                    continue;
+                _state[row + Dimensions + 0] += offsetX / dist * strength;
+                _state[row + Dimensions + 1] += offsetY / dist * strength;
+            }
+        }
+
         public void Step(int n = 1)
         {
             for (int s = 0; s < n; s++)

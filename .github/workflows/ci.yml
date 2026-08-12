@@ -41,3 +41,83 @@ jobs:
           dotnet-version: "10.0.x"
       - name: Tests (replays the shared conformance vectors)
         run: dotnet test dotnet --nologo
+
+  # The third leg of the determinism contract. Python and .NET are checked above;
+  # this runs Unity's own replay of the same vectors (heaton-life-unity/CLAUDE.md,
+  # "The Conformance Gate") so the invariant stops depending on someone
+  # remembering to run it locally. Runner and licensing mirror dynaface-unity's
+  # workflows — macOS is the platform the app actually ships on, and it is the
+  # combination already proven in that repo.
+  #
+  # REQUIRED REPOSITORY SECRETS — pick ONE row (same as dynaface-unity):
+  #   UNITY_EMAIL + UNITY_PASSWORD + UNITY_SERIAL   (Pro/Plus seat)
+  #   UNITY_LICENSE                                 (Personal: contents of the .ulf)
+  # Until one is set the job warns and skips rather than failing every push, so
+  # adding Unity CI does not paint main red before the secrets land.
+  unity:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Are Unity license secrets configured?
+        id: lic
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+        run: |
+          if [ -n "$UNITY_LICENSE" ] || [ -n "$UNITY_EMAIL" ]; then
+            echo "have=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "have=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Unity gate skipped::Set UNITY_LICENSE (or UNITY_EMAIL/PASSWORD/SERIAL) to run the Unity conformance gate."
+          fi
+
+      - uses: actions/cache@v4
+        if: steps.lic.outputs.have == 'true'
+        with:
+          path: heaton-life-unity/Library
+          key: Library-heaton-life-${{ hashFiles('heaton-life-unity/Packages/packages-lock.json', 'heaton-life-unity/ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: Library-heaton-life-
+
+      # EditMode replays every shared vector family from ../vectors/ (sims,
+      # fractals incl. the 1e14 orbit, render frames, evolve, upstream MergeLife).
+      - name: EditMode conformance gate
+        if: steps.lic.outputs.have == 'true'
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          projectPath: heaton-life-unity
+          testMode: editmode
+          artifactsPath: unity-editmode-results
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: Unity EditMode
+
+      # PlayMode boots the whole app headlessly and drives every family; it fails
+      # on any error log.
+      - name: PlayMode smoke suite
+        if: steps.lic.outputs.have == 'true'
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          projectPath: heaton-life-unity
+          testMode: playmode
+          artifactsPath: unity-playmode-results
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: Unity PlayMode
+
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.lic.outputs.have == 'true'
+        with:
+          name: unity-test-results
+          path: |
+            unity-editmode-results
+            unity-playmode-results
+          retention-days: 7

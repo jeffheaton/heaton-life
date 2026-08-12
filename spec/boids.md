@@ -84,6 +84,20 @@ straight from the state — the same simulation, multiple renderers, which is
 the point of the state/frame split. The orthographic frame is the canonical
 cross-language presentation.
 
+## Nudge (editing)
+
+The standard pointer interaction, defined here so every front-end pushes the
+same flock the same way. `nudge(x, y, radius, strength)` applies a radial
+velocity impulse at world point `(x, y)`: for each boid,
+`offset = (pos₀ − x, pos₁ − y)`, minimum-image wrapped per axis when
+`boundary = wrap`; `dist = |offset|`; boids with `0 < dist < radius` receive
+`vel₀,₁ += offset/dist · strength`. Positive strength repels (scare), negative
+attracts (lure). The pointer is 2-D: the impulse acts in the x/y plane and
+never touches z position or velocity, any d; a boid exactly at the point is
+untouched. Editing, not physics — the generation does not change, and the next
+step's speed clamp bounds the result. (Apps conventionally use radius 48 and
+strength `±0.8 · max_speed`.)
+
 ## Vector encoding
 
 Raw little-endian float64, shape `(count, 2·d)` in the checkpoint entry.
