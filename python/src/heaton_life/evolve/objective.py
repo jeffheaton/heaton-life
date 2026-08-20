@@ -1,7 +1,9 @@
 """The MergeLife objective function (paper Sec. 4), ported from the reference engine.
 
 A candidate rule is scored by running it from a random lattice until it converges
-(paper Sec. 4.1), then measuring five statistics of the run:
+(the 2018 reference trainer's detector — dead world, frozen background, or the
+step cap; see spec/evolve.md for why the paper Sec. 4.1 text is deliberately not
+used), then measuring five statistics of the run:
 
 - steps:      CA generations until convergence
 - foreground: fraction of cells stably holding a non-background color (>5 gens)
@@ -26,7 +28,7 @@ from numpy.typing import NDArray
 
 from heaton_life.ca import MergeLife
 
-MAX_STEPS = 1000  # paper Sec. 4.1: hard stop
+MAX_STEPS = 1000  # default step cap; a capped run records MAX_STEPS + 1 steps
 
 
 @dataclasses.dataclass(frozen=True)
@@ -71,7 +73,6 @@ class _RunEvaluator:
         self.mode_cnt = np.zeros((height, width), dtype=np.int64)
         self.same_cnt = np.zeros((height, width), dtype=np.int64)
         self.last_mode = np.zeros((height, width), dtype=np.int64)
-        self.last_change = np.zeros((height, width), dtype=np.int64)
         self.mode_age = 0
         self.last_mode_val: int | None = None
         self.mc_nochange = 0
@@ -95,7 +96,11 @@ class _RunEvaluator:
         mode_mask = d2_avg == md2
         self.mode_cnt[~mode_mask] = 0
         self.mode_cnt += mode_mask
-        mc = int(np.sum(self.mode_cnt > 100))
+        # 2018 trainer threshold: >50 consecutive generations makes a cell stable
+        # background. (The paper's prose says 100 — but no cell can qualify before
+        # generation 101, so under 100 the stable count is structurally zero long
+        # enough that the freeze exit below ends EVERY run at ~101 generations.)
+        mc = int(np.sum(self.mode_cnt > 50))
 
         same_mask = (d1_avg == d2_avg) & ~mode_mask
         self.same_cnt[~same_mask] = 0
@@ -126,21 +131,23 @@ class _RunEvaluator:
             "chaos": (size - (mc + sc + active)) / size,
         }
 
-    def is_stable(self, stats: dict[str, float]) -> bool:
-        if self.e1 is not None and self.e2 is not None:
-            self.last_change[self.e1[0] != self.e2[0]] = self.time_step
-        if self.time_step > 100:
-            changed_recently = int(np.sum((self.time_step - self.last_change) < 100))
-            if changed_recently < 0.01 * self.height * self.width:
-                return True
+    def is_stable(self, stats: dict[str, float], max_steps: int) -> bool:
+        """The 2018 trainer's convergence test: dead world, frozen background, cap.
+
+        A capped run records `max_steps + 1` steps — above the steps rule's band,
+        scoring `max_weight`. Staying alive to the cap is the treasure signature;
+        this is the semantics every published score came from.
+        """
+        if self.time_step > 100 and stats["bg"] < 0.01:
+            return True  # dead world: background exploded away
         if self.last_mc == stats["mc"]:
             self.mc_nochange += 1
             if self.mc_nochange > 100:
-                return True
+                return True  # frozen background
         else:
             self.mc_nochange = 0
             self.last_mc = int(stats["mc"])
-        return self.time_step > MAX_STEPS
+        return self.time_step > max_steps
 
     def largest_rect_fraction(self, stats: dict[str, float]) -> float:
         assert self.e2 is not None
@@ -186,7 +193,7 @@ def _run_once(
     while True:
         ev.step(sim)
         stats = ev.stats()
-        if ev.time_step >= max_steps or ev.is_stable(stats):
+        if ev.is_stable(stats, max_steps):
             break
     return {
         "steps": ev.time_step,

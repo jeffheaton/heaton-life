@@ -28,12 +28,15 @@ namespace HeatonLife
     /// <summary>
     /// The MergeLife objective function, Heaton 2017 Sec. 4 (spec/evolve.md) — a
     /// faithful port of the reference engine's statistics, including the merged-
-    /// lattice bookkeeping and its one-generation lag. Integer statistics plus
+    /// lattice bookkeeping and its one-generation lag. Convergence follows the
+    /// 2018 reference trainer (dead world / frozen background / cap), the
+    /// semantics every published score came from — see the spec for why the
+    /// paper Sec. 4.1 text is deliberately not used. Integer statistics plus
     /// plain-double scoring: bit-exact across languages, gated by vectors/evolve/.
     /// </summary>
     public static class MergeLifeObjective
     {
-        /// <summary>Paper Sec. 4.1: hard stop for a convergence run.</summary>
+        /// <summary>Default step cap; a capped run records MaxSteps + 1 steps.</summary>
         public const int MaxSteps = 1000;
 
         /// <summary>examples/paperObjective.json from the reference repository.</summary>
@@ -86,7 +89,7 @@ namespace HeatonLife
             {
                 ev.Step(sim);
                 stats = ev.ComputeStats();
-                if (ev.TimeStep >= maxSteps || ev.IsStable(stats))
+                if (ev.IsStable(stats, maxSteps))
                     break;
             }
             return new RunStats(
@@ -240,7 +243,6 @@ namespace HeatonLife
             private readonly int[] _modeCnt;
             private readonly int[] _sameCnt;
             private readonly int[] _lastMode;
-            private readonly int[] _lastChange;
             private int _modeAge;
             private int _lastModeVal = -1; // merged values are 0..255; -1 = unset
             private int _mcNochange;
@@ -256,7 +258,6 @@ namespace HeatonLife
                 _modeCnt = new int[height * width];
                 _sameCnt = new int[height * width];
                 _lastMode = new int[height * width];
-                _lastChange = new int[height * width];
             }
 
             public void Step(MergeLife sim)
@@ -303,7 +304,11 @@ namespace HeatonLife
                 {
                     bool modeMask = d2[i] == md2;
                     _modeCnt[i] = modeMask ? _modeCnt[i] + 1 : 0;
-                    if (_modeCnt[i] > 100)
+                    // 2018 trainer threshold: >50 consecutive generations makes a
+                    // cell stable background (spec/evolve.md "Objective statistics";
+                    // the paper's 100 leaves the count structurally zero long enough
+                    // that the freeze exit ends every run at ~101 generations).
+                    if (_modeCnt[i] > 50)
                         mc++;
                 }
                 int sc = 0;
@@ -345,36 +350,29 @@ namespace HeatonLife
                     (double)mc / size, (double)sc / size, (double)active / size);
             }
 
-            public bool IsStable(in Stats stats)
+            /// <summary>
+            /// The 2018 trainer's convergence test (spec/evolve.md): dead world,
+            /// frozen background, or the cap. A capped run records maxSteps + 1
+            /// steps — above the steps rule's band, scoring MaxWeight; staying
+            /// alive to the cap is the treasure signature every published score
+            /// came from.
+            /// </summary>
+            public bool IsStable(in Stats stats, int maxSteps)
             {
-                int size = _height * _width;
-                if (_e1Avg != null && _e2Avg != null)
-                {
-                    for (int i = 0; i < size; i++)
-                        if (_e1Avg[i] != _e2Avg[i])
-                            _lastChange[i] = TimeStep;
-                }
-                if (TimeStep > 100)
-                {
-                    int changedRecently = 0;
-                    for (int i = 0; i < size; i++)
-                        if (TimeStep - _lastChange[i] < 100)
-                            changedRecently++;
-                    if (changedRecently < 0.01 * _height * _width)
-                        return true;
-                }
+                if (TimeStep > 100 && stats.Bg < 0.01)
+                    return true; // dead world: background exploded away
                 if (_lastMc == stats.Mc)
                 {
                     _mcNochange++;
                     if (_mcNochange > 100)
-                        return true;
+                        return true; // frozen background
                 }
                 else
                 {
                     _mcNochange = 0;
                     _lastMc = stats.Mc;
                 }
-                return TimeStep > MaxSteps;
+                return TimeStep > maxSteps;
             }
 
             public double LargestRectFraction(in Stats stats)

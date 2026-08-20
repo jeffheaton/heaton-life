@@ -5,7 +5,7 @@ the reference trainer (github.com/jeffheaton/mergelife). Because every random
 decision is PCG32-seeded, it is *also* a conformance family: scoring and whole
 runs replay bit-exact across languages (see Conformance below).
 
-## Objective statistics (Sec. 4)
+## Objective statistics (Sec. 4, 2018 trainer semantics)
 
 A rule is scored by running it from a random lattice until convergence, then
 measuring, on the *merged* (grayscale) lattice with the reference's one-generation
@@ -13,14 +13,31 @@ bookkeeping lag:
 
 | stat | meaning |
 |---|---|
-| `steps` | generations until convergence (hard cap 1000) |
+| `steps` | generations until convergence (cap: a capped run records `max_steps + 1`) |
 | `foreground` | fraction of cells stably non-background (>5 gens, not the mode) |
 | `active` | fraction recently background (5–25 gens ago) but no longer |
 | `rect` | largest all-background rectangle / grid area (histogram-stack DP) |
 | `mage` | generations the current background (mode) color has persisted |
 
-Convergence (Sec. 4.1): <1% of merged cells changed in the last 100 generations,
-OR the stable-background count unchanged for 100 generations, OR 1000 generations.
+A **stable background** cell has held the mode color for **more than 50
+consecutive generations** (the 2018 trainer's threshold; the paper's prose says
+100, but every published score came from the trainer).
+
+Convergence — deliberately the **2018 reference trainer's** detector, not the
+paper Sec. 4.1 text (measured 2026-08: the Sec. 4.1 detector reads every world,
+lively or static, as converged at ~101 generations — the stable-background
+count is structurally zero for the first 100 generations, so its freeze counter
+always fires; scoring under it inverts the historical score scale and ranks the
+canonical gallery rules at or below zero). A run ends when any of:
+
+- **dead world** — after generation 100, the stable-background fraction is
+  below 1% (the world exploded into uniform foreground);
+- **frozen background** — the stable-background count has not changed for more
+  than 100 consecutive generations;
+- **cap** — the generation count exceeds `max_steps` (default 1000); the run
+  records `max_steps + 1` steps, which the `steps` objective rule scores as
+  above-max (`max_weight`, +1) — staying alive to the cap is the treasure
+  signature.
 
 Each objective rule scores one stat: below `min` → `min_weight`; above `max` →
 `max_weight`; inside, a tent function scaled by `weight` — peaked, verbatim from
@@ -61,6 +78,10 @@ Bit-exact tier (integer statistics; plain-double scoring). Vectors in
   results from fixed PCG32 seeds (strings and indices in `params.json`).
 - `mini-run-24` — a complete small `Evolver` run: best genome, its score, the
   evaluation count, and the final population, all pinned.
+
+`objective-*` and `mini-run-24` were regenerated 2026-08-19 when the evaluation
+layer returned to the 2018 trainer semantics (above); `operators-seeded` scores
+no lattices and was untouched by that change.
 
 ## Parallel evaluation
 
