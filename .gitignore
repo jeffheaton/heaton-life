@@ -23,6 +23,7 @@ obj/
 # Unity (the app lives in heaton-life-unity/; .meta files are tracked, caches are not)
 Library/
 Temp/
+.utmp/
 Logs/
 UserSettings/
 MemoryCaptures/
