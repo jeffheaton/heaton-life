@@ -74,6 +74,12 @@ namespace HeatonLife
             FillHomogeneous();
             SeedBox(Width / 2, Height / 2);
             Generation = 0;
+            Remember(_seed, _ =>
+            {
+                FillHomogeneous();
+                SeedBox(Width / 2, Height / 2);
+                Generation = 0;
+            });
         }
 
         /// <summary>
@@ -91,6 +97,39 @@ namespace HeatonLife
                 SeedBox(cx, cy);
             }
             Generation = 0;
+            Remember(seed, s =>
+            {
+                FillHomogeneous();
+                var replayRng = new Pcg32(s);
+                for (int i = 0; i < spots; i++)
+                {
+                    int cx = (int)(replayRng.NextU32() % (uint)Width);
+                    int cy = (int)(replayRng.NextU32() % (uint)Height);
+                    SeedBox(cx, cy);
+                }
+                Generation = 0;
+            });
+        }
+
+        // --- reset ---------------------------------------------------------------
+        // How this world was last seeded, so Reset can replay it. The Python
+        // reference keeps init/density/seed on its params object and re-dispatches
+        // in reset(); a captured delegate is the same idea without a params type.
+        private Action<uint> _replayInit = _ => { };
+        private uint _seed;
+
+        private void Remember(uint seed, Action<uint> replay)
+        {
+            _seed = seed;
+            _replayInit = replay;
+        }
+
+        /// <inheritdoc />
+        public void Reset(uint? seed = null)
+        {
+            if (seed.HasValue)
+                _seed = seed.Value;
+            _replayInit(_seed);
         }
 
         /// <summary>Load an explicit (2, Height, Width) state, row-major, U then V.</summary>
@@ -100,6 +139,12 @@ namespace HeatonLife
                 throw new ArgumentException($"expected {_state.Length} values, got {state.Length}");
             state.CopyTo(_state);
             Generation = 0;
+            var snapshot = _state.Clone() as double[];
+            Remember(_seed, _ =>
+            {
+                Array.Copy(snapshot!, _state, _state.Length);
+                Generation = 0;
+            });
         }
 
         /// <summary>Restore a saved state at a given generation (catalog loads).</summary>

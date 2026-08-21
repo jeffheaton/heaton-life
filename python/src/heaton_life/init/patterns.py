@@ -84,6 +84,28 @@ def stamp(
                 grid[dst_y, dst_x] = pattern[row, col]
 
 
+def clear(
+    grid: NDArray[Any], x0: int, y0: int, x1: int, y1: int, blank: Any
+) -> None:
+    """spec/patterns.md "Clear": restore an inclusive rectangle to the family blank.
+
+    ``grid`` is indexed ``[y, x]`` with any trailing channel axis, and ``blank`` is
+    broadcast into the region, so it may be a scalar (0, 0.0) or a per-channel
+    sequence. The blank is a family fact, not an app choice — Gray-Scott's is the
+    substrate (U = 1, V = 0), not zero — so callers are the family classes'
+    ``clear_rect`` methods rather than app code. Clearing does not touch the
+    generation, exactly like stamping.
+    """
+    height, width = grid.shape[0], grid.shape[1]
+    if x0 > x1 or y0 > y1:
+        raise ValueError(f"clear region is empty: ({x0}, {y0})..({x1}, {y1})")
+    if x0 < 0 or y0 < 0 or x1 >= width or y1 >= height:
+        raise ValueError(
+            f"clear region ({x0}, {y0})..({x1}, {y1}) is outside {width}x{height}"
+        )
+    grid[y0 : y1 + 1, x0 : x1 + 1] = blank
+
+
 def compatible(pattern_family: str, target_family: str, pattern: CellArray,
                target_states: int | None = None) -> str | None:
     """Spec compatibility check: the rejection reason, or None when stampable.

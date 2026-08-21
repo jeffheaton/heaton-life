@@ -101,6 +101,13 @@ def main() -> None:
         ("soup-64-torus", {"rule": "B3/S23", "density": 0.35, "seed": 42}),
         ("soup-64-dead", {"rule": "B3/S23", "density": 0.35, "seed": 7, "boundary": "dead"}),
         ("highlife-64-torus", {"rule": "B36/S23", "density": 0.4, "seed": 11}),
+        # `single` and `blob` close the init-coverage hole: until these, only
+        # `soup` and `array` were vectored for this family, so the .NET port could
+        # ship WITHOUT the spec's `single` strategy and no suite noticed. The
+        # replicator is used for `single` so the case exercises real evolution out
+        # of one cell rather than a lone cell dying on step 1 under B3/S23.
+        ("replicator-single-64", {"rule": "B1357/S1357", "init": "single"}),
+        ("blob-64-torus", {"rule": "B3/S23", "init": "blob", "density": 0.35, "seed": 5}),
     ]
     for name, overrides in lifelike_cases:
         params = {"width": 64, "height": 64, **overrides}
@@ -224,6 +231,17 @@ def main() -> None:
         build_sim("lenia-asymptotic", {"width": 64, "height": 64, "seed": 7}),
         [0, 1, 10, 50],
     )
+    write_case(
+        "lenia-flow",
+        "blobs-64",
+        build_sim("lenia-flow", {"width": 64, "height": 64, "seed": 7, "init": "blobs"}),
+        [0, 1, 10, 50],
+    )
+    # Flow's real default. Until 2026-08-21 FlowLeniaParams inherited the base
+    # class's `blobs`, so the params path (which this generator uses) disagreed
+    # with the constructor and the case named "soup-64" was recorded from BLOBS.
+    # The default is fixed in lenia/flow.py; the original bytes keep their true
+    # name above, and the soup path is vectored here for the first time.
     write_case(
         "lenia-flow",
         "soup-64",

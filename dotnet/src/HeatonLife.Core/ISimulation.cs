@@ -17,6 +17,20 @@ namespace HeatonLife
         int Generation { get; }
 
         void Step(int n = 1);
+
+        /// <summary>
+        /// Re-run this world's initialization, returning Generation to 0. With no
+        /// seed the world replays its stored seeding parameters exactly; with one,
+        /// it replays the same strategy under the new seed. A world last loaded
+        /// from an explicit grid replays that grid and ignores the seed — the
+        /// reference's "array" init behaves the same way.
+        ///
+        /// The counterpart of the Python protocol's <c>reset(seed=None)</c>
+        /// (python/src/heaton_life/core/protocols.py). Without it a host could not
+        /// re-seed a world through the interface and had to switch on the concrete
+        /// family, which is exactly what callers were doing.
+        /// </summary>
+        void Reset(uint? seed = null);
     }
 
     /// <summary>Frame = Height*Width palette indices (0..255), spec/render.md.</summary>

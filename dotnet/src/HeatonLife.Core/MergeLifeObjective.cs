@@ -126,14 +126,19 @@ namespace HeatonLife
         /// </summary>
         public static (double Score, double TimeStep) ScoreGenome(
             string genome,
-            IReadOnlyList<ObjectiveRule> objective,
-            int cycles,
-            int width,
-            int height,
-            ulong seed,
+            IReadOnlyList<ObjectiveRule> objective = null,
+            int cycles = 5,
+            int width = 100,
+            int height = 100,
+            ulong seed = 0,
             int maxSteps = MaxSteps,
             int workers = 1)
         {
+            // Defaults mirror the Python reference's score_genome, where only the
+            // genome is required (evolve/objective.py). Parameter ORDER is kept as
+            // it was — matching Python's would move `objective` to first, breaking
+            // every caller for a cosmetic win.
+            objective = objective ?? PaperObjective;
             // Cycle runs are independent (cycle i seeds from seed + i), so they
             // parallelize into per-index slots; the reduction below reads the
             // slots in index order — output is identical for any worker count

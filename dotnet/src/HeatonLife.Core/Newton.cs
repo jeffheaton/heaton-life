@@ -42,7 +42,9 @@ namespace HeatonLife
         }
 
         /// <summary>Root/iteration grids into caller buffers, row-major (height, width), -1 where unconverged.</summary>
-        public void Basins(int width, int height, Viewport viewport, int[] roots, int[] iterations)
+        public void Basins(
+            int width, int height, Viewport viewport, int[] roots, int[] iterations,
+            RenderProgress? progress = null)
         {
             if (roots.Length != width * height || iterations.Length != width * height)
                 throw new ArgumentException($"expected {width * height} cells in each output buffer");
@@ -61,15 +63,16 @@ namespace HeatonLife
                 }
             }
 
-            FractalEngine.ForRows(height, Workers, Row);
+            FractalEngine.ForRows(height, Workers, Row, progress);
         }
 
         /// <summary>(root_index, iterations), each row-major (height, width), -1 where unconverged.</summary>
-        public (int[] Roots, int[] Iterations) Basins(int width, int height, Viewport viewport)
+        public (int[] Roots, int[] Iterations) Basins(
+            int width, int height, Viewport viewport, RenderProgress? progress = null)
         {
             var roots = new int[width * height];
             var iters = new int[width * height];
-            Basins(width, height, viewport, roots, iters);
+            Basins(width, height, viewport, roots, iters, progress);
             return (roots, iters);
         }
 
@@ -80,15 +83,41 @@ namespace HeatonLife
         /// Hue by basin, shaded by convergence speed; unconverged pixels are 0
         /// (spec/render.md): value = (root + 1 - 0.7 * iters / max_iter) / degree, clipped.
         /// </summary>
-        public double[] Render(int width, int height, Viewport viewport)
+        public double[] Render(
+            int width, int height, Viewport viewport, RenderProgress? progress = null)
         {
-            var (roots, iters) = Basins(width, height, viewport);
+            var (roots, iters) = Basins(width, height, viewport, progress);
+            return Shade(roots, iters);
+        }
+
+        /// <summary>
+        /// One computation, both consumers: the shaded render and the raw
+        /// convergence counts. The counterpart of the Python reference's
+        /// `render_and_counts`, and of the same overload the three escape-time
+        /// fields carry — Newton was the odd one out, and because the shading was
+        /// inlined inside Render a caller who wanted both had to re-implement the
+        /// shade formula.
+        /// </summary>
+        public (double[] Render, int[] Counts) RenderAndCounts(
+            int width, int height, Viewport viewport, RenderProgress? progress = null)
+        {
+            var (roots, iters) = Basins(width, height, viewport, progress);
+            return (Shade(roots, iters), iters);
+        }
+
+        /// <summary>
+        /// Hue by basin, shaded by convergence speed (spec/render.md):
+        /// value = (root + 1 - 0.7 * iters / max_iter) / degree, clipped;
+        /// unconverged pixels stay 0.
+        /// </summary>
+        private double[] Shade(int[] roots, int[] iterations)
+        {
             var value = new double[roots.Length];
             for (int i = 0; i < roots.Length; i++)
             {
                 if (roots[i] >= 0)
                 {
-                    double shade = 1.0 - 0.7 * (iters[i] / (double)MaxIter);
+                    double shade = 1.0 - 0.7 * (iterations[i] / (double)MaxIter);
                     value[i] = Math.Clamp((roots[i] + shade) / Degree, 0.0, 1.0);
                 }
             }

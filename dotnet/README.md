@@ -40,6 +40,9 @@ dotnet test dotnet
 RNG → Life-like → remaining discrete CAs → continuous grids → fractals → boids →
 render → evolve — **complete**; every stage landed with its conformance replay
 green. The spec (`../spec/`) is the authority; when C# and Python disagree, the
-vectors decide. Reference-orbit *generation* (bignum) stays on the Python side;
-the C# perturbation tier consumes precomputed orbits. Next: the
+vectors decide. Reference-orbit *generation* now runs on the C# side too
+(`ReferenceOrbit`, fixed point over `System.Numerics.BigInteger` — the option
+spec/deep-zoom.md sanctions), so the perturbation tier no longer depends on an
+externally supplied orbit; it still accepts one, which is how the conformance
+replay works. Pinned by regenerating the shipped `orbit.c128` byte for byte. Next: the
 `HeatonLife.Unity` UPM adapter.

@@ -10,15 +10,41 @@ namespace HeatonLife
     public static class Seeding
     {
         /// <summary>
+        /// Density is a probability. The Python reference rejects anything outside
+        /// [0, 1] (init/seeding.py `_threshold`); C# used to cast it straight to a
+        /// threshold, where 1.5 silently filled every cell and a NEGATIVE density
+        /// became an unchecked double-to-ulong conversion — a degenerate grid
+        /// instead of an error.
+        /// </summary>
+        private static ulong Threshold(double density)
+        {
+            if (!(density >= 0.0) || density > 1.0)
+                throw new ArgumentOutOfRangeException(
+                    nameof(density), density, "density must be in [0, 1]");
+            return (ulong)(density * 4294967296.0);
+        }
+
+        /// <summary>
         /// Uniform random 0/1 fill: alive iff draw &lt; floor(density * 2^32).
         /// Consumes exactly one draw per cell.
         /// </summary>
         public static void Soup(byte[] cells, double density, uint seed)
         {
             var rng = new Pcg32(seed);
-            ulong threshold = (ulong)(density * 4294967296.0);
+            ulong threshold = Threshold(density);
             for (int i = 0; i < cells.Length; i++)
                 cells[i] = (byte)(rng.NextU32() < threshold ? 1 : 0);
+        }
+
+        /// <summary>
+        /// One live cell at (width / 2, height / 2), everything else blank.
+        /// Consumes NO draws — the deterministic seed, so it takes no RNG at all
+        /// (spec/lifelike.md "Initialization").
+        /// </summary>
+        public static void Single(byte[] cells, int width, int height)
+        {
+            Array.Clear(cells, 0, cells.Length);
+            cells[(height / 2) * width + (width / 2)] = 1;
         }
 
         /// <summary>
@@ -29,7 +55,7 @@ namespace HeatonLife
             byte[] cells, int width, int height, double density, double radius, uint seed)
         {
             var rng = new Pcg32(seed);
-            ulong threshold = (ulong)(density * 4294967296.0);
+            ulong threshold = Threshold(density);
             double r = radius * Math.Min(width, height);
             double r2 = r * r;
             int cx = width / 2, cy = height / 2;

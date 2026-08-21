@@ -96,6 +96,48 @@ Conformance: [`vectors/mergelife-decode/`](../vectors/mergelife-decode/), one
 case per rule with the expected rows embedded in `params.json`; bit-exact
 (`percent` compares as exact float64).
 
+## Featured rules (the gallery)
+
+Every implementation ships the same ordered catalog of featured rules — the
+MergeLife counterpart of spec/patterns.md's built-in patterns, and the entry
+point apps surface as a rule gallery. Rules are the interesting part of this
+family: unlike Life-like, a MergeLife rule is 32 raw octets with no mnemonic,
+so a curated set is the only practical way in.
+
+Provenance: the twelve gallery rules of the upstream HeatonCA gallery
+(github.com/jeffheaton/mergelife, `python/application/pyqt/tab_gallery.py`
+`GALLERY_RULES`), in that order with the 2017 paper's rule first, plus **Cobalt
+Reef** — engineered by permuting Red World's octets, so it sits beside its
+parent. Names and descriptions are authored here from observed 128×128 soup
+behavior (multi-seed runs to generation 640); they are presentation text, not
+part of any wire format.
+
+The catalog is **ordered** and the order is part of the set. Every `rule` is
+already canonical (lowercase, hyphen-grouped — see "Rule"), so
+`canonical(rule) == rule` for every entry; names and descriptions are non-empty
+and unique. No vectors: like the built-in patterns, the table below is the
+contract and each implementation pins it in its own suite.
+
+| # | name | rule | description |
+|---|---|---|---|
+| 1 | Red World (paper) | `e542-5f79-9341-f31e-6c6b-7f08-8773-7068` | The 2017 paper's rule: blue-green colonies adrift on a churning red sea. |
+| 2 | Cobalt Reef | `e542-9341-6c6b-f31e-5f79-7f08-8773-7068` | Engineered from Red World's parts: green reefs adrift on a deep cobalt sea. |
+| 3 | Pen and Ink | `a07f-c000-0000-0000-0000-0000-ff80-807f` | Monochrome MergeLife: inky rings and specks doodle across a white page. |
+| 4 | Brushfire | `6eb6-ba3d-70b4-ac6f-baae-2604-8529-8998` | Ember-red fire lines crackle and creep across a hot yellow plain. |
+| 5 | Beetle Meadow | `ea44-55df-9025-bead-5f6e-45ca-6168-275a` | Blue-shelled beetles with speckled backs graze a bright green meadow. |
+| 6 | High Noon | `7b58-f7b4-c5b4-fd87-22fa-eb10-6de8-107c` | Dark gnat swarms mill about, then burn away under a blank yellow glare. |
+| 7 | Lagoons | `8503-5eb6-084c-04df-7657-a5b3-6044-3524` | Cyan lagoons ringed by deep-blue shores drain slowly into green lowland. |
+| 8 | Frost | `1c48-9004-8831-41be-2804-8f50-9901-db18` | White discs bloom on green, merge into foam, and freeze the world still. |
+| 9 | Lichen | `df1d-bba1-8e06-aa66-48ff-7414-6a2f-6237` | Green lichen creeps in ragged mats across a yellow wall, never settling. |
+| 10 | Plankton | `6769-5dd6-7d03-564e-a5ec-cae2-54c4-810c` | A magenta tide boils away, stranding tiny rose-ringed cells in still cyan. |
+| 11 | Neon Storm | `cb97-6a74-88c0-28aa-1b6a-834b-4fe8-60ac` | A full boil that never settles: red-pink static with dark drifting squalls. |
+| 12 | Coral Bloom | `6007-7d42-05e5-1b9b-2899-e043-1cd4-2f7b` | White-flecked coral heads grow and fuse into continents in a hot-pink sea. |
+| 13 | Emeralds | `dfda-67af-bc97-7ef6-be98-42d9-9147-97d3` | Cyan lace condenses into blue-rimmed emerald pods scattered across gold. |
+| 14 | Diamond Mine | `7e18-62ac-5c42-109e-45a1-9ff2-b7d8-64a1` | Pin-striped magenta diamonds crystallize around white grit on open green. |
+| 15 | Mood Ring | `2152-9b71-abb7-162a-45ff-dd03-fe15-957e` | The sky drifts white to cyan to violet, then pink confetti settles on gold. |
+
+Entry 1 is the family's default rule (see "Parameters").
+
 ## Vector encoding
 
 RGB PNG, raw bytes.

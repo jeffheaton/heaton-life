@@ -16,9 +16,23 @@ Iterate the center once at high precision:
 Z₀ = 0;  Zₙ₊₁ = Zₙ² + C        C = viewport center
 ```
 
-- Precision: `bits = ceil(3.33 · zoom_digits) + 64` guard bits.
+- Precision: `bits = trunc(3.33 · zoom_digits) + 64` guard bits — the fractional
+  part is **discarded**, not rounded up (46 bits at zoom 14, not 47). This is a
+  correction: the text said `ceil` while every shipped orbit vector was produced by
+  the truncating form, and the vectors are the contract. Changing it would
+  invalidate them.
 - Arithmetic: gmpy2 (GMP) when installed, mpmath as pure-Python fallback, behind one internal shim.
+- **Stopping rule**: the orbit ends early once `|Zₙ|² > 1e100`, tested on the
+  float64-rounded sample. Past that magnitude every pixel referencing the sample has
+  escaped at any sane radius, and the cutoff keeps the value inside float64's range.
+  So `N = min(escape_iter, max_iter)`, and **`Z[0..N]` may be shorter than
+  `max_iter + 1`** — which is why implementations clamp the reference index to the
+  last sample. Vectors record the realised `length` rather than deriving it.
 - The orbit values themselves are O(1) magnitude, so they are **stored as complex128** — the array `Z[0..N]` is plain doubles and is exportable (see cross-language notes).
+- Any backend must agree with the others **after rounding each sample to float64**,
+  which is the only form the perturbation loop consumes. That is a weaker
+  requirement than identical mantissas, and it is what lets a fixed-point
+  implementation stand in for a floating-point one.
 
 ### Per-pixel perturbation (hardware floats)
 
@@ -78,7 +92,7 @@ Tier selection is automatic and invisible to the caller; the API surface is iden
 ## Cross-language notes
 
 - The perturbation loop is plain doubles — the same code shape in Python and C#; iteration counts are bit-comparable in T0/T1.
-- C# has no bignum float. Two sanctioned options: fixed-point over `System.Numerics.BigInteger` for the reference orbit (only ~max_iter multiplies — cheap), or consume reference orbits exported in conformance vectors.
+- C# has no bignum float. Two sanctioned options: fixed-point over `System.Numerics.BigInteger` for the reference orbit (only ~max_iter multiplies — cheap), or consume reference orbits exported in conformance vectors. **C# implements the first** (`ReferenceOrbit`), so it deep-zooms without externally supplied data; it still accepts a supplied orbit, which is how the conformance replay works. Two practical notes for anyone porting it: fixed point measures precision from the binary point rather than the leading digit, so it needs guard bits **beyond** the formula above for centres below 1; and the fixed-point → float64 conversion must round to nearest (.NET's `(double)BigInteger` truncates), or the very first sample lands an ulp off.
 - Vectors for fractals include: viewport JSON, iteration-count grids (bit-exact tier), and the reference orbit as raw little-endian f64 pairs.
 
 ## Future work (explicitly out of v1)

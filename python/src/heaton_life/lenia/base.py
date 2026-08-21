@@ -10,6 +10,7 @@ from numpy.typing import NDArray
 from heaton_life.core.fftconv import fft_convolve, kernel_fft
 from heaton_life.core.params import Params
 from heaton_life.core.rng import Pcg32
+from heaton_life.init.patterns import clear
 from heaton_life.lenia.kernels import ring_kernel
 
 
@@ -87,6 +88,16 @@ class LeniaBase:
     @property
     def generation(self) -> int:
         return self._generation
+
+    def clear_rect(self, x0: int, y0: int, x1: int, y1: int) -> None:
+        """spec/patterns.md "Clear": inclusive rectangle to this family's blank.
+
+        Lenia's blank is 0.0. The generation is untouched, exactly like stamping. The C# port has
+        carried this per family as ``ClearRect`` all along; the Python library had
+        no equivalent at all, even though the spec lists Clear alongside Extract
+        and Stamp as normative.
+        """
+        clear(self._state, x0, y0, x1, y1, 0.0)
 
     def frame(self) -> NDArray[np.float64]:
         return self._state

@@ -20,6 +20,7 @@ from numpy.typing import NDArray
 from heaton_life.core.params import Params
 from heaton_life.core.rng import Pcg32
 from heaton_life.core.stencil import laplacian5
+from heaton_life.init.patterns import clear
 
 GRAY_SCOTT_PRESETS: dict[str, dict[str, float]] = {
     "Mitosis": {"feed": 0.0367, "kill": 0.0649},
@@ -153,6 +154,18 @@ class GrayScott:
     @property
     def generation(self) -> int:
         return self._generation
+
+    def clear_rect(self, x0: int, y0: int, x1: int, y1: int) -> None:
+        """spec/patterns.md "Clear": inclusive rectangle to this family's blank.
+
+        Gray-Scott's blank is the SUBSTRATE (U = 1, V = 0), not zero -- the spec calls
+        this out explicitly, and state is stacked as [u, v]. The generation is untouched, exactly like stamping. The C# port has
+        carried this per family as ``ClearRect`` all along; the Python library had
+        no equivalent at all, even though the spec lists Clear alongside Extract
+        and Stamp as normative.
+        """
+        clear(self._state[0], x0, y0, x1, y1, 1.0)
+        clear(self._state[1], x0, y0, x1, y1, 0.0)
 
     def frame(self) -> NDArray[np.float64]:
         # V is where the patterns live; ~0.4 is its practical ceiling.

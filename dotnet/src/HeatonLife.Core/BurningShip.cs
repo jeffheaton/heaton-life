@@ -55,21 +55,23 @@ namespace HeatonLife
         }
 
         /// <summary>One computation, both consumers: the smooth render in [0,1] and the raw counts.</summary>
-        public (double[] Render, int[] Counts) RenderAndCounts(int width, int height, Viewport viewport)
+        public (double[] Render, int[] Counts) RenderAndCounts(
+            int width, int height, Viewport viewport, RenderProgress? progress = null)
         {
             var counts = new int[width * height];
             var mu = new double[width * height];
-            Compute(width, height, viewport, null, null, counts, mu);
+            Compute(width, height, viewport, null, null, counts, mu, progress);
             return (FractalEngine.NormalizeRender(mu), counts);
         }
 
-        /// <summary>T1 variant of <see cref="RenderAndCounts(int,int,Viewport)"/>.</summary>
+        /// <summary>T1 variant of <see cref="RenderAndCounts(int,int,Viewport,RenderProgress)"/>.</summary>
         public (double[] Render, int[] Counts) RenderAndCounts(
-            int width, int height, Viewport viewport, double[] orbitRe, double[] orbitIm)
+            int width, int height, Viewport viewport, double[] orbitRe, double[] orbitIm,
+            RenderProgress? progress = null)
         {
             var counts = new int[width * height];
             var mu = new double[width * height];
-            Compute(width, height, viewport, orbitRe, orbitIm, counts, mu);
+            Compute(width, height, viewport, orbitRe, orbitIm, counts, mu, progress);
             return (FractalEngine.NormalizeRender(mu), counts);
         }
 
@@ -89,15 +91,20 @@ namespace HeatonLife
             double[]? orbitRe,
             double[]? orbitIm,
             int[] counts,
-            double[]? mu)
+            double[]? mu,
+            RenderProgress? progress = null)
         {
             if (counts.Length != width * height)
                 throw new ArgumentException($"expected {width * height} counts, got {counts.Length}");
-            bool t1 = orbitRe != null;
-            if (t1)
-                FractalEngine.RequireT1(viewport);
-            else
-                FractalEngine.RequireT0(viewport);
+            // Zoom picks the tier, not orbit presence (spec/deep-zoom.md).
+            bool t1 = FractalEngine.IsPerturbationTier(viewport);
+            if (t1 && orbitRe == null)
+            {
+                // Deep zoom with no orbit handed in: make one. spec/deep-zoom.md
+                // sanctions BigInteger fixed point for exactly this, and until it
+                // existed the only reachable T1 render was a replay of a vector.
+                (orbitRe, orbitIm) = ReferenceOrbit.BurningShip(viewport.CenterRe, viewport.CenterIm, viewport.ZoomLog10, MaxIter);
+            }
             double ps = FractalEngine.PixelScale(width, viewport);
             double centerRe = t1 ? 0.0 : viewport.CenterReDouble;
             double centerIm = t1 ? 0.0 : viewport.CenterImDouble;
@@ -123,7 +130,7 @@ namespace HeatonLife
                 }
             }
 
-            FractalEngine.ForRows(height, Workers, Row);
+            FractalEngine.ForRows(height, Workers, Row, progress);
         }
     }
 }

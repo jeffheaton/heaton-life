@@ -13,7 +13,7 @@ import numpy as np
 
 from heaton_life.core.params import Params
 from heaton_life.core.viewport import Viewport
-from heaton_life.fractal.engine import FloatArray, IntArray, pixel_grid
+from heaton_life.fractal.engine import T0_MAX_ZOOM, FloatArray, IntArray, pixel_grid
 
 TOLERANCE = 1e-9
 
@@ -37,6 +37,16 @@ class Newton:
         self, size: tuple[int, int], viewport: Viewport
     ) -> tuple[IntArray, IntArray]:
         """(root_index, iterations), each shape (height, width), -1 where unconverged."""
+        # spec/fractals.md: "Newton (float64 only, zoom <= 1e12)"; spec/deep-zoom.md
+        # gives it no perturbation tier. Every other family here tiers or raises,
+        # but Newton had NO check at all and silently produced a degenerate frame
+        # past 1e13 (and kept going past the T1 ceiling, where the escape-time
+        # fields raise). The C# port has enforced this all along.
+        if viewport.zoom_log10 > T0_MAX_ZOOM:
+            raise ValueError(
+                f"zoom 1e{viewport.zoom_log10:g} exceeds the float64 direct tier "
+                f"(1e{T0_MAX_ZOOM:g}); this family has no perturbation tier"
+            )
         width, height = size
         z = pixel_grid(size, viewport)
         n = z.size

@@ -49,6 +49,12 @@ namespace HeatonLife
             Array.Clear(_tape, 0, _tape.Length);
             _tape[Width / 2] = 1;
             ResetDiagram();
+            Remember(_seed, _ =>
+            {
+                Array.Clear(_tape, 0, _tape.Length);
+                _tape[Width / 2] = 1;
+                ResetDiagram();
+            });
         }
 
         /// <summary>Soup init per spec: one PCG32 draw per cell, alive iff draw &lt; floor(density * 2^32).</summary>
@@ -56,6 +62,30 @@ namespace HeatonLife
         {
             Seeding.Soup(_tape, density, seed);
             ResetDiagram();
+            Remember(seed, s => { Seeding.Soup(_tape, density, s); ResetDiagram(); });
+        }
+
+        // --- reset ---------------------------------------------------------------
+        // How this world was last seeded, so Reset can replay it. The Python
+        // reference keeps init/density/seed on its params object and re-dispatches
+        // in reset(); a captured delegate is the same idea without a params type.
+        // Every replay ends in ResetDiagram(), so the space-time record restarts
+        // from the fresh tape exactly as it does after a first seeding.
+        private Action<uint> _replayInit = _ => { };
+        private uint _seed;
+
+        private void Remember(uint seed, Action<uint> replay)
+        {
+            _seed = seed;
+            _replayInit = replay;
+        }
+
+        /// <inheritdoc />
+        public void Reset(uint? seed = null)
+        {
+            if (seed.HasValue)
+                _seed = seed.Value;
+            _replayInit(_seed);
         }
 
         /// <summary>Load an explicit 0/1 tape (Width entries).</summary>
@@ -66,6 +96,12 @@ namespace HeatonLife
             for (int i = 0; i < tape.Length; i++)
                 _tape[i] = (byte)(tape[i] > 0 ? 1 : 0);
             ResetDiagram();
+            var snapshot = _tape.Clone() as byte[];
+            Remember(_seed, _ =>
+            {
+                Array.Copy(snapshot!, _tape, _tape.Length);
+                ResetDiagram();
+            });
         }
 
         /// <summary>Restore a saved tape at a given generation; the diagram restarts from it.</summary>

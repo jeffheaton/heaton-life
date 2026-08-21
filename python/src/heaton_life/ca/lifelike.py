@@ -12,6 +12,7 @@ from heaton_life.ca.rulestring import canonical_rule, parse_rule
 from heaton_life.core.neighbors import Boundary, moore_sum
 from heaton_life.core.params import Params
 from heaton_life.init import blob, single, soup
+from heaton_life.init.patterns import clear
 
 
 @dataclasses.dataclass(frozen=True)
@@ -119,6 +120,16 @@ class LifeLike:
     @property
     def generation(self) -> int:
         return self._generation
+
+    def clear_rect(self, x0: int, y0: int, x1: int, y1: int) -> None:
+        """spec/patterns.md "Clear": inclusive rectangle to this family's blank.
+
+        LifeLike's blank is 0 (dead). The generation is untouched, exactly like stamping. The C# port has
+        carried this per family as ``ClearRect`` all along; the Python library had
+        no equivalent at all, even though the spec lists Clear alongside Extract
+        and Stamp as normative.
+        """
+        clear(self._state, x0, y0, x1, y1, 0)
 
     def frame(self) -> NDArray[np.uint8]:
         return self._state * np.uint8(255)

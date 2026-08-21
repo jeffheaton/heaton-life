@@ -4,6 +4,43 @@ namespace HeatonLife.Tests
 {
     public class LifeLikeTests
     {
+        /// <summary>
+        /// spec/lifelike.md "Initialization": single = one live cell at
+        /// (width // 2, height // 2), consuming no draws. The family's third init
+        /// strategy; it was missing from this port until 2026-08-21 because no
+        /// vector exercised it (vectors/lifelike/replicator-single-64 now does).
+        /// </summary>
+        [Fact]
+        public void SeedSingleLightsExactlyTheMiddleCell()
+        {
+            var sim = new LifeLike("B3/S23", 9, 7);
+            sim.SeedSingle();
+            byte[] state = sim.State.ToArray();
+            int live = 0;
+            foreach (byte cell in state)
+                live += cell;
+            Assert.Equal(1, live);
+            Assert.Equal(1, state[(7 / 2) * 9 + (9 / 2)]);
+            Assert.Equal(0, sim.Generation);
+        }
+
+        /// <summary>
+        /// It consumes NO RNG draws, so it cannot depend on a seed — the property
+        /// that makes it reproducible without one.
+        /// </summary>
+        [Fact]
+        public void SeedSingleIsIndependentOfAnyPriorRngUse()
+        {
+            var fresh = new LifeLike("B3/S23", 16, 16);
+            fresh.SeedSingle();
+
+            var churned = new LifeLike("B3/S23", 16, 16);
+            churned.SeedSoup(0.5, 12345);   // burn a whole grid's worth of draws
+            churned.SeedSingle();
+
+            Assert.Equal(fresh.State.ToArray(), churned.State.ToArray());
+        }
+
         [Fact]
         public void BlinkerOscillates()
         {

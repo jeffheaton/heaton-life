@@ -77,6 +77,28 @@ namespace HeatonLife
             for (int i = 0; i < _cells.Length; i++)
                 _cells[i] = (byte)(rng.NextU32() % (uint)States);
             Generation = 0;
+            Remember(seed, s => SeedSoup(s));
+        }
+
+        // --- reset ---------------------------------------------------------------
+        // How this world was last seeded, so Reset can replay it. The Python
+        // reference keeps init/density/seed on its params object and re-dispatches
+        // in reset(); a captured delegate is the same idea without a params type.
+        private Action<uint> _replayInit = _ => { };
+        private uint _seed;
+
+        private void Remember(uint seed, Action<uint> replay)
+        {
+            _seed = seed;
+            _replayInit = replay;
+        }
+
+        /// <inheritdoc />
+        public void Reset(uint? seed = null)
+        {
+            if (seed.HasValue)
+                _seed = seed.Value;
+            _replayInit(_seed);
         }
 
         /// <summary>Load an explicit grid (row-major, Height*Width entries, values in [0, States)).</summary>
@@ -91,6 +113,12 @@ namespace HeatonLife
                 _cells[i] = cells[i];
             }
             Generation = 0;
+            var snapshot = _cells.Clone() as byte[];
+            Remember(_seed, _ =>
+            {
+                Array.Copy(snapshot!, _cells, _cells.Length);
+                Generation = 0;
+            });
         }
 
         /// <summary>Restore a saved state at a given generation (catalog loads).</summary>

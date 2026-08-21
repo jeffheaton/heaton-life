@@ -49,6 +49,7 @@ namespace HeatonLife
         {
             Seeding.Soup(_cells, density, seed);
             Generation = 0;
+            Remember(seed, s => { Seeding.Soup(_cells, density, s); Generation = 0; });
         }
 
         /// <summary>Blob init per spec: soup restricted to a centered disk (radius as a fraction of min dimension).</summary>
@@ -56,6 +57,43 @@ namespace HeatonLife
         {
             Seeding.Blob(_cells, Width, Height, density, radius, seed);
             Generation = 0;
+            Remember(
+                seed,
+                s => { Seeding.Blob(_cells, Width, Height, density, radius, s); Generation = 0; });
+        }
+
+        /// <summary>
+        /// Single init per spec/lifelike.md: one live cell at the grid's middle,
+        /// consuming no RNG draws. The third of the family's four `init` strategies
+        /// (soup / blob / single / array) — Python has had it since the reference
+        /// implementation; it was missing here because no vector exercised it.
+        /// </summary>
+        public void SeedSingle()
+        {
+            Seeding.Single(_cells, Width, Height);
+            Generation = 0;
+            Remember(_seed, _ => { Seeding.Single(_cells, Width, Height); Generation = 0; });
+        }
+
+        // --- reset ---------------------------------------------------------------
+        // How this world was last seeded, so Reset can replay it. The Python
+        // reference keeps init/density/seed on its params object and re-dispatches
+        // in reset(); a captured delegate is the same idea without a params type.
+        private Action<uint> _replayInit = _ => { };
+        private uint _seed;
+
+        private void Remember(uint seed, Action<uint> replay)
+        {
+            _seed = seed;
+            _replayInit = replay;
+        }
+
+        /// <inheritdoc />
+        public void Reset(uint? seed = null)
+        {
+            if (seed.HasValue)
+                _seed = seed.Value;
+            _replayInit(_seed);
         }
 
         /// <summary>Load an explicit 0/1 grid (row-major, Height*Width entries).</summary>
@@ -66,6 +104,12 @@ namespace HeatonLife
             for (int i = 0; i < cells.Length; i++)
                 _cells[i] = (byte)(cells[i] > 0 ? 1 : 0);
             Generation = 0;
+            var snapshot = _cells.Clone() as byte[];
+            Remember(_seed, _ =>
+            {
+                Array.Copy(snapshot!, _cells, _cells.Length);
+                Generation = 0;
+            });
         }
 
         /// <summary>Restore a saved state at a given generation (catalog loads).</summary>

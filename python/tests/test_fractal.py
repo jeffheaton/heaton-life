@@ -129,3 +129,24 @@ def test_zoom_animation_frame_count() -> None:
         steps=3,
     )
     assert len(anim) == 3
+
+
+def test_newton_refuses_to_leave_the_direct_tier() -> None:
+    """spec/fractals.md: "Newton (float64 only, zoom <= 1e12)"; spec/deep-zoom.md
+    gives it no perturbation tier. Every other family here tiers or raises, but
+    Newton had NO zoom check at all and silently produced a degenerate frame past
+    1e13 — and kept going past the T1 ceiling, where the escape-time fields raise.
+    The C# port enforced this all along.
+    """
+    field = Newton(degree=3, max_iter=60)
+    field.basins((16, 16), Viewport("0.3", "0.5", 12.0))          # at the ceiling: fine
+
+    for zoom in (12.5, 14.0, 300.0):
+        with pytest.raises(ValueError, match="no perturbation tier"):
+            field.basins((16, 16), Viewport("0.3", "0.5", zoom))
+
+    # Every entry point routes through basins, so all of them are guarded.
+    with pytest.raises(ValueError):
+        field.render((16, 16), Viewport("0.3", "0.5", 20.0))
+    with pytest.raises(ValueError):
+        field.iterations((16, 16), Viewport("0.3", "0.5", 20.0))

@@ -283,6 +283,10 @@ namespace HeatonLife.Tests
                         sim.SetState(initial);
                     else if (init == "soup")
                         sim.SeedSoup(p.GetProperty("density").GetDouble(), p.GetProperty("seed").GetUInt32());
+                    else if (init == "blob")
+                        sim.SeedBlob(p.GetProperty("density").GetDouble(), p.GetProperty("seed").GetUInt32());
+                    else if (init == "single")
+                        sim.SeedSingle();
                     else
                         throw new InvalidDataException($"unsupported lifelike init '{init}'");
                     return new Sim(sim.Step, () => sim.State.ToArray());

@@ -114,8 +114,8 @@ namespace HeatonLife
         public int NoImprovement { get; private set; }
 
         public Evolver(
-            int width,
-            int height,
+            int width = 100,
+            int height = 100,
             int populationSize = 100,
             double crossoverRate = 0.75,
             int tournamentRounds = 5,

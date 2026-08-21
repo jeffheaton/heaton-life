@@ -35,6 +35,13 @@ class FlowLeniaParams(LeniaParams):
     theta: float = dataclasses.field(
         default=2.0, metadata={"min": 0.1, "max": 5.0, "step": 0.1}
     )
+    # Flow seeds SOUP, not the base class's blobs (spec/lenia.md "Parameters":
+    # Flow "adds theta: 2.0 ... init soup"). Without this override the two entry
+    # points disagreed with each other — FlowLenia() seeded soup while
+    # FlowLenia.from_params(FlowLeniaParams()) inherited blobs — and since the
+    # vector generator uses the params path, the case named "soup-64" was
+    # actually recorded from blobs, leaving the real soup path unvectored.
+    init: str = dataclasses.field(default="soup", metadata={"choices": ["blobs", "soup"]})
 
 
 class FlowLenia(LeniaBase):

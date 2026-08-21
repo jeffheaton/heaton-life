@@ -31,13 +31,18 @@ namespace HeatonLife
         public static double OffsetIm(int y, int height, double pixelScale) =>
             -(y + 0.5 - height / 2.0) * pixelScale;
 
+        /// <summary>
+        /// For families with NO perturbation tier — Newton only (spec/fractals.md:
+        /// "float64 only, zoom &lt;= 1e12"; spec/deep-zoom.md: "no perturbation tier").
+        /// The escape-time fields no longer use this: they reach T1 on their own now
+        /// that <see cref="ReferenceOrbit"/> can produce a reference.
+        /// </summary>
         internal static void RequireT0(Viewport viewport)
         {
             if (viewport.ZoomLog10 > T0MaxZoom)
                 throw new ArgumentException(
                     $"zoom 1e{viewport.ZoomLog10:g} exceeds the float64 direct tier (1e{T0MaxZoom:g}); " +
-                    "pass a precomputed reference orbit for the perturbation tier " +
-                    "(C# does not generate reference orbits yet)");
+                    "this family has no perturbation tier");
         }
 
         internal static void RequireT1(Viewport viewport)
@@ -46,6 +51,24 @@ namespace HeatonLife
                 throw new ArgumentException(
                     $"zoom 1e{viewport.ZoomLog10:g} exceeds the float64 perturbation tier " +
                     $"(~1e{T1MaxZoom:g}); the floatexp tier is not implemented yet");
+        }
+
+        /// <summary>
+        /// Which tier renders this viewport. spec/deep-zoom.md: "Tier selection is
+        /// automatic and invisible to the caller" — so the ZOOM decides, never
+        /// whether the caller happened to hand us an orbit. Selecting on orbit
+        /// presence let two callers with the same viewport get different counts,
+        /// because T0 and T1 legitimately disagree on a few percent of boundary
+        /// pixels (spec/fractals.md "Tiering"). At or below the T0 ceiling a
+        /// supplied orbit is therefore ignored, which is exactly what the Python
+        /// reference does — it tiers on zoom alone and takes no orbit at all.
+        /// </summary>
+        internal static bool IsPerturbationTier(Viewport viewport)
+        {
+            if (viewport.ZoomLog10 <= T0MaxZoom)
+                return false;
+            RequireT1(viewport);
+            return true;
         }
 
         /// <summary>
@@ -134,10 +157,12 @@ namespace HeatonLife
         /// <summary>
         /// Smooth iteration value for one pixel (spec/render.md, ε tier):
         /// mu = n + 1 - log2(log|z| / log R) for escaped pixels, 0 for interior.
+        /// Public because the Python reference's `smooth_iterations` is: without it
+        /// a consumer can only get the percentile-stretched render, never the raw mu.
         /// |z| uses sqrt(re² + im²); the reference's hypot may differ in the last
         /// ulp, absorbed by the ε tier.
         /// </summary>
-        internal static double SmoothMu(int count, double finalRe, double finalIm, double logEscapeRadius)
+        public static double SmoothMu(int count, double finalRe, double finalIm, double logEscapeRadius)
         {
             if (count <= 0)
                 return 0.0;
@@ -152,6 +177,27 @@ namespace HeatonLife
         /// </summary>
         public static void ForRows(int height, int workers, Action<int> row) =>
             Parallelism.For(height, workers, row);
+
+        /// <summary>
+        /// <see cref="ForRows(int,int,Action{int})"/> that also counts finished rows
+        /// into <paramref name="progress"/> for a host's progress readout. Purely
+        /// observational: the rows run exactly as before, so output is bit-identical
+        /// with or without it (spec/fractals.md "Parallel rendering").
+        /// </summary>
+        public static void ForRows(int height, int workers, Action<int> row, RenderProgress? progress)
+        {
+            if (progress == null)
+            {
+                ForRows(height, workers, row);
+                return;
+            }
+            progress.Begin(height);
+            Parallelism.For(height, workers, y =>
+            {
+                row(y);
+                progress.Step();
+            });
+        }
 
         /// <summary>
         /// Map smooth iterations to [0, 1] for colormapping; interior stays 0

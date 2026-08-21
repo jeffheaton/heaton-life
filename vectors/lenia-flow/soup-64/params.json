@@ -1,0 +1,53 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.f64",
+      "shape": [
+        64,
+        64
+      ],
+      "step": 0
+    },
+    {
+      "file": "state_00001.f64",
+      "shape": [
+        64,
+        64
+      ],
+      "step": 1
+    },
+    {
+      "file": "state_00010.f64",
+      "shape": [
+        64,
+        64
+      ],
+      "step": 10
+    },
+    {
+      "file": "state_00050.f64",
+      "shape": [
+        64,
+        64
+      ],
+      "step": 50
+    }
+  ],
+  "epsilon": 1e-06,
+  "family": "lenia-flow",
+  "params": {
+    "blobs": 40,
+    "density": 0.5,
+    "dt": 2.0,
+    "height": 64,
+    "init": "soup",
+    "mu": 0.3,
+    "radius": 13,
+    "seed": 7,
+    "sigma": 0.08,
+    "theta": 2.0,
+    "width": 64
+  },
+  "spec_version": "0.2.0",
+  "tier": "epsilon"
+}

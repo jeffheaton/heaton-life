@@ -234,13 +234,51 @@ namespace HeatonLife
             return true;
         }
 
-        /// <summary>Soup init per spec: one PCG32 draw per byte (draw &amp; 0xFF), row-major, RGB innermost.</summary>
+        /// <summary>
+        /// Soup init per spec: one PCG32 draw per byte (draw &amp; 0xFF), row-major,
+        /// RGB innermost.
+        ///
+        /// The seed is a <c>ulong</c> where the other families take a <c>uint</c>,
+        /// and that is deliberate, not an oversight: the GA walks seeds
+        /// arithmetically — evaluation i of a run scores from <c>seed + i *
+        /// eval_cycles</c> and cycle j from <c>seed + j</c>
+        /// (<see cref="MergeLifeObjective.ScoreGenome"/>, spec/evolve.md
+        /// "Determinism") — so a long search runs off the end of 32 bits. Narrowing
+        /// it would silently wrap those seeds and break run reproducibility. Callers
+        /// with a uint need no cast; it widens implicitly.
+        /// </summary>
         public void SeedSoup(ulong seed)
         {
             var rng = new Pcg32(seed);
             for (int i = 0; i < _cells.Length; i++)
                 _cells[i] = (byte)(rng.NextU32() & 0xFF);
             Generation = 0;
+            // Replays through SeedSoup itself rather than a copy of the loop above:
+            // this family is bit-exact, so the draw order must live in exactly one place.
+            Remember(seed, s => SeedSoup(s));
+        }
+
+        // --- reset ---------------------------------------------------------------
+        // How this world was last seeded, so Reset can replay it. The Python
+        // reference keeps init/density/seed on its params object and re-dispatches
+        // in reset(); a captured delegate is the same idea without a params type.
+        // This family's seeds are ulong (SeedSoup takes one), so the stored seed is
+        // wider than the interface's uint and Reset simply widens the value it is given.
+        private Action<ulong> _replayInit = _ => { };
+        private ulong _seed;
+
+        private void Remember(ulong seed, Action<ulong> replay)
+        {
+            _seed = seed;
+            _replayInit = replay;
+        }
+
+        /// <inheritdoc />
+        public void Reset(uint? seed = null)
+        {
+            if (seed.HasValue)
+                _seed = seed.Value;
+            _replayInit(_seed);
         }
 
         /// <summary>Load an explicit RGB lattice (row-major, Height*Width*3 bytes).</summary>
@@ -250,6 +288,12 @@ namespace HeatonLife
                 throw new ArgumentException($"expected {_cells.Length} bytes, got {cells.Length}");
             cells.CopyTo(_cells);
             Generation = 0;
+            var snapshot = _cells.Clone() as byte[];
+            Remember(_seed, _ =>
+            {
+                Array.Copy(snapshot!, _cells, _cells.Length);
+                Generation = 0;
+            });
         }
 
         /// <summary>Restore a saved state at a given generation (catalog loads).</summary>

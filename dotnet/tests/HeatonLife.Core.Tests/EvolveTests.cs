@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
@@ -6,6 +7,68 @@ namespace HeatonLife.Tests
 {
     public class EvolveTests
     {
+
+        /// <summary>
+        /// The evolve entry points must offer the same defaults as the Python
+        /// reference, where Evolver() and score_genome(genome) both work with no
+        /// further arguments (evolve/ga.py, evolve/objective.py). C# required
+        /// width/height and five more, so the two ports read differently for no
+        /// reason. Checked by REFLECTION rather than by running an evaluation: the
+        /// declared default is the contract, and a full scoring run at the default
+        /// 100x100 x 5 cycles x 1000 steps is far too slow for a unit test.
+        ///
+        /// Parameter ORDER is deliberately NOT aligned with Python — matching it
+        /// would move `objective` to first and break every caller for cosmetics.
+        /// </summary>
+        [Fact]
+        public void EvolveEntryPointsCarryTheReferenceDefaults()
+        {
+            var ctor = typeof(Evolver).GetConstructors()[0];
+            var expectedCtor = new Dictionary<string, object>
+            {
+                ["width"] = 100, ["height"] = 100,        // python size=(100, 100)
+                ["populationSize"] = 100,
+                ["crossoverRate"] = 0.75,
+                ["tournamentRounds"] = 5,
+                ["evalCycles"] = 5,
+                ["patience"] = 1000,
+                ["maxSteps"] = 1000,
+                ["seed"] = 0UL,
+            };
+            AssertDefaults(ctor.GetParameters(), expectedCtor, "Evolver(..)");
+
+            var score = typeof(MergeLifeObjective).GetMethod(nameof(MergeLifeObjective.ScoreGenome));
+            var expectedScore = new Dictionary<string, object>
+            {
+                ["cycles"] = 5,
+                ["width"] = 100, ["height"] = 100,
+                ["seed"] = 0UL,
+                ["maxSteps"] = 1000,
+            };
+            AssertDefaults(score!.GetParameters(), expectedScore, "ScoreGenome(..)");
+
+            // Only the genome is required, exactly as in Python.
+            foreach (var p in score.GetParameters())
+                if (p.Name != "genome")
+                    Assert.True(p.IsOptional, $"ScoreGenome({p.Name}) should be optional");
+        }
+
+        private static void AssertDefaults(
+            System.Reflection.ParameterInfo[] parameters,
+            Dictionary<string, object> expected,
+            string what)
+        {
+            foreach (var p in parameters)
+            {
+                if (!expected.TryGetValue(p.Name!, out object? want))
+                    continue;
+                Assert.True(p.IsOptional, $"{what}: {p.Name} should have a default");
+                Assert.Equal(want, p.DefaultValue);
+                expected.Remove(p.Name!);
+            }
+            Assert.True(expected.Count == 0, $"{what}: never saw {string.Join(", ", expected.Keys)}");
+        }
+
         private const string RedWorld = "e542-5f79-9341-f31e-6c6b-7f08-8773-7068";
 
         [Fact]
