@@ -4,7 +4,7 @@
 
 # heaton-life
 
-[![PyPI version](https://badge.fury.io/py/heaton-life.svg)](https://pypi.org/project/heaton-life/)
+[![PyPI version](https://img.shields.io/pypi/v/heaton-life?style=flat-square)](https://pypi.org/project/heaton-life/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](https://github.com/jeffheaton/heaton-life/blob/main/LICENSE)
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jeffheaton/heaton-life/blob/main/python/examples/heaton_life_intro.ipynb)
 
