@@ -82,71 +82,71 @@ namespace HeatonLife.Tests
             switch (simFamily)
             {
                 case "lifelike":
-                {
-                    var sim = new LifeLike(
-                        p.GetProperty("rule").GetString()!, width, height,
-                        p.GetProperty("boundary").GetString() == "dead" ? Boundary.Dead : Boundary.Torus);
-                    sim.SetState(ReadGrayBinarized(Path.Combine(caseDir, inputFile)));
-                    AssertByteFrame(caseName, caseDir, outputFile, sim.Frame());
-                    break;
-                }
+                    {
+                        var sim = new LifeLike(
+                            p.GetProperty("rule").GetString()!, width, height,
+                            p.GetProperty("boundary").GetString() == "dead" ? Boundary.Dead : Boundary.Torus);
+                        sim.SetState(ReadGrayBinarized(Path.Combine(caseDir, inputFile)));
+                        AssertByteFrame(caseName, caseDir, outputFile, sim.Frame());
+                        break;
+                    }
                 case "cyclic":
-                {
-                    var sim = new Cyclic(
-                        p.GetProperty("states").GetInt32(), width, height,
-                        p.GetProperty("threshold").GetInt32(), p.GetProperty("reach").GetInt32(),
-                        p.GetProperty("neighborhood").GetString() == "vonneumann"
-                            ? Neighborhood.VonNeumann
-                            : Neighborhood.Moore);
-                    var (_, _, _, pixels) = Png.Read(Path.Combine(caseDir, inputFile));
-                    sim.SetState(pixels); // cyclic encoding: raw state values
-                    AssertByteFrame(caseName, caseDir, outputFile, sim.Frame());
-                    break;
-                }
+                    {
+                        var sim = new Cyclic(
+                            p.GetProperty("states").GetInt32(), width, height,
+                            p.GetProperty("threshold").GetInt32(), p.GetProperty("reach").GetInt32(),
+                            p.GetProperty("neighborhood").GetString() == "vonneumann"
+                                ? Neighborhood.VonNeumann
+                                : Neighborhood.Moore);
+                        var (_, _, _, pixels) = Png.Read(Path.Combine(caseDir, inputFile));
+                        sim.SetState(pixels); // cyclic encoding: raw state values
+                        AssertByteFrame(caseName, caseDir, outputFile, sim.Frame());
+                        break;
+                    }
                 case "wireworld":
-                {
-                    var (_, _, _, pixels) = Png.Read(Path.Combine(caseDir, inputFile));
-                    var cells = new byte[pixels.Length];
-                    for (int i = 0; i < pixels.Length; i++)
-                        cells[i] = (byte)(pixels[i] / 85); // wireworld encoding: state * 85
-                    var sim = new Wireworld(
-                        width, height, cells,
-                        p.GetProperty("boundary").GetString() == "torus" ? Boundary.Torus : Boundary.Dead);
-                    AssertByteFrame(caseName, caseDir, outputFile, sim.Frame());
-                    break;
-                }
+                    {
+                        var (_, _, _, pixels) = Png.Read(Path.Combine(caseDir, inputFile));
+                        var cells = new byte[pixels.Length];
+                        for (int i = 0; i < pixels.Length; i++)
+                            cells[i] = (byte)(pixels[i] / 85); // wireworld encoding: state * 85
+                        var sim = new Wireworld(
+                            width, height, cells,
+                            p.GetProperty("boundary").GetString() == "torus" ? Boundary.Torus : Boundary.Dead);
+                        AssertByteFrame(caseName, caseDir, outputFile, sim.Frame());
+                        break;
+                    }
                 case "grayscott":
-                {
-                    var sim = new GrayScott(
-                        width, height,
-                        p.GetProperty("du").GetDouble(), p.GetProperty("dv").GetDouble(),
-                        p.GetProperty("feed").GetDouble(), p.GetProperty("kill").GetDouble(),
-                        p.GetProperty("dt").GetDouble());
-                    sim.SetState(ReadF64(Path.Combine(caseDir, inputFile)));
-                    AssertFloatFrame(caseName, caseDir, outputFile, sim.Frame());
-                    break;
-                }
+                    {
+                        var sim = new GrayScott(
+                            width, height,
+                            p.GetProperty("du").GetDouble(), p.GetProperty("dv").GetDouble(),
+                            p.GetProperty("feed").GetDouble(), p.GetProperty("kill").GetDouble(),
+                            p.GetProperty("dt").GetDouble());
+                        sim.SetState(ReadF64(Path.Combine(caseDir, inputFile)));
+                        AssertFloatFrame(caseName, caseDir, outputFile, sim.Frame());
+                        break;
+                    }
                 case "boids":
-                {
-                    var sim = new Boids(
-                        p.GetProperty("count").GetInt32(), width, height,
-                        p.GetProperty("perception").GetDouble(),
-                        p.GetProperty("separation_radius").GetDouble(),
-                        p.GetProperty("w_separation").GetDouble(),
-                        p.GetProperty("w_alignment").GetDouble(),
-                        p.GetProperty("w_cohesion").GetDouble(),
-                        p.GetProperty("max_speed").GetDouble(),
-                        p.GetProperty("min_speed").GetDouble(),
-                        p.GetProperty("max_force").GetDouble(),
-                        p.GetProperty("boundary").GetString() == "bounce"
-                            ? BoidsBoundary.Bounce
-                            : BoidsBoundary.Wrap,
-                        p.TryGetProperty("dimensions", out var dims) ? dims.GetInt32() : 2,
-                        p.TryGetProperty("depth", out var boidsDepth) ? boidsDepth.GetInt32() : 256);
-                    sim.SetState(ReadF64(Path.Combine(caseDir, inputFile)));
-                    AssertFloatFrame(caseName, caseDir, outputFile, sim.Frame());
-                    break;
-                }
+                    {
+                        var sim = new Boids(
+                            p.GetProperty("count").GetInt32(), width, height,
+                            p.GetProperty("perception").GetDouble(),
+                            p.GetProperty("separation_radius").GetDouble(),
+                            p.GetProperty("w_separation").GetDouble(),
+                            p.GetProperty("w_alignment").GetDouble(),
+                            p.GetProperty("w_cohesion").GetDouble(),
+                            p.GetProperty("max_speed").GetDouble(),
+                            p.GetProperty("min_speed").GetDouble(),
+                            p.GetProperty("max_force").GetDouble(),
+                            p.GetProperty("boundary").GetString() == "bounce"
+                                ? BoidsBoundary.Bounce
+                                : BoidsBoundary.Wrap,
+                            p.TryGetProperty("dimensions", out var dims) ? dims.GetInt32() : 2,
+                            p.TryGetProperty("depth", out var boidsDepth) ? boidsDepth.GetInt32() : 256);
+                        sim.SetState(ReadF64(Path.Combine(caseDir, inputFile)));
+                        AssertFloatFrame(caseName, caseDir, outputFile, sim.Frame());
+                        break;
+                    }
                 default:
                     throw new InvalidDataException($"no frame builder for '{simFamily}'");
             }

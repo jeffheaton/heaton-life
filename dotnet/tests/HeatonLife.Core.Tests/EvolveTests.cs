@@ -26,7 +26,8 @@ namespace HeatonLife.Tests
             var ctor = typeof(Evolver).GetConstructors()[0];
             var expectedCtor = new Dictionary<string, object>
             {
-                ["width"] = 100, ["height"] = 100,        // python size=(100, 100)
+                ["width"] = 100,
+                ["height"] = 100,        // python size=(100, 100)
                 ["populationSize"] = 100,
                 ["crossoverRate"] = 0.75,
                 ["tournamentRounds"] = 5,
@@ -41,7 +42,8 @@ namespace HeatonLife.Tests
             var expectedScore = new Dictionary<string, object>
             {
                 ["cycles"] = 5,
-                ["width"] = 100, ["height"] = 100,
+                ["width"] = 100,
+                ["height"] = 100,
                 ["seed"] = 0UL,
                 ["maxSteps"] = 1000,
             };

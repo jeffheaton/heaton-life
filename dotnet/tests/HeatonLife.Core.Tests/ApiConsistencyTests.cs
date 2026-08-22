@@ -28,25 +28,25 @@ namespace HeatonLife.Tests
             switch (sim)
             {
                 case IIndexedFrameSource indexed:
-                {
-                    var frame = new byte[sim.Width * sim.Height];
-                    indexed.WriteFrame(frame);
-                    return frame;
-                }
+                    {
+                        var frame = new byte[sim.Width * sim.Height];
+                        indexed.WriteFrame(frame);
+                        return frame;
+                    }
                 case IRgbFrameSource rgb:
-                {
-                    var frame = new byte[sim.Width * sim.Height * 3];
-                    rgb.WriteFrame(frame);
-                    return frame;
-                }
+                    {
+                        var frame = new byte[sim.Width * sim.Height * 3];
+                        rgb.WriteFrame(frame);
+                        return frame;
+                    }
                 case IFloatFrameSource floats:
-                {
-                    var frame = new double[sim.Width * sim.Height];
-                    floats.WriteFrame(frame);
-                    var bytes = new byte[frame.Length * 8];
-                    Buffer.BlockCopy(frame, 0, bytes, 0, bytes.Length);
-                    return bytes;
-                }
+                    {
+                        var frame = new double[sim.Width * sim.Height];
+                        floats.WriteFrame(frame);
+                        var bytes = new byte[frame.Length * 8];
+                        Buffer.BlockCopy(frame, 0, bytes, 0, bytes.Length);
+                        return bytes;
+                    }
                 default:
                     throw new InvalidOperationException($"{sim.GetType().Name} has no frame interface");
             }
@@ -195,25 +195,25 @@ namespace HeatonLife.Tests
                 switch (sim)
                 {
                     case IIndexedFrameSource indexed:
-                    {
-                        var frame = new byte[sim.Width * sim.Height];
-                        indexed.WriteFrame(frame);
-                        break;
-                    }
+                        {
+                            var frame = new byte[sim.Width * sim.Height];
+                            indexed.WriteFrame(frame);
+                            break;
+                        }
                     case IRgbFrameSource rgb:
-                    {
-                        var frame = new byte[sim.Width * sim.Height * 3];
-                        rgb.WriteFrame(frame);
-                        break;
-                    }
+                        {
+                            var frame = new byte[sim.Width * sim.Height * 3];
+                            rgb.WriteFrame(frame);
+                            break;
+                        }
                     case IFloatFrameSource floats:
-                    {
-                        var frame = new double[sim.Width * sim.Height];
-                        floats.WriteFrame(frame);
-                        foreach (double v in frame)
-                            Assert.True(v >= 0.0 && v <= 1.0);
-                        break;
-                    }
+                        {
+                            var frame = new double[sim.Width * sim.Height];
+                            floats.WriteFrame(frame);
+                            foreach (double v in frame)
+                                Assert.True(v >= 0.0 && v <= 1.0);
+                            break;
+                        }
                     default:
                         Assert.Fail($"{sim.GetType().Name} implements no frame interface");
                         break;

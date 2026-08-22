@@ -85,53 +85,53 @@ namespace HeatonLife.Tests
             switch (family)
             {
                 case "mandelbrot":
-                {
-                    var field = new Mandelbrot(
-                        p.GetProperty("max_iter").GetInt32(),
-                        p.GetProperty("escape_radius").GetDouble(),
-                        workers);
-                    int[] iterations = orbitRe != null
-                        ? field.Iterations(width, height, viewport, orbitRe, orbitIm!)
-                        : field.Iterations(width, height, viewport);
-                    return new Dictionary<string, int[]> { ["iterations"] = iterations };
-                }
-                case "julia":
-                {
-                    var field = new Julia(
-                        p.GetProperty("c_re").GetDouble(),
-                        p.GetProperty("c_im").GetDouble(),
-                        p.GetProperty("max_iter").GetInt32(),
-                        p.GetProperty("escape_radius").GetDouble(),
-                        workers);
-                    int[] iterations = orbitRe != null
-                        ? field.Iterations(width, height, viewport, orbitRe, orbitIm!)
-                        : field.Iterations(width, height, viewport);
-                    return new Dictionary<string, int[]> { ["iterations"] = iterations };
-                }
-                case "burning-ship":
-                {
-                    var field = new BurningShip(
-                        p.GetProperty("max_iter").GetInt32(),
-                        p.GetProperty("escape_radius").GetDouble(),
-                        workers);
-                    int[] iterations = orbitRe != null
-                        ? field.Iterations(width, height, viewport, orbitRe, orbitIm!)
-                        : field.Iterations(width, height, viewport);
-                    return new Dictionary<string, int[]> { ["iterations"] = iterations };
-                }
-                case "newton":
-                {
-                    var field = new Newton(
-                        p.GetProperty("degree").GetInt32(),
-                        p.GetProperty("max_iter").GetInt32(),
-                        workers);
-                    var (roots, iterations) = field.Basins(width, height, viewport);
-                    return new Dictionary<string, int[]>
                     {
-                        ["roots"] = roots,
-                        ["iterations"] = iterations,
-                    };
-                }
+                        var field = new Mandelbrot(
+                            p.GetProperty("max_iter").GetInt32(),
+                            p.GetProperty("escape_radius").GetDouble(),
+                            workers);
+                        int[] iterations = orbitRe != null
+                            ? field.Iterations(width, height, viewport, orbitRe, orbitIm!)
+                            : field.Iterations(width, height, viewport);
+                        return new Dictionary<string, int[]> { ["iterations"] = iterations };
+                    }
+                case "julia":
+                    {
+                        var field = new Julia(
+                            p.GetProperty("c_re").GetDouble(),
+                            p.GetProperty("c_im").GetDouble(),
+                            p.GetProperty("max_iter").GetInt32(),
+                            p.GetProperty("escape_radius").GetDouble(),
+                            workers);
+                        int[] iterations = orbitRe != null
+                            ? field.Iterations(width, height, viewport, orbitRe, orbitIm!)
+                            : field.Iterations(width, height, viewport);
+                        return new Dictionary<string, int[]> { ["iterations"] = iterations };
+                    }
+                case "burning-ship":
+                    {
+                        var field = new BurningShip(
+                            p.GetProperty("max_iter").GetInt32(),
+                            p.GetProperty("escape_radius").GetDouble(),
+                            workers);
+                        int[] iterations = orbitRe != null
+                            ? field.Iterations(width, height, viewport, orbitRe, orbitIm!)
+                            : field.Iterations(width, height, viewport);
+                        return new Dictionary<string, int[]> { ["iterations"] = iterations };
+                    }
+                case "newton":
+                    {
+                        var field = new Newton(
+                            p.GetProperty("degree").GetInt32(),
+                            p.GetProperty("max_iter").GetInt32(),
+                            workers);
+                        var (roots, iterations) = field.Basins(width, height, viewport);
+                        return new Dictionary<string, int[]>
+                        {
+                            ["roots"] = roots,
+                            ["iterations"] = iterations,
+                        };
+                    }
                 default:
                     throw new InvalidDataException($"no fractal builder for family '{family}'");
             }

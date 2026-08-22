@@ -158,72 +158,72 @@ namespace HeatonLife.Tests
             switch (family)
             {
                 case "grayscott":
-                {
-                    var sim = new GrayScott(
-                        width,
-                        height,
-                        p.GetProperty("du").GetDouble(),
-                        p.GetProperty("dv").GetDouble(),
-                        p.GetProperty("feed").GetDouble(),
-                        p.GetProperty("kill").GetDouble(),
-                        p.GetProperty("dt").GetDouble());
-                    if (init == "spots")
-                        sim.SeedSpots(p.GetProperty("spots").GetInt32(), p.GetProperty("seed").GetUInt32());
-                    else if (init == "center")
-                        sim.SeedCenter();
-                    else
-                        throw new InvalidDataException($"unsupported grayscott init '{init}'");
-                    return new FloatSim(sim.Step, () => sim.State.ToArray());
-                }
+                    {
+                        var sim = new GrayScott(
+                            width,
+                            height,
+                            p.GetProperty("du").GetDouble(),
+                            p.GetProperty("dv").GetDouble(),
+                            p.GetProperty("feed").GetDouble(),
+                            p.GetProperty("kill").GetDouble(),
+                            p.GetProperty("dt").GetDouble());
+                        if (init == "spots")
+                            sim.SeedSpots(p.GetProperty("spots").GetInt32(), p.GetProperty("seed").GetUInt32());
+                        else if (init == "center")
+                            sim.SeedCenter();
+                        else
+                            throw new InvalidDataException($"unsupported grayscott init '{init}'");
+                        return new FloatSim(sim.Step, () => sim.State.ToArray());
+                    }
                 case "lenia-classic":
                 case "lenia-asymptotic":
                 case "lenia-flow":
-                {
-                    int radius = p.GetProperty("radius").GetInt32();
-                    double mu = p.GetProperty("mu").GetDouble();
-                    double sigma = p.GetProperty("sigma").GetDouble();
-                    double dt = p.GetProperty("dt").GetDouble();
-                    LeniaBase sim = family switch
                     {
-                        "lenia-classic" => new ClassicLenia(width, height, radius, mu, sigma, dt),
-                        "lenia-asymptotic" => new AsymptoticLenia(width, height, radius, mu, sigma, dt),
-                        _ => new FlowLenia(
-                            width, height, radius, mu, sigma, dt, p.GetProperty("theta").GetDouble()),
-                    };
-                    if (init == "blobs")
-                        sim.SeedBlobs(p.GetProperty("blobs").GetInt32(), p.GetProperty("seed").GetUInt32());
-                    else if (init == "soup")
-                        sim.SeedSoup(p.GetProperty("density").GetDouble(), p.GetProperty("seed").GetUInt32());
-                    else
-                        throw new InvalidDataException($"unsupported lenia init '{init}'");
-                    return new FloatSim(sim.Step, () => sim.State.ToArray());
-                }
+                        int radius = p.GetProperty("radius").GetInt32();
+                        double mu = p.GetProperty("mu").GetDouble();
+                        double sigma = p.GetProperty("sigma").GetDouble();
+                        double dt = p.GetProperty("dt").GetDouble();
+                        LeniaBase sim = family switch
+                        {
+                            "lenia-classic" => new ClassicLenia(width, height, radius, mu, sigma, dt),
+                            "lenia-asymptotic" => new AsymptoticLenia(width, height, radius, mu, sigma, dt),
+                            _ => new FlowLenia(
+                                width, height, radius, mu, sigma, dt, p.GetProperty("theta").GetDouble()),
+                        };
+                        if (init == "blobs")
+                            sim.SeedBlobs(p.GetProperty("blobs").GetInt32(), p.GetProperty("seed").GetUInt32());
+                        else if (init == "soup")
+                            sim.SeedSoup(p.GetProperty("density").GetDouble(), p.GetProperty("seed").GetUInt32());
+                        else
+                            throw new InvalidDataException($"unsupported lenia init '{init}'");
+                        return new FloatSim(sim.Step, () => sim.State.ToArray());
+                    }
                 case "boids":
-                {
-                    var sim = new Boids(
-                        p.GetProperty("count").GetInt32(),
-                        width,
-                        height,
-                        p.GetProperty("perception").GetDouble(),
-                        p.GetProperty("separation_radius").GetDouble(),
-                        p.GetProperty("w_separation").GetDouble(),
-                        p.GetProperty("w_alignment").GetDouble(),
-                        p.GetProperty("w_cohesion").GetDouble(),
-                        p.GetProperty("max_speed").GetDouble(),
-                        p.GetProperty("min_speed").GetDouble(),
-                        p.GetProperty("max_force").GetDouble(),
-                        p.GetProperty("boundary").GetString() == "bounce"
-                            ? BoidsBoundary.Bounce
-                            : BoidsBoundary.Wrap,
-                        // Older 2D cases predate these keys.
-                        p.TryGetProperty("dimensions", out var dims) ? dims.GetInt32() : 2,
-                        p.TryGetProperty("depth", out var boidsDepth) ? boidsDepth.GetInt32() : 256);
-                    if (init == "random")
-                        sim.SeedRandom(p.GetProperty("seed").GetUInt32());
-                    else
-                        throw new InvalidDataException($"unsupported boids init '{init}'");
-                    return new FloatSim(sim.Step, () => sim.State.ToArray());
-                }
+                    {
+                        var sim = new Boids(
+                            p.GetProperty("count").GetInt32(),
+                            width,
+                            height,
+                            p.GetProperty("perception").GetDouble(),
+                            p.GetProperty("separation_radius").GetDouble(),
+                            p.GetProperty("w_separation").GetDouble(),
+                            p.GetProperty("w_alignment").GetDouble(),
+                            p.GetProperty("w_cohesion").GetDouble(),
+                            p.GetProperty("max_speed").GetDouble(),
+                            p.GetProperty("min_speed").GetDouble(),
+                            p.GetProperty("max_force").GetDouble(),
+                            p.GetProperty("boundary").GetString() == "bounce"
+                                ? BoidsBoundary.Bounce
+                                : BoidsBoundary.Wrap,
+                            // Older 2D cases predate these keys.
+                            p.TryGetProperty("dimensions", out var dims) ? dims.GetInt32() : 2,
+                            p.TryGetProperty("depth", out var boidsDepth) ? boidsDepth.GetInt32() : 256);
+                        if (init == "random")
+                            sim.SeedRandom(p.GetProperty("seed").GetUInt32());
+                        else
+                            throw new InvalidDataException($"unsupported boids init '{init}'");
+                        return new FloatSim(sim.Step, () => sim.State.ToArray());
+                    }
                 default:
                     throw new InvalidDataException($"no float builder for family '{family}'");
             }
@@ -238,28 +238,28 @@ namespace HeatonLife.Tests
             switch (family)
             {
                 case "lifelike": // pixel = state * 255
-                {
-                    var state = new byte[pixels.Length];
-                    for (int i = 0; i < pixels.Length; i++)
-                        state[i] = (byte)(pixels[i] > 0 ? 1 : 0);
-                    return state;
-                }
+                    {
+                        var state = new byte[pixels.Length];
+                        for (int i = 0; i < pixels.Length; i++)
+                            state[i] = (byte)(pixels[i] > 0 ? 1 : 0);
+                        return state;
+                    }
                 case "elementary": // 1 x width, pixel = tape * 255
-                {
-                    var state = new byte[width];
-                    for (int i = 0; i < width; i++)
-                        state[i] = (byte)(pixels[i] > 0 ? 1 : 0);
-                    return state;
-                }
+                    {
+                        var state = new byte[width];
+                        for (int i = 0; i < width; i++)
+                            state[i] = (byte)(pixels[i] > 0 ? 1 : 0);
+                        return state;
+                    }
                 case "cyclic": // pixel = raw state
                     return pixels;
                 case "wireworld": // pixel = state * 85
-                {
-                    var state = new byte[pixels.Length];
-                    for (int i = 0; i < pixels.Length; i++)
-                        state[i] = (byte)(pixels[i] / 85);
-                    return state;
-                }
+                    {
+                        var state = new byte[pixels.Length];
+                        for (int i = 0; i < pixels.Length; i++)
+                            state[i] = (byte)(pixels[i] / 85);
+                        return state;
+                    }
                 case "mergelife": // RGB, raw bytes
                     return pixels;
                 default:
@@ -276,76 +276,76 @@ namespace HeatonLife.Tests
             switch (family)
             {
                 case "lifelike":
-                {
-                    var sim = new LifeLike(
-                        p.GetProperty("rule").GetString()!, width, height, ParseBoundary(p));
-                    if (initial != null)
-                        sim.SetState(initial);
-                    else if (init == "soup")
-                        sim.SeedSoup(p.GetProperty("density").GetDouble(), p.GetProperty("seed").GetUInt32());
-                    else if (init == "blob")
-                        sim.SeedBlob(p.GetProperty("density").GetDouble(), p.GetProperty("seed").GetUInt32());
-                    else if (init == "single")
-                        sim.SeedSingle();
-                    else
-                        throw new InvalidDataException($"unsupported lifelike init '{init}'");
-                    return new Sim(sim.Step, () => sim.State.ToArray());
-                }
+                    {
+                        var sim = new LifeLike(
+                            p.GetProperty("rule").GetString()!, width, height, ParseBoundary(p));
+                        if (initial != null)
+                            sim.SetState(initial);
+                        else if (init == "soup")
+                            sim.SeedSoup(p.GetProperty("density").GetDouble(), p.GetProperty("seed").GetUInt32());
+                        else if (init == "blob")
+                            sim.SeedBlob(p.GetProperty("density").GetDouble(), p.GetProperty("seed").GetUInt32());
+                        else if (init == "single")
+                            sim.SeedSingle();
+                        else
+                            throw new InvalidDataException($"unsupported lifelike init '{init}'");
+                        return new Sim(sim.Step, () => sim.State.ToArray());
+                    }
                 case "elementary":
-                {
-                    var sim = new Elementary(
-                        p.GetProperty("rule").GetInt32(), width, height, ParseBoundary(p));
-                    if (initial != null)
-                        sim.SetState(initial);
-                    else if (init == "single")
-                        sim.SeedSingle();
-                    else if (init == "soup")
-                        sim.SeedSoup(p.GetProperty("density").GetDouble(), p.GetProperty("seed").GetUInt32());
-                    else
-                        throw new InvalidDataException($"unsupported elementary init '{init}'");
-                    return new Sim(sim.Step, () => sim.State.ToArray());
-                }
+                    {
+                        var sim = new Elementary(
+                            p.GetProperty("rule").GetInt32(), width, height, ParseBoundary(p));
+                        if (initial != null)
+                            sim.SetState(initial);
+                        else if (init == "single")
+                            sim.SeedSingle();
+                        else if (init == "soup")
+                            sim.SeedSoup(p.GetProperty("density").GetDouble(), p.GetProperty("seed").GetUInt32());
+                        else
+                            throw new InvalidDataException($"unsupported elementary init '{init}'");
+                        return new Sim(sim.Step, () => sim.State.ToArray());
+                    }
                 case "cyclic":
-                {
-                    var sim = new Cyclic(
-                        p.GetProperty("states").GetInt32(),
-                        width,
-                        height,
-                        p.GetProperty("threshold").GetInt32(),
-                        p.GetProperty("reach").GetInt32(),
-                        p.GetProperty("neighborhood").GetString() == "vonneumann"
-                            ? Neighborhood.VonNeumann
-                            : Neighborhood.Moore);
-                    if (initial != null)
-                        sim.SetState(initial);
-                    else if (init == "soup")
-                        sim.SeedSoup(p.GetProperty("seed").GetUInt32());
-                    else
-                        throw new InvalidDataException($"unsupported cyclic init '{init}'");
-                    return new Sim(sim.Step, () => sim.State.ToArray());
-                }
+                    {
+                        var sim = new Cyclic(
+                            p.GetProperty("states").GetInt32(),
+                            width,
+                            height,
+                            p.GetProperty("threshold").GetInt32(),
+                            p.GetProperty("reach").GetInt32(),
+                            p.GetProperty("neighborhood").GetString() == "vonneumann"
+                                ? Neighborhood.VonNeumann
+                                : Neighborhood.Moore);
+                        if (initial != null)
+                            sim.SetState(initial);
+                        else if (init == "soup")
+                            sim.SeedSoup(p.GetProperty("seed").GetUInt32());
+                        else
+                            throw new InvalidDataException($"unsupported cyclic init '{init}'");
+                        return new Sim(sim.Step, () => sim.State.ToArray());
+                    }
                 case "wireworld":
-                {
-                    var sim = new Wireworld(width, height, ParseBoundary(p));
-                    if (initial != null)
-                        sim.SetState(initial);
-                    else if (init == "clock")
-                        sim.SeedClock();
-                    else
-                        throw new InvalidDataException($"unsupported wireworld init '{init}'");
-                    return new Sim(sim.Step, () => sim.State.ToArray());
-                }
+                    {
+                        var sim = new Wireworld(width, height, ParseBoundary(p));
+                        if (initial != null)
+                            sim.SetState(initial);
+                        else if (init == "clock")
+                            sim.SeedClock();
+                        else
+                            throw new InvalidDataException($"unsupported wireworld init '{init}'");
+                        return new Sim(sim.Step, () => sim.State.ToArray());
+                    }
                 case "mergelife":
-                {
-                    var sim = new MergeLife(p.GetProperty("genome").GetString()!, width, height);
-                    if (initial != null)
-                        sim.SetState(initial);
-                    else if (init == "soup")
-                        sim.SeedSoup(p.GetProperty("seed").GetUInt32());
-                    else
-                        throw new InvalidDataException($"unsupported mergelife init '{init}'");
-                    return new Sim(sim.Step, () => sim.State.ToArray());
-                }
+                    {
+                        var sim = new MergeLife(p.GetProperty("genome").GetString()!, width, height);
+                        if (initial != null)
+                            sim.SetState(initial);
+                        else if (init == "soup")
+                            sim.SeedSoup(p.GetProperty("seed").GetUInt32());
+                        else
+                            throw new InvalidDataException($"unsupported mergelife init '{init}'");
+                        return new Sim(sim.Step, () => sim.State.ToArray());
+                    }
                 default:
                     throw new InvalidDataException($"no builder for family '{family}'");
             }
