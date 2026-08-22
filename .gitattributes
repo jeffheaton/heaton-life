@@ -1,0 +1,16 @@
+# The golden conformance vectors are the byte-exact cross-language contract that
+# Python, .NET, and Unity are all replayed against. Git must never rewrite them.
+#
+# Without this, a clone on Windows (where Git's default is core.autocrlf=true)
+# silently converts every text vector's LF to CRLF on checkout. The binary
+# vectors survive — git detects the NUL bytes — but the .rle patterns do not,
+# and the RLE conformance tests then fail against their own corrupted fixtures.
+# The failure reads as "the implementation is wrong" when in fact the checkout
+# is; that inversion is exactly what the determinism contract cannot afford.
+#
+# -text disables all end-of-line conversion in both directions, so the bytes on
+# disk are the bytes in the blob on every platform.
+vectors/** -text
+
+# Same reasoning for pattern fixtures shipped inside the Unity package's tests.
+*.rle -text

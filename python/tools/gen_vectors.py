@@ -59,7 +59,7 @@ def write_case(family: str, name: str, sim: Simulation, steps: list[int]) -> Non
     }
     if epsilon is not None:
         meta["epsilon"] = epsilon
-    (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+    (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n")
     print(f"wrote {case_dir.relative_to(REPO_ROOT)} (steps {steps})")
 
 
@@ -87,7 +87,7 @@ def gen_mergelife_decode() -> None:
             "rule": rule,
             "expected_rows": rows,
         }
-        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n")
         print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
 
 
@@ -351,7 +351,7 @@ def write_fractal_case(
             np.ascontiguousarray(orbit, dtype="<c16").tobytes()
         )
         meta["reference_orbit"] = {"file": "orbit.c128", "length": len(orbit)}
-    (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+    (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n")
     print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
 
 
@@ -381,7 +381,7 @@ def write_render_cases() -> None:
             "cmap": name,
             "output": {"file": "lut.png", "shape": [256, 3]},
         }
-        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n")
         print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
 
     apply_cases = [
@@ -405,7 +405,7 @@ def write_render_cases() -> None:
             "input": {"file": "frame.f64", "shape": [height, width]},
             "output": {"file": "rgb.png", "shape": [height, width, 3]},
         }
-        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n")
         print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
 
 
@@ -426,7 +426,7 @@ def write_frame_cases() -> None:
         return buf.getvalue()
 
     def write_meta(case_dir: Path, meta: dict[str, Any]) -> None:
-        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n")
         print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
 
     def frame_case(
@@ -615,7 +615,7 @@ def write_pattern_cases() -> None:
 
     def write_meta(case_dir: Path, meta: dict[str, Any]) -> None:
         case_dir.mkdir(parents=True, exist_ok=True)
-        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n")
         print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
 
     # RLE decode + canonical encode cases. Grids are stored raw-value grayscale.
@@ -651,9 +651,9 @@ def write_pattern_cases() -> None:
         case_dir.mkdir(parents=True, exist_ok=True)
         grid, rule = rle_decode(text)
         canonical = rle_encode(grid, rule=rule if rule is not None else "B3/S23")
-        (case_dir / "input.rle").write_text(text)
+        (case_dir / "input.rle").write_text(text, newline="\n")
         (case_dir / "grid.png").write_bytes(gray_png(grid))
-        (case_dir / "canonical.rle").write_text(canonical)
+        (case_dir / "canonical.rle").write_text(canonical, newline="\n")
         write_meta(case_dir, {
             "spec_version": SPEC_VERSION,
             "family": "patterns",
@@ -754,7 +754,7 @@ def write_evolve_cases() -> None:
 
     def write_meta(case_dir: Path, meta: dict[str, Any]) -> None:
         case_dir.mkdir(parents=True, exist_ok=True)
-        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n")
         print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
 
     # Objective scoring: per-run stats + score for each cycle, then the max.
@@ -886,7 +886,7 @@ def write_png_io_cases() -> None:
             "input": "input.png",
             "grid": {"file": "grid.png", "shape": [4, 5, 3]},
         }
-        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n")
         print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
 
     write("decode-scale1", mergelife_to_png(grid, 1), 1)
