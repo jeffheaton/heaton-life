@@ -10,7 +10,7 @@ from heaton_life.core.protocols import Field, Simulation
 from heaton_life.core.rng import Pcg32
 from heaton_life.core.viewport import Viewport
 
-__version__ = "0.0.1"
+__version__ = "1.0.0"
 
 __all__ = [
     "Field",
