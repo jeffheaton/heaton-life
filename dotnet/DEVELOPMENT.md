@@ -61,8 +61,11 @@ dotnet test tests/HeatonLife.Core.Tests/HeatonLife.Core.Tests.csproj -c Release 
 - The workflow also runs an advisory vulnerable-package report over the test
   project's dependencies, the only place a package could enter:
   `dotnet list tests/HeatonLife.Core.Tests/HeatonLife.Core.Tests.csproj package --vulnerable --include-transitive`.
-- To try the package as a user would: `dotnet pack src/HeatonLife.Core -c Release -o nupkgs`,
-  then `dotnet add package HeatonLife.Core --source ./nupkgs` in a fresh project.
+- To try the package as a user would, pack it at a version that is not on NuGet.org so
+  the global package cache cannot substitute the published one:
+  `dotnet pack src/HeatonLife.Core -c Release -o nupkgs -p:Version=1.0.1-local`, then
+  `dotnet add package HeatonLife.Core --version 1.0.1-local --source ./nupkgs` in a
+  fresh project (`nupkgs/` is ignored by git).
 
 ## How the library is built: the spec decides
 
@@ -121,6 +124,31 @@ sanctions), so the perturbation tier does not depend on an externally supplied
 orbit; it still accepts one, which is how the conformance replay works. It is
 pinned by regenerating the shipped `orbit.c128` byte for byte.
 
+## Adding a family
+
+The spec page and the Python implementation (with its vectors) come first; see
+["Adding or changing a family"](../python/DEVELOPMENT.md#adding-or-changing-a-family).
+On this side:
+
+1. Add `src/HeatonLife.Core/<Family>.cs` in the `HeatonLife` namespace: a constructor
+   taking the spec's parameters (with the Python defaults), `ISimulation` (`Width`,
+   `Height`, `Generation`, `Step`, `Reset`), and exactly one of `IIndexedFrameSource`,
+   `IFloatFrameSource`, or `IRgbFrameSource` with a zero-allocation `WriteFrame`
+   (fractals are renderers instead: `Render(width, height, viewport)` returning
+   doubles in `[0, 1]`). Seeding draws from `Pcg32` in the order the spec gives, and
+   the class's XML doc comment cites the spec page.
+2. Wire it into the conformance replay in `tests/HeatonLife.Core.Tests/ConformanceTests.cs`:
+   its family name in `ByteFamilies` or `FloatFamilies`, a case in `BuildSim` or
+   `BuildFloatSim` that constructs it from `params.json`, and (for byte families) the
+   pixel decoding in `DecodeState`. Cases under `../vectors/<family>/` are then
+   discovered automatically.
+3. Add it to `AllFamilies()` in `ApiConsistencyTests.cs` (the host-facing contract:
+   interfaces, constructor defaults, RGBA paths) and, if it has a frame-indexing rule
+   in `../spec/render.md`, to `RenderConformanceTests.cs`.
+4. Pin any curated content (presets, galleries, built-in patterns) with a test, as
+   the Python side does; it is part of the contract but not a vector.
+5. Run the checks; the port is done when the new vectors replay within their tier.
+
 ## Code style
 
 - Allman braces, and `dotnet format` clean (the CI gate).
@@ -154,7 +182,8 @@ workflow regenerates it with the run number and date before building.
 ## Releasing
 
 One manually dispatched GitHub workflow, **Build Library (.NET)**
-(`.github/workflows/build-lib-dotnet.yml`), the same shape as dynaface's. Nothing
+(`.github/workflows/build-lib-dotnet.yml`), the same shape as the workflows in the
+maintainer's [dynaface](https://github.com/jeffheaton/dynaface) project. Nothing
 runs on push. In order: restore, the `dotnet format` gate, the vulnerable-package
 report (advisory), the regenerated `Version.cs`, the Release build, the xunit suite
 (published as a test report), then `heaton-life-dotnet-<version>.zip` (DLL + XML
@@ -165,18 +194,26 @@ back to this repository at the packed commit for every file but the CI-regenerat
 `Version.cs`) are uploaded as the `heaton-life-nupkgs` artifact, and finally the push
 of both to NuGet.org, the symbols package explicitly as well as alongside the main
 package. Pushes use `--skip-duplicate`, so re-running at an already-published version
-is a no-op rather than an error, and a rerun still pushes the symbols if an earlier
-run published the main package without them.
+is a no-op on NuGet.org rather than an error, and a rerun still pushes the symbols
+if an earlier run published the main package without them. The S3 copy is not a
+no-op: every run overwrites the public `heaton-life-dotnet-<version>.zip` with a
+fresh build whose `HeatonLifeVersion.Build` and `BuildDate` differ from the assembly
+on NuGet.org, and which picks up any source change since the original run. Rerun a
+published version only when that is acceptable; otherwise bump the version.
 
 The push uses **Trusted Publishing**, so there is no long-lived API key stored in
 the repository: the `NuGet/login` action exchanges the job's short-lived GitHub OIDC
 token (the workflow grants `id-token: write`) for a temporary NuGet.org API key.
-Its `user:` input is the NuGet.org account that *created* the policy. One-time
-setup on NuGet.org (Account → Trusted Publishing): add a policy bound to the GitHub
+Its `user:` input is the NuGet.org account that *created* the policy. That policy
+already exists: on the `jeffheaton` NuGet.org account (Account → Trusted Publishing)
+the policy named `heaton-life-dotnet` (created 2026-08-22) is bound to the GitHub
 repository owner `jeffheaton`, the repository `heaton-life`, and the workflow file
-`build-lib-dotnet.yml` (the file name, not the workflow's display name). Without a
-matching policy the login step fails with
-`No matching trust policy owned by user '…' was found`. If NuGet.org lists a newly
+`build-lib-dotnet.yml`, and the 1.0.0 release was pushed through it, so nothing needs
+to be set up for the next release. Renaming the workflow file breaks the binding
+until the policy is edited to match. To recreate it (a new account, or a renamed
+file): add a policy with those three values (the file name, not the workflow's
+display name). Without a matching policy the login step fails with
+`No matching trust policy owned by user '…' was found`; if NuGet.org lists a newly
 created policy as pending, running the workflow activates it.
 
 Repository secrets for the S3 copy: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
@@ -184,8 +221,10 @@ Repository secrets for the S3 copy: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
 
 Release checklist:
 
-1. Bump `<Version>` in the csproj (in step with the Python version) and the version
-   in the `heaton-life-dotnet-<version>.zip` link under "Install" in `README.md`. The
+1. Bump `<Version>` in the csproj (in step with the Python version), the `Version`
+   constant in the tracked `src/HeatonLife.Core/Version.cs` baseline (CI regenerates
+   the file, but local builds report the baseline), and the version in the
+   `heaton-life-dotnet-<version>.zip` link under "Install" in `README.md`. The
    package README and icon are frozen into each version, so also update `README.md`
    first if the API or the sample changed.
 2. Run the checks locally, commit, and push.
@@ -199,5 +238,13 @@ Release checklist:
    public, pack it locally (see "The checks") and install it from that folder into
    a fresh project.
 4. Check the run; its `heaton-life-nupkgs` artifact holds the exact `.nupkg` and
-   `.snupkg` that were pushed. NuGet versions are immutable: anything that needs changing after the push
-   becomes the next version.
+   `.snupkg` that were pushed. NuGet versions are immutable: anything that needs
+   changing after the push becomes the next version.
+5. A few minutes later, once NuGet.org has validated and indexed the push, verify it
+   landed: the package page (`https://www.nuget.org/packages/HeatonLife.Core/<version>`)
+   lists the version, renders the README, and offers "Download symbols" (the
+   `.snupkg`; its push is separate from the main one, so check it explicitly), and
+   `https://data.heatonresearch.com/library/heaton-life-dotnet-<version>.zip` resolves
+   and contains the DLL, XML, and PDB. Then record the release in `../ROADMAP.md` and
+   tag the commit once the Python package is out too (see `../python/DEVELOPMENT.md`,
+   "Releasing").

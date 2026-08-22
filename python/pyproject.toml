@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "heaton-life"
 version = "1.0.0"
-description = "Emergence algorithms: cellular automata, Lenia, fractals, boids, and reaction-diffusion."
+description = "Explore emergence in Python: cellular automata (MergeLife, Life-like, Elementary, Cyclic, Wireworld), Lenia, deep-zoom fractals, boids, and Gray-Scott reaction-diffusion under one deterministic API, rendered to images, GIFs, and MP4s, with a MergeLife evolver and a PyQt6 playground."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
@@ -34,7 +34,8 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/jeffheaton/heaton-life"
-Documentation = "https://github.com/jeffheaton/heaton-life/tree/main/spec"
+Documentation = "https://github.com/jeffheaton/heaton-life/blob/main/python/README.md"
+Specifications = "https://github.com/jeffheaton/heaton-life/tree/main/spec"
 Source = "https://github.com/jeffheaton/heaton-life"
 "Bug Tracker" = "https://github.com/jeffheaton/heaton-life/issues"
 
@@ -42,7 +43,6 @@ Source = "https://github.com/jeffheaton/heaton-life"
 playground = ["PyQt6>=6.6"]
 precision = ["gmpy2>=2.1"]   # fast deep-zoom reference orbits; mpmath fallback is built in
 video = ["imageio[ffmpeg]>=2.31"]
-fast = ["numba>=0.59"]
 dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.4", "mypy>=1.10", "gmpy2>=2.1"]
 
 [project.gui-scripts]

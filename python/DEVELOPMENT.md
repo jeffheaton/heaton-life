@@ -40,7 +40,6 @@ pip install -e ".[dev,playground]"
 | `playground` | PyQt6, for the interactive app and its offscreen tests |
 | `precision` | gmpy2 for fast deep-zoom reference orbits (mpmath fallback is built in) |
 | `video` | imageio-ffmpeg for `.mp4` output from `Animation.save` |
-| `fast` | numba kernels |
 
 ## Layout
 
@@ -52,7 +51,7 @@ python/
 │   ├── ca/             # lifelike, elementary, cyclic, wireworld, mergelife (+ the rule gallery)
 │   ├── lenia/          # kernels, classic, asymptotic, flow
 │   ├── fractal/        # escape-time engine, perturbation engine, mandelbrot, julia, burning_ship, newton
-│   ├── boids/          # reynolds + spatial hash
+│   ├── boids/          # reynolds (O(N²) neighbours, capped at 2k boids; a spatial hash is future work)
 │   ├── rd/             # gray_scott + presets
 │   ├── evolve/         # the MergeLife genetic algorithm and objective
 │   ├── init/           # soup, blob, single, RLE import, built-in patterns, PNG I/O
@@ -60,14 +59,15 @@ python/
 │   ├── playground/     # PyQt6 app (optional extra)
 │   └── version.py      # build stamp (see Releasing)
 ├── tests/              # pytest suite; replays ../vectors and drives the playground offscreen
-├── tools/              # gen_vectors.py, gen_gallery.py
+├── tools/              # gen_vectors.py, gen_gallery.py, score_rules.py
 └── examples/           # the intro notebook (runs in Colab)
 ```
 
 ## The checks
 
-These four commands are exactly what the Build Library workflow runs; keep them
-green before committing.
+These four commands are what the Build Library workflow runs. `ruff check`, `mypy`,
+and `pytest` must be green before committing; `ruff format --check` is advisory (see
+below).
 
 ```
 ruff check src tests tools
@@ -76,8 +76,10 @@ mypy
 QT_QPA_PLATFORM=offscreen pytest -q
 ```
 
-- **ruff**: line length 100, configured in `pyproject.toml`. `ruff format` is
-  advisory in CI but keep the tree formatted anyway.
+- **ruff**: line length 100, configured in `pyproject.toml`. `ruff format --check` is
+  advisory in CI and the tree is not currently format-clean (about 40 files would
+  change), so format only the files you touch (`ruff format <file>`) rather than
+  reformatting the tree in an unrelated commit.
 - **mypy** runs in strict mode over `heaton_life` (`gmpy2` and `mpmath` have no
   stubs and are ignored for missing imports).
 - **pytest** takes a few seconds. `pytest -m "not slow"` skips the long evolver
@@ -95,16 +97,23 @@ heaton-life is spec first and multi-language, and that shapes every change.
   the spec gets fixed deliberately and every implementation follows.
 - **The vectors decide disputes.** `../vectors/` holds golden outputs
   (`params.json` plus expected states) shared by every implementation. Families
-  in the bit-exact tier (the discrete automata, fractal iteration counts, patterns
-  and RLE, the evolver) must match byte for byte; the epsilon tier (Lenia, boids,
-  Gray-Scott) must match within the tolerance recorded in each `params.json`.
+  in the bit-exact tier (the discrete automata, fractal iteration counts, colormaps
+  and frame indexing, patterns and RLE, PNG grid I/O, the evolver) must match byte
+  for byte; the epsilon tier (Lenia, boids, Gray-Scott, and the smooth-colored fractal render
+  cases under `render/`) must match within the tolerance recorded in each
+  `params.json`.
 - **All randomness flows through PCG32** (`heaton_life.core.rng.Pcg32`). Never use
   NumPy's random module or Python's `random`; seeding and draw order are part of
   each family's spec, and the .NET port reproduces them exactly.
 - **Never regenerate existing vectors casually.** They are the cross-language
   contract. Regenerate only when a deliberate spec change justifies it, and add
-  new families or cases additively with `tools/gen_vectors.py`, running only the
-  new section. `../vectors/mergelife-upstream/` tracks the upstream MergeLife
+  new families or cases additively by appending their `write_case(...)` calls to
+  `tools/gen_vectors.py`. The script has no section selector and regenerates every
+  family when run except `png-io` (its `write_png_io_cases()` is not called from
+  `main()` because PNG bytes are encoder-specific; invoke it by hand when adding a
+  png-io case); afterwards check `git status ../vectors/` and confirm only the
+  new case directories changed (existing vectors must come back byte-identical)
+  before committing. `../vectors/mergelife-upstream/` tracks the upstream MergeLife
   project and is never regenerated here.
 - **Changes travel in order**: spec page, then the Python implementation (plus
   additive vectors if there is new surface), then the .NET port, with both test
@@ -131,14 +140,18 @@ Some floating-point rules are not obvious and are easy to "clean up" by mistake:
    Frames are always renderable: 2-D `uint8`, 2-D float in `[0, 1]`, or `HxWx3`
    `uint8` RGB. Fractals implement the `Field` protocol instead
    (`render(size, viewport)`).
-3. Give it a frozen `Params` dataclass with UI metadata on each field (`min`,
-   `max`, `step`, `choices`, `role`). The playground builds its forms from this,
+3. Give it a frozen `Params` dataclass with UI metadata on each field (`label`,
+   `min`, `max`, `step`, `choices`, `role`; see `ca/lifelike.py` for the pattern). The playground builds its forms from this,
    so a new family gets a UI for free.
 4. Curated content (presets, galleries, built-in patterns) is part of the
    cross-implementation contract: it is listed in the spec and pinned by tests in
    both ports rather than by vectors.
-5. Add tests: unit tests for the implementation and a conformance test that
-   replays the family's vectors.
+5. Wire it into the conformance machinery: a codec and tier for the family in
+   `src/heaton_life/conformance.py` (`CODECS`, `TIERS`; the codec defines the vector
+   file encoding, which the spec page's vector section must match) and a section in
+   `tools/gen_vectors.py` (read the regeneration policy above first). Then add tests:
+   unit tests for the implementation and a conformance test that replays the
+   family's vectors.
 6. Port it to .NET (`../dotnet/`), then update the docs: the README sample if it
    belongs there, and the gallery image via `tools/gen_gallery.py`.
 
@@ -148,6 +161,8 @@ Some floating-point rules are not obvious and are easy to "clean up" by mistake:
   the image at the top of both READMEs.
 - `tools/gen_vectors.py` generates conformance vectors. Read the regeneration
   policy above before running any of it.
+- `tools/score_rules.py` scores MergeLife rule strings with the paper objective
+  (`../spec/evolve.md`).
 
 ## Playground
 
@@ -174,14 +189,15 @@ number and date before packaging.
 
 ## Releasing
 
-Two manually dispatched GitHub workflows, the same shape as dynaface's. Nothing
+Two manually dispatched GitHub workflows (the same build-then-deploy shape as the
+maintainer's [dynaface](https://github.com/jeffheaton/dynaface) project). Nothing
 runs on push.
 
 1. **Build Library** (`.github/workflows/build-lib.yml`): ruff and mypy reports
    (advisory), the test suite (fatal), the regenerated `version.py`, then the
    wheel, `twine check`, a workflow artifact named `heaton-life-wheel`, and a copy
    at `s3://data.heatonresearch.com/library/`. The S3 copy is public, for example
-   `https://s3.us-east-1.amazonaws.com/data.heatonresearch.com/library/heaton_life-1.0.0-py3-none-any.whl`,
+   `https://data.heatonresearch.com/library/heaton_life-1.0.0-py3-none-any.whl`,
    which lets a build be tried before it is deployed to PyPI (the intro notebook
    installed from that URL until 1.0.0; it now installs from PyPI).
 2. **Deploy Library to PyPI** (`.github/workflows/deploy-lib.yml`): takes a wheel
@@ -190,13 +206,20 @@ runs on push.
    irreversible step.
 
 Repository secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-`AWS_DEFAULT_REGION` (`us-east-1`), and `PYPI_API_TOKEN`. The first upload of a
-new project needs an account-scoped PyPI token; switch to a project-scoped token
-once the project exists.
+`AWS_DEFAULT_REGION` (`us-east-1`), and `PYPI_API_TOKEN`, which should be a token
+scoped to the `heaton-life` project (PyPI → Your projects → heaton-life → Settings →
+API tokens). The first upload, 1.0.0, needed an account-scoped token because the
+project did not exist yet; if that token is still the one stored, replace it with a
+project-scoped one and update the repository secret.
 
 Release checklist:
 
-1. Bump the version in `pyproject.toml` and `__init__.py` (and the .NET csproj).
+1. Bump the version in `pyproject.toml`, `__version__` in `src/heaton_life/__init__.py`,
+   and the `VERSION` baseline in `src/heaton_life/version.py` (CI checks only the first
+   two against each other; the baseline is what local and editable builds report), in
+   step with the .NET csproj, its `Version.cs` baseline, and the zip link in
+   `dotnet/README.md` (see `../dotnet/DEVELOPMENT.md`, "Releasing"). `README.md` is
+   frozen into the wheel as the PyPI project page, so finish README edits first.
 2. Run the four checks locally, commit, and push.
 3. Dispatch Build Library:
 
@@ -214,9 +237,16 @@ Release checklist:
 
    PyPI versions are immutable: anything that needs changing after the upload
    becomes the next version.
-5. Update the install cell in `examples/heaton_life_intro.ipynb` to the PyPI
-   command for the released version, and re-run the notebook so its saved outputs
-   match.
+5. The intro notebook (`examples/heaton_life_intro.ipynb`) installs the latest
+   release with an unpinned `!pip install --upgrade heaton-life` and is committed
+   with its outputs cleared, so nothing in it changes per release. If you pointed
+   its install cell at the S3 wheel URL in step 3, revert that. After the upload,
+   run the notebook end to end (Colab, or a fresh venv) against the new version to
+   confirm every sample still runs; if the API changed, update the cells and
+   clear the outputs before committing.
+6. Once both packages are out, tag the released commit (one tag serves both,
+   since the versions move together) and push it:
+   `git tag -a v<version> -m "heaton-life <version>" && git push origin v<version>`.
 
 ## Code style
 

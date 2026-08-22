@@ -1,6 +1,6 @@
 # Roadmap
 
-Build order for the Python library + PyQt6 playground, sequenced so each phase proves the layer the next one leans on. Every phase also lands its spec pages and conformance vectors — the spec is written *with* the first implementation, not after it.
+Build order for the library — the Python reference implementation, the PyQt6 playground, and the .NET port — sequenced so each phase proves the layer the next one leans on. Phases 0–9 are complete and 1.0.0 of both packages shipped on 2026-08-22; what remains is under "Future work". Every phase also lands its spec pages and conformance vectors — the spec is written *with* the first implementation, not after it.
 
 ## Phase 0 — Scaffold ✅
 
@@ -55,7 +55,7 @@ Per `spec/deep-zoom.md` (contract already in core since Phase 1):
 - Mandelbrot, Julia, Burning Ship (diffabs), Newton (T0 only) — T1 validated against T0 (exact for Julia/Ship; Mandelbrot agreement equals T0's own 1-ulp chaos bound).
 - Playground: click/wheel zoom (cursor-anchored, Decimal-precise recentering), pan via Ctrl-click; zoom movies via `fractal.zoom_animation`.
 - Vectors: int32 iteration/root grids (bit-exact) incl. a deep-zoom case with its exported reference orbit.
-- Deferred to Phase 7: progressive refinement with cancellation (renders are single-pass), optional numba kernels.
+- Deferred (see Future work): progressive refinement with cancellation (renders are single-pass), optional numba kernels.
 
 ## Phase 6 — Boids ✅
 
@@ -73,26 +73,35 @@ Per `spec/deep-zoom.md` (contract already in core since Phase 1):
   and whole evolution runs replay from a seed. `PAPER_OBJECTIVE` included.
 - MP4 export (`Animation.save("*.mp4")`, video extra); gallery generator
   (`tools/gen_gallery.py` → `docs/gallery.png`, embedded in the README).
-- Packaging: classifiers/urls, wheel builds clean. Publishing to PyPI is a
-  release decision (account + license choice) left to the maintainer.
+- Packaging: classifiers/urls, wheel builds clean; publishing was deferred to Phase 9.
 - Spec completion pass: every family page + rng, deep-zoom, fractals, evolve.
 - **.NET port begun and green**: `HeatonLife.Core` (netstandard2.1) with PCG32
   (known-answer tested) and Life-like; the xunit suite replays the shared
   `vectors/lifelike/` byte-for-byte via a dependency-free PNG reader, and CI runs it.
 
+## Phase 8 — .NET parity ✅
+
+`HeatonLife.Core` replays every shared vector: all families, colormaps
+(spec/render.md), patterns, PNG I/O, and the evolver (spec/evolve.md). Reference-orbit
+generation (bignum) runs on the C# side too (`ReferenceOrbit`, the fixed-point option
+spec/deep-zoom.md sanctions, pinned by regenerating the shipped `orbit.c128` byte for
+byte). The package is a dependency-free `netstandard2.1` assembly with a symbols package.
+
+## Phase 9 — First releases ✅
+
+`heaton-life` 1.0.0 on PyPI and `HeatonLife.Core` 1.0.0 on NuGet, both on 2026-08-22,
+published by the manually dispatched Build Library workflows (python/DEVELOPMENT.md and
+dotnet/DEVELOPMENT.md, "Releasing"; NuGet through Trusted Publishing, no stored key).
+Consumer-facing READMEs on both package pages, the intro notebook installing from PyPI.
+
 ## Future work
 
-- .NET: library parity is complete — all families, colormaps (spec/render.md),
-  and the evolver (spec/evolve.md) conform to the shared vectors. Reference-orbit generation (bignum) runs on
-  the C# side too (`ReferenceOrbit`, the fixed-point option spec/deep-zoom.md sanctions,
-  pinned by regenerating the shipped `orbit.c128` byte for byte).
 - Fractals: progressive refinement with cancellation in the playground; optional
   numba kernels; floatexp tier beyond zoom 1e290; BLA iteration skipping.
 - Boids spatial hash if flocks ever need >2k; Lenia multi-channel; Orbium and
   friends as stampable Lenia creatures; MP4/GIF export buttons in the playground.
-- First PyPI and NuGet releases ✅ (1.0.0, both on 2026-08-22): the manual Build
-  Library workflows build and publish the packages (python/DEVELOPMENT.md and
-  dotnet/DEVELOPMENT.md, "Releasing").
+- Python 3.13+ in the classifiers once the suite has run there; a project-scoped
+  PyPI token in place of the account-scoped one used for the first upload.
 
 ## Cross-cutting rules
 

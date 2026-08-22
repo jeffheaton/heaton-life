@@ -8,8 +8,9 @@ name: Build Library (.NET)
 # (--skip-duplicate), so the S3/artifact half is always safe to rerun.
 #
 # Secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION.
-# NuGet.org: a Trusted Publishing policy under the jeffheaton account, bound to
-# jeffheaton/heaton-life and this workflow file (see dotnet/DEVELOPMENT.md, "Releasing").
+# NuGet.org: the Trusted Publishing policy "heaton-life-dotnet" under the jeffheaton
+# account, bound to jeffheaton/heaton-life and this file name, build-lib-dotnet.yml
+# (renaming the file breaks the binding; see dotnet/DEVELOPMENT.md, "Releasing").
 
 on:
   workflow_dispatch:

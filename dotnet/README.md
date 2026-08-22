@@ -13,10 +13,13 @@ and Gray-Scott reaction-diffusion under one consistent API. Every system steps a
 renders the same way, so a few lines of C# give you a frame as a plain array,
 colormapped RGB, or a PNG, and a genetic evolver can search for new MergeLife rules.
 
-It is pure C# with no dependencies: a single `netstandard2.1` assembly that runs
-anywhere .NET does, including Unity (IL2CPP, WebGL, and mobile). The step and frame
-APIs write into buffers you own and allocate nothing, so the library is comfortable
-inside a game loop.
+It is pure C# with no dependencies: a single `netstandard2.1` assembly, so it runs on
+.NET Core 3.0 and later, .NET 5 through .NET 10, Mono 6.4 and later, and Unity 2021.2
+and later (IL2CPP, WebGL, and mobile); .NET Framework 4.x does not implement .NET
+Standard 2.1. The step and frame APIs write into buffers you own and allocate nothing,
+so the library is comfortable inside a game loop. The fractal renderers and the evolver
+take an optional `workers` count (default 1, fully serial); results are identical for
+any worker count, but keep it at 1 on Unity WebGL, which has no threads.
 
 Results are reproducible by design. Each system follows a written specification and a
 set of conformance vectors, so the same parameters and seed always give the same run,
@@ -45,6 +48,9 @@ For Unity (2021.2 or newer, which supports .NET Standard 2.1), copy
 your project's `Assets/Plugins` folder. There is no native code and nothing else to
 install. Each release also ships the DLL, the XML docs, and the PDB together as
 [`heaton-life-dotnet-1.0.0.zip`](https://data.heatonresearch.com/library/heaton-life-dotnet-1.0.0.zip).
+The NuGet package also carries a symbols package (`.snupkg`, a portable PDB with
+SourceLink to this repository), so a debugger configured for the NuGet.org symbol
+server can step into the library's source.
 
 # Sample Code
 

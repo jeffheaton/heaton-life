@@ -83,7 +83,7 @@ order (stable by `limit`); each row carries:
 
 Color names, in rule order: Black, Red, Green, Yellow, Blue, Purple, Cyan, White.
 
-Display conventions (so the three UIs render identically): the Key Color column
+Display conventions (so every UI that shows the table renders it identically): the Key Color column
 shows `target_name` swatched with the **true** key color (not the display
 toolkit's named color); Percent (β) is `trunc(percent × 100)` with its sign;
 Index (γ) is `color_index` 0-based; octets display as `0x%02x` of the **raw**

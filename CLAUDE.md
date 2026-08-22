@@ -18,7 +18,7 @@ This repo's identity is that Python and .NET produce **the same output** for the
 - The **spec wins**; when an implementation and the spec disagree, the implementation is wrong (or the spec gets fixed deliberately).
 - The **vectors decide** disputes between implementations. Bit-exact tiers must match byte-for-byte; ε tiers within the per-family tolerance in `params.json`.
 - **All simulation randomness flows through PCG32** (`spec/rng.md`). Never numpy RNG, never `System.Random`; seeding and draw order are part of each family's spec.
-- **Never regenerate existing vectors casually** — they are the cross-language contract. Regenerate only when a deliberate spec change justifies it. New families/cases are added additively (`python/tools/gen_vectors.py`, run only the new section). `vectors/mergelife-upstream/` tracks the upstream repo and is never regenerated here.
+- **Never regenerate existing vectors casually** — they are the cross-language contract. Regenerate only when a deliberate spec change justifies it. New families/cases are added additively: append their `write_case(...)` calls to `python/tools/gen_vectors.py`, run it, and confirm with `git status vectors/` that only the new case directories changed (the script has no section selector and regenerates every family except `png-io`, whose `write_png_io_cases()` is deliberately left out of `main()` because PNG bytes are encoder-specific and is run by hand; existing vectors must come back byte-identical). `vectors/mergelife-upstream/` tracks the upstream repo and is never regenerated here.
 
 **Parity change protocol** — an algorithm/behavior change touches, in order:
 1. `spec/` page + `python/` implementation (+ additive vectors if new surface),
@@ -51,6 +51,7 @@ cd python
 
 # Lint, types, tests — what the Build Library workflow runs
 .venv/bin/ruff check src tests tools
+.venv/bin/ruff format --check src tests tools   # advisory in CI; format the files you touch
 .venv/bin/mypy
 QT_QPA_PLATFORM=offscreen .venv/bin/pytest -q
 
@@ -69,11 +70,16 @@ QT_QPA_PLATFORM=offscreen .venv/bin/pytest -q
 Requires the .NET 10 SDK; no venv.
 
 ```bash
+# Formatting gate (fatal in CI); `dotnet format dotnet/HeatonLife.slnx` fixes what it reports
+dotnet format dotnet/HeatonLife.slnx --verify-no-changes
+
 # Tests (replays the shared conformance vectors)
 dotnet test dotnet --nologo
 
-# Release DLL for direct hand-off (single dependency-free netstandard2.1 assembly)
+# Release build (single dependency-free netstandard2.1 assembly) and a local package to
+# try as a user would (see dotnet/DEVELOPMENT.md, "The checks")
 dotnet build dotnet/src/HeatonLife.Core -c Release
+dotnet pack dotnet/src/HeatonLife.Core -c Release -o dotnet/nupkgs -p:Version=1.0.1-local   # a version not on NuGet.org, so the package cache cannot substitute the published one
 ```
 
 
@@ -82,23 +88,33 @@ dotnet build dotnet/src/HeatonLife.Core -c Release
 Nothing runs on push. Three `workflow_dispatch` workflows in `.github/workflows/`:
 
 - **Build Library** (`build-lib.yml`, Python): ruff/mypy reports (advisory), pytest
-  with JUnit + coverage (fatal), a regenerated `src/heaton_life/version.py` build
+  with JUnit + coverage (fatal; the 60% coverage-threshold step is advisory), a regenerated `src/heaton_life/version.py` build
   stamp, the wheel → `twine check` → artifact → `s3://data.heatonresearch.com/library/`.
 - **Deploy Library to PyPI** (`deploy-lib.yml`): takes a wheel file name, pulls it
   from that S3 prefix, uploads to PyPI.
 - **Build Library (.NET)** (`build-lib-dotnet.yml`): `dotnet format` gate, vulnerable
   package report (advisory), a regenerated `src/HeatonLife.Core/Version.cs`, Release
-  build, xunit with TRX, the DLL zip → artifact → S3, and `dotnet pack` → NuGet.org via
+  build, xunit with TRX, the DLL zip → artifact → S3, and `dotnet pack` (package + `.snupkg` symbols) → NuGet.org via
   Trusted Publishing (OIDC; no stored API key).
 
-Versions: `python/pyproject.toml` ↔ `heaton_life.__version__` (the build fails if they
-disagree) and `<Version>` in `HeatonLife.Core.csproj`; bump all three together. The
-tracked `version.py` / `Version.cs` baselines (BUILD 0) exist so the stamp always
-exists in local builds; CI overwrites them. Secrets on the repo: `AWS_ACCESS_KEY_ID`,
-`AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `PYPI_API_TOKEN`; NuGet needs a Trusted
-Publishing policy under the `jeffheaton` NuGet.org account, bound to
-`jeffheaton/heaton-life` and the workflow file `build-lib-dotnet.yml` (policies are
-account-level, not per package; see dotnet/DEVELOPMENT.md, "Releasing").
+Versions live in six places that move together: `python/pyproject.toml` ↔
+`heaton_life.__version__` (the build fails if they disagree), the tracked
+`src/heaton_life/version.py` baseline, `<Version>` in `HeatonLife.Core.csproj`, the tracked
+`Version.cs` baseline, and the `heaton-life-dotnet-<version>.zip` link under "Install" in
+`dotnet/README.md` (that README is packed into every NuGet package). The baselines (BUILD 0)
+exist so the stamp always exists in local builds; CI overwrites them. The step-by-step
+release checklists (`gh workflow run build-lib.yml` → `gh workflow run deploy-lib.yml -f
+whl_file=…`; `gh workflow run build-lib-dotnet.yml`) are in `python/DEVELOPMENT.md` and
+`dotnet/DEVELOPMENT.md`, "Releasing". Secrets on the repo: `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `PYPI_API_TOKEN` (should be scoped to
+the `heaton-life` PyPI project; 1.0.0 was uploaded with an account-scoped token, see
+python/DEVELOPMENT.md, "Releasing"). NuGet pushes through the existing Trusted Publishing policy
+`heaton-life-dotnet` on the `jeffheaton` NuGet.org account (bound to `jeffheaton/heaton-life`
+and the workflow file `build-lib-dotnet.yml`; policies are account-level, not per package;
+used for 1.0.0) — if `NuGet/login` fails with `No matching trust policy`, check that policy
+before creating another (see dotnet/DEVELOPMENT.md, "Releasing"). `python/LICENSE` is a
+copy of the root `LICENSE` (hatchling cannot embed `../LICENSE` into the wheel); change both
+together.
 
 ## Code Style
 

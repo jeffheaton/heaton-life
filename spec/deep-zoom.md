@@ -51,7 +51,7 @@ Classic perturbation suffers "glitches" where `|δ|` grows comparable to `|Zₙ|
 
 > when `|Z[m] + δ| < |δ|`, set `δ ← Z[m] + δ` and `m ← 0`.
 
-One reference orbit suffices for the whole frame; no glitch passes. Vectorizes cleanly in NumPy: all pixels advance in lockstep, `Z[m]` is a fancy-indexed gather, escaped pixels are masked out. An optional numba kernel covers the scalar-loop fast path; the NumPy version is the reference.
+One reference orbit suffices for the whole frame; no glitch passes. Vectorizes cleanly in NumPy: all pixels advance in lockstep, `Z[m]` is a fancy-indexed gather, escaped pixels are masked out. The NumPy version is the reference; an optional compiled (numba) kernel for the scalar loop is future work ([ROADMAP.md](../ROADMAP.md)) and, if added, must reproduce the NumPy path's iteration counts bit-for-bit (the bit-exact conformance tier, [fractals.md](fractals.md)) and its smooth values within the render ε ([render.md](render.md)).
 
 ### Per-family formulas
 
@@ -87,7 +87,7 @@ Tier selection is automatic and invisible to the caller; the API surface is iden
 ## Caching & interactivity
 
 - The reference orbit depends only on `(C, max_iter)` → cache it; zooming toward a fixed center reuses it. v1 recomputes on center change (one orbit ≈ max_iter bignum ops ≈ ms–100s of ms, amortized over a frame).
-- Playground: progressive refinement (iteration ladder, coarse-to-fine tiles) with cancellation on viewport change.
+- Playground: renders are single-pass today; progressive refinement (iteration ladder, coarse-to-fine tiles) with cancellation on viewport change is future work ([ROADMAP.md](../ROADMAP.md)).
 
 ## Cross-language notes
 

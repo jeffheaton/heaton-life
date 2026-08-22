@@ -22,8 +22,8 @@ Each family gets one page structured as:
 
 | Tier | Families | Test |
 |---|---|---|
-| Bit-exact | Life-like, Elementary, Cyclic, Wireworld, MergeLife, fractal iteration counts, colormaps, evolve | state equality after N steps |
-| ε-tolerance | Lenia ×3, Gray-Scott, Boids, smooth coloring | max abs deviation < ε + fingerprints |
+| Bit-exact | Life-like, Elementary, Cyclic, Wireworld, MergeLife (and its decoded rule table), fractal iteration counts and Newton root indices, colormap LUTs and per-family frame indexing, patterns (RLE, transforms, stamp/extract), PNG grid I/O (decoded grids), evolve (objective statistics, operators, whole runs); pow10 via the known-answer bit patterns on its page | byte-for-byte equality with the vector: states at each checkpoint step, or the one-shot output |
+| ε-tolerance | Lenia ×3, Gray-Scott, Boids, smooth fractal coloring (the fractal render) | max abs deviation ≤ the `epsilon` in the case's `params.json` (1e-6 for Lenia and boids, 1e-9 for Gray-Scott and the fractal render) |
 
 ## Conventions
 
@@ -44,10 +44,10 @@ Each family gets one page structured as:
 - [grayscott.md](grayscott.md) — Gray-Scott reaction-diffusion (ε tier)
 - [lenia.md](lenia.md) — Lenia classic / asymptotic / flow (ε tier)
 - [boids.md](boids.md) — Reynolds flocking (ε tier, point-cloud state)
-- [evolve.md](evolve.md) — the MergeLife GA and paper objective (search, not a conformance family)
+- [evolve.md](evolve.md) — the MergeLife GA and paper objective (bit-exact tier: objective statistics, GA operators, and whole seeded runs replay across languages; vectors in `../vectors/evolve/`)
 - [fractals.md](fractals.md) — escape-time + Newton conventions, pixel mapping, vector schema
 - [deep-zoom.md](deep-zoom.md) — fractal precision architecture (perturbation + rebasing)
 - [render.md](render.md) — colormap LUT construction and frame indexing (bit-exact tier)
 - [patterns.md](patterns.md) — pattern model, RLE dialects, transforms, extract/stamp, family-bound compatibility
 - [png-io.md](png-io.md) — MergeLife PNG import/export at integer scale; grid-level bit-exact contract (PNG bytes are per-encoder)
-- Remaining family pages land alongside their implementations, per [ROADMAP.md](../ROADMAP.md).
+- Every family in the library has a page above. A new family adds its page here (the index and the tier table) before it merges; see [python/DEVELOPMENT.md, "Adding or changing a family"](../python/DEVELOPMENT.md#adding-or-changing-a-family).

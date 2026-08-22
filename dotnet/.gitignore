@@ -1,3 +1,9 @@
 bin/
 obj/
 *.user
+# local outputs of the commands in DEVELOPMENT.md and the workflow
+nupkgs/
+dist/
+format-report/
+TestResults/
+vulnerable-packages-report.txt

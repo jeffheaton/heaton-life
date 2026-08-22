@@ -37,9 +37,10 @@ Install from [PyPI](https://pypi.org/project/heaton-life/).
 pip install heaton-life
 ```
 
-Extras: `heaton-life[playground]` (the PyQt6 app), `[precision]` (gmpy2 for fast
-deep-zoom reference orbits; an mpmath fallback is built in), `[video]` (MP4 export),
-`[fast]` (numba kernels).
+heaton-life requires Python 3.11 or newer and depends only on NumPy, Pillow, and
+mpmath. Extras: `heaton-life[playground]` (the PyQt6 app), `[precision]` (gmpy2 for
+fast deep-zoom reference orbits; an mpmath fallback is built in), `[video]` (MP4
+export).
 
 # Sample Code
 
@@ -64,7 +65,8 @@ hl.fractal.zoom_animation(frac, (512, 512), hl.Viewport(
     center_re="-0.7435", center_im="0.1314", zoom_log10=4.0,
 ), steps=90, cmap="fire").save("zoom.gif")
 
-# Evolve MergeLife rules with the paper's objective — reproducible from a seed:
+# Evolve MergeLife rules with the paper's objective — reproducible from a seed
+# (slow: a few minutes at these settings):
 from heaton_life.evolve import Evolver
 best = Evolver(size=(64, 64), population_size=20, seed=42).run(max_evals=200)
 print(best.genome, best.score)
@@ -82,7 +84,8 @@ form is generated from each family's params dataclass — new families get a UI 
 
 # Helpful Links
 
-- [Intro notebook](https://github.com/jeffheaton/heaton-life/blob/main/python/examples/heaton_life_intro.ipynb) — the capabilities above, runnable in Colab
+- [Intro notebook](https://colab.research.google.com/github/jeffheaton/heaton-life/blob/main/python/examples/heaton_life_intro.ipynb) — the capabilities above, runnable in Colab
+- [.NET package](https://www.nuget.org/packages/HeatonLife.Core/) — `HeatonLife.Core`, the same systems for C#, .NET, and Unity, held to the same conformance vectors
 - [Repository](https://github.com/jeffheaton/heaton-life) — specifications, conformance vectors, and the .NET implementation
 - [Algorithm specifications](https://github.com/jeffheaton/heaton-life/tree/main/spec)
 - [Bug tracker](https://github.com/jeffheaton/heaton-life/issues)
