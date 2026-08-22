@@ -23,7 +23,7 @@ When you open Heaton Life, you'll see your **worlds library** — a card for eve
 <!-- SCREENSHOT: the worlds library on a phone -->
 
 - **+ New world** — Opens the picker (next section).
-- **Import** — Imports a pattern from RLE text on the clipboard (see [Importing Patterns](#importing-patterns)).
+- **Import** — Opens your device's file picker to import a pattern file (see [Importing Patterns](#importing-patterns)).
 - The **MENU** button opens **Evolve MergeLife**, this **Heaton Life Manual**, and the **About** screen (version, build time, and the simulation library build the app is running — include these if you report a problem).
 
 On each card, **★** marks a favorite and **×** deletes the world after a confirmation. There is no undo for a delete.
@@ -87,9 +87,11 @@ Drag to paint with the current ink and brush size. The ink picker depends on the
 
 ## Importing Patterns
 
-- **Import** on the library screen reads **RLE** text from the clipboard — the pattern format used across the Life community. Copy a pattern from LifeWiki (or any text), return to Heaton Life, and tap Import: it becomes a new Life-like world using the rule from its header. If the clipboard holds no pattern, the screen says so.
-- **Paste inside a world** stamps clipboard RLE wherever you like (see above).
-- **iPhone and iPad:** `.rle`, `.txt`, and MergeLife `.png` files open directly from the **Files** app, Mail, or Safari with **Open in Heaton Life**. A PNG becomes a MergeLife world with the image's exact lattice.
+Heaton Life reads the standard **RLE** pattern format used across the Life community (for example, patterns downloaded from LifeWiki), plus PNG lattice exports of MergeLife worlds. Three ways in:
+
+1. **Import** on the library screen opens your device's file picker — the **Files** app on iPhone and iPad, the system document picker on Android — so a pattern you downloaded in your browser is one tap away. A pattern becomes a new Life-like world using the rule from its header; a MergeLife `.png` becomes a MergeLife world with the image's exact lattice. (Android shows every file, because `.rle` has no registered file type; picking something that isn't a pattern simply reports an error.)
+2. **Share to Heaton Life** (iPhone and iPad): from the Files app, Safari, or Mail, share an `.rle`, `.txt`, or `.png` file and choose **Heaton Life** — it opens as a new world.
+3. **Paste inside a world**: copy a pattern's RLE text — a LifeWiki code block, a forum post — then use the edit bar's **Paste** tool in a matching world to stamp it wherever you like.
 
 ## Snapshots
 
