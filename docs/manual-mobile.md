@@ -20,7 +20,7 @@ Families of rules create worlds. A world's family is fixed for its lifetime; the
 
 When you open Heaton Life, you'll see your **worlds library** — a card for every world you've created, each with a live thumbnail, its name, and its family, rule, and generation. The first time you launch the app this screen says **No worlds yet**.
 
-<!-- SCREENSHOT: the worlds library on a phone -->
+<img src="manual/mobile-library.jpg" alt="The worlds library on an iPhone" width="360">
 
 - **+ New world** — Opens the picker (next section).
 - **Import** — Opens your device's file picker to import a pattern file (see [Importing Patterns](#importing-patterns)).
@@ -31,6 +31,8 @@ On each card, **★** marks a favorite and **×** deletes the world after a conf
 ## Creating a World
 
 **+ New world** opens the picker: four categories, each card fronted by a live preview — **Cellular Automata** (MergeLife, Life-like, Elementary, Cyclic, Wireworld), **Continuous Fields** (Classic, Asymptotic, and Flow Lenia, plus Gray-Scott), **Swarms** (Reynolds boids), and **Fractals** (Mandelbrot, Julia, Burning Ship, Newton). Tap a category, then a family. MergeLife goes one step further: its card opens the **rule gallery** of featured rules, each running live, and you pick the one to start from.
+
+<img src="manual/mobile-picker.jpg" alt="New world: pick a category" width="360"> <img src="manual/mobile-gallery.jpg" alt="MergeLife: pick a rule" width="360">
 
 | Family | What you get |
 |---|---|
@@ -51,16 +53,20 @@ Worlds are **born saved**: a new world joins your library immediately, is saved 
 
 The world fills the screen from the top bar to the transport bar. **< Worlds** in the top-left returns to the library; the generation shows in the top-right.
 
-<!-- SCREENSHOT: a phone world with the edit bar open -->
+<img src="manual/mobile-world.jpg" alt="A Life-like world on an iPhone" width="360"> <img src="manual/mobile-world-edit.jpg" alt="The same world with the editing tools open" width="360">
 
 The transport bar holds **Play / Pause**, **Step** (one generation), the **speed** slider (generations per second), **Edit**, and **World**:
 
 - **Edit** shows and hides the editing tools. Phones open in viewing mode, so the canvas is clear until you ask for the tools.
 - **World** opens the world's settings page: the **Rule** field (MergeLife and Life-like — type a rule and tap Done; an invalid rule is rejected and the old one restored), **Preset** and **Colormap** (tap to cycle), **Edges** (`wrap around` or `walls`, where the family offers it), the family's parameter sliders, **Reseed** (a fresh random start with the same rule) and **Defaults** (the family's defaults), the world's **Name**, and for MergeLife **Export PNG ×4**. **< World** returns to the canvas.
 
+<img src="manual/mobile-world-page.jpg" alt="The World settings page" width="360">
+
 The **☰** menu on the world screen holds whole-world actions: **Rule lab — decode this rule** (MergeLife), **Show grid lines**, **Reset to start position**, **Set start position = current state**, **Clear all cells**, **Fill all cells with current ink**, and **Save snapshot (PNG)**.
 
 ### On an iPad
+
+<img src="manual/ipad-world.jpg" alt="A Lenia world on an iPad: settings below the canvas, tools floating" width="600">
 
 An iPad uses the larger layout: the settings panel sits beside the canvas in landscape and below it in portrait, the transport bar carries **Play / Pause**, **Step**, **Speed**, **Snapshot**, and **Tools** (show or hide the editing tools), and the edit bar floats over the canvas, where you can drag it out of the way.
 
@@ -76,7 +82,9 @@ The edit bar offers **Paint**, **Select**, and **Pan**, plus **Undo**, **Paste**
 
 ### Paint
 
-Drag to paint with the current ink and brush size. The ink picker depends on the family: **Life-like** has two swatches; **Wireworld** has Empty, Head, Tail, and Conductor; **Cyclic** has one per state; **MergeLife** has **Hue** and **Bright** sliders; the Lenia families have a **Value** slider (each dab is a soft bump); **Gray-Scott** offers **Seed** or **Substrate**. **Reynolds** has no ink — a tap scares the flock away from your finger — and **Elementary** has no painting. Every family shares **Pick** (the next tap picks up the ink under your finger) and the **Size** slider. To erase, pick the family's blank swatch (or the lowest value) and paint with it.
+Drag to paint with the current ink and brush size. The ink picker depends on the family: **Life-like** has two swatches; **Wireworld** has Empty, Head, Tail, and Conductor; **Cyclic** has one per state; **MergeLife** has **hue** and **lum** sliders plus **White** and **Black** buttons; the Lenia families have a **Value** slider (each dab is a soft bump); **Gray-Scott** offers **Seed** or **Substrate**. **Reynolds** has no ink — a tap scares the flock away from your finger — and **Elementary** has no painting. Every family shares **Pick** (the next tap picks up the ink under your finger) and the **Size** slider. To erase, pick the family's blank swatch (or the lowest value) and paint with it.
+
+<img src="manual/mobile-mergelife.jpg" alt="Painting a MergeLife world" width="360">
 
 ### Select, Paste, Zoo, Undo
 
@@ -110,6 +118,8 @@ Fractals are the picker's fourth category. Each one you open is an **expedition*
 
 Zoom goes to 10¹² — a trillion times.
 
+<img src="manual/mobile-fractal-dive.jpg" alt="A Mandelbrot dive on an iPhone" width="360">
+
 ## Evolving MergeLife Rules
 
 **MENU > Evolve MergeLife** opens the evolver: a genetic algorithm that breeds MergeLife rules and scores each one by how interesting its world stays over time.
@@ -122,6 +132,8 @@ The preview runs the current best rule live above a leaderboard. A stalled popul
 
 - **Create world from best** — Opens the current best rule as a new saved world. **Copy rule** — Copies its rule code.
 - **Finds** — Every kept rule, best first, each card running live; **Refresh** brings in new arrivals (`+3 new`), **Clear** empties the log, **×** removes one. Tap a card to open it as a **preview world** while the search keeps going, then **Create as World** to keep it or **Delete World** (or **< Evolve**) to discard. Finds persist between launches.
+
+<img src="manual/mobile-evolve.jpg" alt="The evolver running on an iPhone" width="360">
 
 ## Tips
 

@@ -24,7 +24,7 @@ Families of rules create worlds. A world's family is fixed for its lifetime; the
 
 When you open Heaton Life, you'll see your **worlds library** — a card for every world you've created, each with a live thumbnail, its name, and its family, rule, and generation. The first time you launch the app this screen says **No worlds yet** and invites you to create your first world.
 
-<!-- SCREENSHOT: the worlds library with a few cards -->
+<img src="manual/app-library.jpg" alt="The worlds library" width="1024">
 
 Along the bottom:
 
@@ -32,6 +32,8 @@ Along the bottom:
 - **Import** — Opens a file dialog to import a pattern file (see [Importing Patterns](#importing-patterns)).
 
 A **MENU** button in the top-right corner opens **Evolve MergeLife**, this **Heaton Life Manual**, and the **About** screen.
+
+<img src="manual/app-menu.jpg" alt="The MENU" width="1024">
 
 On each card, **★** marks a favorite and **×** deletes the world after a confirmation. There is no trash and no undo for a delete.
 
@@ -49,6 +51,8 @@ Along the top of the window (Windows) or the top of the screen (Mac) is a standa
 - **Continuous Fields** — Classic, Asymptotic, and Flow (the three Lenia flavors) and Gray-Scott.
 - **Swarms** — Reynolds (boids).
 - **Fractals** — Mandelbrot, Julia, Burning Ship, Newton (see [Fractals](#fractals)).
+
+<img src="manual/app-picker.jpg" alt="New world: pick a category" width="1024">
 
 Pick a category, then a family, and the world opens. MergeLife goes one step further: its card opens the **rule gallery** — a catalog of featured rules, each running live — and you pick the rule you want to start from. Every other family starts from its default rule with a fresh random seed.
 
@@ -69,7 +73,7 @@ Worlds are **born saved**: the new world joins your library immediately, is save
 
 A world fills the center of the screen. The **world settings** panel sits to the right (or below the canvas in a tall window), the **transport bar** runs along the bottom, **< Worlds** in the top-left returns to the library, and the current **generation** shows in the top-right.
 
-<!-- SCREENSHOT: a Life-like world with the settings panel and edit bar visible -->
+<img src="manual/app-world.jpg" alt="A Life-like world with the edit bar and settings panel" width="1024">
 
 ### The transport bar
 
@@ -110,7 +114,7 @@ The **edit bar** in the top-left corner of the canvas holds the direct-manipulat
 Drag with the left button to paint with the current ink and brush size; drag with the **right button** to erase to the family's blank. The ink picker depends on the family:
 
 - **Life-like** — Two swatches, on and off. **Wireworld** — Empty, Head, Tail, and Conductor. **Cyclic** — One swatch per state.
-- **MergeLife** — **Hue** and **Bright** sliders (the ink is a color).
+- **MergeLife** — **hue** and **lum** sliders set the ink color, with **White** and **Black** shortcuts.
 - **Classic / Asymptotic / Flow** — A **Value** slider; each dab is a soft bump of that intensity.
 - **Gray-Scott** — **Seed** or **Substrate**.
 - **Reynolds** — No ink: a left click scares the flock away from the pointer, a right click lures it in. **Elementary** has no painting.
@@ -133,6 +137,8 @@ Paste takes Heaton Life's own clipboard first; if that is empty, it reads the sy
 ### The zoo
 
 **Zoo** slides open the family's pattern library: built-in patterns (for Life, spaceships, oscillators, still lifes, methuselahs, and the Gosper glider gun; HighLife's replicator; Wireworld's clock and diode) plus every selection you've saved, marked "yours". Each card shows a thumbnail, the name, and the rule and size the pattern was captured under. Click a card to arm it for pasting. **×** deletes your own entries (built-ins stay). **Save selection to zoo** at the bottom captures the current selection. The zoo only ever shows patterns that belong to the current family.
+
+<img src="manual/app-zoo.jpg" alt="The zoo for a Life-like world" width="1024">
 
 ### Undo
 
@@ -171,7 +177,7 @@ Your worlds library and pattern zoo live beside that folder. Everything stays on
 
 Fractals are the picker's fourth category. Each one you open is an **expedition** — a viewpoint into the set that is saved in your library like any world, with its own thumbnail. Four sets are available, each with presets: **Mandelbrot** (Home, Seahorse valley), **Julia** (Classic, Douady rabbit, Dendrite), **Burning Ship** (Full ship, Antenna armada), and **Newton** (z³ − 1, z⁵ − 1).
 
-<!-- SCREENSHOT: a deep Mandelbrot zoom with the status bar -->
+<img src="manual/app-fractal.jpg" alt="A Mandelbrot expedition at a zoom of a trillion" width="1024">
 
 Navigation is map-style:
 
@@ -189,7 +195,7 @@ In the settings panel: **Preset**, **Colormap**, and **Max iter**, the iteration
 
 **MENU > Evolve MergeLife** on the library screen opens the evolver: a genetic algorithm that breeds MergeLife rules and scores each one by how interesting its world stays over time, the way the original MergeLife research trainer did. Nothing here creates a world until you ask.
 
-<!-- SCREENSHOT: the evolve screen mid-run -->
+<img src="manual/app-evolve.jpg" alt="The evolver mid-run" width="1024">
 
 - **Start / Stop** — Starts a search with a fresh random population (and a fresh random seed each time). Stop ends it. The search keeps running while you switch to other windows, and only leaving the evolve screen with **< Catalog** stops it.
 - **Population** (16–128, default 100), **Steps per run** (100–1000), and **Eval cycles** (1–5) — The search's size and patience; the defaults are the reference trainer's.
@@ -199,6 +205,8 @@ The big preview runs the current best rule live, and the leaderboard lists the p
 
 - **Create world from best** — Opens the current best rule as a new, saved world in your library. **Copy rule** — Puts its rule code on the clipboard, ready to paste into any MergeLife world's **Rule** field.
 - **Finds** — The catalog of every kept rule, best score first, each card running a live preview. The title announces new arrivals (`+3 new`); **Refresh** brings them in without shuffling the cards you're reading, **Clear** empties the log, and **×** removes one find. Click a card to open the rule as a **preview world** — the search keeps breeding underneath — and decide with the bar at the top of the canvas: **Create as World** keeps it in your library; **Delete World** (or **< Evolve**) discards it. Finds persist between launches, so a long search only ever improves the catalog.
+
+<img src="manual/app-finds.jpg" alt="The Finds page" width="1024">
 
 ## Tips & Troubleshooting
 
