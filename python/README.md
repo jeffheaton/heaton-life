@@ -4,6 +4,7 @@
 
 [![PyPI version](https://badge.fury.io/py/heaton-life.svg)](https://pypi.org/project/heaton-life/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](https://github.com/jeffheaton/heaton-life/blob/main/LICENSE)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jeffheaton/heaton-life/blob/main/python/examples/heaton_life_intro.ipynb)
 
 Emergence algorithms — cellular automata (MergeLife, Life-like, Elementary, Cyclic,
 Wireworld), Lenia (classic, asymptotic, flow), escape-time fractals with perturbation
@@ -70,6 +71,7 @@ form is generated from each family's params dataclass — new families get a UI 
 
 # Helpful Links
 
+- [Intro notebook](https://github.com/jeffheaton/heaton-life/blob/main/python/examples/heaton_life_intro.ipynb) — the capabilities above, runnable in Colab
 - [Repository](https://github.com/jeffheaton/heaton-life) — specifications, conformance vectors, and the .NET implementation
 - [Algorithm specifications](https://github.com/jeffheaton/heaton-life/tree/main/spec)
 - [Bug tracker](https://github.com/jeffheaton/heaton-life/issues)
