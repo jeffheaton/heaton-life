@@ -83,9 +83,7 @@ Per `spec/deep-zoom.md` (contract already in core since Phase 1):
 ## Future work
 
 - .NET: library parity is complete — all families, colormaps (spec/render.md),
-  and the evolver (spec/evolve.md) conform to the shared vectors. The Unity app
-  (its own repo, heaton-life-unity) consumes the library as a DLL handed over by
-  `python/tools/build_unity_dll.py`. Reference-orbit generation (bignum) remains
+  and the evolver (spec/evolve.md) conform to the shared vectors. Reference-orbit generation (bignum) remains
   Python-side; C# consumes precomputed orbits.
 - Fractals: progressive refinement with cancellation in the playground; optional
   numba kernels; floatexp tier beyond zoom 1e290; BLA iteration skipping.

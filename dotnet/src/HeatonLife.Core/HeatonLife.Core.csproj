@@ -16,10 +16,9 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="HeatonLife.Core.Tests" />
-    <!-- The Unity app (heaton-life-unity, its own repo) consumes this assembly as a DLL.
-         Its EditMode conformance suite replays the vectors against internals (e.g.
-         FractalEngine.Fma) and its on-device self-check uses the same, so the grants
-         must be compiled in here. -->
+    <!-- Downstream hosts consume this assembly as a DLL; their conformance and
+         self-check assemblies replay the vectors against internals (e.g.
+         FractalEngine.Fma), so the grants are compiled in here. -->
     <InternalsVisibleTo Include="HeatonLife.Core.EditorTests" />
     <InternalsVisibleTo Include="HeatonLife.Unity" />
   </ItemGroup>

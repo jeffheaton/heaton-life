@@ -10,11 +10,10 @@ heaton-life is a spec-first, multi-language library of emergence algorithms — 
 - **`vectors/`** — golden conformance vectors (params + expected states) shared by every implementation
 - **`python/`** — Python implementation (NumPy) + PyQt6 playground app; the reference implementation
 - **`dotnet/`** — C#/.NET port (`HeatonLife.Core`, netstandard2.1, zero dependencies); full parity with Python
-- **[heaton-life-unity](https://github.com/jeffheaton/heaton-life-unity)** — the Unity 6 app (the deep user-facing app, successor to the playground) lives in its **own repo**, checked out as a sibling at `../heaton-life-unity`. It consumes this repo's C# core as a compiled `HeatonLife.Core.dll`, handed over by `python/tools/build_unity_dll.py`, and replays this repo's `vectors/` in its own EditMode gate
 
 ## The Determinism Contract (read before changing any algorithm)
 
-This repo's identity is that Python, .NET, and Unity produce **the same output** for the same `(params, seed)`:
+This repo's identity is that Python and .NET produce **the same output** for the same `(params, seed)`:
 
 - The **spec wins**; when an implementation and the spec disagree, the implementation is wrong (or the spec gets fixed deliberately).
 - The **vectors decide** disputes between implementations. Bit-exact tiers must match byte-for-byte; ε tiers within the per-family tolerance in `params.json`.
@@ -24,10 +23,7 @@ This repo's identity is that Python, .NET, and Unity produce **the same output**
 **Parity change protocol** — an algorithm/behavior change touches, in order:
 1. `spec/` page + `python/` implementation (+ additive vectors if new surface),
 2. `dotnet/` port (expression-for-expression where a bit-exact tier applies),
-3. both suites green here: Python pytest and `dotnet test`,
-4. hand the DLL to the app — commit first (the DLL records the library commit it was
-   built from), run `python/tools/build_unity_dll.py`, then run heaton-life-unity's
-   EditMode conformance gate against it (it replays this repo's `vectors/`).
+3. both suites green: Python pytest and `dotnet test`.
 
 ### Float-determinism gotchas (hard-won; do not "clean up")
 
@@ -66,9 +62,6 @@ QT_QPA_PLATFORM=offscreen .venv/bin/pytest -q
 
 # Vector generation — see the regen policy above before running anything here
 .venv/bin/python tools/gen_vectors.py
-
-# Build HeatonLife.Core (Release) and hand the DLL to ../heaton-life-unity (after any dotnet/ change)
-.venv/bin/python tools/build_unity_dll.py
 ```
 
 ### dotnet/ (C# library)
@@ -83,15 +76,6 @@ dotnet test dotnet --nologo
 dotnet build dotnet/src/HeatonLife.Core -c Release
 ```
 
-### heaton-life-unity (the app — its own repo)
-
-Lives at `../heaton-life-unity` (github.com/jeffheaton/heaton-life-unity) and consumes
-`HeatonLife.Core.dll` from this repo; it keeps no copy of the library sources. After a
-library change: commit here, run `tools/build_unity_dll.py` (writes the DLL, its XML docs,
-and a `HeatonLife.Core.version.txt` provenance stamp into the app's package), then run the
-app repo's EditMode conformance gate — its tests find this repo's `vectors/` through the
-sibling layout, or via `HEATON_LIFE_VECTORS`. See that repo's `CLAUDE.md` for the app
-architecture and the on-device self-check.
 
 ## Code Style
 

@@ -1,5 +1,5 @@
 """Pattern conformance: replay vectors/patterns/ — RLE dialects, transforms,
-extract and stamp semantics. Bit-exact; the same files the .NET/Unity suites replay."""
+extract and stamp semantics. Bit-exact; the same files the .NET suite replays."""
 
 import json
 from pathlib import Path
