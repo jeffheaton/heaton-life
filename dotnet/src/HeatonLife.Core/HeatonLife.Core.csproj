@@ -8,7 +8,7 @@
     <!-- Source of truth for the Build Library (.NET) workflow's version stamping
          (mirrors python/pyproject.toml). Bump this for releases. -->
     <Version>1.0.0</Version>
-    <Description>Emergence algorithms: cellular automata, Lenia, fractals, boids, reaction-diffusion. Spec-first port of heaton-life; conforms to the shared vectors.</Description>
+    <Description>Explore emergence in .NET: cellular automata (MergeLife, Life-like, Elementary, Cyclic, Wireworld), three flavors of Lenia, escape-time fractals with deep zoom (Mandelbrot, Julia, Burning Ship, Newton), Reynolds boids, and Gray-Scott reaction-diffusion under one consistent API, plus a genetic evolver that searches for new MergeLife rules. Pure C#, netstandard2.1, zero dependencies: it runs anywhere .NET does, including Unity and IL2CPP, and its step and frame APIs allocate nothing. Every system follows a written specification and conformance vectors shared with the Python package, so the same parameters and seed give the same run in either language.</Description>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <!-- Ship IntelliSense docs alongside the DLL (Unity reads the .xml next to it).
          CS1591 stays off: undocumented public members are fine; spec-relevant docs exist. -->
@@ -20,6 +20,7 @@
   <PropertyGroup>
     <PackageId>HeatonLife.Core</PackageId>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>heaton_life_icon.png</PackageIcon>
     <Authors>Jeff Heaton</Authors>
     <PackageTags>cellular-automata;lenia;fractals;boids;reaction-diffusion;mergelife;emergence;artificial-life</PackageTags>
     <PackageProjectUrl>https://github.com/jeffheaton/heaton-life</PackageProjectUrl>
@@ -29,6 +30,7 @@
 
   <ItemGroup>
     <None Include="../../README.md" Pack="true" PackagePath="\" />
+    <None Include="../../../docs/heaton_life_icon.png" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>

@@ -17,7 +17,8 @@ them:
 | Reaction-diffusion | Gray-Scott |
 
 It also includes a genetic algorithm that evolves new MergeLife rules, and a
-rendering pipeline that turns any system into still images, animated GIFs, or MP4s.
+rendering pipeline that turns any system into still images and, in Python, animated
+GIFs or MP4s.
 
 What makes heaton-life different is that it is **specification first**. Every system
 is defined by a language-neutral spec and pinned by a set of conformance vectors, and
@@ -31,9 +32,9 @@ reproducible and lets the implementations check each other.
   the API and a quick start, or open the
   [intro notebook](python/examples/heaton_life_intro.ipynb) in Colab. Includes an
   optional PyQt6 playground for exploring interactively.
-- **.NET**: the `HeatonLife.Core` package on NuGet, a dependency-free
-  `netstandard2.1` assembly that runs anywhere .NET does, including Unity and IL2CPP.
-  See the [.NET README](dotnet/README.md).
+- **.NET**: `dotnet add package HeatonLife.Core`, a dependency-free `netstandard2.1`
+  assembly that runs anywhere .NET does, including Unity and IL2CPP. See the
+  [.NET README](dotnet/README.md) for the API and a quick start.
 
 ## Apps
 
@@ -50,7 +51,7 @@ repository holds the library it runs on.
 | [`spec/`](spec/) | Language-neutral algorithm specifications, the source of truth every implementation conforms to |
 | [`vectors/`](vectors/) | Golden conformance vectors (parameters plus expected states) shared by all implementations |
 | [`python/`](python/) | Python implementation (NumPy), the playground, the intro notebook, and the [development guide](python/DEVELOPMENT.md) |
-| [`dotnet/`](dotnet/) | C#/.NET implementation (netstandard2.1 core, full parity with Python) |
+| [`dotnet/`](dotnet/) | C#/.NET implementation (netstandard2.1 core, full parity with Python) and its [development guide](dotnet/DEVELOPMENT.md) |
 | [`ROADMAP.md`](ROADMAP.md) | Phased implementation plan |
 
 ## Design principles

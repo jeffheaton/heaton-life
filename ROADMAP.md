@@ -83,14 +83,15 @@ Per `spec/deep-zoom.md` (contract already in core since Phase 1):
 ## Future work
 
 - .NET: library parity is complete — all families, colormaps (spec/render.md),
-  and the evolver (spec/evolve.md) conform to the shared vectors. Reference-orbit generation (bignum) remains
-  Python-side; C# consumes precomputed orbits.
+  and the evolver (spec/evolve.md) conform to the shared vectors. Reference-orbit generation (bignum) runs on
+  the C# side too (`ReferenceOrbit`, the fixed-point option spec/deep-zoom.md sanctions,
+  pinned by regenerating the shipped `orbit.c128` byte for byte).
 - Fractals: progressive refinement with cancellation in the playground; optional
   numba kernels; floatexp tier beyond zoom 1e290; BLA iteration skipping.
 - Boids spatial hash if flocks ever need >2k; Lenia multi-channel; Orbium and
   friends as stampable Lenia creatures; MP4/GIF export buttons in the playground.
 - First PyPI / NuGet release: the manual Build Library workflows build and publish
-  the packages (python/README.md and dotnet/README.md, "Releasing").
+  the packages (python/DEVELOPMENT.md and dotnet/DEVELOPMENT.md, "Releasing").
 
 ## Cross-cutting rules
 

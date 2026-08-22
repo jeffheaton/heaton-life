@@ -1,67 +1,129 @@
-# heaton-life — .NET implementation
+![Heaton Life](https://raw.githubusercontent.com/jeffheaton/heaton-life/main/docs/heaton_life_icon_160.png)
 
-The C# port, mirroring the Python implementation family by family against the
-shared specs and conformance vectors. **No native plugins — pure C# only**, so
-Unity IL2CPP/WebGL/mobile all work.
+# HeatonLife.Core
 
-## Status
+[![NuGet](https://img.shields.io/nuget/v/HeatonLife.Core?style=flat-square)](https://www.nuget.org/packages/HeatonLife.Core/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](https://github.com/jeffheaton/heaton-life/blob/main/LICENSE)
 
-| Piece | State |
-|---|---|
-| `Pcg32` (spec/rng.md, known-answer tested) | ✅ |
-| Life-like CA + soup init | ✅ bit-exact against `vectors/lifelike/` |
-| Elementary, Cyclic, Wireworld, MergeLife | ✅ bit-exact; MergeLife also replays `vectors/mergelife-upstream/` (byte-identical with the upstream engines) |
-| Gray-Scott, Lenia ×3, Boids (ε tier) | ✅ within ε (pure-C# radix-2/Bluestein FFT for Lenia) |
-| Fractals (T0 float64 + T1 perturbation consuming vector orbits) | ✅ bit-exact incl. the zoom-1e14 deep-zoom replay |
-| Colormaps / render (spec/render.md) | ✅ byte-identical LUTs, frame indexing, per-family `WriteFrame` (incl. boids rasterizer + fractal smooth coloring), RGB/RGBA32 output |
-| `ISimulation` + frame-source interfaces | ✅ the polymorphic surface a host (playground/Unity) drives |
-| Evolve: paper objective + GA (spec/evolve.md) | ✅ bit-exact, incl. a replayed end-to-end mini evolution run |
-| Patterns: RLE (both dialects), transforms, extract/stamp (spec/patterns.md) | ✅ bit-exact, Golly-compatible |
+HeatonLife.Core is a .NET library for exploring emergence: simple rules that give rise
+to complex, organic-looking behavior. It brings together cellular automata (MergeLife,
+Life-like, Elementary, Cyclic, and Wireworld), three flavors of Lenia, escape-time
+fractals with deep zoom (Mandelbrot, Julia, Burning Ship, and Newton), Reynolds boids,
+and Gray-Scott reaction-diffusion under one consistent API. Every system steps and
+renders the same way, so a few lines of C# give you a frame as a plain array,
+colormapped RGB, or a PNG, and a genetic evolver can search for new MergeLife rules.
 
-## Layout
+It is pure C# with no dependencies: a single `netstandard2.1` assembly that runs
+anywhere .NET does, including Unity (IL2CPP, WebGL, and mobile). The step and frame
+APIs write into buffers you own and allocate nothing, so the library is comfortable
+inside a game loop.
 
-- `src/HeatonLife.Core/` — engine-agnostic class library, `netstandard2.1`
-  (the profile Unity supports). Flat 1-D row-major arrays, zero-allocation
-  step API; grids share the exact memory layout of the Python arrays and the
-  vector files.
-- `tests/HeatonLife.Core.Tests/` — xunit; includes a dependency-free reader
-  for the vector PNGs (8-bit grayscale) and the conformance runner that replays
-  `../vectors/` byte-for-byte.
+Results are reproducible by design. Each system follows a written specification and a
+set of conformance vectors, so the same parameters and seed always give the same run,
+and the library's Python implementation is held to the same vectors: the discrete
+automata produce identical states in both languages, and the continuous systems agree
+within a recorded tolerance. The specifications, the vectors, and the Python package
+live in the [heaton-life repository](https://github.com/jeffheaton/heaton-life).
 
-## Running
+Here is every system in the library. The tiles were rendered by the repository's
+Python implementation, which this package matches vector for vector; the bottom-right
+one is the Mandelbrot set at a zoom of 10¹⁴, far beyond what plain floating point can
+resolve:
 
-```bash
-dotnet test dotnet
+![heaton-life gallery: one tile per system](https://raw.githubusercontent.com/jeffheaton/heaton-life/main/docs/gallery.png)
+
+# Install
+
+Install from [NuGet](https://www.nuget.org/packages/HeatonLife.Core/).
+
+```
+dotnet add package HeatonLife.Core
 ```
 
-## Porting order (mirrors the Python phases)
+For Unity (2021.2 or newer, which supports .NET Standard 2.1), copy
+`HeatonLife.Core.dll` and the `HeatonLife.Core.xml` beside it (for IntelliSense) into
+your project's `Assets/Plugins` folder. There is no native code and nothing else to
+install. Each release also ships the DLL, the XML docs, and the PDB together as
+[`heaton-life-dotnet-1.0.0.zip`](https://data.heatonresearch.com/library/heaton-life-dotnet-1.0.0.zip).
 
-RNG → Life-like → remaining discrete CAs → continuous grids → fractals → boids →
-render → evolve — **complete**; every stage landed with its conformance replay
-green. The spec (`../spec/`) is the authority; when C# and Python disagree, the
-vectors decide. Reference-orbit *generation* now runs on the C# side too
-(`ReferenceOrbit`, fixed point over `System.Numerics.BigInteger` — the option
-spec/deep-zoom.md sanctions), so the perturbation tier no longer depends on an
-externally supplied orbit; it still accepts one, which is how the conformance
-replay works. Pinned by regenerating the shipped `orbit.c128` byte for byte.
+# Sample Code
 
-## Releasing
+```csharp
+using System;
+using System.IO;
+using HeatonLife;
 
-One manually dispatched GitHub workflow, **Build Library (.NET)**
-(`.github/workflows/build-lib-dotnet.yml`), the same shape as dynaface's: a
-`dotnet format` gate, a vulnerable-package report, a regenerated
-`src/HeatonLife.Core/Version.cs` (`HeatonLifeVersion.Version/BuildDate/Build`), the
-Release build, the xunit suite, then `heaton-life-dotnet-<version>.zip` (DLL + XML
-docs + PDB) as a workflow artifact and on `s3://data.heatonresearch.com/library/`, and
-the `HeatonLife.Core` NuGet package pushed to NuGet.org.
+// A Life-like automaton from a random soup, stepped 500 generations and saved as a PNG.
+var life = new LifeLike("B3/S23", 256, 256);
+life.SeedSoup(density: 0.35, seed: 42);
+life.Step(500);
+var frame = new byte[life.Width * life.Height];
+life.WriteFrame(frame);                                     // palette indices
+var rgb = Colormaps.ApplyIndexed(frame, Colormaps.Get("phosphor"));
+File.WriteAllBytes("life.png", PngGrid.EncodeRgb(rgb, life.Width, life.Height, scale: 2));
 
-The push uses **Trusted Publishing** — GitHub's OIDC token is exchanged for a
-short-lived key by the `NuGet/login` action, so there is **no long-lived API key
-stored in the repo**. One-time setup on NuGet.org (Account → Trusted Publishing): add
-a policy for package id `HeatonLife.Core` bound to this repository
-(`jeffheaton/heaton-life`) and the `Build Library (.NET)` workflow. To cut a release,
-bump `<Version>` in `src/HeatonLife.Core/HeatonLife.Core.csproj` (in step with
-`python/pyproject.toml`), then dispatch the workflow. Pushes use `--skip-duplicate`,
-so re-running at an already-published version is a no-op rather than an error.
-Repository secrets for the S3 copy: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-`AWS_DEFAULT_REGION`.
+// MergeLife frames are already RGB, so no colormap is involved.
+var merge = new MergeLife(MergeLife.DefaultRule, 128, 128);
+merge.SeedSoup(7);
+merge.Step(300);
+File.WriteAllBytes("mergelife.png", merge.ToPng(scale: 3));
+
+// Deep zoom: float64 pixelates near 1e13; this renders via perturbation + rebasing.
+var mandelbrot = new Mandelbrot(maxIter: 5000, workers: Environment.ProcessorCount);
+double[] field = mandelbrot.Render(1920, 1080, new Viewport(
+    centerRe: "-0.743643887037158704752191506114774",
+    centerIm: "0.131825904205311970493132056385139",
+    zoomLog10: 14.0));
+File.WriteAllBytes("deep.png",
+    PngGrid.EncodeRgb(Colormaps.ApplyFloat(field, Colormaps.Get("fire")), 1920, 1080));
+
+// Evolve MergeLife rules with the paper's objective, reproducible from a seed:
+var best = new Evolver(width: 64, height: 64, populationSize: 20, seed: 42).Run(maxEvals: 200);
+Console.WriteLine($"{best.Genome} {best.Score}");
+```
+
+# Driving it from a host
+
+Every time-stepped system (the cellular automata, the three Lenias, boids, and
+Gray-Scott) implements `ISimulation` (`Width`, `Height`, `Generation`, `Step`, and
+`Reset`) plus one of three frame-source interfaces, depending on what its frame holds:
+`IIndexedFrameSource` (palette indices), `IFloatFrameSource` (floats in `[0, 1]`), or
+`IRgbFrameSource` (RGB bytes). A host such as a Unity adapter can therefore drive any
+of them through one code path, and the `WriteFrame` and `Colormaps.Apply*` overloads
+that take an output buffer never allocate:
+
+```csharp
+using HeatonLife;
+
+var sim = new GrayScott(256, 256, feed: 0.0545, kill: 0.062);   // the "Coral" preset
+var frame = new double[sim.Width * sim.Height];
+var rgba = new byte[frame.Length * 4];
+var lut = Colormaps.Get("ice");
+
+// Each tick of the game loop:
+sim.Step();
+sim.WriteFrame(frame);
+Colormaps.ApplyFloatRgba(frame, lut, rgba);   // RGBA32, ready for Texture2D.SetPixelData
+```
+
+The fractals are renderers rather than simulations: `Render(width, height, viewport)`
+returns a new field of doubles in `[0, 1]`, which you colormap exactly like an
+`IFloatFrameSource` frame, as the deep-zoom sample above does.
+
+The built-in colormaps are `gray`, `phosphor`, `fire`, `ice`, `violet`, `wireworld`, and
+`rainbow` (`Colormaps.Names` lists them).
+
+# Helpful Links
+
+- [Repository](https://github.com/jeffheaton/heaton-life) — specifications, conformance vectors, and the Python implementation
+- [Algorithm specifications](https://github.com/jeffheaton/heaton-life/tree/main/spec)
+- [Python package](https://pypi.org/project/heaton-life/) and its [intro notebook](https://github.com/jeffheaton/heaton-life/blob/main/python/examples/heaton_life_intro.ipynb), which runs in Colab and shows the same systems
+- [Bug tracker](https://github.com/jeffheaton/heaton-life/issues)
+
+# Development
+
+Working on the library itself, from the checks to cutting a release, is covered in
+the [development guide](https://github.com/jeffheaton/heaton-life/blob/main/dotnet/DEVELOPMENT.md):
+the build, format, and test gates, how the specifications and conformance vectors
+shape every change, the parity rules with the Python implementation, and the release
+workflow.

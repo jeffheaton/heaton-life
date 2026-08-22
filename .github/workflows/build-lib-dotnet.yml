@@ -9,7 +9,7 @@ name: Build Library (.NET)
 #
 # Secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION.
 # NuGet.org: a Trusted Publishing policy for package id HeatonLife.Core bound to
-# jeffheaton/heaton-life and this workflow (see dotnet/README.md, "Releasing").
+# jeffheaton/heaton-life and this workflow (see dotnet/DEVELOPMENT.md, "Releasing").
 
 on:
   workflow_dispatch:
@@ -152,7 +152,7 @@ jobs:
 
       # Trusted Publishing: exchange GitHub's OIDC token for a short-lived NuGet
       # API key (no long-lived secret stored in the repo). Requires a matching
-      # trusted-publishing policy on NuGet.org for the package id — see README.
+      # trusted-publishing policy on NuGet.org — see dotnet/DEVELOPMENT.md, "Releasing".
       - name: NuGet login (Trusted Publishing / OIDC)
         id: nuget-login
         uses: NuGet/login@v1
