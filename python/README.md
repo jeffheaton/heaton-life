@@ -1,4 +1,6 @@
-![heaton-life gallery: one tile per system](https://raw.githubusercontent.com/jeffheaton/heaton-life/main/docs/gallery.png)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/jeffheaton/heaton-life/main/docs/heaton_life_icon.png" alt="Heaton Life" width="160">
+</p>
 
 # heaton-life
 
@@ -20,6 +22,12 @@ set of conformance vectors, so the same parameters and seed always give the same
 and the library's .NET implementation is held to the same vectors. The specifications,
 the vectors, and the .NET port live in the
 [heaton-life repository](https://github.com/jeffheaton/heaton-life).
+
+Here is every system in the library, each rendered by the library itself. The
+bottom-right tile is the Mandelbrot set at a zoom of 10¹⁴, far beyond what plain
+floating point can resolve:
+
+![heaton-life gallery: one tile per system](https://raw.githubusercontent.com/jeffheaton/heaton-life/main/docs/gallery.png)
 
 # Install
 
