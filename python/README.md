@@ -81,42 +81,8 @@ form is generated from each family's params dataclass — new families get a UI 
 
 # Development
 
-```
-pip install -e ".[dev,playground]"
-ruff check src tests tools
-mypy
-pytest -q
-```
-
-Layout:
-
-```
-src/heaton_life/
-├── core/        # protocols, Viewport, params, PCG32, buffers, kernels, integrators
-├── ca/          # lifelike, elementary, cyclic, wireworld, mergelife
-├── lenia/       # kernels, classic, asymptotic, flow
-├── fractal/     # escape-time engine, perturbation engine, mandelbrot, julia, burning_ship, newton
-├── boids/       # reynolds + spatial hash
-├── rd/          # gray_scott + presets
-├── init/        # soup, blob, single, RLE import
-├── render/      # colormaps, image, animate (GIF/MP4), notebook display
-└── playground/  # PyQt6 app (optional extra)
-```
-
-## Releasing
-
-Two manually dispatched GitHub workflows, the same shape as dynaface's:
-
-1. **Build Library** (`.github/workflows/build-lib.yml`) — ruff/mypy reports, the test
-   suite (conformance vectors + offscreen playground), a regenerated
-   `src/heaton_life/version.py` (VERSION from `pyproject.toml`, BUILD_DATE, BUILD = the
-   run number), then the wheel → `twine check` → workflow artifact →
-   `s3://data.heatonresearch.com/library/`.
-2. **Deploy Library to PyPI** (`deploy-lib.yml`) — takes the wheel file name (e.g.
-   `heaton_life-1.0.0-py3-none-any.whl`), pulls it from S3, uploads it to PyPI.
-
-To cut a release, bump `version` in `pyproject.toml` **and** `__version__` in
-`src/heaton_life/__init__.py` (the build fails if they disagree), dispatch Build
-Library, inspect the artifact, then dispatch Deploy with its file name. Repository
-secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`,
-`PYPI_API_TOKEN`.
+Working on the library itself, from setting up the environment to cutting a
+release, is covered in the
+[development guide](https://github.com/jeffheaton/heaton-life/blob/main/python/DEVELOPMENT.md):
+the lint, type, and test checks, how the specifications and conformance vectors
+shape every change, adding a family, the tools, and the release workflows.

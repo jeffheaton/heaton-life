@@ -1,57 +1,77 @@
 # heaton-life
 
-Emergence algorithms — cellular automata, Lenia, fractals, boids, and reaction-diffusion — as a spec-first, multi-language library with an interactive playground.
-
 ![Gallery: one tile per system](docs/gallery.png)
-*Every system in the taxonomy, rendered by `python/tools/gen_gallery.py`. Bottom right: Mandelbrot at zoom 10¹⁴ via perturbation + rebasing.*
+*One tile per system, rendered by the library itself. Bottom right: the Mandelbrot set at a zoom of 10¹⁴.*
 
-```
-Emergence
-├── Cellular Automata
-│   ├── MergeLife
-│   ├── Life-like
-│   ├── Elementary
-│   ├── Cyclic
-│   └── Wireworld
-├── Lenia
-│   ├── Classic
-│   ├── Asymptotic
-│   └── Flow
-├── Fractals
-│   ├── Mandelbrot
-│   ├── Julia
-│   ├── Burning Ship
-│   └── Newton
-├── Boids
-│   └── Reynolds
-└── Reaction-Diffusion
-    └── Gray-Scott
-```
+heaton-life is a library for exploring **emergence**: simple rules that give rise to
+complex, organic-looking behavior. It brings the classic systems of artificial life
+together in one place, with one consistent way to set them up, step them, and render
+them:
+
+| Family | Systems |
+|---|---|
+| Cellular automata | MergeLife, Life-like (Conway's Life and every other B/S rule), Elementary, Cyclic, Wireworld |
+| Lenia | Classic, Asymptotic, Flow |
+| Fractals | Mandelbrot, Julia, Burning Ship, Newton, with perturbation deep zoom far beyond float64 |
+| Boids | Reynolds flocking in 2D and 3D |
+| Reaction-diffusion | Gray-Scott |
+
+It also includes a genetic algorithm that evolves new MergeLife rules, and a
+rendering pipeline that turns any system into still images, animated GIFs, or MP4s.
+
+What makes heaton-life different is that it is **specification first**. Every system
+is defined by a language-neutral spec and pinned by a set of conformance vectors, and
+two independent implementations, Python and .NET, are held to the same vectors. The
+same parameters and seed give the same run in either language, which makes results
+reproducible and lets the implementations check each other.
+
+## Get the library
+
+- **Python**: `pip install heaton-life`. See the [Python README](python/README.md) for
+  the API and a quick start, or open the
+  [intro notebook](python/examples/heaton_life_intro.ipynb) in Colab. Includes an
+  optional PyQt6 playground for exploring interactively.
+- **.NET**: the `HeatonLife.Core` package on NuGet, a dependency-free
+  `netstandard2.1` assembly that runs anywhere .NET does, including Unity and IL2CPP.
+  See the [.NET README](dotnet/README.md).
+
+## Apps
+
+**Heaton Life**, an app built on this library, is coming soon: a mobile app for
+iPhone, iPad, and Android, and desktop applications for Windows and Mac. It is the
+easiest way to play with these systems, and the place where MergeLife
+experimentation gets the most attention. The app is developed separately; this
+repository holds the library it runs on.
 
 ## Repository layout
 
 | Path | Contents |
 |---|---|
-| [`spec/`](spec/) | Language-neutral algorithm specifications — the source of truth both implementations conform to |
-| [`vectors/`](vectors/) | Golden conformance vectors (params + expected states) shared by all implementations |
-| [`python/`](python/) | Python implementation (NumPy) + PyQt6 playground app |
+| [`spec/`](spec/) | Language-neutral algorithm specifications, the source of truth every implementation conforms to |
+| [`vectors/`](vectors/) | Golden conformance vectors (parameters plus expected states) shared by all implementations |
+| [`python/`](python/) | Python implementation (NumPy), the playground, the intro notebook, and the [development guide](python/DEVELOPMENT.md) |
 | [`dotnet/`](dotnet/) | C#/.NET implementation (netstandard2.1 core, full parity with Python) |
 | [`ROADMAP.md`](ROADMAP.md) | Phased implementation plan |
 
 ## Design principles
 
-- **Spec first.** Each family is defined by its math (gather → respond → integrate), its parameters, and its conformance vectors — never by an implementation's idioms.
-- **Deterministic replay.** `(params, seed)` fully determines a run. The RNG (PCG32) is pinned in the spec; discrete CAs are specified in integer math and must match bit-for-bit across languages.
-- **Params in, frames out.** Every system produces NumPy/array frames; one rendering pipeline serves all families.
-- **Precision is a contract, not a retrofit.** Fractal viewports carry arbitrary-precision centers from day one (see [`spec/deep-zoom.md`](spec/deep-zoom.md)).
+- **Spec first.** Each family is defined by its math (gather, respond, integrate), its
+  parameters, and its conformance vectors, never by an implementation's idioms.
+- **Deterministic replay.** Parameters and a seed fully determine a run. The random
+  number generator (PCG32) is pinned in the spec, and the discrete automata are
+  specified in integer math so every language produces identical states.
+- **Params in, frames out.** Every system produces array frames; one rendering
+  pipeline serves all families.
+- **Precision is a contract, not a retrofit.** Fractal viewports carry
+  arbitrary-precision centers from day one (see [`spec/deep-zoom.md`](spec/deep-zoom.md)).
 
 ## Status
 
-Every family in the taxonomy is implemented in Python with specs, conformance
-vectors, and playground support. The .NET port has reached full library parity:
-every family, the colormap pipeline, and the MergeLife evolver replay the shared
-vectors (bit-exact tiers exactly, ε tiers within tolerance; MergeLife is
-byte-identical with the upstream engines). See [ROADMAP.md](ROADMAP.md).
+Every family above is implemented in Python with specs, conformance vectors, and
+playground support. The .NET port has full library parity: every family, the
+colormap pipeline, and the MergeLife evolver replay the shared vectors (bit-exact
+tiers exactly, epsilon tiers within tolerance; MergeLife is byte-identical with the
+upstream engines). See [ROADMAP.md](ROADMAP.md).
 
 ## License
 
