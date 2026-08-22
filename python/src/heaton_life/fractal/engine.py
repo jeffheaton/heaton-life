@@ -12,6 +12,7 @@ from collections.abc import Callable
 import numpy as np
 from numpy.typing import NDArray
 
+from heaton_life.core.pow10 import pow10
 from heaton_life.core.viewport import Viewport
 
 T0_MAX_ZOOM = 12.0  # beyond this, float64 pixel spacing collapses -> perturbation
@@ -24,9 +25,15 @@ IntArray = NDArray[np.int32]
 
 
 def pixel_scale(size: tuple[int, int], viewport: Viewport) -> float:
-    """Complex-plane distance between adjacent pixel centers (float64)."""
+    """Complex-plane distance between adjacent pixel centers (float64).
+
+    spec/fractals.md "Pixel mapping": one float64 division, one deterministic
+    power (spec/pow10.md), one float64 multiply. Never the historical
+    ``10**(log10(4/width) - zoom)`` — its two libm/numpy transcendentals made
+    the bit-exact tier platform-dependent at fractional zooms.
+    """
     width, _ = size
-    return float(10.0 ** (np.log10(BASE_SPAN / width) - viewport.zoom_log10))
+    return (BASE_SPAN / width) * pow10(-viewport.zoom_log10)
 
 
 def pixel_offsets(size: tuple[int, int], viewport: Viewport) -> ComplexArray:

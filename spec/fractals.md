@@ -8,6 +8,17 @@ Deep-zoom architecture (tiers, perturbation, rebasing): [deep-zoom.md](deep-zoom
 ## Pixel mapping (all families)
 
 - `span_x = 4 / 10^zoom_log10`; pixel scale `ps = span_x / width`; square pixels.
+- **Computed as** `ps = (4.0 / width) · pow10(−zoom_log10)` — one float64
+  division, one deterministic power ([pow10.md](pow10.md)), one float64
+  multiply. The historical expression `10^(log10(4/width) − zoom_log10)` is
+  **forbidden**: its two libm calls made the bit-exact tier silently
+  platform-dependent at fractional zooms (Windows UCRT vs macOS libm differ in
+  the last ulp of `pow` — and numpy's vendored routines differ from both),
+  which is a spec bug this formulation fixes (2026-08-21;
+  `vectors/burning-ship/home-64` and `vectors/mandelbrot/deep-zoom14-48`
+  iterations were regenerated to the deterministic values — the old chain
+  wasn't even exact at integer zooms. `newton/z3-64` and the ε-tier renders
+  survived the ulp shift unchanged).
 - Pixel (row i, col j), row-major, origin top-left:
   `re = center_re + (j + 0.5 − width/2)·ps`, `im = center_im − (i + 0.5 − height/2)·ps`
   (imaginary axis points up).

@@ -29,6 +29,12 @@ This repo's identity is that Python, .NET, and Unity produce **the same output**
 
 ### Float-determinism gotchas (hard-won; do not "clean up")
 
+- **Powers of ten in the fractal pixel scale flow through `spec/pow10.md`'s
+  integer algorithm** (`heaton_life.core.pow10` / C# `Pow10.Compute`), never
+  libm `pow`/`log10` or numpy `10**`. Platform libms differ in the last ulp at
+  fractional zooms (Windows UCRT vs macOS libm vs numpy's vendored routines —
+  measured 2026-08-21 as flipped escape counts in a bit-exact vector), so the
+  historical `10^(log10(4/width) − zoom)` expression is forbidden.
 - NumPy 2.x contracts complex multiplies into FMAs: real = `fma(a,c,−bd)`, imag = `fma(a,d,bc)`. The C# side mirrors this exactly via `FractalEngine.ComplexMul`/`Fma` (software fma — netstandard2.1 has no intrinsic) at the sites where NumPy runs its multiply ufunc, and **only** there. Real-array NumPy ufunc chains never contract across calls, so expression-shape porting elsewhere is safe without fma.
 - `np.round` and the colormap/interp rounding are **half-even** (banker's); C# `Math.Round` default matches.
 - Operation order is spec'd where it matters (e.g. the Gray-Scott Laplacian `((N+S)+W)+E − 4C`); port expression shapes literally.

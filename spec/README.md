@@ -35,6 +35,7 @@ Each family gets one page structured as:
 ## Index
 
 - [rng.md](rng.md) — pinned PCG32 algorithm, known-answer test, draw-order convention
+- [pow10.md](pow10.md) — pinned deterministic 10^x (the fractal pixel scale's power; libm `pow` is forbidden on bit-exact paths)
 - [lifelike.md](lifelike.md) — Life-like CA (bit-exact tier)
 - [elementary.md](elementary.md) — Wolfram elementary CA (bit-exact tier)
 - [cyclic.md](cyclic.md) — cyclic CA (bit-exact tier)

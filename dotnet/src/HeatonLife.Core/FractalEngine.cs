@@ -19,9 +19,15 @@ namespace HeatonLife
 
         public const double BaseSpan = 4.0;
 
-        /// <summary>Complex-plane distance between adjacent pixel centers (float64).</summary>
+        /// <summary>
+        /// Complex-plane distance between adjacent pixel centers (float64).
+        /// spec/fractals.md "Pixel mapping": one float64 division, one
+        /// deterministic power (spec/pow10.md), one float64 multiply. Never the
+        /// historical Math.Pow(10, Math.Log10(4/width) - zoom) — its two libm
+        /// calls made the bit-exact tier platform-dependent at fractional zooms.
+        /// </summary>
         public static double PixelScale(int width, Viewport viewport) =>
-            Math.Pow(10.0, Math.Log10(BaseSpan / width) - viewport.ZoomLog10);
+            (BaseSpan / width) * Pow10.Compute(-viewport.ZoomLog10);
 
         /// <summary>Per-pixel real offset from the viewport center for column x.</summary>
         public static double OffsetRe(int x, int width, double pixelScale) =>
