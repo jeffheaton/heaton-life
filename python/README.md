@@ -1,20 +1,40 @@
-# heaton-life (Python)
+![heaton-life gallery: one tile per system](https://raw.githubusercontent.com/jeffheaton/heaton-life/main/docs/gallery.png)
 
-NumPy implementation of the heaton-life emergence library, plus the PyQt6 playground.
+# heaton-life
 
-## Install (development)
+[![PyPI version](https://badge.fury.io/py/heaton-life.svg)](https://pypi.org/project/heaton-life/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](https://github.com/jeffheaton/heaton-life/blob/main/LICENSE)
 
-```bash
-pip install -e ".[dev,playground]"
+Emergence algorithms — cellular automata (MergeLife, Life-like, Elementary, Cyclic,
+Wireworld), Lenia (classic, asymptotic, flow), escape-time fractals with perturbation
+deep zoom (Mandelbrot, Julia, Burning Ship, Newton), Reynolds boids, and Gray-Scott
+reaction-diffusion — as a NumPy library with one rendering pipeline, a MergeLife
+genetic evolver, and an optional PyQt6 playground.
+
+Every system is defined by a language-neutral specification and pinned by golden
+conformance vectors: `(params, seed)` fully determines a run, the random number
+generator (PCG32) is part of the contract, and the discrete automata match the .NET
+implementation bit for bit. The specifications and vectors live in the
+[heaton-life repository](https://github.com/jeffheaton/heaton-life).
+
+# Install
+
+Install from [PyPI](https://pypi.org/project/heaton-life/).
+
+```
+pip install heaton-life
 ```
 
-Extras: `playground` (PyQt6 app), `precision` (gmpy2 for fast deep zoom), `video` (MP4 export), `fast` (numba kernels).
+Extras: `heaton-life[playground]` (the PyQt6 app), `[precision]` (gmpy2 for fast
+deep-zoom reference orbits; an mpmath fallback is built in), `[video]` (MP4 export),
+`[fast]` (numba kernels).
 
-## Quick start (working today)
+# Sample Code
 
 ```python
 import heaton_life as hl
 
+# A Life-like automaton from a random soup, rendered to an animated GIF.
 sim = hl.ca.LifeLike("B3/S23", size=(256, 256), init="soup", seed=42)
 hl.render.animate(sim, steps=500, cmap="phosphor").save("life.gif")
 
@@ -38,17 +58,32 @@ best = Evolver(size=(64, 64), population_size=20, seed=42).run(max_evals=200)
 print(best.genome, best.score)
 ```
 
-## Playground
+# Playground
 
-```bash
-pip install -e ".[playground]"
+```
+pip install "heaton-life[playground]"
 heaton-life                        # or: python -m heaton_life.playground
 ```
 
 Space = play/pause, N = single step, R = reset, Ctrl+S = save PNG. The parameter
 form is generated from each family's params dataclass — new families get a UI for free.
 
-## Layout
+# Helpful Links
+
+- [Repository](https://github.com/jeffheaton/heaton-life) — specifications, conformance vectors, and the .NET implementation
+- [Algorithm specifications](https://github.com/jeffheaton/heaton-life/tree/main/spec)
+- [Bug tracker](https://github.com/jeffheaton/heaton-life/issues)
+
+# Development
+
+```
+pip install -e ".[dev,playground]"
+ruff check src tests tools
+mypy
+pytest -q
+```
+
+Layout:
 
 ```
 src/heaton_life/

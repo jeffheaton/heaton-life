@@ -10,17 +10,20 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-authors = [{ name = "Jeff Heaton" }]
+authors = [{ name = "Jeff Heaton", email = "jeff@jeffheaton.com" }]
 keywords = ["cellular-automata", "lenia", "fractals", "boids", "reaction-diffusion", "mergelife", "emergence", "artificial-life"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Education",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Typing :: Typed",
+    "Natural Language :: English",
     "Topic :: Scientific/Engineering :: Artificial Life",
     "Topic :: Scientific/Engineering :: Visualization",
+    "Operating System :: OS Independent",
 ]
 
 dependencies = [
@@ -30,7 +33,10 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/jeffheaton/heaton-life"
+Homepage = "https://github.com/jeffheaton/heaton-life"
+Documentation = "https://github.com/jeffheaton/heaton-life/tree/main/spec"
+Source = "https://github.com/jeffheaton/heaton-life"
+"Bug Tracker" = "https://github.com/jeffheaton/heaton-life/issues"
 
 [project.optional-dependencies]
 playground = ["PyQt6>=6.6"]
