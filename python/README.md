@@ -6,16 +6,19 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](https://github.com/jeffheaton/heaton-life/blob/main/LICENSE)
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jeffheaton/heaton-life/blob/main/python/examples/heaton_life_intro.ipynb)
 
-Emergence algorithms — cellular automata (MergeLife, Life-like, Elementary, Cyclic,
-Wireworld), Lenia (classic, asymptotic, flow), escape-time fractals with perturbation
-deep zoom (Mandelbrot, Julia, Burning Ship, Newton), Reynolds boids, and Gray-Scott
-reaction-diffusion — as a NumPy library with one rendering pipeline, a MergeLife
-genetic evolver, and an optional PyQt6 playground.
+heaton-life is a Python library for exploring emergence: simple rules that give rise to
+complex, organic-looking behavior. It brings together cellular automata (MergeLife,
+Life-like, Elementary, Cyclic, and Wireworld), three flavors of Lenia, escape-time
+fractals with deep zoom (Mandelbrot, Julia, Burning Ship, and Newton), Reynolds boids,
+and Gray-Scott reaction-diffusion under one consistent API. Every system steps and
+renders the same way, so a few lines of NumPy-backed code give you a still image, an
+animated GIF, or an MP4. A genetic evolver can search for new MergeLife rules, and an
+optional PyQt6 playground lets you explore everything interactively.
 
-Every system is defined by a language-neutral specification and pinned by golden
-conformance vectors: `(params, seed)` fully determines a run, the random number
-generator (PCG32) is part of the contract, and the discrete automata match the .NET
-implementation bit for bit. The specifications and vectors live in the
+Results are reproducible by design. Each system follows a written specification and a
+set of conformance vectors, so the same parameters and seed always give the same run,
+and the library's .NET implementation is held to the same vectors. The specifications,
+the vectors, and the .NET port live in the
 [heaton-life repository](https://github.com/jeffheaton/heaton-life).
 
 # Install
