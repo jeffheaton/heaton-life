@@ -20,33 +20,6 @@ obj/
 *.suo
 .vs/
 
-# Unity (the app lives in heaton-life-unity/; .meta files are tracked, caches are not)
-Library/
-Temp/
-.utmp/
-Logs/
-UserSettings/
-MemoryCaptures/
-Recordings/
-# Unity build output
-heaton-life-unity/build/
-heaton-life-unity/Build/
-heaton-life-unity/Builds/
-heaton-life-unity/*.apk
-heaton-life-unity/*.aab
-heaton-life-unity/*.unitypackage
-heaton-life-unity/*.app
-# Unity-generated IDE files (regenerated on open; scoped so dotnet/'s real
-# csprojs stay tracked)
-heaton-life-unity/*.csproj
-heaton-life-unity/*.sln
-heaton-life-unity/*.slnx
-heaton-life-unity/.vsconfig
-# Unity crash artifacts
-sysinfo.txt
-*.stackdump
-mono_crash.*.json
-
 # OS / editors
 .DS_Store
 Thumbs.db

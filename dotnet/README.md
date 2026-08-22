@@ -17,7 +17,7 @@ Unity IL2CPP/WebGL/mobile all work.
 | `ISimulation` + frame-source interfaces | ✅ the polymorphic surface a host (playground/Unity) drives |
 | Evolve: paper objective + GA (spec/evolve.md) | ✅ bit-exact, incl. a replayed end-to-end mini evolution run |
 | Patterns: RLE (both dialects), transforms, extract/stamp (spec/patterns.md) | ✅ bit-exact, Golly-compatible |
-| `HeatonLife.Unity` UPM adapter | next |
+| Unity hand-off | ✅ `HeatonLife.Core.dll` built by `python/tools/build_unity_dll.py` for the heaton-life-unity repo, with `InternalsVisibleTo` for its conformance suite and self-check |
 
 ## Layout
 
@@ -44,5 +44,5 @@ vectors decide. Reference-orbit *generation* now runs on the C# side too
 (`ReferenceOrbit`, fixed point over `System.Numerics.BigInteger` — the option
 spec/deep-zoom.md sanctions), so the perturbation tier no longer depends on an
 externally supplied orbit; it still accepts one, which is how the conformance
-replay works. Pinned by regenerating the shipped `orbit.c128` byte for byte. Next: the
-`HeatonLife.Unity` UPM adapter.
+replay works. Pinned by regenerating the shipped `orbit.c128` byte for byte. The Unity app
+(heaton-life-unity, its own repo) consumes this library as a compiled DLL.

@@ -36,7 +36,7 @@ Emergence
 | [`vectors/`](vectors/) | Golden conformance vectors (params + expected states) shared by all implementations |
 | [`python/`](python/) | Python implementation (NumPy) + PyQt6 playground app |
 | [`dotnet/`](dotnet/) | C#/.NET implementation (netstandard2.1 core, full parity with Python) |
-| [`heaton-life-unity/`](heaton-life-unity/) | Unity app + embedded HeatonLife package (source-synced from `dotnet/`, conformance-gated in-editor) |
+| [heaton-life-unity](https://github.com/jeffheaton/heaton-life-unity) | The Unity app, in its own repo; consumes `HeatonLife.Core.dll` built here (`python/tools/build_unity_dll.py`) and replays these vectors in its EditMode gate |
 | [`ROADMAP.md`](ROADMAP.md) | Phased implementation plan |
 
 ## Design principles
