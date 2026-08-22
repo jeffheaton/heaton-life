@@ -8,8 +8,8 @@ name: Build Library (.NET)
 # (--skip-duplicate), so the S3/artifact half is always safe to rerun.
 #
 # Secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION.
-# NuGet.org: a Trusted Publishing policy for package id HeatonLife.Core bound to
-# jeffheaton/heaton-life and this workflow (see dotnet/DEVELOPMENT.md, "Releasing").
+# NuGet.org: a Trusted Publishing policy under the jeffheaton account, bound to
+# jeffheaton/heaton-life and this workflow file (see dotnet/DEVELOPMENT.md, "Releasing").
 
 on:
   workflow_dispatch:
@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Set up .NET SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
@@ -95,7 +95,7 @@ jobs:
 
       - name: Build (Release)
         working-directory: dotnet
-        run: dotnet build HeatonLife.slnx -c Release --no-restore -p:Version=$VERSION
+        run: dotnet build HeatonLife.slnx -c Release --no-restore -p:Version=$VERSION -p:ContinuousIntegrationBuild=true
 
       - name: Run tests
         working-directory: dotnet
@@ -106,7 +106,7 @@ jobs:
 
       - name: Publish test results
         if: always()
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v3
         with:
           name: .NET Test Results
           path: dotnet/TestResults/*.trx
@@ -148,7 +148,9 @@ jobs:
         with:
           name: heaton-life-nupkgs
           retention-days: 7
-          path: dotnet/nupkgs/*.nupkg
+          path: |
+            dotnet/nupkgs/*.nupkg
+            dotnet/nupkgs/*.snupkg
 
       # Trusted Publishing: exchange GitHub's OIDC token for a short-lived NuGet
       # API key (no long-lived secret stored in the repo). Requires a matching
@@ -159,10 +161,18 @@ jobs:
         with:
           user: jeffheaton
 
+      # The .nupkg push carries the .snupkg along only when the main push succeeds,
+      # so the symbols package is pushed explicitly as well: a rerun then recovers
+      # symbols even if the main package already exists (both pushes are no-ops at
+      # an already-published version thanks to --skip-duplicate).
       - name: Push to NuGet.org
         working-directory: dotnet
         run: |
           dotnet nuget push "nupkgs/*.nupkg" \
+            --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+          dotnet nuget push "nupkgs/*.snupkg" \
             --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate

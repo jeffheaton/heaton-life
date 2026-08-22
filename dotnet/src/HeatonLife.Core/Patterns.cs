@@ -7,7 +7,7 @@ namespace HeatonLife
     /// <summary>A decoded RLE pattern: row-major cells plus the header's rule, if any.</summary>
     public sealed class RlePattern
     {
-        public RlePattern(byte[] cells, int width, int height, string rule)
+        public RlePattern(byte[] cells, int width, int height, string? rule)
         {
             Cells = cells;
             Width = width;
@@ -18,7 +18,8 @@ namespace HeatonLife
         public byte[] Cells { get; }
         public int Width { get; }
         public int Height { get; }
-        public string Rule { get; }
+        /// <summary>The header's rule string, or null when the RLE carried no rule.</summary>
+        public string? Rule { get; }
     }
 
     /// <summary>
@@ -43,7 +44,7 @@ namespace HeatonLife
             if (lines.Count == 0)
                 throw new ArgumentException("empty RLE input");
 
-            string rule = null;
+            string? rule = null;
             int declaredW = 0, declaredH = 0;
             string body;
             if (TryParseHeader(lines[0], out declaredW, out declaredH, out rule))
@@ -385,7 +386,7 @@ namespace HeatonLife
         /// enter Wireworld or MergeLife); cyclic patterns must also fit the target's
         /// state count. Returns the rejection reason, or null when stampable.
         /// </summary>
-        public static string Compatible(
+        public static string? Compatible(
             string patternFamily, string targetFamily,
             ReadOnlySpan<byte> patternCells, int targetStates = 0)
         {
@@ -421,7 +422,7 @@ namespace HeatonLife
             return length == 1 ? tag : length.ToString() + tag;
         }
 
-        private static bool TryParseHeader(string line, out int width, out int height, out string rule)
+        private static bool TryParseHeader(string line, out int width, out int height, out string? rule)
         {
             width = height = 0;
             rule = null;

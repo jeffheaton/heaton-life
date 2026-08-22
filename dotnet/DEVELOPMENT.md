@@ -160,9 +160,13 @@ report (advisory), the regenerated `Version.cs`, the Release build, the xunit su
 (published as a test report), then `heaton-life-dotnet-<version>.zip` (DLL + XML
 docs + PDB) as the `heaton-life-dotnet-dll` workflow artifact and a public copy on
 `s3://data.heatonresearch.com/library/`, then `dotnet pack`, whose
-`HeatonLife.Core.<version>.nupkg` is uploaded as the `heaton-life-nupkgs` artifact,
-and finally the push of that package to NuGet.org. Pushes use `--skip-duplicate`, so
-re-running at an already-published version is a no-op rather than an error.
+`HeatonLife.Core.<version>.nupkg` and `.snupkg` (the symbols package, with SourceLink
+back to this repository at the packed commit for every file but the CI-regenerated
+`Version.cs`) are uploaded as the `heaton-life-nupkgs` artifact, and finally the push
+of both to NuGet.org, the symbols package explicitly as well as alongside the main
+package. Pushes use `--skip-duplicate`, so re-running at an already-published version
+is a no-op rather than an error, and a rerun still pushes the symbols if an earlier
+run published the main package without them.
 
 The push uses **Trusted Publishing**, so there is no long-lived API key stored in
 the repository: the `NuGet/login` action exchanges the job's short-lived GitHub OIDC
@@ -194,6 +198,6 @@ Release checklist:
    The same run builds, tests, and publishes. To try a package before it goes
    public, pack it locally (see "The checks") and install it from that folder into
    a fresh project.
-4. Check the run; its `heaton-life-nupkgs` artifact is the exact package that was
-   pushed. NuGet versions are immutable: anything that needs changing after the push
+4. Check the run; its `heaton-life-nupkgs` artifact holds the exact `.nupkg` and
+   `.snupkg` that were pushed. NuGet versions are immutable: anything that needs changing after the push
    becomes the next version.

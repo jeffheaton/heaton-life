@@ -32,11 +32,11 @@ namespace HeatonLife.Tests
             int scale = root.GetProperty("scale").GetInt32();
 
             byte[] input = File.ReadAllBytes(
-                Path.Combine(caseDir, root.GetProperty("input").GetString()));
+                Path.Combine(caseDir, root.GetProperty("input").GetString()!));
             byte[] decoded = PngGrid.DecodeRgb(input, scale, out int width, out int height);
 
             var (expectedWidth, expectedHeight, channels, expected) = Png.Read(
-                Path.Combine(caseDir, root.GetProperty("grid").GetProperty("file").GetString()));
+                Path.Combine(caseDir, root.GetProperty("grid").GetProperty("file").GetString()!));
             Assert.Equal(3, channels);
             Assert.Equal(expectedWidth, width);
             Assert.Equal(expectedHeight, height);

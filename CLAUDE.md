@@ -96,7 +96,9 @@ disagree) and `<Version>` in `HeatonLife.Core.csproj`; bump all three together. 
 tracked `version.py` / `Version.cs` baselines (BUILD 0) exist so the stamp always
 exists in local builds; CI overwrites them. Secrets on the repo: `AWS_ACCESS_KEY_ID`,
 `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `PYPI_API_TOKEN`; NuGet needs a Trusted
-Publishing policy for `HeatonLife.Core` bound to this repo and that workflow.
+Publishing policy under the `jeffheaton` NuGet.org account, bound to
+`jeffheaton/heaton-life` and the workflow file `build-lib-dotnet.yml` (policies are
+account-level, not per package; see dotnet/DEVELOPMENT.md, "Releasing").
 
 ## Code Style
 

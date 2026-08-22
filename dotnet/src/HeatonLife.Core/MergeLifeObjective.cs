@@ -126,7 +126,7 @@ namespace HeatonLife
         /// </summary>
         public static (double Score, double TimeStep) ScoreGenome(
             string genome,
-            IReadOnlyList<ObjectiveRule> objective = null,
+            IReadOnlyList<ObjectiveRule>? objective = null,
             int cycles = 5,
             int width = 100,
             int height = 100,

@@ -266,13 +266,14 @@ namespace HeatonLife
         }
 
         private const uint Crc32Seed = 0xFFFFFFFFu;
-        private static uint[] _crcTable;
+        private static uint[]? _crcTable;
 
         private static uint Crc32(byte[] data, int offset, int count, uint crc)
         {
-            if (_crcTable == null)
+            var table = _crcTable;
+            if (table == null)
             {
-                var table = new uint[256];
+                table = new uint[256];
                 for (uint n = 0; n < 256; n++)
                 {
                     uint c = n;
@@ -283,7 +284,7 @@ namespace HeatonLife
                 _crcTable = table;
             }
             for (int i = offset; i < offset + count; i++)
-                crc = _crcTable[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
+                crc = table[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
             return crc;
         }
     }

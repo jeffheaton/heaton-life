@@ -33,7 +33,7 @@ namespace HeatonLife.Tests
                     {
                         string input = File.ReadAllText(Path.Combine(caseDir, root.GetProperty("input").GetString()!));
                         RlePattern decoded = Patterns.RleDecode(input);
-                        string expectedRule = root.GetProperty("rule").ValueKind == JsonValueKind.Null
+                        string? expectedRule = root.GetProperty("rule").ValueKind == JsonValueKind.Null
                             ? null
                             : root.GetProperty("rule").GetString();
                         Assert.Equal(expectedRule, decoded.Rule);

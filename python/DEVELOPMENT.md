@@ -182,7 +182,8 @@ runs on push.
    wheel, `twine check`, a workflow artifact named `heaton-life-wheel`, and a copy
    at `s3://data.heatonresearch.com/library/`. The S3 copy is public, for example
    `https://s3.us-east-1.amazonaws.com/data.heatonresearch.com/library/heaton_life-1.0.0-py3-none-any.whl`,
-   which is how the intro notebook installs the library before a PyPI release.
+   which lets a build be tried before it is deployed to PyPI (the intro notebook
+   installed from that URL until 1.0.0; it now installs from PyPI).
 2. **Deploy Library to PyPI** (`.github/workflows/deploy-lib.yml`): takes a wheel
    file name, downloads it from that S3 prefix, and uploads it to PyPI with twine.
    Splitting build from deploy means a build can be inspected before the
@@ -204,7 +205,7 @@ Release checklist:
    ```
 
    Check the run, then download the `heaton-life-wheel` artifact and try it in a
-   fresh environment (or run the intro notebook against the S3 copy).
+   fresh environment (or point the intro notebook's install cell at the S3 wheel URL).
 4. Dispatch the deploy with the wheel's file name:
 
    ```

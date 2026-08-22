@@ -14,6 +14,12 @@
          CS1591 stays off: undocumented public members are fine; spec-relevant docs exist. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- Symbols: a .snupkg with the portable PDB is packed beside the .nupkg and pushed
+         with it. SourceLink (built into the SDK) maps the PDB back to this repository at
+         the packed commit (every file but the CI-regenerated Version.cs), and the
+         workflow builds with ContinuousIntegrationBuild so the paths are deterministic. -->
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
   <!-- NuGet package metadata (package id "HeatonLife.Core" — the assembly name matches) -->
