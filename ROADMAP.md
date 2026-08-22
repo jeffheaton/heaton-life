@@ -89,7 +89,8 @@ Per `spec/deep-zoom.md` (contract already in core since Phase 1):
   numba kernels; floatexp tier beyond zoom 1e290; BLA iteration skipping.
 - Boids spatial hash if flocks ever need >2k; Lenia multi-channel; Orbium and
   friends as stampable Lenia creatures; MP4/GIF export buttons in the playground.
-- PyPI release (licensed Apache-2.0; publishing needs the maintainer's PyPI account).
+- First PyPI / NuGet release: the manual Build Library workflows build and publish
+  the packages (python/README.md and dotnet/README.md, "Releasing").
 
 ## Cross-cutting rules
 

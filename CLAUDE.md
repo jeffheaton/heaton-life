@@ -49,7 +49,7 @@ The Python component uses `python/.venv` (note: `.venv`, not `venv`). **Never in
 ```bash
 cd python
 
-# Lint, types, tests — exactly what CI runs
+# Lint, types, tests — what the Build Library workflow runs
 .venv/bin/ruff check src tests tools
 .venv/bin/mypy
 QT_QPA_PLATFORM=offscreen .venv/bin/pytest -q
@@ -76,6 +76,27 @@ dotnet test dotnet --nologo
 dotnet build dotnet/src/HeatonLife.Core -c Release
 ```
 
+
+## CI / releases (manually dispatched, the dynaface shape)
+
+Nothing runs on push. Three `workflow_dispatch` workflows in `.github/workflows/`:
+
+- **Build Library** (`build-lib.yml`, Python): ruff/mypy reports (advisory), pytest
+  with JUnit + coverage (fatal), a regenerated `src/heaton_life/version.py` build
+  stamp, the wheel → `twine check` → artifact → `s3://data.heatonresearch.com/library/`.
+- **Deploy Library to PyPI** (`deploy-lib.yml`): takes a wheel file name, pulls it
+  from that S3 prefix, uploads to PyPI.
+- **Build Library (.NET)** (`build-lib-dotnet.yml`): `dotnet format` gate, vulnerable
+  package report (advisory), a regenerated `src/HeatonLife.Core/Version.cs`, Release
+  build, xunit with TRX, the DLL zip → artifact → S3, and `dotnet pack` → NuGet.org via
+  Trusted Publishing (OIDC; no stored API key).
+
+Versions: `python/pyproject.toml` ↔ `heaton_life.__version__` (the build fails if they
+disagree) and `<Version>` in `HeatonLife.Core.csproj`; bump all three together. The
+tracked `version.py` / `Version.cs` baselines (BUILD 0) exist so the stamp always
+exists in local builds; CI overwrites them. Secrets on the repo: `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `PYPI_API_TOKEN`; NuGet needs a Trusted
+Publishing policy for `HeatonLife.Core` bound to this repo and that workflow.
 
 ## Code Style
 

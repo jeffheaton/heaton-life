@@ -5,6 +5,8 @@
     <LangVersion>9.0</LangVersion>
     <Nullable>enable</Nullable>
     <RootNamespace>HeatonLife</RootNamespace>
+    <!-- Source of truth for the Build Library (.NET) workflow's version stamping
+         (mirrors python/pyproject.toml). Bump this for releases. -->
     <Version>1.0.0</Version>
     <Description>Emergence algorithms: cellular automata, Lenia, fractals, boids, reaction-diffusion. Spec-first port of heaton-life; conforms to the shared vectors.</Description>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
@@ -13,6 +15,21 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
+
+  <!-- NuGet package metadata (package id "HeatonLife.Core" — the assembly name matches) -->
+  <PropertyGroup>
+    <PackageId>HeatonLife.Core</PackageId>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Authors>Jeff Heaton</Authors>
+    <PackageTags>cellular-automata;lenia;fractals;boids;reaction-diffusion;mergelife;emergence;artificial-life</PackageTags>
+    <PackageProjectUrl>https://github.com/jeffheaton/heaton-life</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/jeffheaton/heaton-life</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="HeatonLife.Core.Tests" />

@@ -44,3 +44,24 @@ vectors decide. Reference-orbit *generation* now runs on the C# side too
 spec/deep-zoom.md sanctions), so the perturbation tier no longer depends on an
 externally supplied orbit; it still accepts one, which is how the conformance
 replay works. Pinned by regenerating the shipped `orbit.c128` byte for byte.
+
+## Releasing
+
+One manually dispatched GitHub workflow, **Build Library (.NET)**
+(`.github/workflows/build-lib-dotnet.yml`), the same shape as dynaface's: a
+`dotnet format` gate, a vulnerable-package report, a regenerated
+`src/HeatonLife.Core/Version.cs` (`HeatonLifeVersion.Version/BuildDate/Build`), the
+Release build, the xunit suite, then `heaton-life-dotnet-<version>.zip` (DLL + XML
+docs + PDB) as a workflow artifact and on `s3://data.heatonresearch.com/library/`, and
+the `HeatonLife.Core` NuGet package pushed to NuGet.org.
+
+The push uses **Trusted Publishing** — GitHub's OIDC token is exchanged for a
+short-lived key by the `NuGet/login` action, so there is **no long-lived API key
+stored in the repo**. One-time setup on NuGet.org (Account → Trusted Publishing): add
+a policy for package id `HeatonLife.Core` bound to this repository
+(`jeffheaton/heaton-life`) and the `Build Library (.NET)` workflow. To cut a release,
+bump `<Version>` in `src/HeatonLife.Core/HeatonLife.Core.csproj` (in step with
+`python/pyproject.toml`), then dispatch the workflow. Pushes use `--skip-duplicate`,
+so re-running at an already-published version is a no-op rather than an error.
+Repository secrets for the S3 copy: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
+`AWS_DEFAULT_REGION`.

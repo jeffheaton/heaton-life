@@ -1,0 +1,43 @@
+name: Deploy Library to PyPI
+
+# Second half of the Python release (dynaface's deploy-lib.yml): take a wheel
+# that Build Library already put on S3 and upload it to PyPI. Separating the two
+# means a build can be inspected before anything irreversible happens.
+#
+# Secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION, PYPI_API_TOKEN.
+
+on:
+  workflow_dispatch:
+    inputs:
+      whl_file:
+        description: 'Wheel file name to deploy (e.g., heaton_life-1.0.0-py3-none-any.whl)'
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifact from S3
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+        run: |
+          mkdir -p dist
+
+          echo "Downloading ${{ github.event.inputs.whl_file }} from S3..."
+          aws s3 cp s3://data.heatonresearch.com/library/${{ github.event.inputs.whl_file }} dist/ || {
+            echo "Error: File ${{ github.event.inputs.whl_file }} does not exist in S3."
+            exit 1
+          }
+
+      - name: Deploy to PyPI
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          # Upgrade packaging too: the wheel uses Metadata-Version 2.4 (PEP 639
+          # License-File), which the runner's system packaging (24.0) doesn't
+          # recognize, causing twine to reject a valid field. packaging>=24.2 fixes it.
+          pip install --upgrade twine "packaging>=24.2"
+          twine upload --non-interactive -u __token__ -p "$PYPI_API_TOKEN" dist/*

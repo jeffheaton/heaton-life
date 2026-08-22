@@ -37,7 +37,7 @@ playground = ["PyQt6>=6.6"]
 precision = ["gmpy2>=2.1"]   # fast deep-zoom reference orbits; mpmath fallback is built in
 video = ["imageio[ffmpeg]>=2.31"]
 fast = ["numba>=0.59"]
-dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10", "gmpy2>=2.1"]
+dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.4", "mypy>=1.10", "gmpy2>=2.1"]
 
 [project.gui-scripts]
 heaton-life = "heaton_life.playground:main"

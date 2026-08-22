@@ -59,7 +59,7 @@
 			}
 		]
 	},
-	// Mirrors the CI jobs (.github/workflows/ci.yml)
+	// Mirrors the checks the manual Build Library workflows run (.github/workflows/build-lib*.yml)
 	"tasks": {
 		"version": "2.0.0",
 		"tasks": [
