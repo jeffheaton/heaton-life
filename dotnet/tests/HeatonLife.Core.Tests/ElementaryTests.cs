@@ -1,3 +1,4 @@
+using System;
 using Xunit;
 
 namespace HeatonLife.Tests
@@ -63,6 +64,37 @@ namespace HeatonLife.Tests
             sim.Step(1); // forces scroll
             diagram = sim.Diagram.ToArray();
             Assert.Equal(row2, Row(diagram, 1)); // scrolled up by one
+        }
+
+        /// <summary>
+        /// A tape restored together with its diagram is the same world the diagram
+        /// came from — it shows the same picture, steps on identically, and Reset
+        /// replays the tape from a fresh diagram like the tape-only restore does.
+        /// </summary>
+        [Fact]
+        public void SetStateWithDiagramRestoresThePicture()
+        {
+            var sim = new Elementary(110, 16, 8);
+            sim.Step(12); // past the diagram's height: it has scrolled
+            byte[] tape = sim.State.ToArray();
+            byte[] diagram = sim.Diagram.ToArray();
+
+            var restored = new Elementary(110, 16, 8);
+            restored.SetState(tape, diagram, 12);
+            Assert.Equal(12, restored.Generation);
+            Assert.Equal(tape, restored.State.ToArray());
+            Assert.Equal(diagram, restored.Diagram.ToArray());
+
+            sim.Step(2);
+            restored.Step(2);
+            Assert.Equal(sim.Diagram.ToArray(), restored.Diagram.ToArray());
+
+            restored.Reset();
+            Assert.Equal(0, restored.Generation);
+            Assert.Equal(tape, restored.State.ToArray());
+            Assert.Equal(tape, restored.Diagram.ToArray().AsSpan(0, 16).ToArray());
+
+            Assert.Throws<ArgumentException>(() => restored.SetState(tape, new byte[3], 0));
         }
 
         [Fact]

@@ -17,7 +17,9 @@ namespace HeatonLife
     /// concrete family.
     ///
     /// The layout is the one already on disk in shipped saves; it is a storage
-    /// contract, not merely an implementation detail. Do not change it.
+    /// contract, not merely an implementation detail. Do not change it. (Extended
+    /// once, before any release shipped — 2026-08-22: an elementary save carries
+    /// the space-time diagram after the tape, and tape-only saves still load.)
     /// </summary>
     public static class StateCodec
     {
@@ -30,7 +32,7 @@ namespace HeatonLife
                 case Cyclic cyclic: return cyclic.State.ToArray();
                 case Wireworld wire: return wire.State.ToArray();
                 case MergeLife merge: return merge.State.ToArray();
-                case Elementary elementary: return elementary.State.ToArray();
+                case Elementary elementary: return ElementaryBytes(elementary);
                 case GrayScott gray: return DoubleBytes(gray.State);
                 case LeniaBase lenia: return DoubleBytes(lenia.State);
                 case Boids boids: return DoubleBytes(boids.State);
@@ -54,7 +56,7 @@ namespace HeatonLife
                 case Cyclic cyclic: cyclic.SetState(bytes, generation); break;
                 case Wireworld wire: wire.SetState(bytes, generation); break;
                 case MergeLife merge: merge.SetState(bytes, generation); break;
-                case Elementary elementary: elementary.SetState(bytes, generation); break;
+                case Elementary elementary: LoadElementary(elementary, bytes, generation); break;
                 case GrayScott gray: gray.SetState(BytesToDoubles(bytes), generation); break;
                 case LeniaBase lenia: lenia.SetState(BytesToDoubles(bytes), generation); break;
                 case Boids boids: boids.SetState(BytesToDoubles(bytes), generation); break;
@@ -62,6 +64,39 @@ namespace HeatonLife
                     throw new ArgumentException(
                         $"no state restorer for {sim.GetType().Name}", nameof(sim));
             }
+        }
+
+        /// <summary>
+        /// Elementary: the tape (Width bytes) followed by the space-time diagram
+        /// (Height*Width bytes, row-major 0/1). The diagram is presentation by
+        /// spec/elementary.md, but it is the record of the steps already taken and
+        /// cannot be rebuilt from the tape — a world saved without it reopened as a
+        /// blank canvas. The tape travels explicitly rather than being read back out
+        /// of the diagram so that a world restored from a tape-only save (whose
+        /// diagram is mostly blank) still saves its true tape.
+        /// </summary>
+        private static byte[] ElementaryBytes(Elementary sim)
+        {
+            var bytes = new byte[sim.Width + sim.Diagram.Length];
+            sim.State.CopyTo(bytes);
+            sim.Diagram.CopyTo(bytes.AsSpan(sim.Width));
+            return bytes;
+        }
+
+        /// <summary>Accepts both layouts: tape only (pre-2026-08-22 saves) or tape + diagram.</summary>
+        private static void LoadElementary(Elementary sim, byte[] bytes, int generation)
+        {
+            int width = sim.Width;
+            int full = width + sim.Diagram.Length;
+            if (bytes.Length == width)
+            {
+                sim.SetState(bytes, generation);
+                return;
+            }
+            if (bytes.Length != full)
+                throw new ArgumentException(
+                    $"expected {width} (tape) or {full} (tape + diagram) bytes, got {bytes.Length}");
+            sim.SetState(bytes.AsSpan(0, width), bytes.AsSpan(width), generation);
         }
 
         /// <summary>IEEE-754 doubles as explicit little-endian bytes (8 per value).</summary>

@@ -100,6 +100,53 @@ namespace HeatonLife.Tests
             Assert.Equal(16 * 16 * 3, StateCodec.Save(merge).Length); // RGB
         }
 
+        /// <summary>
+        /// Elementary saves carry the space-time diagram after the tape: the diagram
+        /// is what the user sees and cannot be rebuilt from the tape, so a world saved
+        /// without it reopened blank (2026-08-22). Tape-only saves — the layout before
+        /// then — still load, with the diagram restarting in the generation's row.
+        /// </summary>
+        [Fact]
+        public void ElementarySavesTheDiagramAndStillLoadsTapeOnlySaves()
+        {
+            var sim = new Elementary(30, 16, 8);
+            sim.Step(5);
+            byte[] saved = StateCodec.Save(sim);
+            Assert.Equal(16 + 16 * 8, saved.Length);
+            Assert.Equal(sim.State.ToArray(), saved.AsSpan(0, 16).ToArray());
+            Assert.Equal(sim.Diagram.ToArray(), saved.AsSpan(16).ToArray());
+
+            var restored = new Elementary(30, 16, 8);
+            StateCodec.Load(restored, saved, 5);
+            Assert.Equal(5, restored.Generation);
+            Assert.Equal(sim.State.ToArray(), restored.State.ToArray());
+            Assert.Equal(sim.Diagram.ToArray(), restored.Diagram.ToArray());
+
+            // Tape only, at a generation inside the diagram: the tape sits in its row.
+            var legacy = new Elementary(30, 16, 8);
+            StateCodec.Load(legacy, sim.State.ToArray(), 5);
+            Assert.Equal(5, legacy.Generation);
+            Assert.Equal(sim.State.ToArray(), legacy.State.ToArray());
+            byte[] diagram = legacy.Diagram.ToArray();
+            for (int row = 0; row < 8; row++)
+            {
+                byte[] expected = row == 5 ? sim.State.ToArray() : new byte[16];
+                Assert.Equal(expected, diagram.AsSpan(row * 16, 16).ToArray());
+            }
+            legacy.Step(3);
+            restored.Step(3);
+            Assert.Equal(restored.State.ToArray(), legacy.State.ToArray());
+
+            // Tape only, past the diagram's height: the tape sits in the last row.
+            var scrolled = new Elementary(30, 16, 8);
+            StateCodec.Load(scrolled, sim.State.ToArray(), 100);
+            Assert.Equal(100, scrolled.Generation);
+            Assert.Equal(sim.State.ToArray(), scrolled.Diagram.ToArray().AsSpan(7 * 16, 16).ToArray());
+
+            Assert.Throws<ArgumentException>(
+                () => StateCodec.Load(new Elementary(30, 16, 8), new byte[17], 0));
+        }
+
         [Fact]
         public void MalformedInputIsRejected()
         {

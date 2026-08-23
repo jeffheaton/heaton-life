@@ -7,6 +7,12 @@ Conformance tier: **bit-exact**. Vectors: [`vectors/elementary/`](../vectors/ele
 1-D tape of `width` cells, values `0`/`1`, unsigned bytes. The 2-D space-time diagram is
 presentation (the frame), not state; `height` only sizes that diagram.
 
+A host that *persists a world* must keep the diagram with the tape, though: it is the
+record of the steps already taken and cannot be rebuilt from the tape, so a world
+restored from its tape alone reopens with a blank diagram. The .NET `StateCodec`
+therefore stores `tape ‖ diagram` for elementary (and still loads tape-only saves);
+conformance vectors compare tapes only, as below.
+
 ## Gather / Respond / Integrate
 
 For each cell, form `index = left<<2 | center<<1 | right`; the next value is bit `index`

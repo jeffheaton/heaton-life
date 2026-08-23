@@ -104,12 +104,46 @@ namespace HeatonLife
             });
         }
 
-        /// <summary>Restore a saved tape at a given generation; the diagram restarts from it.</summary>
+        /// <summary>
+        /// Restore a saved tape at a given generation. The diagram restarts from the
+        /// tape, placed in the row a world that had stepped to that generation would
+        /// hold it in (so stepping on continues the picture downward rather than
+        /// leaving a gap); the rows above it are gone. A host that saved the diagram
+        /// should use the overload that takes it.
+        /// </summary>
         public void SetState(ReadOnlySpan<byte> tape, int generation)
         {
             SetState(tape);
+            int row = TapeRow(generation);
+            if (row != 0)
+            {
+                Array.Clear(_diagram, 0, Width);
+                Array.Copy(_tape, 0, _diagram, row * Width, Width);
+            }
             Generation = generation;
         }
+
+        /// <summary>
+        /// Restore a saved tape together with its space-time diagram (Height*Width
+        /// bytes, row-major 0/1) at a given generation. This is what a host that
+        /// persists a world needs: the diagram is the record of the steps already
+        /// taken and cannot be rebuilt from the tape (spec/elementary.md "State"), so
+        /// a world restored from its tape alone reopens blank. Reset replays the tape
+        /// from a fresh diagram, exactly as after the tape-only overload.
+        /// </summary>
+        public void SetState(ReadOnlySpan<byte> tape, ReadOnlySpan<byte> diagram, int generation)
+        {
+            if (diagram.Length != _diagram.Length)
+                throw new ArgumentException(
+                    $"expected {_diagram.Length} diagram cells, got {diagram.Length}");
+            SetState(tape);
+            for (int i = 0; i < diagram.Length; i++)
+                _diagram[i] = (byte)(diagram[i] > 0 ? 1 : 0);
+            Generation = generation;
+        }
+
+        /// <summary>The diagram row that holds the tape at a given generation.</summary>
+        private int TapeRow(int generation) => Math.Min(Math.Max(generation, 0), Height - 1);
 
         private void ResetDiagram()
         {
