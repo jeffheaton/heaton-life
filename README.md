@@ -53,7 +53,8 @@ easiest way to play with these systems, and the place where MergeLife
 experimentation gets the most attention. The app is developed separately; this
 repository holds the library it runs on — and the app's user guides:
 [Heaton Life for Windows & macOS](docs/manual-app.md) and
-[Heaton Life for iPhone, iPad & Android](docs/manual-mobile.md).
+[Heaton Life for iPhone, iPad & Android](docs/manual-mobile.md), plus the app's
+[privacy policy](docs/privacy.md) (it collects nothing).
 
 ## Repository layout
 

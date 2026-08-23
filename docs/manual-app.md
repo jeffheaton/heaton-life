@@ -2,7 +2,7 @@
 
 Heaton Life is a desktop app for Windows and macOS for exploring **emergence** — simple rules that grow complex, organic-looking behavior. It brings the classic systems of artificial life together in one place: cellular automata (MergeLife, Conway-style Life, Elementary, Cyclic, Wireworld), three flavors of Lenia, Gray-Scott reaction-diffusion, flocking boids, and deep-zoom fractals (Mandelbrot, Julia, Burning Ship, Newton). Create worlds, paint and edit them with pattern tools, breed brand-new MergeLife rules with the built-in evolver, and keep everything in your worlds library.
 
-Everything runs and stays on your computer — nothing is uploaded anywhere.
+Everything runs and stays on your computer — nothing is uploaded anywhere (see the [privacy policy](privacy.md)).
 
 > **Keyboard shortcuts** are written as `Ctrl+O / ⌘O`: use the **Ctrl** key on Windows and the **Command (⌘)** key on a Mac.
 
