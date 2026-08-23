@@ -169,7 +169,7 @@ Heaton Life reads the standard **RLE** pattern format used across the Life commu
 **Snapshot** on the transport bar (or on a fractal's status bar) saves a PNG of the current view, named `heatonlife-<family>-<date>-<time>.png`; the status line confirms with `saved …`, and the desktop app then shows you the file — selected in a Finder window on macOS, in Explorer on Windows. Snapshots go to the app's **Snapshots** folder:
 
 - **Windows:** `%USERPROFILE%\AppData\LocalLow\Jeff Heaton\Heaton Life\Snapshots`
-- **macOS:** `~/Library/Application Support/Jeff Heaton/Heaton Life/Snapshots` — for the App Store version, inside the app's container: `~/Library/Containers/com.heatonresearch.heatonlife/Data/Library/Application Support/Jeff Heaton/Heaton Life/Snapshots` (in Finder, hold **Option** and choose **Go > Library**).
+- **macOS (App Store version):** inside the app's container, `~/Library/Containers/com.heatonresearch.heatonlife/Data/Library/Application Support/com.heatonresearch.heatonlife/Snapshots` — the app opens a Finder window on the file for you, so you rarely need the path (to browse there by hand, hold **Option** in Finder and choose **Go > Library**).
 
 Your worlds library and pattern zoo live beside that folder. Everything stays on your computer.
 
