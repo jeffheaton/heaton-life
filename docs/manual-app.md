@@ -189,7 +189,7 @@ Navigation is map-style:
 
 The status line reads out the current zoom and center, for example `zoom 1.0e5x   center -0.745, 0.112`. Zoom goes to 10¹² — a trillion times — with the center tracked precisely enough that the image never smears at depth. Deep frames take longer: a **rendering…** chip shows the percentage done, with a **Cancel** button that abandons the frame and returns the iteration budget to its automatic setting.
 
-In the settings panel: **Preset**, **Colormap**, and **Max iter**, the iteration budget. Heaton Life raises the budget automatically as you go deeper; once you move the slider by hand it stays where you put it, which is the usual reason a frame takes forever — Cancel resets it. Julia worlds add the constant **c (re)** and **c (im)**; Newton adds the polynomial **Degree** and uses its iteration slider directly.
+In the settings panel: **Preset**, **Colormap**, **Max iter** (the iteration budget), and **Name**, which renames the expedition. Heaton Life raises the budget automatically as you go deeper; once you move the slider by hand it stays where you put it, which is the usual reason a frame takes forever — Cancel resets it. Julia worlds add the constant **c (re)** and **c (im)**; Newton adds the polynomial **Degree** and uses its iteration slider directly.
 
 ## Evolving MergeLife Rules
 
