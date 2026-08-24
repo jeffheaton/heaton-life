@@ -1,6 +1,6 @@
 # Heaton Life Privacy Policy
 
-*Effective August 22, 2026. Applies to the Heaton Life app on iOS, iPadOS, macOS, Windows, and Android.*
+*Effective August 23, 2026. Applies to the Heaton Life app on iOS, iPadOS, macOS, Windows, and Android.*
 
 **Heaton Life does not collect, store, or transmit any personal information.** There are no accounts, no analytics, no advertising, no crash reporting, and no tracking of any kind. The app never connects to the internet on its own.
 
@@ -13,7 +13,7 @@ Everything you make in Heaton Life — your worlds library, your pattern zoo, sn
 - **Windows:** under your AppData folder.
 - **Android:** in the app's private storage.
 
-Deleting the app deletes this data. Your device's own backups (iCloud or computer backups on iOS, for example) may include it; that is governed by your device's backup settings, not by the app.
+On iPhone, iPad, and Android, deleting the app deletes this data. On Mac and Windows, uninstalling the app leaves its data folder (and the worlds in it) on your computer — delete that folder too if you want everything gone. Your device's own backups (iCloud or computer backups on iOS, for example) may include this data; that is governed by your device's backup settings, not by the app.
 
 ## Things the app does only when you ask
 
