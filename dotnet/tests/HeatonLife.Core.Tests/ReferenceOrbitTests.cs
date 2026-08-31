@@ -69,8 +69,8 @@ namespace HeatonLife.Tests
         }
 
         /// <summary>
-        /// Decimal centres are parsed WITHOUT passing through double — the reason
-        /// the viewport carries strings at all. A 33-digit centre round-trips to
+        /// Decimal centers are parsed WITHOUT passing through double — the reason
+        /// the viewport carries strings at all. A 33-digit center round-trips to
         /// far more precision than float64 could hold.
         /// </summary>
         [Fact]
@@ -100,15 +100,15 @@ namespace HeatonLife.Tests
         [InlineData("1e")]
         [InlineData("1e+")]
         [InlineData("--1")]
-        public void RejectsMalformedCentres(string bad)
+        public void RejectsMalformedCenters(string bad)
         {
             Assert.Throws<ArgumentException>(() => ReferenceOrbit.ParseFixed(bad, 64));
         }
 
         [Fact]
-        public void ShortOrbitsAreExpectedWhenTheCentreItselfEscapes()
+        public void ShortOrbitsAreExpectedWhenTheCenterItselfEscapes()
         {
-            // A centre well outside the set escapes in a handful of steps, so the
+            // A center well outside the set escapes in a handful of steps, so the
             // orbit is far shorter than max_iter + 1. Both ports clamp the
             // reference index to the last sample, which is why this is legal.
             var (re, im) = ReferenceOrbit.Mandelbrot("2.0", "2.0", 13.0, 500);

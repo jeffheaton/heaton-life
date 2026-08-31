@@ -17,9 +17,9 @@ def test_accepts_long_decimal_strings() -> None:
 
 
 def test_accepts_exact_integers_but_refuses_floats() -> None:
-    """A float centre is REFUSED, not coerced.
+    """A float center is REFUSED, not coerced.
 
-    This class exists so a deep-zoom centre keeps its digits, and a float64
+    This class exists so a deep-zoom center keeps its digits, and a float64
     argument has already lost them before __post_init__ can see it:
     Viewport(-0.743643887037158704752191506114774) used to store
     '-0.7436438870371587', silently dropping 17 digits at exactly the depth where

@@ -135,7 +135,7 @@ namespace HeatonLife.Tests
             Assert.Equal(glider, sim.State.ToArray());
             Assert.Equal(0, sim.Generation);
 
-            // Even with a seed: an explicit grid is not re-randomised.
+            // Even with a seed: an explicit grid is not re-randomized.
             sim.Step(3);
             sim.Reset(777);
             Assert.Equal(glider, sim.State.ToArray());

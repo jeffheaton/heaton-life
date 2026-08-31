@@ -7,7 +7,7 @@ namespace HeatonLife
     /// <summary>
     /// High-precision reference orbits for the perturbation tier
     /// (spec/deep-zoom.md). The only bignum computation in the fractal pipeline:
-    /// one orbit of the viewport centre, so a T1 render needs no externally
+    /// one orbit of the viewport center, so a T1 render needs no externally
     /// supplied data.
     ///
     /// spec/deep-zoom.md "Cross-language notes" sanctions exactly two options for
@@ -45,7 +45,7 @@ namespace HeatonLife
         public const double EscapeAbs2 = 1e100;
 
         /// <summary>
-        /// Working precision for a centre at 10^zoom magnification, plus guard.
+        /// Working precision for a center at 10^zoom magnification, plus guard.
         /// NOTE the truncation: <c>(int)(3.33 * zoom)</c>, matching the Python
         /// reference's <c>int(3.33 * ...)</c>. spec/deep-zoom.md's "Precision" line
         /// says ceil, but the shipped orbit vector was produced by the truncating
@@ -61,24 +61,24 @@ namespace HeatonLife
         /// <see cref="PrecisionBits"/>. Fixed point measures precision from the
         /// binary point, a float from the leading digit, so a value below 1 gets
         /// fewer significant bits here than gmpy2 gives it at the same nominal
-        /// precision. That bites immediately: a centre of ~0.13 held at 110
+        /// precision. That bites immediately: a center of ~0.13 held at 110
         /// fractional bits has ~107 significant bits, and rounding 107 -&gt; 53 in
         /// two steps is only safe above 2*53+2 = 108 — the orbit came out one ulp
         /// off in the imaginary part of Z[1], which for a Mandelbrot orbit IS the
-        /// parsed centre. The headroom makes every sample a correctly rounded
+        /// parsed center. The headroom makes every sample a correctly rounded
         /// double of the true value, which is what gmpy2 at its precision also
         /// produces, so the two agree.
         /// </summary>
         internal const int WorkingGuardBits = 64;
 
-        /// <summary>Z0..ZK for Z -&gt; Z^2 + C with Z0 = 0 and C = the centre.</summary>
+        /// <summary>Z0..ZK for Z -&gt; Z^2 + C with Z0 = 0 and C = the center.</summary>
         public static (double[] Re, double[] Im) Mandelbrot(
             string centerRe, string centerIm, double zoomLog10, int maxIter) =>
             Compute(Kind.Mandelbrot, centerRe, centerIm, zoomLog10, maxIter, 0.0, 0.0);
 
         /// <summary>
-        /// Z0..ZK for Z -&gt; Z^2 + c with Z0 = the centre and c fixed
-        /// (spec/fractals.md: Julia's reference uses the centre's orbit under the
+        /// Z0..ZK for Z -&gt; Z^2 + c with Z0 = the center and c fixed
+        /// (spec/fractals.md: Julia's reference uses the center's orbit under the
         /// same c, and its delta carries no dc term).
         /// </summary>
         public static (double[] Re, double[] Im) Julia(
@@ -97,9 +97,9 @@ namespace HeatonLife
             BurningShip,
         }
 
-        // The orbit depends only on (kind, centre, precision, max_iter, c) — cache
+        // The orbit depends only on (kind, center, precision, max_iter, c) — cache
         // it, as spec/deep-zoom.md "Caching & interactivity" asks, so zooming toward
-        // a fixed centre does not recompute thousands of bignum multiplies per
+        // a fixed center does not recompute thousands of bignum multiplies per
         // frame. Same capacity as the Python reference's lru_cache(maxsize=8).
         private const int CacheCapacity = 8;
         private static readonly object CacheLock = new object();
@@ -237,7 +237,7 @@ namespace HeatonLife
         internal static BigInteger FromDouble(double value, int bits)
         {
             if (double.IsNaN(value) || double.IsInfinity(value))
-                throw new ArgumentException("centre components must be finite", nameof(value));
+                throw new ArgumentException("center components must be finite", nameof(value));
             if (value == 0.0)
                 return BigInteger.Zero;
             long raw = BitConverter.DoubleToInt64Bits(value);
@@ -271,7 +271,7 @@ namespace HeatonLife
         /// This must NOT lean on the built-in <c>(double)BigInteger</c> conversion,
         /// which TRUNCATES the mantissa. That was the whole bug: the orbit came out
         /// one ulp low in the imaginary part of Z[1] — which for a Mandelbrot orbit
-        /// is simply the parsed centre — and extra working precision did not fix it,
+        /// is simply the parsed center — and extra working precision did not fix it,
         /// because the error was in the final conversion, not the arithmetic.
         /// </summary>
         internal static double ToDouble(BigInteger value, int bits)
@@ -332,9 +332,9 @@ namespace HeatonLife
         }
 
         /// <summary>
-        /// Parse a decimal string (the viewport centre format — arbitrary length,
+        /// Parse a decimal string (the viewport center format — arbitrary length,
         /// language-neutral, spec/deep-zoom.md) into fixed point WITHOUT going
-        /// through double, which is the entire point: the centre carries more
+        /// through double, which is the entire point: the center carries more
         /// digits than float64 can hold. Hand-rolled because Core takes no Regex.
         /// </summary>
         internal static BigInteger ParseFixed(string text, int bits)

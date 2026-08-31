@@ -120,4 +120,5 @@ together.
 
 - **Python**: ruff (line length 100), mypy `strict`; params are frozen dataclasses with UI metadata; every family follows the `Simulation` protocol (`step/reset/state/frame`) in `core/protocols.py`.
 - **C#**: Allman braces, XML doc comments that cite the spec page each class implements; `HeatonLife.Core` stays netstandard2.1 with **zero dependencies** (no Regex, no LINQ in Core, no JSON — parsing lives in test projects); zero-allocation step/frame APIs (`WriteFrame` into caller buffers).
+- **American English everywhere** — identifiers, comments, docstrings, XML docs, spec pages, READMEs, commit messages, UI strings. `color`/`center`/`neighbor`/`behavior`/`gray`/`normalize`/`analyze`/`modeled`, never the `-our`/`-tre`/`-ise`/`-yse`/`-lled` British forms. The only exception is spelling dictated by an external API being called (none today).
 - Cross-cutting: nothing merges without its spec page and vectors; the playground/app consumes only the public API — if it needs a hack, the API is wrong.

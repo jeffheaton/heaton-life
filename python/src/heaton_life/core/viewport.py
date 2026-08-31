@@ -15,8 +15,8 @@ from typing import Any
 
 
 def _normalize(value: object, field_name: str) -> str:
-    # A float centre is REFUSED, not coerced. This class exists so a deep-zoom
-    # centre keeps its digits (spec/deep-zoom.md: "decimal strings of arbitrary
+    # A float center is REFUSED, not coerced. This class exists so a deep-zoom
+    # center keeps its digits (spec/deep-zoom.md: "decimal strings of arbitrary
     # length"), and a float64 argument has already lost them before __post_init__
     # can see it -- Viewport(-0.743643887037158704752191506114774) used to store
     # '-0.7436438870371587', silently truncating 17 digits at exactly the depth
@@ -24,7 +24,7 @@ def _normalize(value: object, field_name: str) -> str:
     if isinstance(value, float):
         raise TypeError(
             f"Viewport.{field_name} must be a decimal string, not a float: float64 "
-            f"cannot hold a deep-zoom centre, so {value!r} would silently lose its "
+            f"cannot hold a deep-zoom center, so {value!r} would silently lose its "
             f"tail. Quote it instead: \"{value!r}\"."
         )
     if isinstance(value, decimal.Decimal):

@@ -14,7 +14,7 @@ from heaton_life.rd import GrayScott
 
 
 def test_lifelike_clears_to_dead() -> None:
-    # density 1.0 = every cell alive, so anything blank afterwards was cleared.
+    # density 1.0 = every cell alive, so anything blank afterward was cleared.
     # Deliberately NOT stepped first: B3/S23 kills a saturated grid immediately,
     # which would leave nothing to prove "outside is untouched" with.
     sim = LifeLike("B3/S23", size=(8, 8), init="soup", density=1.0)

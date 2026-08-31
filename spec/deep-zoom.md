@@ -27,7 +27,7 @@ Z₀ = 0;  Zₙ₊₁ = Zₙ² + C        C = viewport center
   escaped at any sane radius, and the cutoff keeps the value inside float64's range.
   So `N = min(escape_iter, max_iter)`, and **`Z[0..N]` may be shorter than
   `max_iter + 1`** — which is why implementations clamp the reference index to the
-  last sample. Vectors record the realised `length` rather than deriving it.
+  last sample. Vectors record the realized `length` rather than deriving it.
 - The orbit values themselves are O(1) magnitude, so they are **stored as complex128** — the array `Z[0..N]` is plain doubles and is exportable (see cross-language notes).
 - Any backend must agree with the others **after rounding each sample to float64**,
   which is the only form the perturbation loop consumes. That is a weaker
@@ -92,7 +92,7 @@ Tier selection is automatic and invisible to the caller; the API surface is iden
 ## Cross-language notes
 
 - The perturbation loop is plain doubles — the same code shape in Python and C#; iteration counts are bit-comparable in T0/T1.
-- C# has no bignum float. Two sanctioned options: fixed-point over `System.Numerics.BigInteger` for the reference orbit (only ~max_iter multiplies — cheap), or consume reference orbits exported in conformance vectors. **C# implements the first** (`ReferenceOrbit`), so it deep-zooms without externally supplied data; it still accepts a supplied orbit, which is how the conformance replay works. Two practical notes for anyone porting it: fixed point measures precision from the binary point rather than the leading digit, so it needs guard bits **beyond** the formula above for centres below 1; and the fixed-point → float64 conversion must round to nearest (.NET's `(double)BigInteger` truncates), or the very first sample lands an ulp off.
+- C# has no bignum float. Two sanctioned options: fixed-point over `System.Numerics.BigInteger` for the reference orbit (only ~max_iter multiplies — cheap), or consume reference orbits exported in conformance vectors. **C# implements the first** (`ReferenceOrbit`), so it deep-zooms without externally supplied data; it still accepts a supplied orbit, which is how the conformance replay works. Two practical notes for anyone porting it: fixed point measures precision from the binary point rather than the leading digit, so it needs guard bits **beyond** the formula above for centers below 1; and the fixed-point → float64 conversion must round to nearest (.NET's `(double)BigInteger` truncates), or the very first sample lands an ulp off.
 - Vectors for fractals include: viewport JSON, iteration-count grids (bit-exact tier), and the reference orbit as raw little-endian f64 pairs.
 
 ## Future work (explicitly out of v1)

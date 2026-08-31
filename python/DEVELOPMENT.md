@@ -51,7 +51,7 @@ python/
 │   ├── ca/             # lifelike, elementary, cyclic, wireworld, mergelife (+ the rule gallery)
 │   ├── lenia/          # kernels, classic, asymptotic, flow
 │   ├── fractal/        # escape-time engine, perturbation engine, mandelbrot, julia, burning_ship, newton
-│   ├── boids/          # reynolds (O(N²) neighbours, capped at 2k boids; a spatial hash is future work)
+│   ├── boids/          # reynolds (O(N²) neighbors, capped at 2k boids; a spatial hash is future work)
 │   ├── rd/             # gray_scott + presets
 │   ├── evolve/         # the MergeLife genetic algorithm and objective
 │   ├── init/           # soup, blob, single, RLE import, built-in patterns, PNG I/O
@@ -111,7 +111,7 @@ heaton-life is spec first and multi-language, and that shapes every change.
   `tools/gen_vectors.py`. The script has no section selector and regenerates every
   family when run except `png-io` (its `write_png_io_cases()` is not called from
   `main()` because PNG bytes are encoder-specific; invoke it by hand when adding a
-  png-io case); afterwards check `git status ../vectors/` and confirm only the
+  png-io case); afterward check `git status ../vectors/` and confirm only the
   new case directories changed (existing vectors must come back byte-identical)
   before committing. `../vectors/mergelife-upstream/` tracks the upstream MergeLife
   project and is never regenerated here.
