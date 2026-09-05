@@ -47,14 +47,13 @@ reproducible and lets the implementations check each other.
 
 ## Apps
 
-**Heaton Life**, an app built on this library, is coming soon: a mobile app for
-iPhone, iPad, and Android, and desktop applications for Windows and Mac. It is the
-easiest way to play with these systems, and the place where MergeLife
-experimentation gets the most attention. The app is developed separately; this
-repository holds the library it runs on — and the app's user guides:
-[Heaton Life for Windows & macOS](docs/manual-app.md) and
-[Heaton Life for iPhone, iPad & Android](docs/manual-mobile.md), plus the app's
-[privacy policy](docs/privacy.md) (it collects nothing).
+**Heaton Life** is a free app built on this library: every system above, on your
+phone, tablet, or desktop. It is the easiest way to play with these systems, and my own MergeLife cellular automation.
+
+### Get Heaton Life
+- [Apple Store - macOS/iPhone/iPad](https://apps.apple.com/us/app/heaton-life/id6804346957)
+- [Microsoft Store - Windows 10/11](https://apps.microsoft.com/detail/9NS1693PBPVN)
+- Google Play - Android: coming soon
 
 ## Repository layout
 
