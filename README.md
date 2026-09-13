@@ -48,12 +48,12 @@ reproducible and lets the implementations check each other.
 ## Apps
 
 **Heaton Life** is a free app built on this library: every system above, on your
-phone, tablet, or desktop. It is the easiest way to play with these systems, and my own MergeLife cellular automation.
+phone, tablet, or desktop. It is the easiest way to play with these systems, and my own MergeLife cellular automaton.
 
 ### Get Heaton Life
 - [Apple Store - macOS/iPhone/iPad](https://apps.apple.com/us/app/heaton-life/id6804346957)
 - [Microsoft Store - Windows 10/11](https://apps.microsoft.com/detail/9NS1693PBPVN)
-- Google Play - Android: coming soon
+- [Google Play - Android](https://play.google.com/store/apps/details?id=com.heatonresearch.heatonlife)
 
 ## Repository layout
 
