@@ -13,6 +13,8 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
+from heaton_life.core import decimal_text
+
 
 def _normalize(value: object, field_name: str) -> str:
     # A float center is REFUSED, not coerced. This class exists so a deep-zoom
@@ -36,9 +38,12 @@ def _normalize(value: object, field_name: str) -> str:
             f"Viewport.{field_name} must be a decimal string (or an exact int), "
             f"got {type(value).__name__}"
         )
+    # One grammar for every consumer (core.decimal_text): Decimal() alone also
+    # accepted "NaN", "Infinity", "1_000" and non-ASCII digits, which the orbit
+    # parse and the C# port reject.
     try:
-        decimal.Decimal(value)
-    except decimal.InvalidOperation:
+        decimal_text.scan(value)
+    except ValueError:
         raise ValueError(f"Viewport.{field_name} is not a valid decimal string: {value!r}") from None
     return value
 

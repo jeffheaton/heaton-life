@@ -37,10 +37,10 @@ Install from [PyPI](https://pypi.org/project/heaton-life/).
 pip install heaton-life
 ```
 
-heaton-life requires Python 3.11 or newer and depends only on NumPy, Pillow, and
-mpmath. Extras: `heaton-life[playground]` (the PyQt6 app), `[precision]` (gmpy2 for
-fast deep-zoom reference orbits; an mpmath fallback is built in), `[video]` (MP4
-export).
+heaton-life requires Python 3.11 or newer and depends only on NumPy and Pillow.
+Extras: `heaton-life[playground]` (the PyQt6 app), `[precision]` (gmpy2 for faster
+deep-zoom reference orbits; plain Python integers give the same orbit otherwise),
+`[video]` (MP4 export).
 
 # Sample Code
 

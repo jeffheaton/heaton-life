@@ -1,0 +1,32 @@
+{
+  "family": "mandelbrot",
+  "outputs": [
+    {
+      "file": "iterations.i32",
+      "kind": "iterations",
+      "shape": [
+        32,
+        32
+      ]
+    }
+  ],
+  "params": {
+    "escape_radius": 1000.0,
+    "max_iter": 1000
+  },
+  "reference_orbit": {
+    "file": "orbit.c128",
+    "length": 500
+  },
+  "size": [
+    32,
+    32
+  ],
+  "spec_version": "0.3.0",
+  "tier": "bit-exact",
+  "viewport": {
+    "center_im": "1e-295",
+    "center_re": "-2",
+    "zoom_log10": 280.0
+  }
+}

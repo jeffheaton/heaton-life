@@ -36,3 +36,14 @@ def test_validate_flags_bad_rule() -> None:
     problem = family.validate(params)
     assert problem is not None
     assert problem[0] == "rule"
+
+
+def test_validate_flags_centers_outside_the_shared_grammar() -> None:
+    # The playground accepts exactly what Viewport and the orbit parse accept
+    # (core.decimal_text); decimal.Decimal() alone let "NaN" and "1_000" through.
+    family = FAMILIES["mandelbrot"]
+    for bad in ("NaN", "Infinity", "1_000", "١٢"):
+        params = family.params_cls.from_dict({"center_re": bad})
+        problem = family.validate(params)
+        assert problem is not None and problem[0] == "center_re", bad
+    assert family.validate(family.params_cls.from_dict({"center_re": "-0.75e0"})) is None

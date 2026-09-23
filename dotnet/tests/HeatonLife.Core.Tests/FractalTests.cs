@@ -31,6 +31,69 @@ namespace HeatonLife.Tests
             }
         }
 
+        /// <summary>
+        /// The software fma is a real fma — one rounding, subnormals included — not just on
+        /// well-scaled operands. T1 calls it as ComplexMul does, Fma(t, dz, -(u * dz')):
+        /// with t of order 1 and dz down to the ~1e-292 offsets of zoom 290 and below;
+        /// and, for Julia (no dc floor), with t as small as dz itself — right after a
+        /// rebase onto the critical orbit W0 = 0, or while dz contracts toward an
+        /// attracting cycle. Before the exact slow path the Dekker form differed from the
+        /// hardware in a third of the tiny-product cases (spec/deep-zoom.md
+        /// "Float-determinism gotchas"). Random bit patterns cover every exponent.
+        /// </summary>
+        [Fact]
+        public void SoftwareFmaMatchesHardwareEverywhere()
+        {
+            var rng = new Pcg32(290);
+            double Unit() => rng.NextU32() / 4294967296.0 * 4.0 - 2.0;
+            void Check(double a, double b, double c, string where)
+            {
+                double expected = Math.FusedMultiplyAdd(a, b, c);
+                double got = FractalEngine.Fma(a, b, c);
+                Assert.True(
+                    BitConverter.DoubleToInt64Bits(expected) == BitConverter.DoubleToInt64Bits(got),
+                    $"fma mismatch ({where}) for ({a:R}, {b:R}, {c:R}): {expected:R} vs {got:R}");
+            }
+
+            // ComplexMul shape, t ~ 1: every T1 depth and on into the subnormals.
+            for (int exp = -20; exp >= -323; exp -= 3)
+            {
+                double scale = Math.Pow(10.0, exp);
+                for (int i = 0; i < 4000; i++)
+                {
+                    double t = Unit(), u = Unit(), dz = Unit() * scale, dz2 = Unit() * scale;
+                    Check(t, dz, -(u * dz2), $"t~1, dz~1e{exp}");
+                }
+            }
+
+            // The near-zero diagonal: t ~ dz, products down through the subnormals.
+            for (int exp = -20; exp >= -170; exp -= 2)
+            {
+                double scale = Math.Pow(10.0, exp);
+                for (int i = 0; i < 4000; i++)
+                {
+                    double t = Unit() * scale, u = Unit() * scale, dz = Unit() * scale, dz2 = Unit() * scale;
+                    Check(t, dz, -(u * dz2), $"t~dz~1e{exp}");
+                }
+            }
+
+            // Arbitrary finite bit patterns, c on its own scale: every exponent pairing.
+            double Any()
+            {
+                long bits = ((long)rng.NextU32() << 32) | rng.NextU32();
+                double x = BitConverter.Int64BitsToDouble(bits & ~(0x7FFL << 52) | ((long)(rng.NextU32() % 2047) << 52));
+                return x;
+            }
+            for (int i = 0; i < 400_000; i++)
+            {
+                double a = Any(), b = Any(), c = Any();
+                if (double.IsInfinity(a * b) || double.IsInfinity(c))
+                    continue;
+                Check(a, b, c, "random bits");
+                Check(a, b, -(a * b), "near cancellation");
+            }
+        }
+
         [Fact]
         public void MandelbrotInteriorNeverEscapes()
         {

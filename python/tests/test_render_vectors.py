@@ -14,7 +14,7 @@ from heaton_life.boids import Boids
 from heaton_life.ca import Cyclic, LifeLike, Wireworld
 from heaton_life.conformance import bytes_to_state
 from heaton_life.core.viewport import Viewport
-from heaton_life.fractal import Mandelbrot, Newton
+from heaton_life.fractal import Julia, Mandelbrot, Newton
 from heaton_life.rd import GrayScott
 from heaton_life.render import apply_colormap, get_colormap
 
@@ -101,6 +101,12 @@ def test_render_vector(case: Path) -> None:
         field: Any
         if meta["sim_family"] == "mandelbrot":
             field = Mandelbrot(max_iter=p["max_iter"], escape_radius=p["escape_radius"])
+        elif meta["sim_family"] == "julia":
+            field = Julia(
+                c=complex(p["c_re"], p["c_im"]),
+                max_iter=p["max_iter"],
+                escape_radius=p["escape_radius"],
+            )
         else:
             field = Newton(degree=p["degree"], max_iter=p["max_iter"])
         viewport = Viewport.from_dict(meta["viewport"])

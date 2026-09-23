@@ -89,7 +89,16 @@ What that means for C# specifically:
 - **NumPy 2.x fuses complex multiplies into FMAs.** The fractal engine mirrors that
   with a software fused multiply-add at exactly the sites where NumPy contracts, and
   only there (`netstandard2.1` has no FMA intrinsic). Do not restructure the complex
-  arithmetic in `FractalEngine` or `Perturbation`.
+  arithmetic in `FractalEngine` or `Perturbation`. The software fma is a real one —
+  Dekker's transforms where they are exact, an exact integer sum rounded once below
+  `|a·b| = 2^-968` (deep Julia gets there) — and a test pins it bitwise against
+  `Math.FusedMultiplyAdd` over every exponent.
+- **The reference orbit is spec'd arithmetic**, not just a result: fixed point with
+  the spec's working precision, ties-away products, one correct rounding per sample
+  (`../spec/deep-zoom.md`, "Reference orbit"). Python runs the same integer operations.
+- **A center's float64 projection** (T0) is the correctly rounded decimal-to-double
+  conversion in `DecimalText` — never `double.Parse`, which Mono and IL2CPP do not
+  guarantee, and never a rounding of the orbit's fixed point.
 - **Rounding is half-even**, which is `Math.Round`'s default, matching `np.round`.
 - **MergeLife's numerics** (stable sort by limit alone, mode-padded neighbor sums,
   the 127/128 percent scaling, floor semantics) are the cross-engine contract with
@@ -110,7 +119,7 @@ meets.
 | Life-like CA + soup init | ✅ bit-exact against `../vectors/lifelike/` |
 | Elementary, Cyclic, Wireworld, MergeLife | ✅ bit-exact; MergeLife also replays `../vectors/mergelife-upstream/` (byte-identical with the upstream engines) |
 | Gray-Scott, Lenia ×3, Boids (ε tier) | ✅ within ε (pure-C# radix-2/Bluestein FFT for Lenia) |
-| Fractals (T0 float64 + T1 perturbation) | ✅ bit-exact incl. the zoom-1e14 deep-zoom replay |
+| Fractals (T0 float64 + T1 perturbation) | ✅ bit-exact incl. the deep-zoom replays (Mandelbrot 1e14, 1e20 with a 256-place center, 1e280; Julia 1e13 with critical-orbit rebasing) and a deep Julia smooth render |
 | Colormaps / render (`../spec/render.md`) | ✅ byte-identical LUTs, frame indexing, per-family `WriteFrame` (incl. boids rasterizer + fractal smooth coloring), RGB/RGBA32 output |
 | `ISimulation` + frame-source interfaces | ✅ the C# side of Python's `Simulation` protocol; the polymorphic surface a host (e.g. a Unity adapter) drives |
 | Evolve: paper objective + GA (`../spec/evolve.md`) | ✅ bit-exact, incl. a replayed end-to-end mini evolution run |
@@ -119,10 +128,12 @@ meets.
 The port landed in the order RNG → Life-like → remaining discrete CAs → continuous
 grids → fractals → boids → render → evolve, each stage with its conformance replay
 green. Reference-orbit *generation* runs on the C# side too (`ReferenceOrbit`,
-fixed point over `System.Numerics.BigInteger`, the option `../spec/deep-zoom.md`
-sanctions), so the perturbation tier does not depend on an externally supplied
-orbit; it still accepts one, which is how the conformance replay works. It is
-pinned by regenerating the shipped `orbit.c128` byte for byte.
+fixed point over `System.Numerics.BigInteger`, the normative arithmetic of
+`../spec/deep-zoom.md` that the Python reference runs as well), so the perturbation
+tier does not depend on an externally supplied orbit; it still accepts one, which is
+how the conformance replay works. The tests regenerate every stored `orbit.c128` and
+`critical.c128` byte for byte, and check the SHA-256 of a 139,166-sample orbit too
+long to ship.
 
 ## Adding a family
 

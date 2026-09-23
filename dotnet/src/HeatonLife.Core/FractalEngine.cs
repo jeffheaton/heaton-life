@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 
 namespace HeatonLife
 {
@@ -87,17 +88,44 @@ namespace HeatonLife
         internal static (double Re, double Im) ComplexMul(double a, double b, double c, double d) =>
             (Fma(a, c, -(b * d)), Fma(a, d, b * c));
 
+        /// <summary>2^-968: below this |a*b| the Dekker product's error term can underflow.</summary>
+        private static readonly double TinyProduct = BitConverter.Int64BitsToDouble(55L << 52);
+
         /// <summary>
-        /// Software fused multiply-add: round(a*b + c) with a single rounding.
-        /// netstandard2.1 has no Math.FusedMultiplyAdd, and Unity must run this, so it
-        /// is built from error-free transforms (Dekker TwoProduct + TwoSum) — plain IEEE
-        /// ops only, valid for the well-scaled magnitudes these iterations produce.
-        /// The test suite pins it bitwise against the hardware intrinsic.
+        /// 2^-914: an addend this large has a half-ulp (even one binade down) above any
+        /// |a*b| &lt; 2^-968, so the correctly rounded sum is the addend itself.
+        /// </summary>
+        private static readonly double DominantAddend = BitConverter.Int64BitsToDouble(109L << 52);
+
+        /// <summary>2^995: at or above this, Veltkamp's split (x * 2^27) or TwoSum can overflow.</summary>
+        private static readonly double HugeOperand = BitConverter.Int64BitsToDouble(2018L << 52);
+
+        private static bool IsFinite(double x) => !double.IsNaN(x) && !double.IsInfinity(x);
+
+        /// <summary>
+        /// Software fused multiply-add: round(a*b + c) with a single rounding, as IEEE 754
+        /// defines it and NumPy's hardware FMA computes it. netstandard2.1 has no
+        /// Math.FusedMultiplyAdd, and Unity must run this, so the common case is built
+        /// from error-free transforms (Dekker TwoProduct + TwoSum) — plain IEEE ops. Those
+        /// are exact only while the product's low bits stay representable, |a*b| &gt;=
+        /// 2^-968; below that the exact sum is formed in integers and rounded once
+        /// (spec/deep-zoom.md "Float-determinism gotchas"). Julia T1 lands there — its
+        /// delta has no dc floor — and the Dekker form differed from the hardware in a
+        /// third of such cases. The test suite pins the whole thing bitwise against the
+        /// hardware intrinsic.
         /// </summary>
         internal static double Fma(double a, double b, double c)
         {
             const double split = 134217729.0; // 2^27 + 1, Veltkamp splitting constant
             double p = a * b;
+            if (a == 0.0 || b == 0.0 || !IsFinite(a) || !IsFinite(b) || !IsFinite(c))
+                return p + c;                                  // an exact signed-zero product, or IEEE's inf/NaN rules
+            double absP = Math.Abs(p);
+            if (absP < TinyProduct)
+                return Math.Abs(c) >= DominantAddend ? c : ExactFma(a, b, c);
+            if (Math.Abs(a) >= HugeOperand || Math.Abs(b) >= HugeOperand
+                || absP >= HugeOperand || Math.Abs(c) >= HugeOperand)
+                return ExactFma(a, b, c);                      // Veltkamp's split or TwoSum would overflow
             double ta = split * a;
             double ahi = ta - (ta - a);
             double alo = a - ahi;
@@ -109,6 +137,51 @@ namespace HeatonLife
             double v = s - p;
             double t = (p - (s - v)) + (c - v); // s + t == p + c
             return s + (t + e);
+        }
+
+        /// <summary>
+        /// round(a*b + c) from the exact integer sum, for finite nonzero a and b and a
+        /// finite c. Rare enough that BigInteger is affordable: it runs only where the
+        /// product has left the range the error-free transforms cover.
+        /// </summary>
+        private static double ExactFma(double a, double b, double c)
+        {
+            Decompose(a, out BigInteger ma, out int ea);
+            Decompose(b, out BigInteger mb, out int eb);
+            BigInteger sum = ma * mb;
+            int exponent = ea + eb;                            // value = sum * 2^exponent
+            if (c != 0.0)
+            {
+                Decompose(c, out BigInteger mc, out int ec);
+                int common = Math.Min(exponent, ec);
+                sum = (sum << (exponent - common)) + (mc << (ec - common));
+                exponent = common;
+                if (sum.IsZero)
+                    return 0.0;                                // exact cancellation: +0 under round-to-nearest
+            }
+            bool negative = sum.Sign < 0;
+            BigInteger magnitude = negative ? -sum : sum;
+            return exponent >= 0
+                ? DecimalText.RatioToDouble(negative, magnitude << exponent, BigInteger.One)
+                : DecimalText.RatioToDouble(negative, magnitude, BigInteger.One << -exponent);
+        }
+
+        /// <summary>A finite double as signed mantissa * 2^exponent, exactly.</summary>
+        private static void Decompose(double value, out BigInteger mantissa, out int exponent)
+        {
+            long bits = BitConverter.DoubleToInt64Bits(value);
+            int field = (int)((bits >> 52) & 0x7FF);
+            long fraction = bits & 0xFFFFFFFFFFFFFL;
+            if (field == 0)
+            {
+                exponent = -1074;                              // subnormal
+            }
+            else
+            {
+                fraction |= 1L << 52;
+                exponent = field - 1075;
+            }
+            mantissa = bits < 0 ? -(BigInteger)fraction : fraction;
         }
 
         /// <summary>

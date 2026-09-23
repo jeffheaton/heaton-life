@@ -174,6 +174,12 @@ namespace HeatonLife.Tests
                         p.GetProperty("degree").GetInt32(),
                         p.GetProperty("max_iter").GetInt32())
                     .Render(width, height, viewport),
+                "julia" => new Julia(
+                        p.GetProperty("c_re").GetDouble(),
+                        p.GetProperty("c_im").GetDouble(),
+                        p.GetProperty("max_iter").GetInt32(),
+                        p.GetProperty("escape_radius").GetDouble())
+                    .Render(width, height, viewport),
                 var other => throw new InvalidDataException($"no fractal-render builder for '{other}'"),
             };
             double[] expected = ReadF64(

@@ -10,12 +10,32 @@ namespace HeatonLife.Tests
     /// Fractal conformance runner: rebuilds each field and compares int32 outputs
     /// exactly, mirroring the Python test_fractal_vectors.py. Fractal vectors are
     /// one-shot renders (no time axis): params + viewport + declared outputs.
-    /// Deep-zoom cases ship their pinned reference orbit; the C# side consumes the
-    /// stored orbit (orbit *generation* needs bignum and stays on the Python side).
+    /// Deep-zoom cases ship their pinned reference orbit (and, for Julia, the critical
+    /// orbit rebased pixels restart on); this runner replays the stored orbits so the
+    /// counts check needs no bignum. Regenerating those orbits in C# is
+    /// ReferenceOrbitTests' job.
     /// </summary>
     public class FractalConformanceTests
     {
         private static readonly string[] Families = { "mandelbrot", "julia", "burning-ship", "newton" };
+
+        // Everything this runner understands. A key outside these sets fails the case
+        // rather than being skipped: a runner that ignored, say, "critical_orbit" would
+        // replay a deep Julia case the old way and fail confusingly or pass wrongly.
+        private static readonly HashSet<string> SpecVersions = new HashSet<string> { "0.2.0", "0.3.0" };
+        private static readonly HashSet<string> TopKeys = new HashSet<string>
+        {
+            "spec_version", "family", "tier", "params", "viewport", "size", "outputs",
+            "reference_orbit", "critical_orbit", "source",
+        };
+        private static readonly Dictionary<string, HashSet<string>> ParamKeys = new Dictionary<string, HashSet<string>>
+        {
+            ["mandelbrot"] = new HashSet<string> { "max_iter", "escape_radius" },
+            ["julia"] = new HashSet<string> { "c_re", "c_im", "max_iter", "escape_radius" },
+            ["burning-ship"] = new HashSet<string> { "max_iter", "escape_radius" },
+            ["newton"] = new HashSet<string> { "degree", "max_iter" },
+        };
+        private static readonly HashSet<string> OutputKinds = new HashSet<string> { "iterations", "roots" };
 
         public static IEnumerable<object[]> Cases()
         {
@@ -31,8 +51,36 @@ namespace HeatonLife.Tests
             string caseDir = Path.Combine(TestPaths.VectorRoot(), family, caseName);
             using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(caseDir, "params.json")));
             var root = doc.RootElement;
+            foreach (var property in root.EnumerateObject())
+                Assert.True(TopKeys.Contains(property.Name),
+                    $"{family}/{caseName}: runner does not understand '{property.Name}'; teach it first");
+            Assert.Contains(root.GetProperty("spec_version").GetString()!, SpecVersions);
             Assert.Equal("bit-exact", root.GetProperty("tier").GetString());
             var p = root.GetProperty("params");
+            var paramNames = new HashSet<string>();
+            foreach (var property in p.EnumerateObject())
+                paramNames.Add(property.Name);
+            Assert.True(ParamKeys[family].SetEquals(paramNames), $"{family}/{caseName}: unexpected params");
+            Assert.True(family == "julia" || !root.TryGetProperty("critical_orbit", out _));
+            AssertKeys(root.GetProperty("viewport"), $"{family}/{caseName} viewport", "center_re", "center_im", "zoom_log10");
+            foreach (string key in new[] { "reference_orbit", "critical_orbit" })
+            {
+                if (!root.TryGetProperty(key, out var orbit))
+                    continue;
+                AssertKeys(orbit, $"{family}/{caseName} {key}", "file", "length");
+                Assert.EndsWith(".c128", orbit.GetProperty("file").GetString()!);
+            }
+            foreach (var output in root.GetProperty("outputs").EnumerateArray())
+            {
+                AssertKeys(output, $"{family}/{caseName} output", "kind", "file", "shape");
+                Assert.True(
+                    OutputKinds.Contains(output.GetProperty("kind").GetString()!)
+                    && output.GetProperty("file").GetString()!.EndsWith(".i32", StringComparison.Ordinal),
+                    $"{family}/{caseName}: runner does not understand output {output}");
+                // size is [width, height]; shape is [rows, cols].
+                Assert.Equal(root.GetProperty("size")[1].GetInt32(), output.GetProperty("shape")[0].GetInt32());
+                Assert.Equal(root.GetProperty("size")[0].GetInt32(), output.GetProperty("shape")[1].GetInt32());
+            }
             var vp = root.GetProperty("viewport");
             var viewport = new Viewport(
                 vp.GetProperty("center_re").GetString()!,
@@ -48,6 +96,13 @@ namespace HeatonLife.Tests
                     Path.Combine(caseDir, orbitMeta.GetProperty("file").GetString()!));
                 Assert.Equal(orbitMeta.GetProperty("length").GetInt32(), orbitRe.Length);
             }
+            double[]? criticalRe = null, criticalIm = null;
+            if (root.TryGetProperty("critical_orbit", out var criticalMeta))
+            {
+                (criticalRe, criticalIm) = ReadC128(
+                    Path.Combine(caseDir, criticalMeta.GetProperty("file").GetString()!));
+                Assert.Equal(criticalMeta.GetProperty("length").GetInt32(), criticalRe.Length);
+            }
 
             // Serial and parallel must both match the vectors byte-for-byte
             // (spec/fractals.md "Parallel rendering"): 5 workers deliberately does
@@ -55,7 +110,7 @@ namespace HeatonLife.Tests
             foreach (int workers in new[] { 1, 5 })
             {
                 var produced = ComputeOutputs(
-                    family, p, viewport, width, height, orbitRe, orbitIm, workers);
+                    family, p, viewport, width, height, orbitRe, orbitIm, criticalRe, criticalIm, workers);
                 foreach (var output in root.GetProperty("outputs").EnumerateArray())
                 {
                     string kind = output.GetProperty("kind").GetString()!;
@@ -80,6 +135,8 @@ namespace HeatonLife.Tests
             int height,
             double[]? orbitRe,
             double[]? orbitIm,
+            double[]? criticalRe,
+            double[]? criticalIm,
             int workers)
         {
             switch (family)
@@ -104,7 +161,9 @@ namespace HeatonLife.Tests
                             p.GetProperty("escape_radius").GetDouble(),
                             workers);
                         int[] iterations = orbitRe != null
-                            ? field.Iterations(width, height, viewport, orbitRe, orbitIm!)
+                            ? (criticalRe != null
+                                ? field.Iterations(width, height, viewport, orbitRe, orbitIm!, criticalRe, criticalIm!)
+                                : field.Iterations(width, height, viewport, orbitRe, orbitIm!))
                             : field.Iterations(width, height, viewport);
                         return new Dictionary<string, int[]> { ["iterations"] = iterations };
                     }
@@ -135,6 +194,15 @@ namespace HeatonLife.Tests
                 default:
                     throw new InvalidDataException($"no fractal builder for family '{family}'");
             }
+        }
+
+        /// <summary>The object must carry exactly these keys (strict: unknown keys fail the case).</summary>
+        private static void AssertKeys(JsonElement element, string where, params string[] expected)
+        {
+            var names = new HashSet<string>();
+            foreach (var property in element.EnumerateObject())
+                names.Add(property.Name);
+            Assert.True(names.SetEquals(expected), $"{where}: unexpected keys {string.Join(", ", names)}");
         }
 
         /// <summary>Raw little-endian int32, the fractal output encoding.</summary>

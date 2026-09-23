@@ -12,6 +12,7 @@ from collections.abc import Callable
 import numpy as np
 from numpy.typing import NDArray
 
+from heaton_life.core import decimal_text
 from heaton_life.core.pow10 import pow10
 from heaton_life.core.viewport import Viewport
 
@@ -48,7 +49,9 @@ def pixel_offsets(size: tuple[int, int], viewport: Viewport) -> ComplexArray:
 
 def pixel_grid(size: tuple[int, int], viewport: Viewport) -> ComplexArray:
     """Absolute pixel coordinates in float64 (T0 only — collapses past zoom ~1e13)."""
-    center = complex(float(viewport.center_re), float(viewport.center_im))
+    center = complex(
+        decimal_text.to_float(viewport.center_re), decimal_text.to_float(viewport.center_im)
+    )
     return pixel_offsets(size, viewport) + center
 
 

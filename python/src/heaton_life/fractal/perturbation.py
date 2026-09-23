@@ -2,10 +2,13 @@
 
 One high-precision reference orbit (core.bignum); every pixel iterates its small
 deviation delta in plain float64. Rebasing (Zhuoran 2021): whenever the full value
-|Z[m] + delta| drops below |delta|, restart against the beginning of the reference
-(delta <- Z[m] + delta, m <- 0). One reference serves the whole frame; no glitch
-detection passes. The reference index is clamped to the last orbit sample, which
-is only reachable when the reference escaped — those pixels escape immediately.
+|Z[m] + delta| drops below |delta|, restart against the beginning of an orbit whose
+first sample is 0 (delta <- Z[m] + delta, m <- 0). For Mandelbrot and Burning Ship
+that is the reference itself (Z0 = 0); a Julia reference starts at the viewport
+center, so Julia rebases onto the critical orbit (W0 = 0, same c) instead. One
+reference serves the whole frame; no glitch detection passes. The reference index
+is clamped to the last sample of whichever orbit the pixel follows, which is only
+reachable when that orbit escaped — those pixels escape immediately.
 """
 
 from __future__ import annotations
@@ -24,24 +27,39 @@ def perturb_z2(
     delta_c: ComplexArray,
     max_iter: int,
     escape_radius: float,
+    rebase_orbit: ComplexArray | None = None,
 ) -> tuple[IntArray, ComplexArray]:
     """Perturbation for z^2 + c maps (Mandelbrot: delta0=0; Julia: delta_c=0).
 
-    Same (counts, final_z) contract as engine.escape_time.
+    ``rebase_orbit`` is the orbit a rebased pixel restarts on; it must begin at 0.
+    None means the reference itself (Mandelbrot, whose reference starts at 0).
+    Julia passes its critical orbit. Same (counts, final_z) contract as
+    engine.escape_time.
     """
+    # Both orbits live in one array so a pixel's reference sample stays a single
+    # fancy-indexed gather: m is an absolute index, `last` the end of the orbit
+    # that pixel currently follows. With no separate rebase orbit the values are
+    # exactly the historical single-orbit loop's.
+    if rebase_orbit is None:
+        refs = orbit
+        rebase_start = 0
+    else:
+        refs = np.concatenate([orbit, rebase_orbit])
+        rebase_start = len(orbit)
+    rebase_last = len(refs) - 1
     n = delta0.size
     counts = np.full(n, -1, dtype=np.int32)
     final = np.zeros(n, dtype=np.complex128)
     dz = delta0.copy()
     dc = delta_c.copy()
     m = np.zeros(n, dtype=np.int64)
+    last = np.full(n, len(orbit) - 1, dtype=np.int64)
     idx = np.arange(n)
-    last = len(orbit) - 1
     r2 = escape_radius * escape_radius
     for it in range(1, max_iter + 1):
-        dz = (2.0 * orbit[m] + dz) * dz + dc
+        dz = (2.0 * refs[m] + dz) * dz + dc
         m = np.minimum(m + 1, last)
-        z = orbit[m] + dz
+        z = refs[m] + dz
         zabs2 = z.real * z.real + z.imag * z.imag
         escaped = zabs2 > r2
         if escaped.any():
@@ -49,15 +67,16 @@ def perturb_z2(
             counts[hits] = it
             final[hits] = z[escaped]
             keep = ~escaped
-            dz, dc, m, idx, z, zabs2 = (
-                dz[keep], dc[keep], m[keep], idx[keep], z[keep], zabs2[keep]
+            dz, dc, m, last, idx, z, zabs2 = (
+                dz[keep], dc[keep], m[keep], last[keep], idx[keep], z[keep], zabs2[keep]
             )
             if idx.size == 0:
                 break
         rebase = zabs2 < (dz.real * dz.real + dz.imag * dz.imag)
         if rebase.any():
             dz[rebase] = z[rebase]
-            m[rebase] = 0
+            m[rebase] = rebase_start
+            last[rebase] = rebase_last
     return counts, final
 
 

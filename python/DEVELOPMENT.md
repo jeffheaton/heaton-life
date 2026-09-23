@@ -21,8 +21,8 @@ vectors directly, so work from a full clone rather than from an installed wheel.
 - Optional, for MP4 export: `ffmpeg` is pulled in by the `video` extra
   (`imageio-ffmpeg`), nothing to install by hand.
 - Optional, for fast deep zooms: the `precision` extra installs `gmpy2`; binary
-  wheels exist for the common platforms. Without it the library falls back to
-  `mpmath`, which is slower but gives the same results.
+  wheels exist for the common platforms. Without it the orbit runs on plain Python
+  integers, about half as fast and bit-for-bit the same.
 
 ## Setting up
 
@@ -36,9 +36,9 @@ pip install -e ".[dev,playground]"
 
 | Extra | What it adds |
 |---|---|
-| `dev` | pytest, pytest-cov, ruff, mypy, gmpy2 (the test suite exercises the fast deep-zoom path) |
+| `dev` | pytest, pytest-cov, ruff, mypy, gmpy2 (the test suite exercises the fast deep-zoom path), mpmath (an independent oracle in `test_pow10.py`) |
 | `playground` | PyQt6, for the interactive app and its offscreen tests |
-| `precision` | gmpy2 for fast deep-zoom reference orbits (mpmath fallback is built in) |
+| `precision` | gmpy2 for faster deep-zoom reference orbits (plain Python ints otherwise; identical results) |
 | `video` | imageio-ffmpeg for `.mp4` output from `Animation.save` |
 
 ## Layout
@@ -80,10 +80,12 @@ QT_QPA_PLATFORM=offscreen pytest -q
   advisory in CI and the tree is not currently format-clean (about 40 files would
   change), so format only the files you touch (`ruff format <file>`) rather than
   reformatting the tree in an unrelated commit.
-- **mypy** runs in strict mode over `heaton_life` (`gmpy2` and `mpmath` have no
-  stubs and are ignored for missing imports).
+- **mypy** runs in strict mode over `heaton_life` (`gmpy2` has no stubs and is
+  ignored for missing imports).
 - **pytest** takes a few seconds. `pytest -m "not slow"` skips the long evolver
-  runs. Coverage: `pytest --cov=heaton_life --cov-report=term`.
+  runs and the deep-zoom oracle (`tests/test_deep_oracle.py`, the only tests that
+  check T1 against direct arbitrary-precision iteration), so run the full suite
+  before touching the fractal code. Coverage: `pytest --cov=heaton_life --cov-report=term`.
 - The playground tests run Qt offscreen, which is what `QT_QPA_PLATFORM=offscreen`
   is for. On a headless Linux machine install `libegl1 libgl1 libxkbcommon0` first.
 

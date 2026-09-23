@@ -2,8 +2,8 @@
 
 Fractal vectors are one-shot renders (no time axis): params + viewport + declared
 outputs. Deep-zoom cases also pin the reference orbit — regeneration must match the
-stored orbit bit-for-bit (gmpy2 and mpmath are tested identical, so this holds for
-either backend).
+stored orbit bit-for-bit (the orbit is fixed-point integer arithmetic; plain ints
+and gmpy2 mpz are tested identical, so this holds with or without gmpy2).
 """
 
 import json
@@ -34,6 +34,30 @@ FIELDS = {
 
 ORBIT_KINDS = {"mandelbrot": "mandelbrot", "julia": "julia", "burning-ship": "burning_ship"}
 
+# Everything this runner understands. A key outside these sets fails the case rather
+# than being skipped: a runner that ignored, say, "critical_orbit" would replay a deep
+# Julia case the old way and either fail confusingly or pass for the wrong reason.
+SPEC_VERSIONS = {"0.2.0", "0.3.0"}
+TOP_KEYS = {
+    "spec_version",
+    "family",
+    "tier",
+    "params",
+    "viewport",
+    "size",
+    "outputs",
+    "reference_orbit",
+    "critical_orbit",
+    "source",
+}
+PARAM_KEYS = {
+    "mandelbrot": {"max_iter", "escape_radius"},
+    "julia": {"c_re", "c_im", "max_iter", "escape_radius"},
+    "burning-ship": {"max_iter", "escape_radius"},
+    "newton": {"degree", "max_iter"},
+}
+OUTPUT_KINDS = {"iterations", "roots"}
+
 CASES = sorted(
     p for p in VECTOR_ROOT.glob("*/*/params.json") if p.parent.parent.name in FIELDS
 )
@@ -49,6 +73,22 @@ def test_fractal_vector(case: Path) -> None:
     case_dir = case.parent
     meta: dict[str, Any] = json.loads(case.read_text())
     family = meta["family"]
+    unknown = set(meta) - TOP_KEYS
+    assert not unknown, f"{case}: runner does not understand {sorted(unknown)}; teach it first"
+    assert meta["spec_version"] in SPEC_VERSIONS, f"{case}: unknown spec_version"
+    assert meta["tier"] == "bit-exact"
+    assert set(meta["params"]) == PARAM_KEYS[family], f"{case}: unexpected params"
+    assert "critical_orbit" not in meta or family == "julia"
+    assert set(meta["viewport"]) == {"center_re", "center_im", "zoom_log10"}
+    for key in ("reference_orbit", "critical_orbit"):
+        if key in meta:
+            assert set(meta[key]) == {"file", "length"} and meta[key]["file"].endswith(".c128")
+    for output in meta["outputs"]:
+        assert set(output) == {"kind", "file", "shape"}, f"{case}: unexpected output keys"
+        assert output["kind"] in OUTPUT_KINDS and output["file"].endswith(".i32"), (
+            f"{case}: runner does not understand output {output}"
+        )
+        assert output["shape"] == [meta["size"][1], meta["size"][0]], "size is [w, h]"
     field = FIELDS[family](meta["params"])
     viewport = Viewport.from_dict(meta["viewport"])
     size = (meta["size"][0], meta["size"][1])
@@ -68,6 +108,7 @@ def test_fractal_vector(case: Path) -> None:
         stored = np.frombuffer(
             (case_dir / meta["reference_orbit"]["file"]).read_bytes(), dtype="<c16"
         )
+        assert len(stored) == meta["reference_orbit"]["length"]
         regenerated = reference_orbit(
             ORBIT_KINDS[family],
             viewport.center_re,
@@ -79,4 +120,18 @@ def test_fractal_vector(case: Path) -> None:
         )
         assert np.array_equal(stored, regenerated), (
             "reference orbit regeneration diverged from the stored contract"
+        )
+
+    if "critical_orbit" in meta:
+        # Julia's rebase target: the critical orbit (z0 = 0), same c and precision.
+        stored = np.frombuffer(
+            (case_dir / meta["critical_orbit"]["file"]).read_bytes(), dtype="<c16"
+        )
+        assert len(stored) == meta["critical_orbit"]["length"]
+        regenerated = reference_orbit(
+            "julia", "0", "0", viewport.zoom_log10, meta["params"]["max_iter"],
+            c_re=meta["params"]["c_re"], c_im=meta["params"]["c_im"],
+        )
+        assert np.array_equal(stored, regenerated), (
+            "critical orbit regeneration diverged from the stored contract"
         )

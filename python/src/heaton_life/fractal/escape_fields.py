@@ -155,9 +155,18 @@ class Julia(_EscapeField):
             viewport.zoom_log10, self.max_iter,
             c_re=self.c.real, c_im=self.c.imag,
         )
+        # Rebasing restarts a pixel on an orbit that begins at 0; the reference
+        # above begins at the center, so rebased pixels follow the critical orbit
+        # (spec/deep-zoom.md "Rebasing"): center "0", so the zoom alone sets its precision.
+        critical = reference_orbit(
+            "julia", "0", "0", viewport.zoom_log10, self.max_iter,
+            c_re=self.c.real, c_im=self.c.imag,
+        )
         dz0 = pixel_offsets(size, viewport)
         dc = np.zeros_like(dz0)
-        return perturb_z2(orbit, dz0, dc, self.max_iter, self.escape_radius)
+        return perturb_z2(
+            orbit, dz0, dc, self.max_iter, self.escape_radius, rebase_orbit=critical
+        )
 
 
 @dataclasses.dataclass(frozen=True)

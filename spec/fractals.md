@@ -22,8 +22,9 @@ Deep-zoom architecture (tiers, perturbation, rebasing): [deep-zoom.md](deep-zoom
 - Pixel (row i, col j), row-major, origin top-left:
   `re = center_re + (j + 0.5 − width/2)·ps`, `im = center_im − (i + 0.5 − height/2)·ps`
   (imaginary axis points up).
-- T0 computes absolute coordinates in float64; T1 computes only the offsets in float64
-  and keeps the center in the reference orbit.
+- T0 computes absolute coordinates in float64, from the center's float64
+  projection ([deep-zoom.md](deep-zoom.md#viewport-contract-lands-in-core-on-day-one));
+  T1 computes only the offsets in float64 and keeps the center in the reference orbit.
 
 ## Counts convention
 
@@ -38,7 +39,9 @@ conformance output.
 
 - **Mandelbrot**: `z ← z² + c`, `z₀ = 0`, `c` = pixel.
 - **Julia**: `z ← z² + c`, `c` fixed, `z₀` = pixel. Perturbation uses the center's
-  orbit under the same `c`; `δ₀` = pixel offset, no `δc` term.
+  orbit under the same `c`; `δ₀` = pixel offset, no `δc` term. Rebased pixels
+  restart on the critical orbit (`z₀ = 0`), never on the center's orbit
+  ([deep-zoom.md](deep-zoom.md#rebasing-single-reference-no-glitches)).
 - **Burning Ship**: `x' = x² − y² + cx`, `y' = 2|x||y| + cy`. Perturbation in
   component form with `diffabs(X, d) = |X+d| − |X|` evaluated by case analysis
   (never by subtraction).
@@ -55,9 +58,9 @@ conformance output.
 | T1 | ≤ 290 | perturbation + rebasing, reference index clamped to the last orbit sample |
 | T2 | > 290 | not implemented (raises); floatexp reserved |
 
-Determinism note: T1 counts are bit-stable given the reference orbit, and the two
-sanctioned bignum backends (gmpy2, mpmath) produce **identical** orbits at equal
-precision (tested). In chaotic boundary regions T0 and T1 legitimately disagree on
+Determinism note: T1 counts are bit-stable given the reference orbit, and the orbit
+itself is pinned — both ports run one fixed-point arithmetic and produce
+**identical** orbits at any length ([deep-zoom.md](deep-zoom.md#reference-orbit-the-only-high-precision-computation)). In chaotic boundary regions T0 and T1 legitimately disagree on
 a few percent of pixels — by exactly as much as T0 disagrees with itself under a
 1-ulp input perturbation. Conformance therefore always compares like against like:
 the vector's tier is whatever the viewport's zoom selects.
@@ -89,7 +92,17 @@ performance detail, never an algorithm change.
 }
 ```
 
+- `size` = `[width, height]` in pixels; each output's `shape` = `[height, width]`
+  (rows, cols; C order) — `vectors/mandelbrot/seahorse-zoom6-48x32` is non-square.
 - `.i32` = raw little-endian int32, C order.
 - `.c128` = raw little-endian complex128 (re, im float64 pairs) — present on
   deep-zoom cases; regeneration must reproduce it bit-for-bit, and implementations
   without a bignum stack may consume it directly.
+- Deep Julia cases also carry `"critical_orbit": { "file": "critical.c128", "length": N }`,
+  the orbit rebased pixels restart on ([deep-zoom.md](deep-zoom.md#rebasing-single-reference-no-glitches)).
+  A replay must use both stored orbits.
+- `source` (optional string): attribution for a third-party location; runners accept
+  and ignore it.
+- Cases written from 2026-09-23 carry `"spec_version": "0.3.0"` (earlier ones keep
+  `0.2.0`; [vectors/README.md](../vectors/README.md) lists what each adds). Runners are
+  strict: a key, output kind, codec or version they do not know fails the case.

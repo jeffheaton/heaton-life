@@ -22,7 +22,7 @@ Not every family is a time series. The other case shapes, each described on its 
 
 | Directory | Files beside `params.json` | Spec |
 |---|---|---|
-| `mandelbrot/`, `julia/`, `burning-ship/`, `newton/` | `iterations.i32` (raw little-endian int32 escape counts, row-major); `roots.i32` for Newton; `orbit.c128` (raw complex128 reference orbit) for deep-zoom cases | [fractals.md](../spec/fractals.md), [deep-zoom.md](../spec/deep-zoom.md) |
+| `mandelbrot/`, `julia/`, `burning-ship/`, `newton/` | `iterations.i32` (raw little-endian int32 escape counts, row-major); `roots.i32` for Newton; `orbit.c128` (raw complex128 reference orbit) for deep-zoom cases; `critical.c128` (the critical orbit rebased pixels restart on) for deep Julia cases | [fractals.md](../spec/fractals.md), [deep-zoom.md](../spec/deep-zoom.md) |
 | `render/` | `lut-*/`: `lut.png` (the 1×256 LUT); `apply-*/`: `frame.f64` in, `rgb.png` out; `frame-<family>/`: `state.f64` or `state.png` in, `frame.f64` or `frame.png` out; `fractal-render-*/`: `render.f64` (ε tier) | [render.md](../spec/render.md) |
 | `patterns/` | `rle-*/`: `input.rle` in, `grid.png` + `canonical.rle` out; `transforms/`: `grid.png` in, `flip_h.png`, `flip_v.png`, `rotate90.png` out; `stamp-*/`: `pattern.png` in, `expected.png` out; `extract-*/`: `grid.png` in, `expected.png` out | [patterns.md](../spec/patterns.md) |
 | `png-io/` | `input.png` in, `grid.png` out (MergeLife PNG decode at integer scale) | [png-io.md](../spec/png-io.md) |
@@ -30,4 +30,11 @@ Not every family is a time series. The other case shapes, each described on its 
 | `mergelife-decode/` | `params.json` only; the expected decoded rule table is embedded | [mergelife.md](../spec/mergelife.md) |
 | `mergelife-upstream/` | `vectors.txt`, copied from the upstream MergeLife project; see its README | [mergelife.md](../spec/mergelife.md) |
 
-Vectors are versioned with the spec: every generated `params.json` carries `"spec_version"` (the `mergelife-decode` cases and the upstream `vectors.txt` are the exceptions). Regenerating a vector requires a spec-change justification in the PR.
+Vectors are versioned with the spec: every generated `params.json` carries `"spec_version"` (the `mergelife-decode` cases and the upstream `vectors.txt` are the exceptions). Regenerating a vector requires a spec-change justification in the PR. A version bump applies to the cases written under it; existing cases keep the version they were generated with, byte for byte.
+
+| `spec_version` | What a runner must know to replay it |
+|---|---|
+| `0.2.0` | Everything up to 2026-09-22. |
+| `0.3.0` | Fractal cases from 2026-09-23 ([deep-zoom.md](../spec/deep-zoom.md)): Julia's `critical_orbit` (rebased pixels restart on it), the fixed-point orbit arithmetic, the shared center grammar and exact float64 projection, orbit components far below `1e-292` converting without error, a deep Julia smooth render that needs an exact fma, and the optional `source` attribution key. (The precision rule's digit term and subnormal rounding are pinned by unit tests in both suites, not by a shipped vector.) |
+
+Fractal runners are strict: a key at any level, a parameter, output kind, codec, or `spec_version` a runner does not know fails the case instead of being skipped.

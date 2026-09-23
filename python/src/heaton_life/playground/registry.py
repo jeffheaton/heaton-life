@@ -26,6 +26,7 @@ from heaton_life.ca import (
 )
 from heaton_life.ca.mergelife import parse_rule_error
 from heaton_life.ca.rulestring import parse_rule
+from heaton_life.core import decimal_text
 from heaton_life.core.neighbors import Boundary
 from heaton_life.core.params import Params
 from heaton_life.core.protocols import Simulation
@@ -576,12 +577,12 @@ register(
 
 
 def _validate_fractal(params: Params) -> tuple[str, str] | None:
-    import decimal
-
+    # The one center grammar every consumer shares (core.decimal_text): Decimal()
+    # alone also accepted "NaN", "1_000" and non-ASCII digits, which Viewport rejects.
     for field in ("center_re", "center_im"):
         try:
-            decimal.Decimal(getattr(params, field))
-        except decimal.InvalidOperation:
+            decimal_text.scan(getattr(params, field))
+        except ValueError:
             return (field, f"{field} must be a decimal number string")
     return None
 

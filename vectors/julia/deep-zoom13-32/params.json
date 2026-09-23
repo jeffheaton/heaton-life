@@ -1,0 +1,38 @@
+{
+  "critical_orbit": {
+    "file": "critical.c128",
+    "length": 601
+  },
+  "family": "julia",
+  "outputs": [
+    {
+      "file": "iterations.i32",
+      "kind": "iterations",
+      "shape": [
+        32,
+        32
+      ]
+    }
+  ],
+  "params": {
+    "c_im": 0.745,
+    "c_re": -0.123,
+    "escape_radius": 1000.0,
+    "max_iter": 600
+  },
+  "reference_orbit": {
+    "file": "orbit.c128",
+    "length": 83
+  },
+  "size": [
+    32,
+    32
+  ],
+  "spec_version": "0.3.0",
+  "tier": "bit-exact",
+  "viewport": {
+    "center_im": "-0.47966605489732779175475867397901",
+    "center_re": "1.27658194945592591790467276337476",
+    "zoom_log10": 13.0
+  }
+}

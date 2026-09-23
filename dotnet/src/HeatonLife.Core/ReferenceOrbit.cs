@@ -10,25 +10,18 @@ namespace HeatonLife
     /// one orbit of the viewport center, so a T1 render needs no externally
     /// supplied data.
     ///
-    /// spec/deep-zoom.md "Cross-language notes" sanctions exactly two options for
-    /// C#: "fixed-point over System.Numerics.BigInteger for the reference orbit
-    /// (only ~max_iter multiplies — cheap), or consume reference orbits exported in
-    /// conformance vectors." This is the first; the port shipped only the second
-    /// until 2026-08-21, which meant C# could not deep-zoom on its own at all.
+    /// The arithmetic is spec'd, not just the result: binary fixed point over
+    /// System.Numerics.BigInteger with <see cref="WorkingBits"/> fractional bits,
+    /// decimal parsing and products rounded to nearest with ties away from zero, and
+    /// each sample converted to float64 by one correct rounding. The Python reference
+    /// (core/bignum.py) runs the same integer operations, so the two orbits agree
+    /// bit for bit at any length. Until 2026-09-23 Python iterated in binary
+    /// FLOATING point instead; the two agreed only while rounding differences stayed
+    /// below a double ulp, which a chaotic orbit outgrows within ~40 iterations
+    /// (the deep Julia vector parted at sample 38, a 256-digit center at 67,941).
     ///
-    /// Why fixed point is sound here even though the Python reference uses binary
-    /// FLOATING point (gmpy2/mpmath): every orbit sample is rounded to **float64**
-    /// before the perturbation loop ever sees it (orbits travel as complex128, and
-    /// `Perturbation` takes double[]). The two representations therefore only have
-    /// to agree to better than half a double ulp per sample, not bit-for-bit in
-    /// their own mantissas. Fixed point holds a CONSTANT absolute precision of
-    /// 2^-F, so it is strictly finer than a prec-F float wherever |Z| >= 1 and
-    /// stays finer than float64's own resolution until |Z| falls below about
-    /// 2^-(F-53) — far under the guard band the precision formula reserves.
-    ///
-    /// The proof is empirical, not argued: <c>ReferenceOrbitTests</c> regenerates
-    /// vectors/mandelbrot/deep-zoom14-48/orbit.c128 and requires all 80,016 bytes
-    /// to match the orbit gmpy2 produced.
+    /// <c>ReferenceOrbitTests</c> regenerates the shipped orbit vectors and requires
+    /// them byte for byte.
     /// </summary>
     public static class ReferenceOrbit
     {
@@ -45,31 +38,46 @@ namespace HeatonLife
         public const double EscapeAbs2 = 1e100;
 
         /// <summary>
-        /// Working precision for a center at 10^zoom magnification, plus guard.
-        /// NOTE the truncation: <c>(int)(3.33 * zoom)</c>, matching the Python
-        /// reference's <c>int(3.33 * ...)</c>. spec/deep-zoom.md's "Precision" line
-        /// says ceil, but the shipped orbit vector was produced by the truncating
-        /// form (46 bits at zoom 14, not 47) and the vector is the contract, so the
-        /// spec text is the thing that was wrong. Do not "fix" this to Ceiling
-        /// without regenerating every deep-zoom vector.
+        /// Bits needed to resolve a frame at 10^zoom magnification, plus guard — the
+        /// zoom term of <see cref="WorkingBits"/>. NOTE the truncation:
+        /// <c>(int)(3.33 * zoom)</c>, matching the Python reference's <c>int(3.33 * ...)</c>
+        /// (46 bits at zoom 14, not 47). The spec once said ceil; the shipped vectors
+        /// were produced by the truncating form and the vectors are the contract. Do
+        /// not "fix" this to Ceiling without regenerating every deep-zoom vector.
         /// </summary>
         public static int PrecisionBits(double zoomLog10) =>
             (int)(3.33 * Math.Max(zoomLog10, 0.0)) + GuardBits;
 
         /// <summary>
-        /// Extra FRACTIONAL bits the fixed-point carries beyond
-        /// <see cref="PrecisionBits"/>. Fixed point measures precision from the
-        /// binary point, a float from the leading digit, so a value below 1 gets
-        /// fewer significant bits here than gmpy2 gives it at the same nominal
-        /// precision. That bites immediately: a center of ~0.13 held at 110
-        /// fractional bits has ~107 significant bits, and rounding 107 -&gt; 53 in
-        /// two steps is only safe above 2*53+2 = 108 — the orbit came out one ulp
-        /// off in the imaginary part of Z[1], which for a Mandelbrot orbit IS the
-        /// parsed center. The headroom makes every sample a correctly rounded
-        /// double of the true value, which is what gmpy2 at its precision also
-        /// produces, so the two agree.
+        /// Fractional bits the fixed point carries beyond the precision rule. Fixed
+        /// point measures precision from the binary point, a float from the leading
+        /// digit, so a value below 1 gets fewer significant bits than its nominal
+        /// precision; the headroom keeps every sample a correctly rounded double
+        /// (a center of ~0.13 at 110 fractional bits came out one ulp off in Z[1]).
         /// </summary>
         internal const int WorkingGuardBits = 64;
+
+        /// <summary>
+        /// Center digits past 10^-340 sit below half the smallest float64 subnormal: they
+        /// cannot reach a sample, so the digit term of <see cref="WorkingBits"/> stops
+        /// there and a long string cannot set the precision on its own.
+        /// </summary>
+        public const int MaxDigitPlaces = 340;
+
+        /// <summary>
+        /// Fractional bits F of the fixed-point orbit (spec/deep-zoom.md "Precision"):
+        /// the frame's need (<see cref="PrecisionBits"/>) or the center's own digits (at
+        /// most <see cref="MaxDigitPlaces"/> of them), whichever is finer, plus
+        /// <see cref="WorkingGuardBits"/>. The digits term
+        /// keeps a long or tiny center intact — without it a component of 1e-310 at
+        /// zoom 280 would keep ~30 significant bits.
+        /// </summary>
+        public static int WorkingBits(string centerRe, string centerIm, double zoomLog10)
+        {
+            int places = Math.Min(Math.Max(DecimalPlaces(centerRe), DecimalPlaces(centerIm)), MaxDigitPlaces);
+            int digitBits = DecimalText.BitLength(BigInteger.Pow(10, places));
+            return Math.Max(PrecisionBits(zoomLog10), digitBits) + WorkingGuardBits;
+        }
 
         /// <summary>Z0..ZK for Z -&gt; Z^2 + C with Z0 = 0 and C = the center.</summary>
         public static (double[] Re, double[] Im) Mandelbrot(
@@ -84,6 +92,16 @@ namespace HeatonLife
         public static (double[] Re, double[] Im) Julia(
             string centerRe, string centerIm, double zoomLog10, int maxIter, double cRe, double cIm) =>
             Compute(Kind.Julia, centerRe, centerIm, zoomLog10, maxIter, cRe, cIm);
+
+        /// <summary>
+        /// W0..WK for W -&gt; W^2 + c with W0 = 0: the Julia critical orbit, which a
+        /// rebased Julia pixel restarts on (spec/deep-zoom.md "Rebasing"). Exactly
+        /// <see cref="Julia(string,string,double,int,double,double)"/> at center "0",
+        /// so it shares that method's precision (set by the zoom) and cache.
+        /// </summary>
+        public static (double[] Re, double[] Im) JuliaCritical(
+            double cRe, double cIm, double zoomLog10, int maxIter) =>
+            Compute(Kind.Julia, "0", "0", zoomLog10, maxIter, cRe, cIm);
 
         /// <summary>Z0..ZK for the Burning Ship map, |x| and |y| taken each step.</summary>
         public static (double[] Re, double[] Im) BurningShip(
@@ -100,7 +118,9 @@ namespace HeatonLife
         // The orbit depends only on (kind, center, precision, max_iter, c) — cache
         // it, as spec/deep-zoom.md "Caching & interactivity" asks, so zooming toward
         // a fixed center does not recompute thousands of bignum multiplies per
-        // frame. Same capacity as the Python reference's lru_cache(maxsize=8).
+        // frame. Least-recently-used eviction at the Python reference's
+        // lru_cache(maxsize=8): a Julia render hits its critical orbit every frame,
+        // and first-in-first-out would evict it every eighth.
         private const int CacheCapacity = 8;
         private static readonly object CacheLock = new object();
         private static readonly List<string> CacheOrder = new List<string>();
@@ -118,21 +138,28 @@ namespace HeatonLife
             if (maxIter < 1)
                 throw new ArgumentOutOfRangeException(nameof(maxIter), "max_iter must be positive");
 
-            int bits = PrecisionBits(zoomLog10) + WorkingGuardBits;
+            int bits = WorkingBits(centerRe, centerIm, zoomLog10);
             string key = kind + "|" + centerRe + "|" + centerIm + "|" + bits + "|" + maxIter
                          + "|" + cRe.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
                          + "|" + cIm.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
             lock (CacheLock)
             {
                 if (Cache.TryGetValue(key, out var hit))
+                {
+                    Touch(key);
                     return hit;
+                }
             }
 
             var computed = Iterate(kind, centerRe, centerIm, bits, maxIter, cRe, cIm);
 
             lock (CacheLock)
             {
-                if (!Cache.ContainsKey(key))
+                if (Cache.ContainsKey(key))
+                {
+                    Touch(key);                                // another thread got here first
+                }
+                else
                 {
                     if (CacheOrder.Count >= CacheCapacity)
                     {
@@ -144,6 +171,13 @@ namespace HeatonLife
                 }
             }
             return computed;
+        }
+
+        /// <summary>Mark a cached key most recently used. Caller holds CacheLock.</summary>
+        private static void Touch(string key)
+        {
+            CacheOrder.Remove(key);
+            CacheOrder.Add(key);
         }
 
         /// <summary>Drop every cached orbit (tests; a host reclaiming memory).</summary>
@@ -273,6 +307,14 @@ namespace HeatonLife
         /// one ulp low in the imaginary part of Z[1] — which for a Mandelbrot orbit
         /// is simply the parsed center — and extra working precision did not fix it,
         /// because the error was in the final conversion, not the arithmetic.
+        ///
+        /// Subnormals round the same single time: once a value falls below 2^-1022
+        /// its ulp stops shrinking at 2^-1074, so the rounding point moves up, and the
+        /// result is assembled from its IEEE-754 bit pattern rather than scaled by a
+        /// power of two — a multiply into the subnormal range would round a second
+        /// time. Orbit components that small are ordinary at deep zoom (a center with
+        /// a tiny imaginary part is one), and the old form threw on them once the
+        /// working precision passed 1022 fractional bits, near zoom 268.8.
         /// </summary>
         internal static double ToDouble(BigInteger value, int bits)
         {
@@ -280,142 +322,56 @@ namespace HeatonLife
                 return 0.0;
             bool negative = value.Sign < 0;
             BigInteger magnitude = negative ? -value : value;
-            int length = BitLength(magnitude);
-            double result;
-            if (length <= 53)
+
+            // value = magnitude * 2^-bits, leading bit at 2^(length - 1 - bits). The
+            // result's ulp is 2^ulp: 53 significant bits while normal, 2^-1074 below.
+            int length = DecimalText.BitLength(magnitude);
+            int ulp = Math.Max(length - 1 - bits - 52, -1074);
+            int shift = ulp + bits;                            // magnitude / 2^shift = value / 2^ulp
+            BigInteger q;
+            if (shift <= 0)
             {
-                // Fits a double exactly; no rounding decision to make.
-                result = (double)magnitude * Pow2(-bits);
+                q = magnitude << -shift;                       // exact: under 53 bits
             }
             else
             {
-                int shift = length - 54;                       // keep 53 bits + a guard bit
-                BigInteger top = magnitude >> shift;
-                bool sticky = !(magnitude - (top << shift)).IsZero;
-                bool guard = !(top & BigInteger.One).IsZero;
-                BigInteger rounded = top >> 1;
-                if (guard && (sticky || !(rounded & BigInteger.One).IsZero))
-                    rounded += BigInteger.One;                 // ties to even
-                result = (double)rounded * Pow2(shift + 1 - bits);
+                q = magnitude >> shift;
+                BigInteger rest = magnitude - (q << shift);
+                int versusHalf = rest.CompareTo(BigInteger.One << (shift - 1));
+                if (versusHalf > 0 || (versusHalf == 0 && !q.IsEven))
+                    q += BigInteger.One;                       // ties to even
             }
-            return negative ? -result : result;
-        }
 
-        /// <summary>Position of the highest set bit of a positive BigInteger.</summary>
-        private static int BitLength(BigInteger value)
-        {
-            byte[] bytes = value.ToByteArray();               // little-endian, two's complement
-            int i = bytes.Length - 1;
-            while (i > 0 && bytes[i] == 0)
-                i--;
-            int top = bytes[i];
-            int inTop = 0;
-            while (top > 0)
-            {
-                inTop++;
-                top >>= 1;
-            }
-            return i * 8 + inTop;
-        }
-
-        /// <summary>
-        /// 2^n as an exact double, built from its IEEE-754 bit pattern.
-        /// netstandard2.1 has no Math.ScaleB, and Math.Pow would put a libm call on
-        /// a determinism-critical path — this is exact by construction on every
-        /// runtime.
-        /// </summary>
-        internal static double Pow2(int n)
-        {
-            if (n < -1022 || n > 1023)
-                throw new ArgumentOutOfRangeException(nameof(n), $"2^{n} is outside the normal range");
-            return BitConverter.Int64BitsToDouble((long)(n + 1023) << 52);
+            return DecimalText.Compose(negative, q, ulp);
         }
 
         /// <summary>
         /// Parse a decimal string (the viewport center format — arbitrary length,
-        /// language-neutral, spec/deep-zoom.md) into fixed point WITHOUT going
-        /// through double, which is the entire point: the center carries more
-        /// digits than float64 can hold. Hand-rolled because Core takes no Regex.
+        /// language-neutral, spec/deep-zoom.md; grammar in <see cref="DecimalText"/>)
+        /// into fixed point WITHOUT going through double, which is the entire point:
+        /// the center carries more digits than float64 can hold.
         /// </summary>
         internal static BigInteger ParseFixed(string text, int bits)
         {
-            if (string.IsNullOrWhiteSpace(text))
-                throw new ArgumentException("empty decimal string", nameof(text));
-            string s = text.Trim();
-            int i = 0;
-            bool negative = false;
-            if (s[i] == '+' || s[i] == '-')
-            {
-                negative = s[i] == '-';
-                i++;
-            }
-
-            BigInteger digits = BigInteger.Zero;
-            int fractionDigits = 0;
-            bool sawDigit = false;
-            bool sawPoint = false;
-            bool sawExponent = false;
-            for (; i < s.Length; i++)
-            {
-                char c = s[i];
-                if (c >= '0' && c <= '9')
-                {
-                    digits = digits * 10 + (c - '0');
-                    if (sawPoint)
-                        fractionDigits++;
-                    sawDigit = true;
-                }
-                else if (c == '.' && !sawPoint)
-                {
-                    sawPoint = true;
-                }
-                else if ((c == 'e' || c == 'E') && sawDigit)
-                {
-                    i++;
-                    sawExponent = true;
-                    break;
-                }
-                else
-                {
-                    throw new ArgumentException($"not a decimal number: '{text}'", nameof(text));
-                }
-            }
-            if (!sawDigit)
-                throw new ArgumentException($"not a decimal number: '{text}'", nameof(text));
-
-            int exponent = 0;
-            if (sawExponent && i >= s.Length)
-                throw new ArgumentException($"truncated exponent: '{text}'", nameof(text));
-            if (i < s.Length)
-            {
-                bool expNegative = false;
-                if (s[i] == '+' || s[i] == '-')
-                {
-                    expNegative = s[i] == '-';
-                    i++;
-                }
-                if (i >= s.Length)
-                    throw new ArgumentException($"truncated exponent: '{text}'", nameof(text));
-                for (; i < s.Length; i++)
-                {
-                    char c = s[i];
-                    if (c < '0' || c > '9')
-                        throw new ArgumentException($"not a decimal number: '{text}'", nameof(text));
-                    exponent = exponent * 10 + (c - '0');
-                    if (exponent > 100000)
-                        throw new ArgumentException($"exponent out of range: '{text}'", nameof(text));
-                }
-                if (expNegative)
-                    exponent = -exponent;
-            }
-
-            // value = digits * 10^(exponent - fractionDigits), scaled by 2^bits.
-            int netExponent = exponent - fractionDigits;
+            DecimalText.Scan(text, out bool negative, out BigInteger digits, out int netExponent);
+            // value = digits * 10^netExponent, scaled by 2^bits.
             BigInteger scaled = digits << bits;
             BigInteger result = netExponent >= 0
                 ? scaled * BigInteger.Pow(10, netExponent)
                 : RoundDiv(scaled, BigInteger.Pow(10, -netExponent));
             return negative ? -result : result;
+        }
+
+        /// <summary>
+        /// Fraction digits needed to write a decimal string exactly: digits after the
+        /// point minus the exponent, never below 0 ("1e-295" needs 295, "2.5E1" none).
+        /// </summary>
+        public static int DecimalPlaces(string text)
+        {
+            if (text == null)
+                throw new ArgumentNullException(nameof(text));
+            DecimalText.Scan(text, out _, out _, out int netExponent);
+            return Math.Max(-netExponent, 0);
         }
     }
 }

@@ -26,11 +26,25 @@ from heaton_life.core.viewport import Viewport
 from heaton_life.fractal import BurningShip, Julia, Mandelbrot, Newton
 from heaton_life.init import place, rle_decode
 
-SPEC_VERSION = "0.2.0"
+SPEC_VERSION = "0.2.0"  # what existing cases were written under; new fractal cases pass "0.3.0"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VECTOR_ROOT = REPO_ROOT / "vectors"
 
 GLIDER_RLE = "x = 3, y = 3, rule = B3/S23\nbob$2bo$3o!"
+
+# Dinkydau's "11 Dimensions", 256 decimal places.
+ELEVEN_DIMENSIONS_RE = (
+    "-1.789169018604823106674468341188838763817361836815907015582201739718100615627027"
+    "574914236924582039605440639575567531218327153412892304947143409769022231541920271"
+    "538326405015913194702917367739501587876736286253331090293821032099999999999999999"
+    "9999999999999998"
+)
+ELEVEN_DIMENSIONS_IM = (
+    "-0.000000339368515767182566028230266146812728348218894593856901397469694238873656"
+    "911013614721917617426684297223646854879514198904612245023079025046965906353413282"
+    "632411984659927807440363593913324582126454730659527320203070323299999999999999999"
+    "9999999999999998"
+)
 
 
 def write_case(family: str, name: str, sim: Simulation, steps: list[int]) -> None:
@@ -285,11 +299,75 @@ def main() -> None:
         (48, 48),
         orbit_kind="mandelbrot",
     )
+    # T0 with a 33-place center, non-square: the float64 projection of the center must
+    # be the one correctly rounded double on every platform (the C# port computes it
+    # from the digits; double.Parse is only guaranteed on .NET Core), and a 48x32
+    # frame pins width-based framing -- every earlier vector was square.
+    write_fractal_case(
+        "mandelbrot", "seahorse-zoom6-48x32",
+        Mandelbrot(max_iter=2000),
+        {"max_iter": 2000, "escape_radius": 1000.0},
+        Viewport(
+            "-0.743643887037158704752191506114774",
+            "0.131825904205311970493132056385139",
+            6.0,
+        ),
+        (48, 32),
+        spec_version="0.3.0",
+    )
+    # Past zoom ~268.8 the working precision exceeds 1022 fractional bits; the C#
+    # fixed point -> float64 conversion threw on any orbit component below ~1e-292,
+    # which a center this close to the real axis produces from Z1 on. The frame is
+    # the antenna tip c = -2 (orbit 0, -2, 2, 2, ... with the imaginary part growing
+    # 4x per step); every pixel matches a 1200-bit direct iteration.
+    write_fractal_case(
+        "mandelbrot", "deep-zoom280-tinyim-32",
+        Mandelbrot(max_iter=1000),
+        {"max_iter": 1000, "escape_radius": 1000.0},
+        Viewport("-2", "1e-295", 280.0),
+        (32, 32),
+        orbit_kind="mandelbrot",
+        spec_version="0.3.0",
+    )
+    # A 256-place center at F = 915 bits (the digit term; zoom 20 alone would ask for
+    # 194). It pins the fixed-point orbit arithmetic the two ports share, which the old
+    # floating-point Python orbit fails; its 4,001 samples do not reach the depth where
+    # the digit term itself changes a sample -- the zoom-160 orbit digest in both test
+    # suites and the working-bits asserts pin that. Every pixel matches a 1200-bit
+    # direct iteration.
+    write_fractal_case(
+        "mandelbrot", "deep-zoom20-11dim-32",
+        Mandelbrot(max_iter=4000),
+        {"max_iter": 4000, "escape_radius": 1000.0},
+        Viewport(ELEVEN_DIMENSIONS_RE, ELEVEN_DIMENSIONS_IM, 20.0),
+        (32, 32),
+        orbit_kind="mandelbrot",
+        source='Dinkydau, "11 Dimensions" (Kalles Fraktaler location; center only)',
+        spec_version="0.3.0",
+    )
     write_fractal_case(
         "julia", "classic-64",
         Julia(max_iter=500),
         {"c_re": -0.7269, "c_im": 0.1889, "max_iter": 500, "escape_radius": 1000.0},
         Viewport("0.0", "0.0", 0.0), (64, 64),
+    )
+    # Deep Julia at the rabbit's repelling fixed point beta = (1 + sqrt(1 - 4c)) / 2,
+    # which lies on the Julia set: pixels separate from the reference within ~30
+    # iterations, pass closer to 0 than to it, and rebase — onto the critical
+    # orbit, the case this vector exists to pin. Every pixel matches a 300-bit
+    # direct iteration (tests/test_fractal.py).
+    write_fractal_case(
+        "julia", "deep-zoom13-32",
+        Julia(c=complex(-0.123, 0.745), max_iter=600),
+        {"c_re": -0.123, "c_im": 0.745, "max_iter": 600, "escape_radius": 1000.0},
+        Viewport(
+            "1.27658194945592591790467276337476",
+            "-0.47966605489732779175475867397901",
+            13.0,
+        ),
+        (32, 32),
+        orbit_kind="julia",
+        spec_version="0.3.0",
     )
     write_fractal_case(
         "burning-ship", "home-64",
@@ -325,6 +403,8 @@ def write_fractal_case(
     viewport: Viewport,
     size: tuple[int, int],
     orbit_kind: str | None = None,
+    source: str | None = None,
+    spec_version: str = SPEC_VERSION,
 ) -> None:
     case_dir = VECTOR_ROOT / family / name
     case_dir.mkdir(parents=True, exist_ok=True)
@@ -334,7 +414,7 @@ def write_fractal_case(
         (case_dir / file).write_bytes(np.ascontiguousarray(grid, dtype="<i4").tobytes())
         outputs.append({"kind": kind, "file": file, "shape": list(grid.shape)})
     meta: dict[str, Any] = {
-        "spec_version": SPEC_VERSION,
+        "spec_version": spec_version,
         "family": family,
         "tier": "bit-exact",
         "params": params,
@@ -342,15 +422,31 @@ def write_fractal_case(
         "size": list(size),
         "outputs": outputs,
     }
+    if source is not None:
+        meta["source"] = source  # attribution for a third-party location
     if orbit_kind is not None:
+        c_re = params.get("c_re", 0.0)
+        c_im = params.get("c_im", 0.0)
         orbit = reference_orbit(
             orbit_kind, viewport.center_re, viewport.center_im,
-            viewport.zoom_log10, params["max_iter"],
+            viewport.zoom_log10, params["max_iter"], c_re=c_re, c_im=c_im,
         )
         (case_dir / "orbit.c128").write_bytes(
             np.ascontiguousarray(orbit, dtype="<c16").tobytes()
         )
         meta["reference_orbit"] = {"file": "orbit.c128", "length": len(orbit)}
+        if orbit_kind == "julia":
+            # A Julia reference starts at the center; rebased pixels restart on the
+            # critical orbit (z0 = 0, same c), which the vector pins too so a port
+            # with no bignum stack can replay the case (spec/deep-zoom.md "Rebasing").
+            critical = reference_orbit(
+                "julia", "0", "0", viewport.zoom_log10, params["max_iter"],
+                c_re=c_re, c_im=c_im,
+            )
+            (case_dir / "critical.c128").write_bytes(
+                np.ascontiguousarray(critical, dtype="<c16").tobytes()
+            )
+            meta["critical_orbit"] = {"file": "critical.c128", "length": len(critical)}
     (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n")
     print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
 
@@ -577,6 +673,18 @@ def write_frame_cases() -> None:
             {"degree": 3, "max_iter": 60},
             Viewport("0.0", "0.0", -0.1),
         ),
+        # Deep Julia centered on sqrt(-c), a preimage of 0 (c = i): pixels rebase onto
+        # the critical orbit W0 = 0, whose next step squares delta ~ 1e-158 -- a
+        # subnormal product. C#'s software fma was inexact there before its exact slow
+        # path; the counts still agreed, but final z and so this smooth render did not
+        # (up to 4.5e-4 relative). spec/deep-zoom.md "Float-determinism gotchas".
+        (
+            "fractal-render-julia-deep157",
+            "julia",
+            Julia(c=1j, max_iter=2000),
+            {"c_re": 0.0, "c_im": 1.0, "max_iter": 2000, "escape_radius": 1000.0},
+            Viewport("0.70710678118654752440084436210484903928483593768847403658833986899536623923105351942519376716382078636750692311545614851246241802792536860632206074854996791570661133296375279637789997525057639103028574", "-0.70710678118654752440084436210484903928483593768847403658833986899536623923105351942519376716382078636750692311545614851246241802792536860632206074854996791570661133296375279637789997525057639103028574", 157.5),
+        ),
     ]
     for name, family, field, params, viewport in fractal_cases:
         case_dir = VECTOR_ROOT / "render" / name
@@ -586,7 +694,7 @@ def write_frame_cases() -> None:
             np.ascontiguousarray(render, dtype="<f8").tobytes()
         )
         write_meta(case_dir, {
-            "spec_version": SPEC_VERSION,
+            "spec_version": "0.3.0" if family == "julia" else SPEC_VERSION,
             "family": "render",
             "tier": "epsilon",
             "epsilon": 1e-9,

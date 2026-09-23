@@ -51,7 +51,7 @@ Built early on purpose: the playground is the library's first real consumer and 
 Per `spec/deep-zoom.md` (contract already in core since Phase 1):
 
 - Escape-time engine, T0 float64 direct path; smooth coloring.
-- Perturbation + rebasing engine (T1): gmpy2/mpmath shim (backends verified bit-identical), cached reference orbits, NumPy lockstep iteration with fancy-indexed `Z[m]` gather.
+- Perturbation + rebasing engine (T1): cached reference orbits, NumPy lockstep iteration with fancy-indexed `Z[m]` gather. (Orbits were a gmpy2/mpmath floating-point shim until 2026-09-23; they are now the spec's fixed-point arithmetic on Python ints, gmpy2 mpz optional, identical to the C# port.)
 - Mandelbrot, Julia, Burning Ship (diffabs), Newton (T0 only) — T1 validated against T0 (exact for Julia/Ship; Mandelbrot agreement equals T0's own 1-ulp chaos bound).
 - Playground: click/wheel zoom (cursor-anchored, Decimal-precise recentering), pan via Ctrl-click; zoom movies via `fractal.zoom_animation`.
 - Vectors: int32 iteration/root grids (bit-exact) incl. a deep-zoom case with its exported reference orbit.
@@ -83,9 +83,9 @@ Per `spec/deep-zoom.md` (contract already in core since Phase 1):
 
 `HeatonLife.Core` replays every shared vector: all families, colormaps
 (spec/render.md), patterns, PNG I/O, and the evolver (spec/evolve.md). Reference-orbit
-generation (bignum) runs on the C# side too (`ReferenceOrbit`, the fixed-point option
-spec/deep-zoom.md sanctions, pinned by regenerating the shipped `orbit.c128` byte for
-byte). The package is a dependency-free `netstandard2.1` assembly with a symbols package.
+generation (bignum) runs on the C# side too (`ReferenceOrbit`, the normative
+fixed-point arithmetic of spec/deep-zoom.md, pinned by regenerating every shipped
+orbit byte for byte). The package is a dependency-free `netstandard2.1` assembly with a symbols package.
 
 ## Phase 9 — First releases ✅
 

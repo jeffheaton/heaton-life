@@ -4,16 +4,19 @@ namespace HeatonLife
 {
     /// <summary>
     /// Perturbation + rebasing deep-zoom engine (spec/deep-zoom.md). One high-precision
-    /// reference orbit — precomputed elsewhere (the Python side, or a stored vector) —
-    /// and every pixel iterates its small deviation delta in plain float64. Rebasing
-    /// (Zhuoran 2021): whenever the full value |Z[m] + delta| drops below |delta|,
-    /// restart against the beginning of the reference. One reference serves the whole
+    /// reference orbit (<see cref="ReferenceOrbit"/>, or a stored vector) and every
+    /// pixel iterates its small deviation delta in plain float64. Rebasing (Zhuoran
+    /// 2021): whenever the full value |Z[m] + delta| drops below |delta|, restart
+    /// against the beginning of an orbit whose first sample is 0 — the reference
+    /// itself for Mandelbrot and Burning Ship, the critical orbit for Julia (whose
+    /// reference starts at the viewport center). One reference serves the whole
     /// frame; no glitch detection passes.
     /// </summary>
     public static class Perturbation
     {
         /// <summary>
-        /// Perturbation for z^2 + c maps (Mandelbrot: delta0 = 0; Julia: deltaC = 0).
+        /// Perturbation for z^2 + c maps whose reference starts at 0 (Mandelbrot:
+        /// delta0 = 0), so a rebased pixel restarts on the reference itself.
         /// Returns the 1-based escape iteration for one pixel, or -1.
         /// </summary>
         public static int PerturbZ2(
@@ -27,22 +30,48 @@ namespace HeatonLife
             double escapeRadius,
             out double finalRe,
             out double finalIm)
+            => PerturbZ2(
+                orbitRe, orbitIm, orbitRe, orbitIm, dz0Re, dz0Im, dcRe, dcIm,
+                maxIter, escapeRadius, out finalRe, out finalIm);
+
+        /// <summary>
+        /// Perturbation for z^2 + c maps with a separate rebase orbit, which must
+        /// start at 0 (Julia: deltaC = 0, the reference starts at the viewport
+        /// center, and <paramref name="rebaseRe"/>/<paramref name="rebaseIm"/> is the
+        /// critical orbit under the same c). A pixel follows the reference until its
+        /// first rebase and the rebase orbit from then on (spec/deep-zoom.md
+        /// "Rebasing"). Returns the 1-based escape iteration for one pixel, or -1.
+        /// </summary>
+        public static int PerturbZ2(
+            double[] orbitRe,
+            double[] orbitIm,
+            double[] rebaseRe,
+            double[] rebaseIm,
+            double dz0Re,
+            double dz0Im,
+            double dcRe,
+            double dcIm,
+            int maxIter,
+            double escapeRadius,
+            out double finalRe,
+            out double finalIm)
         {
             double dzr = dz0Re, dzi = dz0Im;
+            double[] refRe = orbitRe, refIm = orbitIm;
             int m = 0;
-            int last = orbitRe.Length - 1;
+            int last = refRe.Length - 1;
             double r2 = escapeRadius * escapeRadius;
             for (int it = 1; it <= maxIter; it++)
             {
                 // dz = (2*Z[m] + dz) * dz + dc, with the reference's fma-contracted multiply
-                double tr = 2.0 * orbitRe[m] + dzr;
-                double ti = 2.0 * orbitIm[m] + dzi;
+                double tr = 2.0 * refRe[m] + dzr;
+                double ti = 2.0 * refIm[m] + dzi;
                 var (mr, mi) = FractalEngine.ComplexMul(tr, ti, dzr, dzi);
                 dzr = mr + dcRe;
                 dzi = mi + dcIm;
                 m = Math.Min(m + 1, last);
-                double zr = orbitRe[m] + dzr;
-                double zi = orbitIm[m] + dzi;
+                double zr = refRe[m] + dzr;
+                double zi = refIm[m] + dzi;
                 double zabs2 = zr * zr + zi * zi;
                 if (zabs2 > r2)
                 {
@@ -54,6 +83,9 @@ namespace HeatonLife
                 {
                     dzr = zr;
                     dzi = zi;
+                    refRe = rebaseRe;
+                    refIm = rebaseIm;
+                    last = refRe.Length - 1;
                     m = 0;
                 }
             }

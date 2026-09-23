@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 
 namespace HeatonLife
 {
@@ -8,7 +7,9 @@ namespace HeatonLife
     /// Centers are decimal strings of unlimited length; zoom is log10 of magnification.
     /// The center is never *stored* as float64 — that is the whole point (float64
     /// pixelates near zoom 1e13, and deep zoom must not be a retrofit). Float64
-    /// projections are provided for the T0 tier only.
+    /// projections are provided for the T0 tier only. Both centers follow the one
+    /// decimal grammar every consumer shares (<see cref="DecimalText"/>, the Python
+    /// reference's core/decimal_text.py): no NaN, no infinities, ASCII digits.
     /// </summary>
     public sealed class Viewport
     {
@@ -18,24 +19,33 @@ namespace HeatonLife
 
         public Viewport(string centerRe = "-0.5", string centerIm = "0.0", double zoomLog10 = 0.0)
         {
-            CenterRe = Validate(centerRe, nameof(centerRe));
-            CenterIm = Validate(centerIm, nameof(centerIm));
+            CenterRe = centerRe ?? throw new ArgumentNullException(nameof(centerRe));
+            CenterIm = centerIm ?? throw new ArgumentNullException(nameof(centerIm));
+            CenterReDouble = Project(centerRe, nameof(centerRe));
+            CenterImDouble = Project(centerIm, nameof(centerIm));
             ZoomLog10 = zoomLog10;
         }
 
-        /// <summary>Float64 projection of the center (T0 only — collapses past zoom ~1e13).</summary>
-        public double CenterReDouble => double.Parse(CenterRe, CultureInfo.InvariantCulture);
+        /// <summary>
+        /// Float64 projection of the center (T0 only — collapses past zoom ~1e13): the
+        /// double nearest the decimal, rounded once, computed from the digits rather
+        /// than by <c>double.Parse</c>, whose rounding is only guaranteed on .NET Core.
+        /// </summary>
+        public double CenterReDouble { get; }
 
         /// <summary>Float64 projection of the center (T0 only).</summary>
-        public double CenterImDouble => double.Parse(CenterIm, CultureInfo.InvariantCulture);
+        public double CenterImDouble { get; }
 
-        private static string Validate(string value, string name)
+        private static double Project(string value, string name)
         {
-            if (value == null)
-                throw new ArgumentNullException(name);
-            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out _))
-                throw new ArgumentException($"Viewport.{name} is not a valid decimal string: '{value}'");
-            return value;
+            try
+            {
+                return DecimalText.ToDouble(value);
+            }
+            catch (ArgumentException)
+            {
+                throw new ArgumentException($"Viewport.{name} is not a valid decimal string: '{value}'", name);
+            }
         }
     }
 }
