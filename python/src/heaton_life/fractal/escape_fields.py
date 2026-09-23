@@ -41,6 +41,8 @@ def _ship_update(z: ComplexArray, c: ComplexArray) -> ComplexArray:
 class _EscapeField:
     """Shared tiering + output logic; subclasses define the two tier paths."""
 
+    max_zoom_log10 = T1_MAX_ZOOM  # the deepest zoom these families render
+
     def __init__(self, max_iter: int = 500, escape_radius: float = 1000.0) -> None:
         if max_iter < 1:
             raise ValueError("max_iter must be positive")
@@ -79,14 +81,22 @@ class _EscapeField:
     def outputs(self, size: tuple[int, int], viewport: Viewport) -> dict[str, IntArray]:
         return {"iterations": self.iterations(size, viewport)}
 
+    def counts_and_smooth(
+        self, size: tuple[int, int], viewport: Viewport
+    ) -> tuple[IntArray, FloatArray]:
+        """Raw counts and smooth values mu (0 where interior), each (height, width),
+        before normalization -- so a host can recolor without re-rendering."""
+        width, height = size
+        counts, final = self._compute(size, viewport)
+        mu = smooth_iterations(counts, final, self.escape_radius)
+        return counts.reshape(height, width), mu.reshape(height, width)
+
     def render_and_counts(
         self, size: tuple[int, int], viewport: Viewport
     ) -> tuple[FloatArray, IntArray]:
         """One computation, both consumers: the render and the raw counts."""
-        width, height = size
-        counts, final = self._compute(size, viewport)
-        mu = smooth_iterations(counts, final, self.escape_radius)
-        return normalize_render(mu).reshape(height, width), counts.reshape(height, width)
+        counts, mu = self.counts_and_smooth(size, viewport)
+        return normalize_render(mu), counts
 
     def render(self, size: tuple[int, int], viewport: Viewport) -> FloatArray:
         """Smooth-colored field in [0,1] (Field protocol); interior is 0."""

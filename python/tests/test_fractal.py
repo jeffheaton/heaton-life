@@ -31,9 +31,8 @@ def test_working_bits_count_the_centers_digits() -> None:
     """spec/deep-zoom.md "Precision": max(zoom bits, center digit bits) + 64."""
     from heaton_life.core.bignum import decimal_places, working_bits
 
-    assert [decimal_places(s) for s in ("0", "0.0", "-2", "2.5E1", "1e-295", ".5")] == [
-        0, 1, 0, 0, 295, 1,
-    ]
+    places = [decimal_places(s) for s in ("0", "0.0", "-2", "2.5E1", "1e-295", ".5")]
+    assert places == [0, 1, 0, 0, 295, 1]
     # The shipped deep vectors: 10^33 has 110 bits, exactly zoom 14's 46 + 64.
     assert working_bits(SEAHORSE_RE, SEAHORSE_IM, 14.0) == 174
     assert working_bits("-2", "1e-295", 280.0) == 1060  # zoom term wins
@@ -270,3 +269,91 @@ def test_newton_refuses_to_leave_the_direct_tier() -> None:
         field.render((16, 16), Viewport("0.3", "0.5", 20.0))
     with pytest.raises(ValueError):
         field.iterations((16, 16), Viewport("0.3", "0.5", 20.0))
+
+
+def test_orbit_cache_serves_prefixes_and_resumes_exactly(monkeypatch: pytest.MonkeyPatch) -> None:
+    """spec/deep-zoom.md "Caching & interactivity": a cached orbit answers shorter
+    requests with a prefix and longer ones by resuming -- identical to computing afresh."""
+    from heaton_life.core import bignum
+
+    calls: list[str] = []
+    fresh, resume = bignum._fresh, bignum._resume
+    monkeypatch.setattr(bignum, "_fresh", lambda *a: calls.append("fresh") or fresh(*a))
+    monkeypatch.setattr(bignum, "_resume", lambda *a: calls.append("resume") or resume(*a))
+    cases = [
+        ("mandelbrot", SEAHORSE_RE, SEAHORSE_IM, 20.0, 0.0, 0.0),
+        ("julia", "0.1", "0.2", 13.0, RABBIT.real, RABBIT.imag),
+        ("julia", "0", "0", 13.0, RABBIT.real, RABBIT.imag),
+        ("burning_ship", "-1.75", "-0.0000001", 15.0, 0.0, 0.0),
+    ]
+    for kind, re, im, zoom, c_re, c_im in cases:
+        bits = bignum.working_bits(re, im, zoom)
+        fresh_short = bignum._orbit_fixed(kind, re, im, bits, 700, c_re, c_im)
+        fresh_long = bignum._orbit_fixed(kind, re, im, bits, 3000, c_re, c_im)
+        assert len(fresh_short) == 701 and len(fresh_long) == 3001  # nothing escapes early
+        bignum.clear_cache()
+        calls.clear()
+        short = reference_orbit(kind, re, im, zoom, 700, c_re=c_re, c_im=c_im)
+        long = reference_orbit(kind, re, im, zoom, 3000, c_re=c_re, c_im=c_im)
+        again = reference_orbit(kind, re, im, zoom, 700, c_re=c_re, c_im=c_im)
+        assert calls == ["fresh", "resume"], kind  # resumed, then a prefix with no work
+        assert np.array_equal(short, fresh_short), kind
+        assert np.array_equal(long, fresh_long), kind
+        assert np.array_equal(again, fresh_short), kind
+        assert not long.flags.writeable and not again.flags.writeable
+    bignum.clear_cache()
+
+
+def test_orbit_cache_evicts_least_recently_used_under_both_caps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from heaton_life.core import bignum
+
+    bignum.clear_cache()
+    for i in range(9):
+        reference_orbit("mandelbrot", f"-0.1{i}", "0.1", 13.0, 100)
+        if i:
+            reference_orbit("mandelbrot", "-0.10", "0.1", 13.0, 100)  # keep orbit 0 recent
+    keys = [key[1] for key in bignum._CACHE]
+    assert len(keys) == 8 and "-0.11" not in keys and keys[-1] == "-0.10"
+
+    # Below one orbit, the two most recent still stay (a Julia frame's pair).
+    monkeypatch.setattr(bignum, "CACHE_BYTES", 0)
+    reference_orbit("mandelbrot", "-0.20", "0.1", 13.0, 100)
+    assert [key[1] for key in bignum._CACHE] == ["-0.10", "-0.20"]
+
+    monkeypatch.setattr(bignum, "CACHE_BYTES", 101 * 16 * 3)  # three 101-sample orbits
+    for i in range(1, 5):
+        reference_orbit("mandelbrot", f"-0.2{i}", "0.1", 13.0, 100)  # new keys: each inserts
+    assert [key[1] for key in bignum._CACHE] == ["-0.22", "-0.23", "-0.24"]
+    bignum.clear_cache()
+
+
+def test_tiers_ceilings_and_raw_smooth_values() -> None:
+    from heaton_life.fractal import tier_of
+    from heaton_life.fractal.engine import normalize_render
+
+    assert [tier_of(z) for z in (-3.0, 12.0, 12.0000001, 290.0, 290.5)] == [
+        "T0",
+        "T0",
+        "T1",
+        "T1",
+        "T2",
+    ]
+    assert Mandelbrot().max_zoom_log10 == Julia().max_zoom_log10 == BurningShip().max_zoom_log10
+    assert Mandelbrot().max_zoom_log10 == 290.0 and Newton().max_zoom_log10 == 12.0
+
+    frames = [
+        (Mandelbrot(max_iter=800), Viewport("-0.5", "0.0", 0.0)),
+        (Mandelbrot(max_iter=5000), Viewport(SEAHORSE_RE, SEAHORSE_IM, 14.0)),
+        (Julia(c=RABBIT, max_iter=600), Viewport(RABBIT_BETA_RE, RABBIT_BETA_IM, 13.0)),
+    ]
+    for field, vp in frames:
+        counts, smooth = field.counts_and_smooth((48, 32), vp)
+        render, counts2 = field.render_and_counts((48, 32), vp)
+        assert counts.shape == smooth.shape == (32, 48)
+        assert (counts > 0).any() and (counts < 0).any()  # a real frame, not a degenerate one
+        assert len(np.unique(smooth[counts > 0])) > 10
+        assert np.array_equal(counts, counts2)
+        assert np.array_equal(normalize_render(smooth), render)
+        assert ((smooth > 0) == (counts > 0)).all()

@@ -58,6 +58,10 @@ conformance output.
 | T1 | ≤ 290 | perturbation + rebasing, reference index clamped to the last orbit sample |
 | T2 | > 290 | not implemented (raises); floatexp reserved |
 
+A host can ask which tier a zoom selects before rendering (C# `FractalEngine.TierOf`,
+Python `tier_of`), and how deep a family goes (`MaxZoomLog10` / `max_zoom_log10`:
+1e290 for the escape-time fields, 1e12 for Newton).
+
 Determinism note: T1 counts are bit-stable given the reference orbit, and the orbit
 itself is pinned — both ports run one fixed-point arithmetic and produce
 **identical** orbits at any length ([deep-zoom.md](deep-zoom.md#reference-orbit-the-only-high-precision-computation)). In chaotic boundary regions T0 and T1 legitimately disagree on
@@ -78,6 +82,24 @@ runs on the finished `mu` buffer. Conformance suites replay the same vectors at
 `workers = 1` and `workers > 1`; both must match byte-for-byte. Python renders
 whole-array through NumPy and takes no knob — parallelism is a host-side
 performance detail, never an algorithm change.
+
+### Other host knobs
+
+The C# port has three more knobs of the same kind, for interactive hosts; each observes
+or stops the work and **never changes a completed frame's output**:
+
+- **Progress** (`RenderProgress`): rows completed, and — for a T1 frame whose orbit is
+  not cached — a reference-orbit phase counting iterations first (Julia runs two, its
+  center's orbit and then the critical orbit). Each render resets it, so one object can
+  be reused frame after frame.
+- **Cancellation** (`CancellationToken`): checked before each row and every 4,096 orbit
+  iterations. A canceled render throws `OperationCanceledException` with its output
+  buffers partly written; a canceled orbit is never cached.
+- **Caller buffers**: counts and raw smooth values `μ` (before normalization; 0 where
+  interior) into the host's arrays, and the normalization into another pair — nothing
+  allocated per pixel, per iteration, or in proportion to the frame or the orbit (a
+  few small objects per call remain, more with `workers > 1`), and a host can recolor
+  without re-rendering. Python's `counts_and_smooth` returns the same `μ`.
 
 ## Vector schema (one-shot renders; no time axis)
 

@@ -30,6 +30,21 @@ namespace HeatonLife
         /// 10^netExponent); ArgumentException for anything outside the grammar.
         /// </summary>
         internal static void Scan(string text, out bool negative, out BigInteger digits, out int netExponent)
+            => ScanCore(text, true, out negative, out digits, out netExponent);
+
+        /// <summary>
+        /// The net exponent alone (value = digits * 10^netExponent), validating the same
+        /// grammar but building no BigInteger: what the precision rule and the Viewport's
+        /// validation need, on every frame, allocation-free.
+        /// </summary>
+        internal static int NetExponent(string text)
+        {
+            ScanCore(text, false, out _, out _, out int netExponent);
+            return netExponent;
+        }
+
+        private static void ScanCore(
+            string text, bool buildDigits, out bool negative, out BigInteger digits, out int netExponent)
         {
             if (text == null)
                 throw new ArgumentNullException(nameof(text));
@@ -57,7 +72,8 @@ namespace HeatonLife
                 {
                     if (++digitCount > MaxDigits)
                         throw new ArgumentException($"more than {MaxDigits} digits", nameof(text));
-                    digits = digits * 10 + (c - '0');
+                    if (buildDigits)
+                        digits = digits * 10 + (c - '0');
                     if (sawPoint)
                         fractionDigits++;
                     sawDigit = true;
@@ -159,9 +175,12 @@ namespace HeatonLife
         /// already rounded at that ulp (normal when q &gt;= 2^52, else subnormal with
         /// ulp = -1074). No floating-point operation runs, so nothing rounds twice.
         /// </summary>
-        internal static double Compose(bool negative, BigInteger q, int ulp)
+        internal static double Compose(bool negative, BigInteger q, int ulp) => Compose(negative, (long)q, ulp);
+
+        /// <summary><see cref="Compose(bool, BigInteger, int)"/> for a mantissa already in a long.</summary>
+        internal static double Compose(bool negative, long q, int ulp)
         {
-            long mantissa = (long)q;
+            long mantissa = q;
             if (mantissa == 1L << 53)
             {
                 mantissa >>= 1;                                // rounding carried into the next binade

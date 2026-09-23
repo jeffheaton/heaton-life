@@ -25,6 +25,8 @@ class NewtonParams(Params):
 
 
 class Newton:
+    max_zoom_log10 = T0_MAX_ZOOM  # no perturbation tier
+
     def __init__(self, degree: int = 3, max_iter: int = 60) -> None:
         if degree < 2:
             raise ValueError("degree must be >= 2")

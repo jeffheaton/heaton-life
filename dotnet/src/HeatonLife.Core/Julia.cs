@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 namespace HeatonLife
 {
@@ -111,6 +112,42 @@ namespace HeatonLife
             return (FractalEngine.NormalizeRender(mu), counts);
         }
 
+        /// <summary>
+        /// Escape counts and raw smooth values into caller buffers. Nothing is allocated per
+        /// pixel, per iteration, or in proportion to the frame — only a T1 reference orbit
+        /// the cache does not already hold, and a few small objects per call. The smooth
+        /// value is spec/fractals.md's mu = n + 1 - log2(log|z| / log R), 0 where interior,
+        /// before any normalization (<see cref="FractalEngine.NormalizeRender(double[], double[], double[])"/>
+        /// makes the same render <see cref="Render(int,int,Viewport)"/> returns), so a host
+        /// can recolor without re-rendering. <paramref name="smooth"/> may be null. Tiered
+        /// by zoom through <see cref="MaxZoomLog10"/>.
+        ///
+        /// <paramref name="progress"/> and <paramref name="cancellationToken"/> only observe
+        /// and stop the work: output is bit-identical with or without them. A canceled
+        /// render throws OperationCanceledException with the buffers partly written, and
+        /// a canceled reference orbit is never cached.
+        /// </summary>
+        public void Iterations(
+            int width, int height, Viewport viewport, int[] counts, double[]? smooth,
+            RenderProgress? progress = null, CancellationToken cancellationToken = default)
+            => Compute(width, height, viewport, null, null, null, null, counts, smooth, progress, cancellationToken);
+
+        /// <summary>
+        /// <see cref="RenderAndCounts(int,int,Viewport,RenderProgress)"/> that a host can
+        /// cancel (OperationCanceledException); a superseded frame stops within a row.
+        /// </summary>
+        public (double[] Render, int[] Counts) RenderAndCounts(
+            int width, int height, Viewport viewport, RenderProgress? progress, CancellationToken cancellationToken)
+        {
+            var counts = new int[width * height];
+            var mu = new double[width * height];
+            Compute(width, height, viewport, null, null, null, null, counts, mu, progress, cancellationToken);
+            return (FractalEngine.NormalizeRender(mu), counts);
+        }
+
+        /// <summary>The deepest zoom this family renders: the T1 ceiling (spec/fractals.md "Tiering").</summary>
+        public double MaxZoomLog10 => FractalEngine.T1MaxZoom;
+
         /// <summary>Smooth-colored field in [0,1] (Field protocol); interior is 0. ε tier.</summary>
         public double[] Render(int width, int height, Viewport viewport)
             => RenderAndCounts(width, height, viewport).Render;
@@ -130,10 +167,14 @@ namespace HeatonLife
             double[]? criticalIm,
             int[] counts,
             double[]? mu,
-            RenderProgress? progress = null)
+            RenderProgress? progress = null,
+            CancellationToken cancellationToken = default)
         {
             if (counts.Length != width * height)
                 throw new ArgumentException($"expected {width * height} counts, got {counts.Length}");
+            if (mu != null && mu.Length != width * height)
+                throw new ArgumentException($"expected {width * height} smooth values, got {mu.Length}");
+            progress?.Reset();
             // Zoom picks the tier, not orbit presence (spec/deep-zoom.md).
             bool t1 = FractalEngine.IsPerturbationTier(viewport);
             if (t1 && orbitRe == null)
@@ -141,14 +182,18 @@ namespace HeatonLife
                 // Deep zoom with no orbit handed in: make one. spec/deep-zoom.md
                 // sanctions BigInteger fixed point for exactly this, and until it
                 // existed the only reachable T1 render was a replay of a vector.
-                (orbitRe, orbitIm) = ReferenceOrbit.Julia(viewport.CenterRe, viewport.CenterIm, viewport.ZoomLog10, MaxIter, CRe, CIm);
+                (orbitRe, orbitIm) = ReferenceOrbit.Compute(
+                    ReferenceOrbit.Kind.Julia, viewport.CenterRe, viewport.CenterIm, viewport.ZoomLog10, MaxIter,
+                    CRe, CIm, progress, cancellationToken, whole: true);
             }
             if (t1 && criticalRe == null)
             {
                 // The reference starts at the center, so rebasing (which restarts a
                 // pixel at index 0 of an orbit that must begin at 0) needs the
                 // critical orbit under the same c (spec/deep-zoom.md "Rebasing").
-                (criticalRe, criticalIm) = ReferenceOrbit.JuliaCritical(CRe, CIm, viewport.ZoomLog10, MaxIter);
+                (criticalRe, criticalIm) = ReferenceOrbit.Compute(
+                    ReferenceOrbit.Kind.Julia, "0", "0", viewport.ZoomLog10, MaxIter, CRe, CIm, progress, cancellationToken,
+                    whole: true);
             }
             if (t1 && (orbitRe!.Length == 0 || orbitIm!.Length != orbitRe.Length))
                 throw new ArgumentException("the reference orbit must be two equal-length, non-empty arrays");
@@ -181,7 +226,7 @@ namespace HeatonLife
                 }
             }
 
-            FractalEngine.ForRows(height, Workers, Row, progress);
+            FractalEngine.ForRows(height, Workers, Row, progress, cancellationToken);
         }
     }
 }

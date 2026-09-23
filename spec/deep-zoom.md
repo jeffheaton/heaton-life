@@ -213,13 +213,33 @@ Tier selection is automatic and invisible to the caller; the API surface is iden
 
 ## Caching & interactivity
 
-- The reference orbit depends only on `(kind, C, F, max_iter)`, plus `c` for Julia, where
-  `F` comes from `zoom_log10` and the center's digits ([Precision](#reference-orbit-the-only-high-precision-computation)).
-  Cache on that key (both ports keep 8 entries, least recently used first out). Zooming
-  toward a fixed center reuses the orbit only while `F` is unchanged — a deeper zoom
-  raises `F` and needs a new orbit. Julia's critical orbit depends on `(c, F, max_iter)`
-  alone and is hit every frame. v1 recomputes on center change (one orbit ≈ max_iter
-  bignum ops ≈ ms–100s of ms, amortized over a frame).
+- The reference orbit depends on `(kind, C, F)`, plus `c` for Julia, where `F` comes
+  from `zoom_log10` and the center's digits ([Precision](#reference-orbit-the-only-high-precision-computation)),
+  and on `max_iter` only through where it stops. Cache on `(kind, C, F, c)`, keeping
+  each orbit's samples **and** the exact fixed-point `Z` at its last sample. A request
+  with `max_iter < length` (the cached orbit already holds `max_iter + 1` samples) — or
+  any request, once the cached orbit has hit the stopping rule — is answered by the
+  first `min(length, max_iter + 1)` samples; a longer one resumes from the kept state
+  and appends. (A renderer may read a longer cached orbit in place: the perturbation
+  index advances by at most one per iteration, so it never reads past `max_iter`.) Both are identical to computing
+  afresh (the recurrence is deterministic; `max_iter` only says when to stop), which
+  makes an auto-iteration ladder cost one orbit, not one per rung. Evict least recently
+  used first, under an entry cap (8 in both ports) and a byte cap (64 MB of samples by
+  default; C#'s `ReferenceOrbit.CacheByteLimit`, Python's `bignum.CACHE_BYTES`), always
+  keeping the two most recent — a Julia frame uses two orbits, and a cap between one
+  and two must not make them evict each other every frame. A computation that is
+  canceled is never cached.
+- The cache helps a fixed center only: zooming toward it reuses the orbit while `F` is
+  unchanged (a deeper zoom raises `F` and needs a new orbit), and raising `max_iter`
+  resumes it. Julia's critical orbit depends on `(c, F)` alone and is hit every frame.
+  A pan moves the center, so v1 computes a new orbit (≈ `max_iter` bignum steps, ms to
+  100s of ms); reusing an off-center reference is future work.
+- C# steps the orbit on fixed-width 32-bit limbs in preallocated buffers
+  (`FixedOrbit`), falling back to `System.Numerics.BigInteger` for centers or `c` of
+  magnitude `2¹⁶` or more. Both run the same integer operations, so the choice cannot
+  show in the orbit; the limbs exist because an immutable `BigInteger` step allocated
+  1.5–4.7 KB per iteration, hundreds of megabytes per deep orbit for a garbage collector
+  that stalls frames.
 - Playground: renders are single-pass today; progressive refinement (iteration ladder, coarse-to-fine tiles) with cancellation on viewport change is future work ([ROADMAP.md](../ROADMAP.md)).
 
 ## Cross-language notes

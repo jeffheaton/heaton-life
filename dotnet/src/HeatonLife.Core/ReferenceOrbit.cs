@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Threading;
 
 namespace HeatonLife
 {
@@ -64,6 +65,21 @@ namespace HeatonLife
         /// </summary>
         public const int MaxDigitPlaces = 340;
 
+        /// <summary>Bit length of 10^p for p = 0..MaxDigitPlaces, so a frame never builds 10^p.</summary>
+        private static readonly int[] DigitBits = BuildDigitBits();
+
+        private static int[] BuildDigitBits()
+        {
+            var table = new int[MaxDigitPlaces + 1];
+            BigInteger power = BigInteger.One;
+            for (int p = 0; p <= MaxDigitPlaces; p++)
+            {
+                table[p] = DecimalText.BitLength(power);
+                power *= 10;
+            }
+            return table;
+        }
+
         /// <summary>
         /// Fractional bits F of the fixed-point orbit (spec/deep-zoom.md "Precision"):
         /// the frame's need (<see cref="PrecisionBits"/>) or the center's own digits (at
@@ -75,8 +91,7 @@ namespace HeatonLife
         public static int WorkingBits(string centerRe, string centerIm, double zoomLog10)
         {
             int places = Math.Min(Math.Max(DecimalPlaces(centerRe), DecimalPlaces(centerIm)), MaxDigitPlaces);
-            int digitBits = DecimalText.BitLength(BigInteger.Pow(10, places));
-            return Math.Max(PrecisionBits(zoomLog10), digitBits) + WorkingGuardBits;
+            return Math.Max(PrecisionBits(zoomLog10), DigitBits[places]) + WorkingGuardBits;
         }
 
         /// <summary>Z0..ZK for Z -&gt; Z^2 + C with Z0 = 0 and C = the center.</summary>
@@ -115,21 +130,124 @@ namespace HeatonLife
             BurningShip,
         }
 
-        // The orbit depends only on (kind, center, precision, max_iter, c) — cache
-        // it, as spec/deep-zoom.md "Caching & interactivity" asks, so zooming toward
-        // a fixed center does not recompute thousands of bignum multiplies per
-        // frame. Least-recently-used eviction at the Python reference's
-        // lru_cache(maxsize=8): a Julia render hits its critical orbit every frame,
-        // and first-in-first-out would evict it every eighth.
+        // The orbit depends on (kind, center, F, c) and on max_iter only through where it
+        // stops, so the cache keys on the first four (spec/deep-zoom.md "Caching &
+        // interactivity"). A cached orbit serves any shorter request as a prefix, and a
+        // longer one by resuming from the exact fixed-point state it kept — both
+        // identical to computing afresh, since the recurrence is deterministic and
+        // max_iter only says when to stop. That is what makes an auto-iteration ladder
+        // cheap. Least-recently-used eviction under both an entry cap (the Python
+        // reference's 8) and a byte cap: a Julia render hits its critical orbit every
+        // frame, and a phone cannot hold 8 long orbits.
         private const int CacheCapacity = 8;
         private static readonly object CacheLock = new object();
-        private static readonly List<string> CacheOrder = new List<string>();
-        private static readonly Dictionary<string, (double[] Re, double[] Im)> Cache =
-            new Dictionary<string, (double[], double[])>();
+        private static readonly List<Key> CacheOrder = new List<Key>();
+        private static readonly Dictionary<Key, Entry> Cache = new Dictionary<Key, Entry>();
+        private static long _cacheByteLimit = 64L << 20;
 
+        /// <summary>Orbits the cache keeps whatever its byte cap: the two a Julia frame needs.</summary>
+        private const int KeepRecent = 2;
+
+        /// <summary>How often (in iterations) a running orbit polls for cancellation and reports progress.</summary>
+        internal const int PollInterval = 4096;
+
+        /// <summary>
+        /// Most bytes of orbit samples the cache holds (16 per sample; default 64 MB).
+        /// Least recently used orbits go first; the two most recent always stay, even over
+        /// the limit (a Julia frame needs both of its orbits). 0 keeps only those two.
+        /// </summary>
+        public static long CacheByteLimit
+        {
+            get { lock (CacheLock) return _cacheByteLimit; }
+            set
+            {
+                if (value < 0)
+                    throw new ArgumentOutOfRangeException(nameof(value), "the byte limit cannot be negative");
+                lock (CacheLock)
+                {
+                    _cacheByteLimit = value;
+                    Evict();
+                }
+            }
+        }
+
+        /// <summary>
+        /// What an orbit depends on — (kind, center, F, c) — compared by value without
+        /// building a string per lookup.
+        /// </summary>
+        private readonly struct Key : IEquatable<Key>
+        {
+            internal Key(Kind kind, string re, string im, int bits, double cRe, double cIm)
+            {
+                KindOf = kind;
+                Re = re;
+                Im = im;
+                Bits = bits;
+                CRe = BitConverter.DoubleToInt64Bits(cRe);
+                CIm = BitConverter.DoubleToInt64Bits(cIm);
+            }
+
+            private Kind KindOf { get; }
+            private string Re { get; }
+            private string Im { get; }
+            private int Bits { get; }
+            private long CRe { get; }
+            private long CIm { get; }
+
+            public bool Equals(Key other) =>
+                KindOf == other.KindOf && Bits == other.Bits && CRe == other.CRe && CIm == other.CIm
+                && string.Equals(Re, other.Re, StringComparison.Ordinal)
+                && string.Equals(Im, other.Im, StringComparison.Ordinal);
+
+            public override bool Equals(object? obj) => obj is Key other && Equals(other);
+
+            public override int GetHashCode() => HashCode.Combine(KindOf, Re, Im, Bits, CRe, CIm);
+        }
+
+        /// <summary>A cached orbit: its samples and the exact state to resume from.</summary>
+        private sealed class Entry
+        {
+            internal Entry(double[] re, double[] im, bool escaped, BigInteger zr, BigInteger zi, BigInteger cr, BigInteger ci)
+            {
+                Re = re;
+                Im = im;
+                Escaped = escaped;
+                Zr = zr;
+                Zi = zi;
+                Cr = cr;
+                Ci = ci;
+            }
+
+            internal double[] Re { get; }
+            internal double[] Im { get; }
+
+            /// <summary>The last sample tripped the stopping rule: longer requests get the same orbit.</summary>
+            internal bool Escaped { get; }
+
+            /// <summary>The fixed-point Z at the last sample, and C, to resume from.</summary>
+            internal BigInteger Zr { get; }
+            internal BigInteger Zi { get; }
+            internal BigInteger Cr { get; }
+            internal BigInteger Ci { get; }
+
+            internal long Bytes => Re.Length * 16L;
+
+            /// <summary>Whether this orbit answers a request for <paramref name="maxIter"/> without iterating.</summary>
+            internal bool Covers(int maxIter) => Escaped || Re.Length - 1 >= maxIter;
+        }
+
+        /// <summary>
+        /// The orbit for <paramref name="maxIter"/>, from the cache when it can be. With
+        /// <paramref name="whole"/>, a longer cached orbit comes back as it is, uncopied:
+        /// the renderers use that, because the perturbation loop's index advances by at
+        /// most one per iteration (m &lt;= it &lt;= maxIter), so samples past maxIter are
+        /// never read and a longer orbit renders bit-identically. Otherwise exactly
+        /// min(length, maxIter + 1) samples, copied outside the lock when they are fewer.
+        /// </summary>
         internal static (double[] Re, double[] Im) Compute(
             Kind kind, string centerRe, string centerIm, double zoomLog10, int maxIter,
-            double cRe, double cIm)
+            double cRe, double cIm, RenderProgress? progress = null, CancellationToken cancellationToken = default,
+            bool whole = false)
         {
             if (centerRe == null)
                 throw new ArgumentNullException(nameof(centerRe));
@@ -139,45 +257,77 @@ namespace HeatonLife
                 throw new ArgumentOutOfRangeException(nameof(maxIter), "max_iter must be positive");
 
             int bits = WorkingBits(centerRe, centerIm, zoomLog10);
-            string key = kind + "|" + centerRe + "|" + centerIm + "|" + bits + "|" + maxIter
-                         + "|" + cRe.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
-                         + "|" + cIm.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+            var key = new Key(kind, centerRe, centerIm, bits, cRe, cIm);
+            Entry? start = null;
             lock (CacheLock)
             {
                 if (Cache.TryGetValue(key, out var hit))
                 {
                     Touch(key);
-                    return hit;
+                    start = hit;
                 }
             }
+            if (start != null && start.Covers(maxIter))
+                return whole ? (start.Re, start.Im) : Prefix(start, maxIter);
 
-            var computed = Iterate(kind, centerRe, centerIm, bits, maxIter, cRe, cIm);
+            // A canceled run throws out of here, so nothing partial is ever cached.
+            Entry computed = start == null
+                ? Fresh(kind, centerRe, centerIm, bits, maxIter, cRe, cIm, progress, cancellationToken)
+                : Resume(kind, start, bits, maxIter, progress, cancellationToken);
 
             lock (CacheLock)
             {
-                if (Cache.ContainsKey(key))
-                {
-                    Touch(key);                                // another thread got here first
-                }
-                else
-                {
-                    if (CacheOrder.Count >= CacheCapacity)
-                    {
-                        Cache.Remove(CacheOrder[0]);
-                        CacheOrder.RemoveAt(0);
-                    }
-                    Cache[key] = computed;
-                    CacheOrder.Add(key);
-                }
+                if (!Cache.TryGetValue(key, out var existing) || existing.Re.Length < computed.Re.Length)
+                    Cache[key] = computed;                     // else another thread stored a longer one
+                Touch(key);
+                Evict();
             }
-            return computed;
+            return whole ? (computed.Re, computed.Im) : Prefix(computed, maxIter);
+        }
+
+        /// <summary>
+        /// The first min(length, maxIter + 1) samples. The cached arrays themselves when
+        /// that is all of them — callers share them and must not write to them, as before.
+        /// Cached arrays never change once stored (a resume builds a new entry), so the
+        /// copy needs no lock.
+        /// </summary>
+        private static (double[] Re, double[] Im) Prefix(Entry entry, int maxIter)
+        {
+            int n = Math.Min(entry.Re.Length, maxIter + 1);
+            if (n == entry.Re.Length)
+                return (entry.Re, entry.Im);
+            var re = new double[n];
+            var im = new double[n];
+            Array.Copy(entry.Re, re, n);
+            Array.Copy(entry.Im, im, n);
+            return (re, im);
         }
 
         /// <summary>Mark a cached key most recently used. Caller holds CacheLock.</summary>
-        private static void Touch(string key)
+        private static void Touch(Key key)
         {
             CacheOrder.Remove(key);
             CacheOrder.Add(key);
+        }
+
+        /// <summary>
+        /// Drop least recently used orbits until the entry and byte caps hold, keeping the
+        /// two most recent regardless: a Julia frame uses two orbits (its center's and the
+        /// critical orbit), and a cap between one orbit and two must not make them evict
+        /// each other every frame. Caller holds CacheLock.
+        /// </summary>
+        private static void Evict()
+        {
+            long bytes = 0;
+            foreach (var entry in Cache.Values)
+                bytes += entry.Bytes;
+            while (CacheOrder.Count > KeepRecent && (CacheOrder.Count > CacheCapacity || bytes > _cacheByteLimit))
+            {
+                var oldest = CacheOrder[0];
+                bytes -= Cache[oldest].Bytes;
+                Cache.Remove(oldest);
+                CacheOrder.RemoveAt(0);
+            }
         }
 
         /// <summary>Drop every cached orbit (tests; a host reclaiming memory).</summary>
@@ -190,9 +340,38 @@ namespace HeatonLife
             }
         }
 
-        private static (double[] Re, double[] Im) Iterate(
+        /// <summary>Cached orbits and their sample bytes (tests).</summary>
+        internal static (int Count, long Bytes) CacheUsage
+        {
+            get
+            {
+                lock (CacheLock)
+                {
+                    long bytes = 0;
+                    foreach (var entry in Cache.Values)
+                        bytes += entry.Bytes;
+                    return (Cache.Count, bytes);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Tests: one orbit computed afresh, bypassing the cache, on the fixed-width path
+        /// (where it fits) or on the BigInteger path — the fixed-width path's oracle.
+        /// </summary>
+        internal static (double[] Re, double[] Im) ComputeUncached(
+            Kind kind, string centerRe, string centerIm, double zoomLog10, int maxIter,
+            double cRe, double cIm, bool bigInteger)
+        {
+            int bits = WorkingBits(centerRe, centerIm, zoomLog10);
+            var entry = Fresh(kind, centerRe, centerIm, bits, maxIter, cRe, cIm, null, CancellationToken.None, bigInteger);
+            return (entry.Re, entry.Im);
+        }
+
+        private static Entry Fresh(
             Kind kind, string centerRe, string centerIm, int bits, int maxIter,
-            double cRe, double cIm)
+            double cRe, double cIm, RenderProgress? progress, CancellationToken cancellationToken,
+            bool bigInteger = false)
         {
             BigInteger centerR = ParseFixed(centerRe, bits);
             BigInteger centerI = ParseFixed(centerIm, bits);
@@ -211,30 +390,140 @@ namespace HeatonLife
                 cr = centerR;
                 ci = centerI;
             }
+            // orbit[0] is Z0 itself, never escape-tested, exactly as the Python reference.
+            var samples = new Samples(Math.Min(maxIter + 1, PollInterval), maxIter + 1);
+            samples.Add(ToDouble(zr, bits), ToDouble(zi, bits));
+            return Run(kind, bits, zr, zi, cr, ci, samples, maxIter, progress, cancellationToken, bigInteger);
+        }
 
-            // The reference loop appends AFTER each step, exactly as the Python
-            // reference does, so orbit[0] is Z0 and the length is max_iter + 1
-            // unless the escape cutoff cuts it short.
-            var re = new List<double>(maxIter + 1) { ToDouble(zr, bits) };
-            var im = new List<double>(maxIter + 1) { ToDouble(zi, bits) };
-            for (int i = 0; i < maxIter; i++)
+        private static Entry Resume(
+            Kind kind, Entry start, int bits, int maxIter, RenderProgress? progress, CancellationToken cancellationToken)
+        {
+            var samples = new Samples(start.Re, start.Im, maxIter + 1);
+            return Run(kind, bits, start.Zr, start.Zi, start.Cr, start.Ci, samples,
+                maxIter - (start.Re.Length - 1), progress, cancellationToken);
+        }
+
+        /// <summary>
+        /// Up to <paramref name="steps"/> steps from Z = (zr, zi), appending each rounded
+        /// sample and stopping after the first that trips the stopping rule — the
+        /// Python reference's loop exactly. The fixed-width path whenever the values fit,
+        /// else BigInteger; the two agree bit for bit.
+        /// </summary>
+        private static Entry Run(
+            Kind kind, int bits, BigInteger zr, BigInteger zi, BigInteger cr, BigInteger ci,
+            Samples samples, int steps, RenderProgress? progress, CancellationToken cancellationToken,
+            bool bigInteger = false)
+        {
+            progress?.BeginOrbit(steps);
+            cancellationToken.ThrowIfCancellationRequested();
+            bool escaped = false;
+            bool burningShip = kind == Kind.BurningShip;
+            int executed = 0;
+            if (!bigInteger && FixedOrbit.Fits(bits, zr, zi, cr, ci))
             {
-                BigInteger nextR = Mul(zr, zr, bits) - Mul(zi, zi, bits) + cr;
-                BigInteger nextI = kind == Kind.BurningShip
-                    ? 2 * Mul(BigInteger.Abs(zr), BigInteger.Abs(zi), bits) + ci
-                    : 2 * Mul(zr, zi, bits) + ci;
-                zr = nextR;
-                zi = nextI;
-
-                double sr = ToDouble(zr, bits);
-                double si = ToDouble(zi, bits);
-                re.Add(sr);
-                im.Add(si);
-                // The escape test runs on the ROUNDED sample, like the reference.
-                if (sr * sr + si * si > EscapeAbs2)
-                    break;
+                var orbit = new FixedOrbit(burningShip, bits, zr, zi, cr, ci);
+                for (int i = 0; i < steps; i++)
+                {
+                    if ((i & (PollInterval - 1)) == 0 && i > 0)
+                        Poll(i, progress, cancellationToken);
+                    orbit.Step();
+                    executed++;
+                    double sr = orbit.SampleRe;
+                    double si = orbit.SampleIm;
+                    samples.Add(sr, si);
+                    // The escape test runs on the ROUNDED sample, like the reference.
+                    if (sr * sr + si * si > EscapeAbs2)
+                    {
+                        escaped = true;
+                        break;
+                    }
+                }
+                (zr, zi) = orbit.State;
             }
-            return (re.ToArray(), im.ToArray());
+            else
+            {
+                for (int i = 0; i < steps; i++)
+                {
+                    if ((i & (PollInterval - 1)) == 0 && i > 0)
+                        Poll(i, progress, cancellationToken);
+                    BigInteger nextR = Mul(zr, zr, bits) - Mul(zi, zi, bits) + cr;
+                    BigInteger nextI = burningShip
+                        ? 2 * Mul(BigInteger.Abs(zr), BigInteger.Abs(zi), bits) + ci
+                        : 2 * Mul(zr, zi, bits) + ci;
+                    zr = nextR;
+                    zi = nextI;
+                    executed++;
+                    double sr = ToDouble(zr, bits);
+                    double si = ToDouble(zi, bits);
+                    samples.Add(sr, si);
+                    if (sr * sr + si * si > EscapeAbs2)
+                    {
+                        escaped = true;
+                        break;
+                    }
+                }
+            }
+            progress?.OrbitAt(executed);
+            var (re, im) = samples.ToArrays();
+            return new Entry(re, im, escaped, zr, zi, cr, ci);
+        }
+
+        private static void Poll(int completed, RenderProgress? progress, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            progress?.OrbitAt(completed);
+        }
+
+        /// <summary>Growable parallel sample arrays, trimmed once at the end.</summary>
+        private sealed class Samples
+        {
+            private double[] _re, _im;
+            private int _count;
+            private readonly int _limit;
+
+            /// <summary>Empty, growing by doubling but never past <paramref name="limit"/>.</summary>
+            internal Samples(int capacity, int limit)
+            {
+                _re = new double[capacity];
+                _im = new double[capacity];
+                _limit = limit;
+            }
+
+            /// <summary>Start from an existing prefix; the arrays never grow past <paramref name="limit"/>.</summary>
+            internal Samples(double[] re, double[] im, int limit)
+            {
+                int capacity = Math.Min(limit, Math.Max(re.Length * 2, re.Length + PollInterval));
+                _re = new double[capacity];
+                _im = new double[capacity];
+                Array.Copy(re, _re, re.Length);
+                Array.Copy(im, _im, im.Length);
+                _count = re.Length;
+                _limit = limit;
+            }
+
+            internal void Add(double re, double im)
+            {
+                if (_count == _re.Length)
+                {
+                    int capacity = (int)Math.Min((long)_re.Length * 2, Math.Max(_limit, _count + 1));
+                    Array.Resize(ref _re, capacity);
+                    Array.Resize(ref _im, capacity);
+                }
+                _re[_count] = re;
+                _im[_count] = im;
+                _count++;
+            }
+
+            internal (double[] Re, double[] Im) ToArrays()
+            {
+                if (_count != _re.Length)
+                {
+                    Array.Resize(ref _re, _count);
+                    Array.Resize(ref _im, _count);
+                }
+                return (_re, _im);
+            }
         }
 
         // ---- fixed-point helpers ---------------------------------------------------
@@ -370,8 +659,7 @@ namespace HeatonLife
         {
             if (text == null)
                 throw new ArgumentNullException(nameof(text));
-            DecimalText.Scan(text, out _, out _, out int netExponent);
-            return Math.Max(-netExponent, 0);
+            return Math.Max(-DecimalText.NetExponent(text), 0);
         }
     }
 }

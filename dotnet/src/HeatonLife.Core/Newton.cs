@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 namespace HeatonLife
 {
@@ -45,10 +46,21 @@ namespace HeatonLife
         public void Basins(
             int width, int height, Viewport viewport, int[] roots, int[] iterations,
             RenderProgress? progress = null)
+            => Basins(width, height, viewport, roots, iterations, progress, CancellationToken.None);
+
+        /// <summary>
+        /// <see cref="Basins(int,int,Viewport,int[],int[],RenderProgress)"/> that a host can
+        /// cancel: OperationCanceledException, buffers partly written. Output is
+        /// bit-identical with or without the token.
+        /// </summary>
+        public void Basins(
+            int width, int height, Viewport viewport, int[] roots, int[] iterations,
+            RenderProgress? progress, CancellationToken cancellationToken)
         {
             if (roots.Length != width * height || iterations.Length != width * height)
                 throw new ArgumentException($"expected {width * height} cells in each output buffer");
             FractalEngine.RequireT0(viewport);
+            progress?.Reset();
             double ps = FractalEngine.PixelScale(width, viewport);
             double centerRe = viewport.CenterReDouble;
             double centerIm = viewport.CenterImDouble;
@@ -63,7 +75,7 @@ namespace HeatonLife
                 }
             }
 
-            FractalEngine.ForRows(height, Workers, Row, progress);
+            FractalEngine.ForRows(height, Workers, Row, progress, cancellationToken);
         }
 
         /// <summary>(root_index, iterations), each row-major (height, width), -1 where unconverged.</summary>
@@ -100,10 +112,20 @@ namespace HeatonLife
         /// </summary>
         public (double[] Render, int[] Counts) RenderAndCounts(
             int width, int height, Viewport viewport, RenderProgress? progress = null)
+            => RenderAndCounts(width, height, viewport, progress, CancellationToken.None);
+
+        /// <summary><see cref="RenderAndCounts(int,int,Viewport,RenderProgress)"/> that a host can cancel.</summary>
+        public (double[] Render, int[] Counts) RenderAndCounts(
+            int width, int height, Viewport viewport, RenderProgress? progress, CancellationToken cancellationToken)
         {
-            var (roots, iters) = Basins(width, height, viewport, progress);
+            var roots = new int[width * height];
+            var iters = new int[width * height];
+            Basins(width, height, viewport, roots, iters, progress, cancellationToken);
             return (Shade(roots, iters), iters);
         }
+
+        /// <summary>The deepest zoom this family renders: the T0 ceiling (no perturbation tier).</summary>
+        public double MaxZoomLog10 => FractalEngine.T0MaxZoom;
 
         /// <summary>
         /// Hue by basin, shaded by convergence speed (spec/render.md):

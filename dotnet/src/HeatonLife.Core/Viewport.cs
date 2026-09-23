@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 namespace HeatonLife
 {
@@ -19,33 +20,64 @@ namespace HeatonLife
 
         public Viewport(string centerRe = "-0.5", string centerIm = "0.0", double zoomLog10 = 0.0)
         {
-            CenterRe = centerRe ?? throw new ArgumentNullException(nameof(centerRe));
-            CenterIm = centerIm ?? throw new ArgumentNullException(nameof(centerIm));
-            CenterReDouble = Project(centerRe, nameof(centerRe));
-            CenterImDouble = Project(centerIm, nameof(centerIm));
+            CenterRe = Validate(centerRe, nameof(centerRe));
+            CenterIm = Validate(centerIm, nameof(centerIm));
             ZoomLog10 = zoomLog10;
         }
+
+        private double _centerReDouble;
+        private double _centerImDouble;
+        private int _projected;                                 // 1 once both projections are stored
 
         /// <summary>
         /// Float64 projection of the center (T0 only — collapses past zoom ~1e13): the
         /// double nearest the decimal, rounded once, computed from the digits rather
         /// than by <c>double.Parse</c>, whose rounding is only guaranteed on .NET Core.
+        /// Computed on first use: a T1 render never needs it, and a host that builds a
+        /// Viewport per frame should not pay for a long center's bignum every frame.
         /// </summary>
-        public double CenterReDouble { get; }
+        public double CenterReDouble
+        {
+            get
+            {
+                Project();
+                return _centerReDouble;
+            }
+        }
 
         /// <summary>Float64 projection of the center (T0 only).</summary>
-        public double CenterImDouble { get; }
-
-        private static double Project(string value, string name)
+        public double CenterImDouble
         {
+            get
+            {
+                Project();
+                return _centerImDouble;
+            }
+        }
+
+        private void Project()
+        {
+            if (Volatile.Read(ref _projected) != 0)
+                return;
+            // Racing threads compute the same values; the flag publishes them after the stores.
+            _centerReDouble = DecimalText.ToDouble(CenterRe);
+            _centerImDouble = DecimalText.ToDouble(CenterIm);
+            Volatile.Write(ref _projected, 1);
+        }
+
+        private static string Validate(string value, string name)
+        {
+            if (value == null)
+                throw new ArgumentNullException(name);
             try
             {
-                return DecimalText.ToDouble(value);
+                DecimalText.NetExponent(value);
             }
             catch (ArgumentException)
             {
                 throw new ArgumentException($"Viewport.{name} is not a valid decimal string: '{value}'", name);
             }
+            return value;
         }
     }
 }

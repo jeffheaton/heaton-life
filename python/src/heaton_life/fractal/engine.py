@@ -25,6 +25,15 @@ FloatArray = NDArray[np.float64]
 IntArray = NDArray[np.int32]
 
 
+def tier_of(zoom_log10: float) -> str:
+    """The tier a zoom selects (spec/fractals.md "Tiering"): "T0" through 1e12, "T1"
+    through 1e290, "T2" beyond -- reserved for floatexp, so rendering there raises today.
+    What a family can render is its own ``max_zoom_log10`` (Newton stops at T0)."""
+    if zoom_log10 <= T0_MAX_ZOOM:
+        return "T0"
+    return "T1" if zoom_log10 <= T1_MAX_ZOOM else "T2"
+
+
 def pixel_scale(size: tuple[int, int], viewport: Viewport) -> float:
     """Complex-plane distance between adjacent pixel centers (float64).
 

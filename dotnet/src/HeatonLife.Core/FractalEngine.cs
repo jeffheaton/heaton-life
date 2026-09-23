@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using System.Threading;
 
 namespace HeatonLife
 {
@@ -37,6 +38,20 @@ namespace HeatonLife
         /// <summary>Per-pixel imaginary offset for row y; im decreases downward.</summary>
         public static double OffsetIm(int y, int height, double pixelScale) =>
             -(y + 0.5 - height / 2.0) * pixelScale;
+
+        /// <summary>
+        /// The tier a zoom selects (spec/fractals.md "Tiering"), for a host deciding what
+        /// a frame will cost before it asks: <see cref="FractalTier.T0"/> through 1e12,
+        /// <see cref="FractalTier.T1"/> through 1e290, and <see cref="FractalTier.T2"/>
+        /// beyond — reserved for floatexp, so rendering there throws today. What a family
+        /// can render is its own MaxZoomLog10 (Newton stops at T0).
+        /// </summary>
+        public static FractalTier TierOf(double zoomLog10)
+        {
+            if (zoomLog10 <= T0MaxZoom)
+                return FractalTier.T0;
+            return zoomLog10 <= T1MaxZoom ? FractalTier.T1 : FractalTier.T2;
+        }
 
         /// <summary>
         /// For families with NO perturbation tier — Newton only (spec/fractals.md:
@@ -264,18 +279,24 @@ namespace HeatonLife
         /// with or without it (spec/fractals.md "Parallel rendering").
         /// </summary>
         public static void ForRows(int height, int workers, Action<int> row, RenderProgress? progress)
+            => ForRows(height, workers, row, progress, CancellationToken.None);
+
+        /// <summary>
+        /// <see cref="ForRows(int,int,Action{int},RenderProgress)"/> that a host can cancel:
+        /// the token is checked before each row, and a canceled render throws
+        /// OperationCanceledException with the output buffers partly written. Like
+        /// progress it only observes the work: rows that run, run exactly as before.
+        /// </summary>
+        public static void ForRows(
+            int height, int workers, Action<int> row, RenderProgress? progress, CancellationToken cancellationToken)
         {
-            if (progress == null)
-            {
-                ForRows(height, workers, row);
-                return;
-            }
-            progress.Begin(height);
-            Parallelism.For(height, workers, y =>
+            progress?.Begin(height);
+            Action<int> body = progress == null ? row : y =>
             {
                 row(y);
                 progress.Step();
-            });
+            };
+            Parallelism.For(height, workers, body, cancellationToken);
         }
 
         /// <summary>
@@ -287,20 +308,41 @@ namespace HeatonLife
         public static double[] NormalizeRender(double[] mu)
         {
             var result = new double[mu.Length];
+            NormalizeRender(mu, result, new double[mu.Length]);
+            return result;
+        }
+
+        /// <summary>
+        /// <see cref="NormalizeRender(double[])"/> into caller buffers, allocating nothing:
+        /// <paramref name="render"/> receives the result and <paramref name="scratch"/> (at
+        /// least as long as <paramref name="mu"/>) holds the sorted escaped values. The
+        /// same arithmetic in the same order, so the output is identical — a host keeps
+        /// the raw smooth values and re-normalizes (or recolors) without re-rendering.
+        /// <paramref name="scratch"/> is overwritten and must not be <paramref name="mu"/>;
+        /// <paramref name="render"/> may be either.
+        /// </summary>
+        public static void NormalizeRender(double[] mu, double[] render, double[] scratch)
+        {
+            if (mu == null)
+                throw new ArgumentNullException(nameof(mu));
+            if (render == null || render.Length != mu.Length)
+                throw new ArgumentException($"expected a render buffer of {mu?.Length} values", nameof(render));
+            if (scratch == null || scratch.Length < mu.Length)
+                throw new ArgumentException($"expected a scratch buffer of at least {mu.Length} values", nameof(scratch));
+            if (ReferenceEquals(scratch, mu))
+                throw new ArgumentException("scratch is overwritten, so it cannot be the mu array", nameof(scratch));
             int escaped = 0;
             foreach (double value in mu)
                 if (value > 0.0)
-                    escaped++;
+                    scratch[escaped++] = value;
             if (escaped == 0)
-                return result; // sqrt(0) everywhere
-            var sorted = new double[escaped];
-            int k = 0;
-            foreach (double value in mu)
-                if (value > 0.0)
-                    sorted[k++] = value;
-            Array.Sort(sorted);
-            double lo = Percentile(sorted, 1.0);
-            double hi = Percentile(sorted, 99.0);
+            {
+                Array.Clear(render, 0, render.Length);          // sqrt(0) everywhere
+                return;
+            }
+            Array.Sort(scratch, 0, escaped);
+            double lo = Percentile(scratch, escaped, 1.0);
+            double hi = Percentile(scratch, escaped, 99.0);
             for (int i = 0; i < mu.Length; i++)
             {
                 double value = 0.0;
@@ -310,18 +352,13 @@ namespace HeatonLife
                         ? 0.6 // featureless frame: one mid tone
                         : Math.Clamp((mu[i] - lo) / (hi - lo), 0.02, 1.0);
                 }
-                result[i] = Math.Sqrt(value);
+                render[i] = Math.Sqrt(value);
             }
-            return result;
         }
 
-        /// <summary>
-        /// numpy's 'linear' percentile on sorted data, including its lerp branch that
-        /// switches to the b-anchored form at t >= 0.5.
-        /// </summary>
-        internal static double Percentile(double[] sorted, double q)
+        /// <summary>np.percentile's linear method over the first <paramref name="n"/> sorted values.</summary>
+        internal static double Percentile(double[] sorted, int n, double q)
         {
-            int n = sorted.Length;
             double virtualIndex = q / 100.0 * (n - 1);
             int lo = (int)Math.Floor(virtualIndex);
             if (lo < 0)
@@ -339,5 +376,18 @@ namespace HeatonLife
         internal static double Log2(double x) => Math.Log(x) / Ln2;
 
         private const double Ln2 = 0.6931471805599453;
+    }
+
+    /// <summary>The precision tiers of spec/deep-zoom.md, selected by zoom alone.</summary>
+    public enum FractalTier
+    {
+        /// <summary>Direct float64 escape time (zoom &lt;= 1e12).</summary>
+        T0 = 0,
+
+        /// <summary>Float64 perturbation against a bignum reference orbit (zoom &lt;= 1e290).</summary>
+        T1 = 1,
+
+        /// <summary>Beyond 1e290: reserved for floatexp; no family renders it yet.</summary>
+        T2 = 2,
     }
 }
