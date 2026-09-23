@@ -489,6 +489,67 @@ def main() -> None:
         (64, 64),
     )
 
+    # -- status (spec/fractals.md "Interior shortcuts", "Status") ---------------------
+    # T0 frames with every way a count is decided: escaped, exhausted, inside the
+    # cardioid or the period-2 bulb (Mandelbrot), and an exact float64 cycle. The
+    # counts are what they always were; the status output says which were proved.
+    write_fractal_case(
+        "mandelbrot",
+        "status-home-64",
+        Mandelbrot(max_iter=500),
+        {"max_iter": 500, "escape_radius": 1000.0},
+        Viewport("-0.5", "0.0", 0.0),
+        (64, 64),
+        spec_version="0.6.0",
+        status=True,
+    )
+    write_fractal_case(
+        "mandelbrot",
+        "status-minibrot-48x32",
+        Mandelbrot(max_iter=3000),
+        {"max_iter": 3000, "escape_radius": 1000.0},
+        Viewport("-1.7549", "0.0", 2.0),
+        (48, 32),
+        spec_version="0.6.0",
+        status=True,
+    )
+    write_fractal_case(
+        "julia",
+        "status-rabbit-64",
+        Julia(c=complex(-0.123, 0.745), max_iter=1000),
+        {"c_re": -0.123, "c_im": 0.745, "max_iter": 1000, "escape_radius": 1000.0},
+        Viewport("0.0", "0.0", 0.0),
+        (64, 64),
+        spec_version="0.6.0",
+        status=True,
+    )
+    # max_iter inside the detection window: which rabbit pixels are proved by iteration 40
+    # depends on the exact save schedule (n = 1, 2, 4, ...); a schedule shifted by one,
+    # saving at 2^k - 1, every iteration, or only at n = 1 each proves a different set.
+    write_fractal_case(
+        "julia",
+        "status-rabbit-it40-64",
+        Julia(c=complex(-0.123, 0.745), max_iter=40),
+        {"c_re": -0.123, "c_im": 0.745, "max_iter": 40, "escape_radius": 1000.0},
+        Viewport("0.0", "0.0", 0.0),
+        (64, 64),
+        spec_version="0.6.0",
+        status=True,
+    )
+    write_fractal_case(
+        "burning-ship",
+        "status-home-64",
+        BurningShip(max_iter=1000),
+        {"max_iter": 1000, "escape_radius": 1000.0},
+        Viewport("-0.5", "-0.5", -0.2),
+        (64, 64),
+        spec_version="0.6.0",
+        status=True,
+    )
+
+    # -- iteration policy (spec/fractals.md "Iteration policy") -----------------------
+    write_policy_cases()
+
     # -- render (colormap LUTs + frame indexing, spec/render.md) ---------------------
     write_render_cases()
     write_frame_cases()
@@ -518,11 +579,15 @@ def write_fractal_case(
     orbit_kind: str | None = None,
     source: str | None = None,
     spec_version: str = SPEC_VERSION,
+    status: bool = False,
 ) -> None:
     case_dir = VECTOR_ROOT / family / name
     case_dir.mkdir(parents=True, exist_ok=True)
     outputs = []
-    for kind, grid in field.outputs(size, viewport).items():
+    grids = dict(field.outputs(size, viewport))
+    if status:  # spec/fractals.md "Status": how each count was decided
+        grids["status"] = field.counts_and_status(size, viewport)[1]
+    for kind, grid in grids.items():
         file = f"{kind}.i32"
         (case_dir / file).write_bytes(np.ascontiguousarray(grid, dtype="<i4").tobytes())
         outputs.append({"kind": kind, "file": file, "shape": list(grid.shape)})
@@ -1172,6 +1237,55 @@ def write_evolve_cases() -> None:
             },
         },
     )
+
+
+def write_policy_cases() -> None:
+    """spec/fractals.md "Iteration policy" (policy version 1): the depth ramp at zooms
+    that land on rounding ties and at the tiers' edges, and need/suggest for count sets
+    (nearest-rank p99.9 in integers), including real frames' counts."""
+    from heaton_life.fractal import auto_max_iter, need_from_counts, suggest_max_iter
+
+    case_dir = VECTOR_ROOT / "iteration-policy" / "table"
+    case_dir.mkdir(parents=True, exist_ok=True)
+    zooms = [-3.0, -0.0, 0.0, 0.0025, 0.0075, 0.5, 1.0, 6.3, 12.0, 14.0, 20.5, 290.0]
+    zooms += [1e7, 1.0737e7, 1.1e7, 1e300]  # the ramp saturates at the largest int32
+    count_sets: list[tuple[float, list[int]]] = [
+        (0.0, []),
+        (0.0, [-1, -1, -1]),
+        (0.0, [7]),
+        (3.0, [-1, 5, 7, 7, 1000, -1, 3]),
+        (1.5, list(range(1, 1001))),  # rank 999 of 1000
+        (1.5, list(range(1, 1002))),  # rank 1000 of 1001
+        (0.0, [2_000_000_000, 5]),  # the suggestion caps at the largest int32
+    ]
+    for size, zoom_log10, field in [
+        ((64, 64), 0.0, Mandelbrot(max_iter=500)),
+        ((48, 32), 6.0, Mandelbrot(max_iter=3000)),
+    ]:
+        vp = Viewport(
+            "-0.743643887037158704752191506114774",
+            "0.131825904205311970493132056385139",
+            zoom_log10,
+        )
+        count_sets.append((zoom_log10, [int(v) for v in field.iterations(size, vp).ravel()]))
+    meta = {
+        "spec_version": "0.6.0",
+        "family": "iteration-policy",
+        "tier": "bit-exact",
+        "policy_version": 1,
+        "ramp": [{"zoom_log10": z, "max_iter": auto_max_iter(z)} for z in zooms],
+        "frames": [
+            {
+                "zoom_log10": z,
+                "counts": counts,
+                "need": need_from_counts(np.array(counts, dtype=np.int64)),
+                "suggest": suggest_max_iter(z, np.array(counts, dtype=np.int64)),
+            }
+            for z, counts in count_sets
+        ],
+    }
+    (case_dir / "params.json").write_text(json.dumps(meta, indent=1, sort_keys=True) + "\n")
+    print("wrote vectors/iteration-policy/table")
 
 
 def write_navigation_cases() -> None:

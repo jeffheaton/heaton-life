@@ -36,7 +36,7 @@ ORBIT_KINDS = {"mandelbrot": "mandelbrot", "julia": "julia", "burning-ship": "bu
 # Everything this runner understands. A key outside these sets fails the case rather
 # than being skipped: a runner that ignored, say, "critical_orbit" would replay a deep
 # Julia case the old way and either fail confusingly or pass for the wrong reason.
-SPEC_VERSIONS = {"0.2.0", "0.3.0", "0.4.0"}
+SPEC_VERSIONS = {"0.2.0", "0.3.0", "0.4.0", "0.6.0"}
 TOP_KEYS = {
     "spec_version",
     "family",
@@ -55,7 +55,7 @@ PARAM_KEYS = {
     "burning-ship": {"max_iter", "escape_radius"},
     "newton": {"degree", "max_iter"},
 }
-OUTPUT_KINDS = {"iterations", "roots"}
+OUTPUT_KINDS = {"iterations", "roots", "status"}
 
 CASES = sorted(p for p in VECTOR_ROOT.glob("*/*/params.json") if p.parent.parent.name in FIELDS)
 
@@ -96,7 +96,11 @@ def test_fractal_vector(case: Path) -> None:
     viewport = Viewport.from_dict(meta["viewport"])
     size = (meta["size"][0], meta["size"][1])
 
-    produced = field.outputs(size, viewport)
+    produced = dict(field.outputs(size, viewport))
+    if any(output["kind"] == "status" for output in meta["outputs"]):
+        # spec/fractals.md "Status" (0.6.0): how each count was decided.
+        assert meta["spec_version"] == "0.6.0", f"{case}: status in a pre-0.6.0 case"
+        produced["status"] = field.counts_and_status(size, viewport)[1]  # type: ignore[attr-defined]
     for output in meta["outputs"]:
         expected = np.frombuffer((case_dir / output["file"]).read_bytes(), dtype="<i4").reshape(
             tuple(output["shape"])

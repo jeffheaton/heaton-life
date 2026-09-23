@@ -239,13 +239,35 @@ namespace HeatonLife
         }
 
         /// <summary>
+        /// Whether c lies inside Mandelbrot's main cardioid or period-2 bulb by more than
+        /// 1e-12 in the test's own measure — interior, provably, so a T0 render with an
+        /// escape radius of at least 2 need not iterate it (its orbit stays within |z| &lt; 2;
+        /// a smaller radius can be crossed, near 1.27 in the bulb) (spec/fractals.md
+        /// "Interior shortcuts"). Plain float64, this operation order, as the Python
+        /// reference's engine.cardioid_or_bulb.
+        /// </summary>
+        internal static bool CardioidOrBulb(double cr, double ci)
+        {
+            double xq = cr - 0.25;
+            double q = xq * xq + ci * ci;
+            return q * (q + xq) < 0.25 * (ci * ci) - 1e-12
+                || (cr + 1.0) * (cr + 1.0) + ci * ci < 0.0625 - 1e-12;
+        }
+
+        /// <summary>
         /// One z^2 + c pixel; returns the 1-based escape iteration or -1. On escape,
-        /// the final z is reported for smooth coloring (zero when interior).
+        /// the final z is reported for smooth coloring (zero when interior). Exact cycle
+        /// detection (spec/fractals.md "Interior shortcuts"): after the escape test at
+        /// iteration n fails, a z_n equal (IEEE ==, both parts) to the state saved at the
+        /// last power-of-two iteration is interior — the iteration is deterministic, so a
+        /// repeated state repeats forever — and z_n is saved when n is a power of two.
         /// </summary>
         internal static int EscapeZ2(
             double zr, double zi, double cr, double ci, int maxIter, double r2,
-            out double finalRe, out double finalIm)
+            out double finalRe, out double finalIm, out PixelStatus status)
         {
+            double savedRe = 0.0, savedIm = 0.0;
+            bool haveSaved = false;
             for (int it = 1; it <= maxIter; it++)
             {
                 var (sr, si) = ComplexMul(zr, zi, zr, zi);
@@ -255,19 +277,36 @@ namespace HeatonLife
                 {
                     finalRe = zr;
                     finalIm = zi;
+                    status = PixelStatus.Escaped;
                     return it;
+                }
+                if (haveSaved && zr == savedRe && zi == savedIm)
+                {
+                    finalRe = 0.0;
+                    finalIm = 0.0;
+                    status = PixelStatus.Cycle;
+                    return -1;
+                }
+                if ((it & (it - 1)) == 0)
+                {
+                    savedRe = zr;
+                    savedIm = zi;
+                    haveSaved = true;
                 }
             }
             finalRe = 0.0;
             finalIm = 0.0;
+            status = PixelStatus.Exhausted;
             return -1;
         }
 
-        /// <summary>One Burning Ship pixel: z = (|Re z| + i |Im z|)^2 + c.</summary>
+        /// <summary>One Burning Ship pixel: z = (|Re z| + i |Im z|)^2 + c, with EscapeZ2's cycle detection.</summary>
         internal static int EscapeShip(
             double zr, double zi, double cr, double ci, int maxIter, double r2,
-            out double finalRe, out double finalIm)
+            out double finalRe, out double finalIm, out PixelStatus status)
         {
+            double savedRe = 0.0, savedIm = 0.0;
+            bool haveSaved = false;
             for (int it = 1; it <= maxIter; it++)
             {
                 double fr = Math.Abs(zr);
@@ -279,11 +318,26 @@ namespace HeatonLife
                 {
                     finalRe = zr;
                     finalIm = zi;
+                    status = PixelStatus.Escaped;
                     return it;
+                }
+                if (haveSaved && zr == savedRe && zi == savedIm)
+                {
+                    finalRe = 0.0;
+                    finalIm = 0.0;
+                    status = PixelStatus.Cycle;
+                    return -1;
+                }
+                if ((it & (it - 1)) == 0)
+                {
+                    savedRe = zr;
+                    savedIm = zi;
+                    haveSaved = true;
                 }
             }
             finalRe = 0.0;
             finalIm = 0.0;
+            status = PixelStatus.Exhausted;
             return -1;
         }
 
@@ -415,6 +469,25 @@ namespace HeatonLife
         internal static double Log2(double x) => Math.Log(x) / Ln2;
 
         private const double Ln2 = 0.6931471805599453;
+    }
+
+    /// <summary>
+    /// How a pixel's count was decided (spec/fractals.md "Status"). A host tells
+    /// "needs more iterations" (Exhausted) from "interior" (CardioidOrBulb, Cycle).
+    /// </summary>
+    public enum PixelStatus : byte
+    {
+        /// <summary>The pixel escaped: its count is positive.</summary>
+        Escaped = 0,
+
+        /// <summary>max_iter was reached with nothing proved; more iterations might escape.</summary>
+        Exhausted = 1,
+
+        /// <summary>Mandelbrot at T0: inside the main cardioid or the period-2 bulb, not iterated.</summary>
+        CardioidOrBulb = 2,
+
+        /// <summary>T0: the float64 state repeated exactly, so the pixel never escapes.</summary>
+        Cycle = 3,
     }
 
     /// <summary>The precision tiers of spec/deep-zoom.md, selected by zoom alone.</summary>

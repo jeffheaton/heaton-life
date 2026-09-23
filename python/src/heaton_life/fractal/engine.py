@@ -113,36 +113,77 @@ def pixel_grid(size: tuple[int, int], viewport: Viewport) -> ComplexArray:
     return pixel_offsets(size, viewport) + center
 
 
+# Per-pixel status (spec/fractals.md "Status"): how a pixel's count was decided.
+ESCAPED = 0  # count > 0
+EXHAUSTED = 1  # max_iter reached with nothing proved: more iterations might escape
+CARDIOID_OR_BULB = 2  # Mandelbrot T0: inside the main cardioid or period-2 bulb
+CYCLE = 3  # T0: the float64 state repeated exactly, so it never escapes
+
+StatusArray = NDArray[np.int8]
+
+
 def escape_time(
     z0: ComplexArray,
     c: ComplexArray,
     update: Callable[[ComplexArray, ComplexArray], ComplexArray],
     max_iter: int,
     escape_radius: float,
-) -> tuple[IntArray, ComplexArray]:
-    """Vectorized escape iteration with active-set compaction.
+) -> tuple[IntArray, ComplexArray, StatusArray]:
+    """Vectorized escape iteration with active-set compaction and exact cycle detection.
 
-    Returns (counts, final_z); final_z is meaningful only where counts > 0.
+    Returns (counts, final_z, status); final_z is meaningful only where counts > 0.
+    Cycle detection (spec/fractals.md "Interior shortcuts"): after the escape test at
+    iteration n fails, a pixel whose z_n equals (IEEE ==, both parts) the state saved
+    at the last power-of-two iteration is interior -- the iteration is deterministic,
+    so a repeated state repeats forever and never escapes. Then z_n is saved when n is
+    a power of two (Brent's schedule). Counts are unchanged: -1 either way.
     """
     n = z0.size
     counts = np.full(n, -1, dtype=np.int32)
     final = np.zeros(n, dtype=np.complex128)
+    status = np.full(n, EXHAUSTED, dtype=np.int8)
     z = z0.copy()
     cc = c.copy()
     idx = np.arange(n)
+    saved: ComplexArray | None = None
     r2 = escape_radius * escape_radius
     for it in range(1, max_iter + 1):
         z = update(z, cc)
         escaped = (z.real * z.real + z.imag * z.imag) > r2
-        if escaped.any():
+        cycled = (z == saved) & ~escaped if saved is not None else None
+        done = escaped if cycled is None else escaped | cycled
+        if done.any():
             hits = idx[escaped]
             counts[hits] = it
             final[hits] = z[escaped]
-            keep = ~escaped
+            status[hits] = ESCAPED
+            if cycled is not None:
+                status[idx[cycled]] = CYCLE
+            keep = ~done
             z, cc, idx = z[keep], cc[keep], idx[keep]
+            if saved is not None:
+                saved = saved[keep]
             if idx.size == 0:
                 break
-    return counts, final
+        if (it & (it - 1)) == 0:  # a power of two (C-family ports: == binds tighter than &)
+            saved = z.copy()
+    return counts, final, status
+
+
+def cardioid_or_bulb(c: ComplexArray) -> NDArray[np.bool_]:
+    """Pixels inside Mandelbrot's main cardioid or period-2 bulb by more than 1e-12 in
+    the test's own measure -- interior, provably, so a T0 render with an escape radius
+    of at least 2 need not iterate them (their orbits stay within |z| < 2; a smaller
+    radius can be crossed, near 1.27 in the bulb). Plain float64, this operation order
+    (spec/fractals.md "Interior shortcuts")."""
+    x = c.real
+    y = c.imag
+    xq = x - 0.25
+    q = xq * xq + y * y
+    cardioid = q * (q + xq) < 0.25 * (y * y) - 1e-12
+    bulb = (x + 1.0) * (x + 1.0) + y * y < 0.0625 - 1e-12
+    inside: NDArray[np.bool_] = cardioid | bulb
+    return inside
 
 
 def smooth_iterations(counts: IntArray, final: ComplexArray, escape_radius: float) -> FloatArray:

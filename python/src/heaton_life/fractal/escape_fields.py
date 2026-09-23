@@ -14,11 +14,16 @@ from heaton_life.core.bignum import reference_orbit
 from heaton_life.core.params import Params
 from heaton_life.core.viewport import Viewport
 from heaton_life.fractal.engine import (
+    CARDIOID_OR_BULB,
+    ESCAPED,
+    EXHAUSTED,
     T0_MAX_ZOOM,
     T1_MAX_ZOOM,
     ComplexArray,
     FloatArray,
     IntArray,
+    StatusArray,
+    cardioid_or_bulb,
     escape_time,
     normalize_render,
     pixel_deltas,
@@ -49,12 +54,16 @@ class _EscapeField:
         self.max_iter = max_iter
         self.escape_radius = escape_radius
 
-    def _compute(self, size: tuple[int, int], viewport: Viewport) -> tuple[IntArray, ComplexArray]:
+    def _compute(
+        self, size: tuple[int, int], viewport: Viewport
+    ) -> tuple[IntArray, ComplexArray, StatusArray]:
         zoom = viewport.zoom_log10
         if zoom <= T0_MAX_ZOOM:
             return self._compute_t0(size, viewport)
         if zoom <= T1_MAX_ZOOM:
-            return self._compute_t1(size, viewport)
+            counts, final = self._compute_t1(size, viewport)
+            status = np.where(counts > 0, ESCAPED, EXHAUSTED).astype(np.int8)
+            return counts, final, status
         raise ValueError(
             f"zoom 1e{zoom:g} exceeds the float64 perturbation tier (~1e{T1_MAX_ZOOM:g}); "
             "the floatexp tier is not implemented yet"
@@ -62,7 +71,7 @@ class _EscapeField:
 
     def _compute_t0(
         self, size: tuple[int, int], viewport: Viewport
-    ) -> tuple[IntArray, ComplexArray]:
+    ) -> tuple[IntArray, ComplexArray, StatusArray]:
         raise NotImplementedError
 
     def _compute_t1(
@@ -73,8 +82,18 @@ class _EscapeField:
     def iterations(self, size: tuple[int, int], viewport: Viewport) -> IntArray:
         """Raw escape counts, shape (height, width). The bit-exact conformance output."""
         width, height = size
-        counts, _ = self._compute(size, viewport)
+        counts, _, _ = self._compute(size, viewport)
         return counts.reshape(height, width)
+
+    def counts_and_status(
+        self, size: tuple[int, int], viewport: Viewport
+    ) -> tuple[IntArray, StatusArray]:
+        """Raw counts and how each was decided (spec/fractals.md "Status"), each
+        (height, width): 0 escaped, 1 max_iter exhausted, 2 inside the cardioid or bulb,
+        3 an exact cycle. A host tells "needs more iterations" (1) from "interior" (2, 3)."""
+        width, height = size
+        counts, _, status = self._compute(size, viewport)
+        return counts.reshape(height, width), status.reshape(height, width)
 
     def outputs(self, size: tuple[int, int], viewport: Viewport) -> dict[str, IntArray]:
         return {"iterations": self.iterations(size, viewport)}
@@ -85,7 +104,7 @@ class _EscapeField:
         """Raw counts and smooth values mu (0 where interior), each (height, width),
         before normalization -- so a host can recolor without re-rendering."""
         width, height = size
-        counts, final = self._compute(size, viewport)
+        counts, final, _ = self._compute(size, viewport)
         mu = smooth_iterations(counts, final, self.escape_radius)
         return counts.reshape(height, width), mu.reshape(height, width)
 
@@ -112,10 +131,19 @@ class Mandelbrot(_EscapeField):
 
     def _compute_t0(
         self, size: tuple[int, int], viewport: Viewport
-    ) -> tuple[IntArray, ComplexArray]:
+    ) -> tuple[IntArray, ComplexArray, StatusArray]:
         c = pixel_grid(size, viewport)
-        z0 = np.zeros_like(c)
-        return escape_time(z0, c, _z2_update, self.max_iter, self.escape_radius)
+        # Only where no interior orbit can cross the radius (|z| stays below 2 in M).
+        inside = cardioid_or_bulb(c) if self.escape_radius >= 2.0 else np.zeros(c.size, dtype=bool)
+        counts = np.full(c.size, -1, dtype=np.int32)
+        final = np.zeros(c.size, dtype=np.complex128)
+        status = np.full(c.size, CARDIOID_OR_BULB, dtype=np.int8)
+        rest = ~inside
+        rest_c = c[rest]
+        counts[rest], final[rest], status[rest] = escape_time(
+            np.zeros_like(rest_c), rest_c, _z2_update, self.max_iter, self.escape_radius
+        )
+        return counts, final, status
 
     def _compute_t1(
         self, size: tuple[int, int], viewport: Viewport
@@ -149,7 +177,7 @@ class Julia(_EscapeField):
 
     def _compute_t0(
         self, size: tuple[int, int], viewport: Viewport
-    ) -> tuple[IntArray, ComplexArray]:
+    ) -> tuple[IntArray, ComplexArray, StatusArray]:
         z0 = pixel_grid(size, viewport)
         c = np.full_like(z0, self.c)
         return escape_time(z0, c, _z2_update, self.max_iter, self.escape_radius)
@@ -193,7 +221,7 @@ class BurningShip(_EscapeField):
 
     def _compute_t0(
         self, size: tuple[int, int], viewport: Viewport
-    ) -> tuple[IntArray, ComplexArray]:
+    ) -> tuple[IntArray, ComplexArray, StatusArray]:
         c = pixel_grid(size, viewport)
         z0 = np.zeros_like(c)
         return escape_time(z0, c, _ship_update, self.max_iter, self.escape_radius)

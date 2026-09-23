@@ -111,6 +111,30 @@ namespace HeatonLife
             return (FractalEngine.NormalizeRender(mu), counts);
         }
 
+        /// <summary>
+        /// Escape counts and how each was decided (spec/fractals.md "Status") into caller
+        /// buffers: <see cref="PixelStatus"/> as bytes — Escaped, Exhausted (max_iter reached,
+        /// more might escape), CardioidOrBulb and Cycle (proved interior, T0). Counts and
+        /// <paramref name="smooth"/> (may be null) are exactly what the other overloads give.
+        /// </summary>
+        public void CountsAndStatus(
+            int width, int height, Viewport viewport, int[] counts, byte[] status, double[]? smooth = null,
+            RenderProgress? progress = null, CancellationToken cancellationToken = default)
+        {
+            if (status == null)
+                throw new ArgumentNullException(nameof(status));
+            Compute(width, height, viewport, null, null, counts, smooth, progress, cancellationToken, status);
+        }
+
+        /// <summary><see cref="CountsAndStatus(int,int,Viewport,int[],byte[],double[],RenderProgress,CancellationToken)"/>, allocating.</summary>
+        public (int[] Counts, byte[] Status) CountsAndStatus(int width, int height, Viewport viewport)
+        {
+            var counts = new int[width * height];
+            var status = new byte[width * height];
+            CountsAndStatus(width, height, viewport, counts, status);
+            return (counts, status);
+        }
+
         /// <summary>The deepest zoom this family renders: the T1 ceiling (spec/fractals.md "Tiering").</summary>
         public double MaxZoomLog10 => FractalEngine.T1MaxZoom;
 
@@ -132,8 +156,11 @@ namespace HeatonLife
             int[] counts,
             double[]? mu,
             RenderProgress? progress = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            byte[]? status = null)
         {
+            if (status != null && status.Length != width * height)
+                throw new ArgumentException($"expected {width * height} statuses, got {status.Length}");
             if (counts.Length != width * height)
                 throw new ArgumentException($"expected {width * height} counts, got {counts.Length}");
             if (mu != null && mu.Length != width * height)
@@ -160,6 +187,8 @@ namespace HeatonLife
             double centerIm = t1 ? 0.0 : viewport.CenterImDouble;
             double r2 = EscapeRadius * EscapeRadius;
             double logR = Math.Log(EscapeRadius);
+            // The cardioid/bulb shortcut only where no interior orbit can cross the radius.
+            bool shortcut = EscapeRadius >= 2.0;
             void Row(int y)
             {
                 double oy = offCenter ? FractalEngine.DeltaIm(y, height, ps, dIm) : FractalEngine.OffsetIm(y, height, ps);
@@ -168,13 +197,30 @@ namespace HeatonLife
                     double ox = offCenter ? FractalEngine.DeltaRe(x, width, ps, dRe) : FractalEngine.OffsetRe(x, width, ps);
                     int count;
                     double fr, fi;
+                    PixelStatus pixel;
                     if (t1)
+                    {
                         count = Perturbation.PerturbZ2(
                             orbitRe!, orbitIm!, 0.0, 0.0, ox, oy, MaxIter, EscapeRadius, out fr, out fi);
+                        pixel = count > 0 ? PixelStatus.Escaped : PixelStatus.Exhausted;
+                    }
                     else
-                        count = FractalEngine.EscapeZ2(
-                            0.0, 0.0, ox + centerRe, oy + centerIm, MaxIter, r2, out fr, out fi);
+                    {
+                        double cr = ox + centerRe, ci = oy + centerIm;
+                        if (shortcut && FractalEngine.CardioidOrBulb(cr, ci))
+                        {
+                            count = -1;
+                            fr = fi = 0.0;
+                            pixel = PixelStatus.CardioidOrBulb;
+                        }
+                        else
+                        {
+                            count = FractalEngine.EscapeZ2(0.0, 0.0, cr, ci, MaxIter, r2, out fr, out fi, out pixel);
+                        }
+                    }
                     counts[y * width + x] = count;
+                    if (status != null)
+                        status[y * width + x] = (byte)pixel;
                     if (mu != null)
                         mu[y * width + x] = FractalEngine.SmoothMu(count, fr, fi, logR);
                 }

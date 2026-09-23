@@ -34,8 +34,82 @@ Deep-zoom architecture (tiers, perturbation, rebasing): [deep-zoom.md](deep-zoom
 (default 1000); `−1` if it never does within `max_iter`. Smooth (presentation only):
 `mu = n + 1 − log2(log|z| / log R)`, then per-frame contrast stretching between the
 1st/99th escaped percentiles for display — deep frames cluster counts near
-`max_iter`, and an absolute mapping would render monochrome. Only `counts` is a
-conformance output.
+`max_iter`, and an absolute mapping would render monochrome. `counts` is the
+conformance output, and, for escape-time families, the `status` of each count
+(below).
+
+## Interior shortcuts (T0)
+
+Two ways a T0 pixel is shown to be interior without running out its budget. Both are
+**output-neutral**: every count and smooth value is exactly what the plain loop gives
+(`−1` and `0`), and every existing vector regenerates byte for byte. They only save
+work — a lot of it where a frame is mostly interior. Measured in C# at 512², where the
+software fma makes every iteration dear: the Mandelbrot home view 4.3×, a view inside
+the cardioid 35×, a period-3 minibrot 2.6×, the rabbit Julia 19×, the Burning Ship
+home view 1.8×, and an escape-heavy Seahorse frame unchanged.
+
+- **Cardioid and bulb (Mandelbrot), when `escape_radius ≥ 2`.** Before iterating, a
+  pixel whose float64 `c` (the value T0 iterates) satisfies, in plain float64 and this
+  operation order,
+
+  ```
+  xq = x − 0.25;  q = xq·xq + y·y
+  q·(q + xq) < 0.25·(y·y) − 1e-12      (main cardioid)
+  (x + 1.0)·(x + 1.0) + y·y < 0.0625 − 1e-12      (period-2 bulb)
+  ```
+
+  is interior. The margin dwarfs the test's own rounding (terms of order 1, error of
+  order 1e-16), so a flagged point is inside by the exact inequality, and an interior
+  point's orbit converges and never leaves `|z| ≤ 2`. Under a smaller radius it can
+  cross the escape test (the bulb's orbits pass `|z| ≈ 1.27`), so there the test is
+  skipped and every pixel iterates.
+- **Exact cycles (Mandelbrot, Julia, Burning Ship).** After the escape test at
+  iteration `n` fails, a pixel whose `z_n` equals — IEEE `==` on both parts — the state
+  saved at the last power-of-two iteration is interior: the iteration is a
+  deterministic function of the float64 state, so a repeated state repeats forever. Then
+  `z_n` is saved when `n` is a power of two (Brent's schedule: compare every iteration,
+  save at `n = 1, 2, 4, …`). Value equality, not bit equality: states that differ only
+  in the sign of a zero evolve identically in magnitude. The cost is one comparison per
+  iteration: none measurable in C#; in NumPy, where the saved states are compacted
+  with the live pixels, about a third on a frame where nearly every pixel escapes and a
+  few percent on a mixed one.
+- **T1 proves nothing** this way: a perturbed pixel's state includes its orbit index,
+  which only grows unless the pixel rebases. Periodicity-bounded reference orbits are
+  future work.
+
+## Status
+
+`status[i]` says how `counts[i]` was decided — an int8 in the ports, an `int32` in the
+vectors:
+
+| status | meaning | count |
+|---|---|---|
+| 0 | escaped | `n > 0` |
+| 1 | exhausted: `max_iter` reached with nothing proved — more might escape | `−1` |
+| 2 | inside the main cardioid or period-2 bulb (Mandelbrot, T0) | `−1` |
+| 3 | an exact cycle (T0) | `−1` |
+
+At T1 it is 0 or 1. A host tells "needs more iterations" (1) from "interior" (2, 3).
+Python `counts_and_status`; C# `CountsAndStatus` (`PixelStatus`). Bit-exact: the
+shortcuts are deterministic, so both ports prove the same pixels.
+
+## Iteration policy
+
+How many iterations a frame deserves is a host's choice, **versioned apart from the
+counts** (policy version 1): changing it changes which `max_iter` a host asks for,
+never what a given `max_iter` renders. Integer and pinned float arithmetic only, no
+libm `pow`:
+
+- `auto_max_iter(z) = min(400 + round(200 · max(0, z)), 2³¹ − 1)`, rounding half to
+  even — the depth ramp. The product `200 · max(0, z)` is one float64 multiply; from
+  `2³¹` up the result is `2³¹ − 1` without rounding (it saturates near `z ≈ 1.07e7`).
+  A zoom that is not finite is an error.
+- `need_from_counts(counts)` = the nearest-rank 99.9th percentile of the positive
+  counts: sort them, take the one at 1-based rank `⌈999·n / 1000⌉` computed in
+  integers; 0 when nothing escaped.
+- `suggest_max_iter(z, counts) = min(max(auto_max_iter(z), 2 · need), 2³¹ − 1)`.
+
+Python `heaton_life.fractal.policy`; C# `IterationPolicy`.
 
 ## Family updates
 
@@ -131,7 +205,9 @@ or stops the work and **never changes a completed frame's output**:
 - The viewport may carry `reference_re` / `reference_im`, an
   [off-center reference](deep-zoom.md#off-center-reference); the stored reference orbit
   is then the reference's, and a replay must offset every pixel by `round64(C − R)`.
-- Cases written from 2026-09-23 carry `"spec_version": "0.3.0"`, and those with a
-  reference `"0.4.0"` (earlier ones keep `0.2.0`; [vectors/README.md](../vectors/README.md)
-  lists what each adds). Runners are strict: a key, output kind, codec or version they
-  do not know fails the case.
+- An escape-time case may add a `status` output (`status.i32`, values 0–3, see
+  [Status](#status)); such cases carry `"spec_version": "0.6.0"`.
+- Cases written from 2026-09-23 carry `"spec_version": "0.3.0"`, those with a reference
+  `"0.4.0"`, those with a status `"0.6.0"` (earlier ones keep `0.2.0`;
+  [vectors/README.md](../vectors/README.md) lists what each adds). Runners are strict: a
+  key, output kind, codec or version they do not know fails the case.

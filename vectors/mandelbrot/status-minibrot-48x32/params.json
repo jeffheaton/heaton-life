@@ -1,0 +1,36 @@
+{
+  "family": "mandelbrot",
+  "outputs": [
+    {
+      "file": "iterations.i32",
+      "kind": "iterations",
+      "shape": [
+        32,
+        48
+      ]
+    },
+    {
+      "file": "status.i32",
+      "kind": "status",
+      "shape": [
+        32,
+        48
+      ]
+    }
+  ],
+  "params": {
+    "escape_radius": 1000.0,
+    "max_iter": 3000
+  },
+  "size": [
+    48,
+    32
+  ],
+  "spec_version": "0.6.0",
+  "tier": "bit-exact",
+  "viewport": {
+    "center_im": "0.0",
+    "center_re": "-1.7549",
+    "zoom_log10": 2.0
+  }
+}

@@ -22,7 +22,7 @@ namespace HeatonLife.Tests
         // Everything this runner understands. A key outside these sets fails the case
         // rather than being skipped: a runner that ignored, say, "critical_orbit" would
         // replay a deep Julia case the old way and fail confusingly or pass wrongly.
-        private static readonly HashSet<string> SpecVersions = new HashSet<string> { "0.2.0", "0.3.0", "0.4.0" };
+        private static readonly HashSet<string> SpecVersions = new HashSet<string> { "0.2.0", "0.3.0", "0.4.0", "0.6.0" };
         private static readonly HashSet<string> TopKeys = new HashSet<string>
         {
             "spec_version", "family", "tier", "params", "viewport", "size", "outputs",
@@ -35,7 +35,7 @@ namespace HeatonLife.Tests
             ["burning-ship"] = new HashSet<string> { "max_iter", "escape_radius" },
             ["newton"] = new HashSet<string> { "degree", "max_iter" },
         };
-        private static readonly HashSet<string> OutputKinds = new HashSet<string> { "iterations", "roots" };
+        private static readonly HashSet<string> OutputKinds = new HashSet<string> { "iterations", "roots", "status" };
 
         public static IEnumerable<object[]> Cases()
         {
@@ -82,9 +82,11 @@ namespace HeatonLife.Tests
                 AssertKeys(orbit, $"{family}/{caseName} {key}", "file", "length");
                 Assert.EndsWith(".c128", orbit.GetProperty("file").GetString()!);
             }
+            bool withStatus = false;
             foreach (var output in root.GetProperty("outputs").EnumerateArray())
             {
                 AssertKeys(output, $"{family}/{caseName} output", "kind", "file", "shape");
+                withStatus |= output.GetProperty("kind").GetString() == "status";
                 Assert.True(
                     OutputKinds.Contains(output.GetProperty("kind").GetString()!)
                     && output.GetProperty("file").GetString()!.EndsWith(".i32", StringComparison.Ordinal),
@@ -93,6 +95,8 @@ namespace HeatonLife.Tests
                 Assert.Equal(root.GetProperty("size")[1].GetInt32(), output.GetProperty("shape")[0].GetInt32());
                 Assert.Equal(root.GetProperty("size")[0].GetInt32(), output.GetProperty("shape")[1].GetInt32());
             }
+            // spec/fractals.md "Status" (0.6.0): how each count was decided.
+            Assert.True(!withStatus || root.GetProperty("spec_version").GetString() == "0.6.0", $"{family}/{caseName}: status in a pre-0.6.0 case");
             var viewport = new Viewport(
                 vp.GetProperty("center_re").GetString()!,
                 vp.GetProperty("center_im").GetString()!,
@@ -123,7 +127,7 @@ namespace HeatonLife.Tests
             foreach (int workers in new[] { 1, 5 })
             {
                 var produced = ComputeOutputs(
-                    family, p, viewport, width, height, orbitRe, orbitIm, criticalRe, criticalIm, workers);
+                    family, p, viewport, width, height, orbitRe, orbitIm, criticalRe, criticalIm, workers, withStatus);
                 foreach (var output in root.GetProperty("outputs").EnumerateArray())
                 {
                     string kind = output.GetProperty("kind").GetString()!;
@@ -150,8 +154,38 @@ namespace HeatonLife.Tests
             double[]? orbitIm,
             double[]? criticalRe,
             double[]? criticalIm,
-            int workers)
+            int workers,
+            bool withStatus)
         {
+            if (withStatus)
+            {
+                // Status cases are T0 frames: the families compute them, no orbit handed in.
+                Assert.Null(orbitRe);
+                var counts = new int[width * height];
+                var status = new byte[width * height];
+                switch (family)
+                {
+                    case "mandelbrot":
+                        new Mandelbrot(p.GetProperty("max_iter").GetInt32(), p.GetProperty("escape_radius").GetDouble(), workers)
+                            .CountsAndStatus(width, height, viewport, counts, status);
+                        break;
+                    case "julia":
+                        new Julia(p.GetProperty("c_re").GetDouble(), p.GetProperty("c_im").GetDouble(),
+                                p.GetProperty("max_iter").GetInt32(), p.GetProperty("escape_radius").GetDouble(), workers)
+                            .CountsAndStatus(width, height, viewport, counts, status);
+                        break;
+                    case "burning-ship":
+                        new BurningShip(p.GetProperty("max_iter").GetInt32(), p.GetProperty("escape_radius").GetDouble(), workers)
+                            .CountsAndStatus(width, height, viewport, counts, status);
+                        break;
+                    default:
+                        throw new InvalidDataException($"no status for family '{family}'");
+                }
+                var statusInts = new int[status.Length];
+                for (int i = 0; i < status.Length; i++)
+                    statusInts[i] = status[i];
+                return new Dictionary<string, int[]> { ["iterations"] = counts, ["status"] = statusInts };
+            }
             switch (family)
             {
                 case "mandelbrot":
