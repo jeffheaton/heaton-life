@@ -22,7 +22,7 @@ from heaton_life.boids import BoidsParams
 from heaton_life.ca import LifeLike, Wireworld, wireworld_from_text
 from heaton_life.conformance import CODECS, TIERS, build_sim
 from heaton_life.core.bignum import reference_orbit
-from heaton_life.core.protocols import Simulation
+from heaton_life.core.protocols import Field, Simulation
 from heaton_life.core.viewport import Viewport
 from heaton_life.fractal import BurningShip, Julia, Mandelbrot, Newton
 from heaton_life.init import place, rle_decode
@@ -89,7 +89,9 @@ def write_case(family: str, name: str, sim: Simulation, steps: list[int]) -> Non
     }
     if epsilon is not None:
         meta["epsilon"] = epsilon
-    (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n")
+    (case_dir / "params.json").write_text(
+        json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n"
+    )
     print(f"wrote {case_dir.relative_to(REPO_ROOT)} (steps {steps})")
 
 
@@ -117,7 +119,9 @@ def gen_mergelife_decode() -> None:
             "rule": rule,
             "expected_rows": rows,
         }
-        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n")
+        (case_dir / "params.json").write_text(
+            json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n"
+        )
         print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
 
 
@@ -127,7 +131,7 @@ def main() -> None:
     glider = LifeLike("B3/S23", size=(16, 16), init=place(pattern, (16, 16), at=(0, 0)))
     write_case("lifelike", "glider-16-torus", glider, [0, 32, 64])
 
-    lifelike_cases = [
+    lifelike_cases: list[tuple[str, dict[str, Any]]] = [
         ("soup-64-torus", {"rule": "B3/S23", "density": 0.35, "seed": 42}),
         ("soup-64-dead", {"rule": "B3/S23", "density": 0.35, "seed": 7, "boundary": "dead"}),
         ("highlife-64-torus", {"rule": "B36/S23", "density": 0.4, "seed": 11}),
@@ -202,11 +206,7 @@ def main() -> None:
         [0, 1, 10, 40],
     )
     # Two parallel wires converging on one cell: exercises the 1-or-2-heads rule.
-    junction = wireworld_from_text(
-        "TH########.\n"
-        "..........#\n"
-        "TH########.\n"
-    )
+    junction = wireworld_from_text("TH########.\n..........#\nTH########.\n")
     grid = place(junction, (16, 8), at=(1, 2))
     write_case("wireworld", "junction-16", Wireworld(size=(16, 8), init=grid), [0, 1, 5, 20])
 
@@ -289,22 +289,32 @@ def main() -> None:
     write_case(
         "boids",
         "flock3d-64",
-        build_sim("boids", {
-            "count": 40, "dimensions": 3,
-            "width": 64, "height": 64, "depth": 64, "seed": 3,
-        }),
+        build_sim(
+            "boids",
+            {
+                "count": 40,
+                "dimensions": 3,
+                "width": 64,
+                "height": 64,
+                "depth": 64,
+                "seed": 3,
+            },
+        ),
         [0, 1, 10, 50],
     )
 
     # -- fractals (one-shot renders: params + viewport + int32 outputs) --------------
     write_fractal_case(
-        "mandelbrot", "home-64",
+        "mandelbrot",
+        "home-64",
         Mandelbrot(max_iter=500),
         {"max_iter": 500, "escape_radius": 1000.0},
-        Viewport("-0.5", "0.0", 0.0), (64, 64),
+        Viewport("-0.5", "0.0", 0.0),
+        (64, 64),
     )
     write_fractal_case(
-        "mandelbrot", "deep-zoom14-48",
+        "mandelbrot",
+        "deep-zoom14-48",
         Mandelbrot(max_iter=5000),
         {"max_iter": 5000, "escape_radius": 1000.0},
         Viewport(
@@ -320,7 +330,8 @@ def main() -> None:
     # from the digits; double.Parse is only guaranteed on .NET Core), and a 48x32
     # frame pins width-based framing -- every earlier vector was square.
     write_fractal_case(
-        "mandelbrot", "seahorse-zoom6-48x32",
+        "mandelbrot",
+        "seahorse-zoom6-48x32",
         Mandelbrot(max_iter=2000),
         {"max_iter": 2000, "escape_radius": 1000.0},
         Viewport(
@@ -337,7 +348,8 @@ def main() -> None:
     # the antenna tip c = -2 (orbit 0, -2, 2, 2, ... with the imaginary part growing
     # 4x per step); every pixel matches a 1200-bit direct iteration.
     write_fractal_case(
-        "mandelbrot", "deep-zoom280-tinyim-32",
+        "mandelbrot",
+        "deep-zoom280-tinyim-32",
         Mandelbrot(max_iter=1000),
         {"max_iter": 1000, "escape_radius": 1000.0},
         Viewport("-2", "1e-295", 280.0),
@@ -352,7 +364,8 @@ def main() -> None:
     # suites and the working-bits asserts pin that. Every pixel matches a 1200-bit
     # direct iteration.
     write_fractal_case(
-        "mandelbrot", "deep-zoom20-11dim-32",
+        "mandelbrot",
+        "deep-zoom20-11dim-32",
         Mandelbrot(max_iter=4000),
         {"max_iter": 4000, "escape_radius": 1000.0},
         Viewport(ELEVEN_DIMENSIONS_RE, ELEVEN_DIMENSIONS_IM, 20.0),
@@ -362,10 +375,12 @@ def main() -> None:
         spec_version="0.3.0",
     )
     write_fractal_case(
-        "julia", "classic-64",
+        "julia",
+        "classic-64",
         Julia(max_iter=500),
         {"c_re": -0.7269, "c_im": 0.1889, "max_iter": 500, "escape_radius": 1000.0},
-        Viewport("0.0", "0.0", 0.0), (64, 64),
+        Viewport("0.0", "0.0", 0.0),
+        (64, 64),
     )
     # Deep Julia at the rabbit's repelling fixed point beta = (1 + sqrt(1 - 4c)) / 2,
     # which lies on the Julia set: pixels separate from the reference within ~30
@@ -373,7 +388,8 @@ def main() -> None:
     # orbit, the case this vector exists to pin. Every pixel matches a 300-bit
     # direct iteration (tests/test_fractal.py).
     write_fractal_case(
-        "julia", "deep-zoom13-32",
+        "julia",
+        "deep-zoom13-32",
         Julia(c=complex(-0.123, 0.745), max_iter=600),
         {"c_re": -0.123, "c_im": 0.745, "max_iter": 600, "escape_radius": 1000.0},
         Viewport(
@@ -386,16 +402,20 @@ def main() -> None:
         spec_version="0.3.0",
     )
     write_fractal_case(
-        "burning-ship", "home-64",
+        "burning-ship",
+        "home-64",
         BurningShip(max_iter=500),
         {"max_iter": 500, "escape_radius": 1000.0},
-        Viewport("-0.5", "-0.5", -0.2), (64, 64),
+        Viewport("-0.5", "-0.5", -0.2),
+        (64, 64),
     )
     write_fractal_case(
-        "newton", "z3-64",
+        "newton",
+        "z3-64",
         Newton(degree=3, max_iter=60),
         {"degree": 3, "max_iter": 60},
-        Viewport("0.0", "0.0", -0.1), (64, 64),
+        Viewport("0.0", "0.0", -0.1),
+        (64, 64),
     )
 
     # -- render (colormap LUTs + frame indexing, spec/render.md) ---------------------
@@ -444,26 +464,36 @@ def write_fractal_case(
         c_re = params.get("c_re", 0.0)
         c_im = params.get("c_im", 0.0)
         orbit = reference_orbit(
-            orbit_kind, viewport.center_re, viewport.center_im,
-            viewport.zoom_log10, params["max_iter"], c_re=c_re, c_im=c_im,
+            orbit_kind,
+            viewport.center_re,
+            viewport.center_im,
+            viewport.zoom_log10,
+            params["max_iter"],
+            c_re=c_re,
+            c_im=c_im,
         )
-        (case_dir / "orbit.c128").write_bytes(
-            np.ascontiguousarray(orbit, dtype="<c16").tobytes()
-        )
+        (case_dir / "orbit.c128").write_bytes(np.ascontiguousarray(orbit, dtype="<c16").tobytes())
         meta["reference_orbit"] = {"file": "orbit.c128", "length": len(orbit)}
         if orbit_kind == "julia":
             # A Julia reference starts at the center; rebased pixels restart on the
             # critical orbit (z0 = 0, same c), which the vector pins too so a port
             # with no bignum stack can replay the case (spec/deep-zoom.md "Rebasing").
             critical = reference_orbit(
-                "julia", "0", "0", viewport.zoom_log10, params["max_iter"],
-                c_re=c_re, c_im=c_im,
+                "julia",
+                "0",
+                "0",
+                viewport.zoom_log10,
+                params["max_iter"],
+                c_re=c_re,
+                c_im=c_im,
             )
             (case_dir / "critical.c128").write_bytes(
                 np.ascontiguousarray(critical, dtype="<c16").tobytes()
             )
             meta["critical_orbit"] = {"file": "critical.c128", "length": len(critical)}
-    (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n")
+    (case_dir / "params.json").write_text(
+        json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n"
+    )
     print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
 
 
@@ -493,7 +523,9 @@ def write_render_cases() -> None:
             "cmap": name,
             "output": {"file": "lut.png", "shape": [256, 3]},
         }
-        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n")
+        (case_dir / "params.json").write_text(
+            json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n"
+        )
         print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
 
     apply_cases = [
@@ -517,7 +549,9 @@ def write_render_cases() -> None:
             "input": {"file": "frame.f64", "shape": [height, width]},
             "output": {"file": "rgb.png", "shape": [height, width, 3]},
         }
-        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n")
+        (case_dir / "params.json").write_text(
+            json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n"
+        )
         print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
 
 
@@ -538,7 +572,9 @@ def write_frame_cases() -> None:
         return buf.getvalue()
 
     def write_meta(case_dir: Path, meta: dict[str, Any]) -> None:
-        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n")
+        (case_dir / "params.json").write_text(
+            json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n"
+        )
         print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
 
     def frame_case(
@@ -567,9 +603,7 @@ def write_frame_cases() -> None:
         if ext == "f64":
             meta["input"]["shape"] = list(state.shape)
         if float_frame:
-            (case_dir / "frame.f64").write_bytes(
-                np.ascontiguousarray(frame, dtype="<f8").tobytes()
-            )
+            (case_dir / "frame.f64").write_bytes(np.ascontiguousarray(frame, dtype="<f8").tobytes())
             meta["output"] = {"file": "frame.f64", "shape": list(frame.shape)}
         else:
             (case_dir / "frame.png").write_bytes(gray_png(frame))
@@ -592,8 +626,12 @@ def write_frame_cases() -> None:
         "frame-cyclic",
         "cyclic",
         {
-            "states": 14, "threshold": 1, "reach": 1, "neighborhood": "moore",
-            "width": 32, "height": 32,
+            "states": 14,
+            "threshold": 1,
+            "reach": 1,
+            "neighborhood": "moore",
+            "width": 32,
+            "height": 32,
         },
         cyclic,
         float_frame=False,
@@ -615,8 +653,13 @@ def write_frame_cases() -> None:
         "frame-grayscott",
         "grayscott",
         {
-            "du": 0.16, "dv": 0.08, "feed": 0.0367, "kill": 0.0649, "dt": 1.0,
-            "width": 48, "height": 48,
+            "du": 0.16,
+            "dv": 0.08,
+            "feed": 0.0367,
+            "kill": 0.0649,
+            "dt": 1.0,
+            "width": 48,
+            "height": 48,
         },
         grayscott,
         float_frame=True,
@@ -639,10 +682,18 @@ def write_frame_cases() -> None:
         "frame-boids",
         "boids",
         {
-            "count": 5, "width": 16, "height": 12, "perception": 12.0,
-            "separation_radius": 6.0, "w_separation": 1.5, "w_alignment": 1.0,
-            "w_cohesion": 1.0, "max_speed": 3.0, "min_speed": 1.0,
-            "max_force": 0.08, "boundary": "wrap",
+            "count": 5,
+            "width": 16,
+            "height": 12,
+            "perception": 12.0,
+            "separation_radius": 6.0,
+            "w_separation": 1.5,
+            "w_alignment": 1.0,
+            "w_cohesion": 1.0,
+            "max_speed": 3.0,
+            "min_speed": 1.0,
+            "max_force": 0.08,
+            "boundary": "wrap",
         },
         boids,
         float_frame=True,
@@ -665,16 +716,26 @@ def write_frame_cases() -> None:
         "frame-boids3d",
         "boids",
         {
-            "count": 5, "dimensions": 3, "width": 16, "height": 12, "depth": 48,
-            "perception": 12.0, "separation_radius": 6.0, "w_separation": 1.5,
-            "w_alignment": 1.0, "w_cohesion": 1.0, "max_speed": 3.0,
-            "min_speed": 1.0, "max_force": 0.08, "boundary": "wrap",
+            "count": 5,
+            "dimensions": 3,
+            "width": 16,
+            "height": 12,
+            "depth": 48,
+            "perception": 12.0,
+            "separation_radius": 6.0,
+            "w_separation": 1.5,
+            "w_alignment": 1.0,
+            "w_cohesion": 1.0,
+            "max_speed": 3.0,
+            "min_speed": 1.0,
+            "max_force": 0.08,
+            "boundary": "wrap",
         },
         boids3d,
         float_frame=True,
     )
 
-    fractal_cases = [
+    fractal_cases: list[tuple[str, str, Field, dict[str, Any], Viewport]] = [
         (
             "fractal-render-mandelbrot-home",
             "mandelbrot",
@@ -699,28 +760,33 @@ def write_frame_cases() -> None:
             "julia",
             Julia(c=1j, max_iter=2000),
             {"c_re": 0.0, "c_im": 1.0, "max_iter": 2000, "escape_radius": 1000.0},
-            Viewport("0.70710678118654752440084436210484903928483593768847403658833986899536623923105351942519376716382078636750692311545614851246241802792536860632206074854996791570661133296375279637789997525057639103028574", "-0.70710678118654752440084436210484903928483593768847403658833986899536623923105351942519376716382078636750692311545614851246241802792536860632206074854996791570661133296375279637789997525057639103028574", 157.5),
+            Viewport(
+                "0.70710678118654752440084436210484903928483593768847403658833986899536623923105351942519376716382078636750692311545614851246241802792536860632206074854996791570661133296375279637789997525057639103028574",
+                "-0.70710678118654752440084436210484903928483593768847403658833986899536623923105351942519376716382078636750692311545614851246241802792536860632206074854996791570661133296375279637789997525057639103028574",
+                157.5,
+            ),
         ),
     ]
     for name, family, field, params, viewport in fractal_cases:
         case_dir = VECTOR_ROOT / "render" / name
         case_dir.mkdir(parents=True, exist_ok=True)
         render = field.render((64, 64), viewport)
-        (case_dir / "render.f64").write_bytes(
-            np.ascontiguousarray(render, dtype="<f8").tobytes()
+        (case_dir / "render.f64").write_bytes(np.ascontiguousarray(render, dtype="<f8").tobytes())
+        write_meta(
+            case_dir,
+            {
+                "spec_version": "0.3.0" if family == "julia" else SPEC_VERSION,
+                "family": "render",
+                "tier": "epsilon",
+                "epsilon": 1e-9,
+                "kind": "fractal-render",
+                "sim_family": family,
+                "params": params,
+                "viewport": viewport.to_dict(),
+                "size": [64, 64],
+                "output": {"file": "render.f64", "shape": [64, 64]},
+            },
         )
-        write_meta(case_dir, {
-            "spec_version": "0.3.0" if family == "julia" else SPEC_VERSION,
-            "family": "render",
-            "tier": "epsilon",
-            "epsilon": 1e-9,
-            "kind": "fractal-render",
-            "sim_family": family,
-            "params": params,
-            "viewport": viewport.to_dict(),
-            "size": [64, 64],
-            "output": {"file": "render.f64", "shape": [64, 64]},
-        })
 
 
 def write_pattern_cases() -> None:
@@ -739,16 +805,16 @@ def write_pattern_cases() -> None:
 
     def write_meta(case_dir: Path, meta: dict[str, Any]) -> None:
         case_dir.mkdir(parents=True, exist_ok=True)
-        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n")
+        (case_dir / "params.json").write_text(
+            json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n"
+        )
         print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
 
     # RLE decode + canonical encode cases. Grids are stored raw-value grayscale.
     rle_cases = [
         (
             "rle-glider",
-            ("#C the classic glider, comments and all\n"
-            "x = 3, y = 3, rule = B3/S23\n"
-            "bob$2bo$3o!\n"),
+            ("#C the classic glider, comments and all\nx = 3, y = 3, rule = B3/S23\nbob$2bo$3o!\n"),
         ),
         (
             "rle-lwss-headerless",
@@ -756,18 +822,19 @@ def write_pattern_cases() -> None:
         ),
         (
             "rle-uppercase-two-state",
-            ("x = 2, y = 2, rule = B3/S23\n"
-            "OB$BO!\n"),  # uppercase B/O with a Life-like rule: two-state dialect
+            (
+                "x = 2, y = 2, rule = B3/S23\nOB$BO!\n"
+            ),  # uppercase B/O with a Life-like rule: two-state dialect
         ),
         (
             "rle-wireworld-diode",
-            ("x = 4, y = 3, rule = WireWorld\n"
-            ".2C$AC.C$.2CB!\n"),  # extended: B is state 2 here, not 'dead'
+            (
+                "x = 4, y = 3, rule = WireWorld\n.2C$AC.C$.2CB!\n"
+            ),  # extended: B is state 2 here, not 'dead'
         ),
         (
             "rle-cyclic-bands",
-            ("x = 5, y = 2, rule = cyclic-6\n"
-            "ABCDE$EDCBA!\n"),
+            ("x = 5, y = 2, rule = cyclic-6\nABCDE$EDCBA!\n"),
         ),
     ]
     for name, text in rle_cases:
@@ -778,16 +845,19 @@ def write_pattern_cases() -> None:
         (case_dir / "input.rle").write_text(text, newline="\n")
         (case_dir / "grid.png").write_bytes(gray_png(grid))
         (case_dir / "canonical.rle").write_text(canonical, newline="\n")
-        write_meta(case_dir, {
-            "spec_version": SPEC_VERSION,
-            "family": "patterns",
-            "tier": "bit-exact",
-            "kind": "rle",
-            "rule": rule,
-            "input": "input.rle",
-            "grid": {"file": "grid.png", "shape": list(grid.shape)},
-            "canonical": "canonical.rle",
-        })
+        write_meta(
+            case_dir,
+            {
+                "spec_version": SPEC_VERSION,
+                "family": "patterns",
+                "tier": "bit-exact",
+                "kind": "rle",
+                "rule": rule,
+                "input": "input.rle",
+                "grid": {"file": "grid.png", "shape": list(grid.shape)},
+                "canonical": "canonical.rle",
+            },
+        )
 
     # Transforms on an asymmetric multi-state grid (raw-value grayscale).
     base = np.array([[1, 2, 3, 0], [0, 4, 0, 5], [6, 0, 7, 8]], dtype=np.uint8)
@@ -797,18 +867,21 @@ def write_pattern_cases() -> None:
     (case_dir / "rotate90.png").write_bytes(gray_png(rotate90(base)))
     (case_dir / "flip_h.png").write_bytes(gray_png(flip_h(base)))
     (case_dir / "flip_v.png").write_bytes(gray_png(flip_v(base)))
-    write_meta(case_dir, {
-        "spec_version": SPEC_VERSION,
-        "family": "patterns",
-        "tier": "bit-exact",
-        "kind": "transform",
-        "grid": {"file": "grid.png", "shape": list(base.shape)},
-        "outputs": {
-            "rotate90": "rotate90.png",
-            "flip_h": "flip_h.png",
-            "flip_v": "flip_v.png",
+    write_meta(
+        case_dir,
+        {
+            "spec_version": SPEC_VERSION,
+            "family": "patterns",
+            "tier": "bit-exact",
+            "kind": "transform",
+            "grid": {"file": "grid.png", "shape": list(base.shape)},
+            "outputs": {
+                "rotate90": "rotate90.png",
+                "flip_h": "flip_h.png",
+                "flip_v": "flip_v.png",
+            },
         },
-    })
+    )
 
     # Stamp semantics: wrap, clip, and transparency over a nonzero background.
     pattern = np.array([[0, 9, 0], [0, 0, 9], [9, 9, 9]], dtype=np.uint8)
@@ -825,21 +898,24 @@ def write_pattern_cases() -> None:
         stamp(grid, pattern, x, y, torus=torus, transparent=transparent)
         (case_dir / "pattern.png").write_bytes(gray_png(pattern))
         (case_dir / "expected.png").write_bytes(gray_png(grid))
-        write_meta(case_dir, {
-            "spec_version": SPEC_VERSION,
-            "family": "patterns",
-            "tier": "bit-exact",
-            "kind": "stamp",
-            "pattern": {"file": "pattern.png", "shape": list(pattern.shape)},
-            "grid_width": gw,
-            "grid_height": gh,
-            "background": background,
-            "x": x,
-            "y": y,
-            "torus": torus,
-            "transparent": transparent,
-            "expected": {"file": "expected.png", "shape": [gh, gw]},
-        })
+        write_meta(
+            case_dir,
+            {
+                "spec_version": SPEC_VERSION,
+                "family": "patterns",
+                "tier": "bit-exact",
+                "kind": "stamp",
+                "pattern": {"file": "pattern.png", "shape": list(pattern.shape)},
+                "grid_width": gw,
+                "grid_height": gh,
+                "background": background,
+                "x": x,
+                "y": y,
+                "torus": torus,
+                "transparent": transparent,
+                "expected": {"file": "expected.png", "shape": [gh, gw]},
+            },
+        )
 
     # Extract semantics: the same wrap/zero-fill contract, round-tripped.
     grid16 = np.arange(16, dtype=np.uint8).reshape(4, 4)
@@ -849,19 +925,22 @@ def write_pattern_cases() -> None:
         region = extract(grid16, 3, 3, 2, 2, torus=torus)
         (case_dir / "grid.png").write_bytes(gray_png(grid16))
         (case_dir / "expected.png").write_bytes(gray_png(region))
-        write_meta(case_dir, {
-            "spec_version": SPEC_VERSION,
-            "family": "patterns",
-            "tier": "bit-exact",
-            "kind": "extract",
-            "grid": {"file": "grid.png", "shape": [4, 4]},
-            "x": 3,
-            "y": 3,
-            "width": 2,
-            "height": 2,
-            "torus": torus,
-            "expected": {"file": "expected.png", "shape": [2, 2]},
-        })
+        write_meta(
+            case_dir,
+            {
+                "spec_version": SPEC_VERSION,
+                "family": "patterns",
+                "tier": "bit-exact",
+                "kind": "extract",
+                "grid": {"file": "grid.png", "shape": [4, 4]},
+                "x": 3,
+                "y": 3,
+                "width": 2,
+                "height": 2,
+                "torus": torus,
+                "expected": {"file": "expected.png", "shape": [2, 2]},
+            },
+        )
 
 
 def write_evolve_cases() -> None:
@@ -878,7 +957,9 @@ def write_evolve_cases() -> None:
 
     def write_meta(case_dir: Path, meta: dict[str, Any]) -> None:
         case_dir.mkdir(parents=True, exist_ok=True)
-        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n")
+        (case_dir / "params.json").write_text(
+            json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n"
+        )
         print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
 
     # Objective scoring: per-run stats + score for each cycle, then the max.
@@ -893,29 +974,46 @@ def write_evolve_cases() -> None:
         for i in range(cycles):
             stats = _run_once(genome, (width, height), seed + i, max_steps)
             runs[i] = [
-                stats["steps"], stats["foreground"], stats["active"],
-                stats["rect"], stats["mage"], _score_stats(stats, PAPER_OBJECTIVE),
+                stats["steps"],
+                stats["foreground"],
+                stats["active"],
+                stats["rect"],
+                stats["mage"],
+                _score_stats(stats, PAPER_OBJECTIVE),
             ]
         (case_dir / "runs.f64").write_bytes(np.ascontiguousarray(runs, dtype="<f8").tobytes())
         summary = np.array([runs[:, 5].max(), runs[:, 0].sum()], dtype=np.float64)
         (case_dir / "score.f64").write_bytes(np.ascontiguousarray(summary, dtype="<f8").tobytes())
-        write_meta(case_dir, {
-            "spec_version": SPEC_VERSION,
-            "family": "evolve",
-            "tier": "bit-exact",
-            "kind": "objective",
-            "params": {
-                "genome": genome, "width": width, "height": height,
-                "cycles": cycles, "seed": seed, "max_steps": max_steps,
-                "objective": "paper",
+        write_meta(
+            case_dir,
+            {
+                "spec_version": SPEC_VERSION,
+                "family": "evolve",
+                "tier": "bit-exact",
+                "kind": "objective",
+                "params": {
+                    "genome": genome,
+                    "width": width,
+                    "height": height,
+                    "cycles": cycles,
+                    "seed": seed,
+                    "max_steps": max_steps,
+                    "objective": "paper",
+                },
+                "outputs": {
+                    "runs": {
+                        "file": "runs.f64",
+                        "shape": [cycles, 6],
+                        "columns": ["steps", "foreground", "active", "rect", "mage", "score"],
+                    },
+                    "score": {
+                        "file": "score.f64",
+                        "shape": [2],
+                        "columns": ["max_score", "total_steps"],
+                    },
+                },
             },
-            "outputs": {
-                "runs": {"file": "runs.f64", "shape": [cycles, 6],
-                         "columns": ["steps", "foreground", "active", "rect", "mage", "score"]},
-                "score": {"file": "score.f64", "shape": [2],
-                          "columns": ["max_score", "total_steps"]},
-            },
-        })
+        )
 
     # GA operators: successive seeded applications, strings/ints only.
     rng = Pcg32(5)
@@ -931,52 +1029,73 @@ def write_evolve_cases() -> None:
     scores = [0.5, -1.0, 2.25, 2.25, 0.0, 3.5, -0.25, 1.0]
     winners_best = [tournament_select(scores, 3, rng) for _ in range(8)]
     winners_worst = [tournament_select(scores, 3, rng, worst=True) for _ in range(8)]
-    write_meta(VECTOR_ROOT / "evolve" / "operators-seeded", {
-        "spec_version": SPEC_VERSION,
-        "family": "evolve",
-        "tier": "bit-exact",
-        "kind": "operators",
-        "params": {
-            "genome": redworld, "parent2": parent2,
-            "mutate_seed": 5, "crossover_seed": 6,
-            "tournament_seed": 7, "tournament_rounds": 3, "tournament_scores": scores,
+    write_meta(
+        VECTOR_ROOT / "evolve" / "operators-seeded",
+        {
+            "spec_version": SPEC_VERSION,
+            "family": "evolve",
+            "tier": "bit-exact",
+            "kind": "operators",
+            "params": {
+                "genome": redworld,
+                "parent2": parent2,
+                "mutate_seed": 5,
+                "crossover_seed": 6,
+                "tournament_seed": 7,
+                "tournament_rounds": 3,
+                "tournament_scores": scores,
+            },
+            "expected": {
+                "mutations": mutations,
+                "crossovers": crossovers,
+                "winners_best": winners_best,
+                "winners_worst": winners_worst,
+            },
         },
-        "expected": {
-            "mutations": mutations,
-            "crossovers": crossovers,
-            "winners_best": winners_best,
-            "winners_worst": winners_worst,
-        },
-    })
+    )
 
     # Mini evolution run: the integration pin — deterministic end to end.
     evolver = Evolver(
-        size=(24, 24), population_size=8, tournament_rounds=3,
-        eval_cycles=1, patience=1000, max_steps=120, seed=123,
+        size=(24, 24),
+        population_size=8,
+        tournament_rounds=3,
+        eval_cycles=1,
+        patience=1000,
+        max_steps=120,
+        seed=123,
     )
     best = evolver.run(max_evals=20)
     case_dir = VECTOR_ROOT / "evolve" / "mini-run-24"
     case_dir.mkdir(parents=True, exist_ok=True)
-    (case_dir / "best.f64").write_bytes(
-        np.array([best.score], dtype="<f8").tobytes()
+    (case_dir / "best.f64").write_bytes(np.array([best.score], dtype="<f8").tobytes())
+    write_meta(
+        case_dir,
+        {
+            "spec_version": SPEC_VERSION,
+            "family": "evolve",
+            "tier": "bit-exact",
+            "kind": "run",
+            "params": {
+                "width": 24,
+                "height": 24,
+                "population_size": 8,
+                "crossover_rate": 0.75,
+                "tournament_rounds": 3,
+                "eval_cycles": 1,
+                "patience": 1000,
+                "max_steps": 120,
+                "seed": 123,
+                "max_evals": 20,
+                "objective": "paper",
+            },
+            "expected": {
+                "best_genome": best.genome,
+                "evals": evolver.evals,
+                "population": [c.genome for c in evolver.population],
+                "best_score": {"file": "best.f64", "shape": [1]},
+            },
+        },
     )
-    write_meta(case_dir, {
-        "spec_version": SPEC_VERSION,
-        "family": "evolve",
-        "tier": "bit-exact",
-        "kind": "run",
-        "params": {
-            "width": 24, "height": 24, "population_size": 8, "crossover_rate": 0.75,
-            "tournament_rounds": 3, "eval_cycles": 1, "patience": 1000,
-            "max_steps": 120, "seed": 123, "max_evals": 20, "objective": "paper",
-        },
-        "expected": {
-            "best_genome": best.genome,
-            "evals": evolver.evals,
-            "population": [c.genome for c in evolver.population],
-            "best_score": {"file": "best.f64", "shape": [1]},
-        },
-    })
 
 
 def write_png_io_cases() -> None:
@@ -1010,7 +1129,9 @@ def write_png_io_cases() -> None:
             "input": "input.png",
             "grid": {"file": "grid.png", "shape": [4, 5, 3]},
         }
-        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n")
+        (case_dir / "params.json").write_text(
+            json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n"
+        )
         print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
 
     write("decode-scale1", mergelife_to_png(grid, 1), 1)
