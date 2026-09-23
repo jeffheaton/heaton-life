@@ -18,6 +18,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from heaton_life.boids import BoidsParams
 from heaton_life.ca import LifeLike, Wireworld, wireworld_from_text
 from heaton_life.conformance import CODECS, TIERS, build_sim
 from heaton_life.core.bignum import reference_orbit
@@ -47,6 +48,21 @@ ELEVEN_DIMENSIONS_IM = (
 )
 
 
+def _vector_params(family: str, params: dict[str, Any]) -> dict[str, Any]:
+    """Spell ``params`` the way the committed vectors do (the frozen wire format)."""
+    if family == "mergelife":
+        # spec/mergelife.md: the JSON key "genome" is frozen; the API calls it the rule.
+        # conformance.py's _Rgb.build maps it back.
+        return {("genome" if k == "rule" else k): v for k, v in params.items()}
+    if family == "boids":
+        # 2D vectors predate the d-dimensional change and carry neither key; the
+        # Python and C# runners default dimensions=2, depth=256 when they are absent.
+        defaults = {f.name: f.default for f in dataclasses.fields(BoidsParams)}
+        if all(params[k] == defaults[k] for k in ("dimensions", "depth")):
+            return {k: v for k, v in params.items() if k not in ("dimensions", "depth")}
+    return params
+
+
 def write_case(family: str, name: str, sim: Simulation, steps: list[int]) -> None:
     codec = CODECS[family]
     tier, epsilon = TIERS[family]
@@ -68,7 +84,7 @@ def write_case(family: str, name: str, sim: Simulation, steps: list[int]) -> Non
         "spec_version": SPEC_VERSION,
         "family": family,
         "tier": tier,
-        "params": sim.params.to_dict(),  # type: ignore[attr-defined]
+        "params": _vector_params(family, sim.params.to_dict()),  # type: ignore[attr-defined]
         "checkpoints": checkpoints,
     }
     if epsilon is not None:
