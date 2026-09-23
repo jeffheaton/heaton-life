@@ -1,0 +1,44 @@
+{
+  "epsilon": 1e-12,
+  "expected": {
+    "center_im": "0.382386261",
+    "center_re": "-1.256640726",
+    "format": "kfr",
+    "half_height_log10": -6.096910013008056,
+    "max_iter": null,
+    "reference": null,
+    "warnings": [
+      "rotation-ignored",
+      "stretch-ignored",
+      "reflect-ignored"
+    ]
+  },
+  "family": "locations",
+  "format": "kfr",
+  "input": "input.kfr",
+  "spec_version": "0.5.0",
+  "tier": "epsilon",
+  "viewports": [
+    {
+      "size": [
+        512,
+        512
+      ],
+      "zoom_log10": 6.3979400086720375
+    },
+    {
+      "size": [
+        1920,
+        1080
+      ],
+      "zoom_log10": 6.148062535455438
+    },
+    {
+      "size": [
+        1080,
+        1920
+      ],
+      "zoom_log10": 6.647817481888637
+    }
+  ]
+}

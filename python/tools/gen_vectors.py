@@ -21,10 +21,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from heaton_life.boids import BoidsParams
 from heaton_life.ca import LifeLike, Wireworld, wireworld_from_text
 from heaton_life.conformance import CODECS, TIERS, build_sim
-from heaton_life.core.bignum import reference_orbit
+from heaton_life.core import decimal_text
+from heaton_life.core.bignum import reference_orbit, working_bits
 from heaton_life.core.protocols import Field, Simulation
 from heaton_life.core.viewport import Viewport
-from heaton_life.fractal import BurningShip, Julia, Mandelbrot, Newton
+from heaton_life.fractal import BurningShip, Julia, Mandelbrot, Newton, pan, pixel_delta, zoom_at
 from heaton_life.init import place, rle_decode
 
 SPEC_VERSION = "0.2.0"  # what existing cases were written under; new fractal cases pass theirs
@@ -497,6 +498,12 @@ def main() -> None:
 
     # -- patterns (RLE dialects, transforms, stamp semantics, spec/patterns.md) ------
     write_pattern_cases()
+
+    # -- navigation (exact viewport arithmetic, spec/navigation.md) -------------------
+    write_navigation_cases()
+
+    # -- locations (framing conventions and importers, spec/locations.md) ------------
+    write_location_cases()
 
     print("done")
 
@@ -1164,6 +1171,444 @@ def write_evolve_cases() -> None:
                 "best_score": {"file": "best.f64", "shape": [1]},
             },
         },
+    )
+
+
+def write_navigation_cases() -> None:
+    """spec/navigation.md: pan, zoom_at, pixel_delta and positional, each case inputs plus
+    the expected strings (or, for pixel_delta, the doubles' IEEE-754 bit patterns)."""
+    root = VECTOR_ROOT / "navigation"
+
+    def bits(value: float) -> str:
+        return f"0x{int.from_bytes(np.float64(value).tobytes(), 'little'):016X}"
+
+    def write(name: str, meta: dict[str, Any]) -> None:
+        case_dir = root / name
+        case_dir.mkdir(parents=True, exist_ok=True)
+        full = {"spec_version": "0.5.0", "family": "navigation", "tier": "bit-exact", **meta}
+        (case_dir / "params.json").write_text(json.dumps(full, indent=2, sort_keys=True) + "\n")
+        print(f"wrote vectors/navigation/{name}")
+
+    seahorse = Viewport(
+        "-0.743643887037158704752191506114774", "0.131825904205311970493132056385139", 14.0
+    )
+
+    def pan_case(
+        name: str,
+        vp: Viewport,
+        dx: float,
+        dy: float,
+        size: tuple[int, int],
+        zoom: float | None = None,
+    ) -> None:
+        meta: dict[str, Any] = {
+            "operation": "pan",
+            "viewport": vp.to_dict(),
+            "size": list(size),
+            "dx": dx,
+            "dy": dy,
+        }
+        if zoom is not None:
+            meta["zoom_log10"] = zoom
+        meta["expected"] = pan(vp, dx, dy, size, zoom).to_dict()
+        write(name, meta)
+
+    def zoom_case(
+        name: str, vp: Viewport, dx: float, dy: float, size: tuple[int, int], zoom: float
+    ) -> None:
+        write(
+            name,
+            {
+                "operation": "zoom_at",
+                "viewport": vp.to_dict(),
+                "size": list(size),
+                "dx": dx,
+                "dy": dy,
+                "zoom_log10": zoom,
+                "expected": zoom_at(vp, dx, dy, size, zoom).to_dict(),
+            },
+        )
+
+    def delta_case(name: str, frm: Viewport, to: Viewport, size: tuple[int, int]) -> None:
+        dx, dy = pixel_delta(frm, to, size)
+        write(
+            name,
+            {
+                "operation": "pixel_delta",
+                "from": frm.to_dict(),
+                "to": to.to_dict(),
+                "size": list(size),
+                "expected": {"dx_bits": bits(dx), "dy_bits": bits(dy)},
+            },
+        )
+
+    # A click on pixel (300, 17) of a 512x384 frame, and a fractional drag at a
+    # fractional zoom (places use its ceiling).
+    pan_case("pan-recenter-seahorse-512x384", seahorse, 300 + 0.5 - 256, 17 + 0.5 - 192, (512, 384))
+    pan_case(
+        "pan-drag-fractional-zoom6.3",
+        dataclasses.replace(seahorse, zoom_log10=6.3),
+        -3.75,
+        12.125,
+        (1920, 1080),
+    )
+    # A move of (0, 0) keeps the center strings, exponent notation and all; any other
+    # move prints both components at the frame's places (1e-295 rounds to zero at 284).
+    pan_case("pan-zero-keeps-strings", Viewport("-2", "1e-295", 280.0), 0.0, 0.0, (32, 32))
+    pan_case("pan-horizontal-reprints-im", Viewport("-2", "1e-295", 280.0), 7.5, 0.0, (32, 32))
+    # Portrait: the places come from the height's digits (1280 has four, 720 three).
+    pan_case("pan-portrait-720x1280", seahorse, 10.5, -300.25, (720, 1280))
+    # Recenter and zoom x4 in one step: offset at the old scale, places at the new zoom.
+    pan_case("pan-and-zoom", seahorse, -100.5, 60.5, (640, 480), 14.60206)
+    pan_case("pan-negative-zoom", Viewport("-0.5", "0.0", -1.5), 20.25, -8.0, (64, 48))
+    # Rounding ties go away from zero: C + 0.25 = 0.0125 exactly at 3 places.
+    pan_case("pan-tie-positive", Viewport("-0.2375", "0", 0.0), 0.0625, 0.0, (1, 1))
+    pan_case("pan-tie-negative", Viewport("0.2375", "0", 0.0), -0.0625, 0.0, (1, 1))
+    # A reference is carried over unchanged.
+    pan_case(
+        "pan-keeps-reference",
+        seahorse.with_reference(
+            "-0.743643887037146704752191506114774", "0.131825904205303970493132056385139"
+        ),
+        12.0,
+        -3.0,
+        (48, 48),
+    )
+    zoom_case("zoom-at-wheel-in", seahorse, 100.3, -50.2, (1920, 1080), 14.0375)
+    zoom_case("zoom-at-pinch-out", seahorse, -255.5, 191.5, (512, 384), 13.2)
+    zoom_case("zoom-at-vertical-anchor", seahorse, 0.0, 40.0, (512, 512), 20.0)
+    zoom_case("zoom-at-deep", Viewport("-2", "1e-295", 280.0), 5.5, -2.25, (32, 32), 281.5)
+    zoom_case("zoom-at-portrait-828x1792", seahorse, -200.25, 700.5, (828, 1792), 14.5)
+    # Thirty decades in one step: fl(dx*ps0) - fl(dx*ps1) must be exact -- a difference
+    # of doubles lands on the wrong grid point.
+    zoom_case("zoom-at-big-jump", Viewport("-0.5", "0", 0.0), 100.0, -37.5, (512, 512), 30.0)
+    # About the center: nothing moves, so the strings stay; only the zoom changes.
+    zoom_case("zoom-at-about-center", seahorse, 0.0, 0.0, (512, 384), 16.0)
+    zoom_case(
+        "zoom-at-keeps-reference",
+        seahorse.with_reference(
+            "-0.743643887037146704752191506114774", "0.131825904205303970493132056385139"
+        ),
+        25.0,
+        12.0,
+        (48, 48),
+        14.5,
+    )
+    delta_case("pixel-delta-pan", seahorse, pan(seahorse, 123.456, -78.9, (512, 384)), (512, 384))
+    delta_case(
+        "pixel-delta-equal-values",
+        Viewport("0.1", "0", 3.0),
+        Viewport("0.10", "0.0", 3.0),
+        (64, 64),
+    )
+    delta_case(
+        "pixel-delta-overflow",
+        Viewport("0", "0", 280.0),
+        Viewport("1e30", "-1e30", 280.0),
+        (32, 32),
+    )
+    delta_case(
+        "pixel-delta-other-zoom",
+        seahorse,
+        dataclasses.replace(pan(seahorse, 3.5, 4.5, (256, 256)), zoom_log10=20.0),
+        (256, 256),
+    )
+    positional_inputs = [
+        "1e-5",
+        "-1.2E-7",
+        "2.5E1",
+        "0.10",
+        "-0.0",
+        "007.50",
+        ".5",
+        "5.",
+        "1.000e3",
+        " +3.25e-2 ",
+        "0e-10",
+        "-123456789012345678901234567890.5e-40",
+    ]
+    write(
+        "positional",
+        {
+            "operation": "positional",
+            "inputs": positional_inputs,
+            "expected": [decimal_text.positional(text) for text in positional_inputs],
+        },
+    )
+    # Forty pans at zoom 40: every intermediate center pinned, and the orbit's working
+    # bits never change (the places come from the frame, never from the center).
+    vp = Viewport(
+        "-0.743643887037158704752191506114774", "0.131825904205311970493132056385139", 40.0
+    )
+    steps: list[dict[str, Any]] = []
+    expected: list[dict[str, Any]] = []
+    for i in range(40):
+        dx, dy = 3.25 - i * 0.375, -1.5 + i * 0.125
+        vp = pan(vp, dx, dy, (1920, 1080))
+        steps.append({"operation": "pan", "dx": dx, "dy": dy})
+        expected.append(
+            {**vp.to_dict(), "working_bits": working_bits(vp.center_re, vp.center_im, 40.0)}
+        )
+    write(
+        "sequence-pans-zoom40",
+        {
+            "operation": "sequence",
+            "size": [1920, 1080],
+            "viewport": Viewport(
+                "-0.743643887037158704752191506114774", "0.131825904205311970493132056385139", 40.0
+            ).to_dict(),
+            "steps": steps,
+            "expected": expected,
+        },
+    )
+
+
+def write_location_cases() -> None:
+    """spec/locations.md: one input file per case beside params.json, which holds the
+    expected record (centers, budgets, references, formats and warnings exact;
+    half_height_log10 within the relative epsilon) and the viewports of three frames --
+    or ``"error": true`` for a file the importer must refuse."""
+    from heaton_life.fractal import locations
+
+    root = VECTOR_ROOT / "locations"
+    parsers = {
+        "kfr": locations.parse_kfr,
+        "f3": locations.parse_fraktaler3,
+        "hf-preset": locations.parse_hf_preset,
+        "hf-result": locations.parse_hf_result,
+        "hf-journal": locations.parse_hf_journal,
+    }
+    frames = [(512, 512), (1920, 1080), (1080, 1920)]
+
+    def write(name: str, fmt: str, filename: str, text: str) -> None:
+        case_dir = root / name
+        case_dir.mkdir(parents=True, exist_ok=True)
+        (case_dir / filename).write_bytes(text.encode("utf-8"))
+        meta: dict[str, Any] = {
+            "spec_version": "0.5.0",
+            "family": "locations",
+            "tier": "epsilon",
+            "epsilon": 1e-12,
+            "format": fmt,
+            "input": filename,
+        }
+        try:
+            loc = parsers[fmt](text)
+        except ValueError:
+            meta["error"] = True
+        else:
+            meta["expected"] = {
+                "center_re": loc.center_re,
+                "center_im": loc.center_im,
+                "half_height_log10": loc.half_height_log10,
+                "format": loc.format,
+                "max_iter": loc.max_iter,
+                "reference": list(loc.reference) if loc.reference else None,
+                "warnings": list(loc.warnings),
+            }
+            meta["viewports"] = (
+                []
+                if loc.half_height_log10 is None
+                else [
+                    {"size": list(size), "zoom_log10": loc.viewport(size).zoom_log10}
+                    for size in frames
+                ]
+            )
+        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+        print(f"wrote vectors/locations/{name}")
+
+    crlf = "\r\n"
+    write(
+        "kfr-as-kf-writes",
+        "kfr",
+        "input.kfr",
+        crlf.join(
+            [
+                "Re: -0.743643887037158704752191506114774",
+                "Im: 0.131825904205311970493132056385139",
+                "Zoom: 1.59738E15",
+                "Iterations: 23832",
+                "IterDiv: 0.010000",
+                "SmoothMethod: 0",
+                "ColorMethod: 7",
+                "Differences: 3",
+                "ColorOffset: 0",
+                "RotateAngle: 0",
+                "StretchAngle: 0",
+                "StretchAmount: 0",
+                "ImagPointsUp: 1",
+                "Version: 2.15.5.2",
+                "",
+            ]
+        ),
+    )
+    # A byte-order mark before the first key; '=' as well as ':'; a later duplicate
+    # wins; no ImagPointsUp, so KF's axis points down and the view is mirrored here.
+    write(
+        "kfr-hand-edited",
+        "kfr",
+        "input.kfr",
+        "﻿Re: -0.9\n; a hand-edited location\n# another comment\n\n"
+        "  IM:  2.0E-2   \nre = -7.5e-1\nzoom: 2.5e6\niterations: 1e6\n"
+        "Rotate: 0\nRatio: 360.0\nno separator here\n",
+    )
+    write(
+        "kfr-transforms",
+        "kfr",
+        "input.kfr",
+        "Re: -1.256640726\nIm: 0.382386261\nZoom: 2.5e6\nRotateAngle: 30\n"
+        "StretchAmount: 0.5\nImagPointsUp: 0\n",
+    )
+    write(
+        "kfr-legacy-rotate",
+        "kfr",
+        "input.kfr",
+        "Re: 0.25\nIm: 0\nZoom: 100\nRotate: 12.5\nRatio: 360\nImagPointsUp: 1\n",
+    )
+    write(
+        "kfr-legacy-ratio",
+        "kfr",
+        "input.kfr",
+        "Re: 0.25\nIm: 0\nZoom: 100\nRotate: 0\nRatio: 177\nImagPointsUp: 1\n",
+    )
+    write("kfr-no-zoom", "kfr", "input.kfr", "Re: 0.25\rIm: -0.5\r")
+    write("kfr-missing-im", "kfr", "input.kfr", "Re: 0.25\nZoom: 100\n")
+    write("kfr-zero-zoom", "kfr", "input.kfr", "Re: 0.25\nIm: 0\nZoom: 0\n")
+    write("kfr-fractional-iterations", "kfr", "input.kfr", "Re: 0.25\nIm: 0\nIterations: 12.5\n")
+    write("kfr-iterations-too-large", "kfr", "input.kfr", "Re: 0.25\nIm: 0\nIterations: 1e19\n")
+
+    # Fraktaler-3 1.x-3.0 as it saves: default-valued keys left out (location.imag = 0
+    # here, and the reference's imaginary part, equal to the location's), and every
+    # string of 68 or more characters streamed as toml11 v3 wraps it at F3's setw(70): a
+    # triple quote, 69-character chunks each ending in a line-ending backslash, the last
+    # (shorter) chunk, then a backslash line-end and the closer. F3 3.1 writes one line.
+    def toml11(key: str, value: str) -> str:
+        width = 70
+        if len(value) + 2 < width:
+            return f'{key} = "{value}"\n'
+        chunks = []
+        rest = value
+        while rest:
+            if len(rest) < width:
+                chunks.append(rest)
+                rest = ""
+            else:
+                take = width - 2 if rest[width - 2] == "\\" else width - 1
+                chunks.append(rest[:take] + "\\\n")
+                rest = rest[take:]
+        return f'{key} = """\n' + "".join(chunks) + '\\\n"""\n'
+
+    deep_real = (
+        "-1.74729959900110572326271032446002389901129253352095659370780511065"
+        "03972284717236823618219405542157081921765913744437023107"
+    )
+    write(
+        "f3-as-f3-writes",
+        "f3",
+        "input.f3.toml",
+        'program = "fraktaler-3"\nversion = "3"\n'
+        + toml11("location.real", deep_real)
+        + toml11("location.zoom", "2.15e2836")
+        + toml11("reference.real", deep_real[:-3] + "123")
+        + "bailout.iterations = 16777216\nbailout.escape_radius = 625.0\n",
+    )
+    write(
+        "f3-3.1-single-line",
+        "f3",
+        "input.f3.toml",
+        f'program = "fraktaler-3"\nversion = "3.1"\nlocation.real = "{deep_real}"\n'
+        'location.imag = "-0.0000000000000000000001"\nlocation.zoom = "2.15e2836"\n',
+    )
+    # An escaped quote run inside a multi-line string in a skipped array table: the
+    # string does not end there, so its "[location] real = 9" lines are text, not keys.
+    write(
+        "f3-escaped-quotes",
+        "f3",
+        "input.f3.toml",
+        'program = "fraktaler-3"\nlocation.real = "-0.75"\n\n[[formula]]\n'
+        'note = """see \\"""\n[location]\nreal = "9"\n"""\n',
+    )
+    write(
+        "f3-sections",
+        "f3",
+        "input.f3.toml",
+        '# a hand-written file\n[location]\nreal = "-7.5e-1"  # the neck, "quoted"\n'
+        "imag = '0.1'\nzoom = 1_000.5\n[transform]\nreflect = true\nrotate = 15\n"
+        "stretch_amount = 0.5\nexponential_map = true\n"
+        '[[history]]\nreal = "9"\nnote = """\nreal = 5\n"""\n[image]\nwidth = 1920\ncolors = [1, 2]\n',
+    )
+    write("f3-defaults", "f3", "input.f3.toml", 'program = "fraktaler-3"\nlocation.imag = "0.5"\n')
+    write("f3-not-a-location", "f3", "input.f3.toml", "[image]\nwidth = 1920\n")
+
+    write(
+        "hf-preset-envelope",
+        "hf-preset",
+        "input.json",
+        json.dumps(
+            {
+                "formatVersion": 1,
+                "id": "B2E1D0C9-8A76-4F54-B321-0E9D8C7B6A55",
+                "name": "Seahorse Valley",
+                "settings": {
+                    "location": {
+                        "baseHalfHeight": "1.0",
+                        "centerImag": "1.31825904205311970493132056385139E-1",
+                        "centerReal": "-0.743643887037158704752191506114774",
+                        "name": "Seahorse Valley",
+                    },
+                    "quality": {"height": 1080, "maxIterationsOverride": 60000, "width": 1920},
+                    "zoom": {"startDepthLog10": 0, "targetDepthLog10": 30},
+                },
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+    )
+    # A bare settings object with no zoom group: no scale (HF would use its app default).
+    write(
+        "hf-settings-bare",
+        "hf-preset",
+        "input.json",
+        json.dumps(
+            {
+                "location": {"baseHalfHeight": "1.25", "centerImag": "0.0", "centerReal": "-0.5"},
+                "quality": {},
+            }
+        ),
+    )
+    write(
+        "hf-preset-no-half-height",
+        "hf-preset",
+        "input.json",
+        json.dumps({"location": {"centerImag": "0.0", "centerReal": "-0.5"}}),
+    )
+    write(
+        "hf-result",
+        "hf-result",
+        "input.txt",
+        "# Heaton Fractal DeepZoomSearch result\n# period 998 minibrot nucleus, depth 1e15.2\n"
+        "# verified: does not escape in 4,000 iterations at 2 limbs\n\n"
+        "re = -7.436438870371588707780645434936425750476e-1\n"
+        "im\t=\t0.1318259042053122928210973548747672652630",
+    )
+    write("hf-result-no-depth", "hf-result", "input.txt", "re = 0.25\r\nim = -0.5\r\n")
+    # The deepest seed wins, the latest among equals -- not the last line; lines that are
+    # not seeds (a numeric real, NaN, a torn write) are skipped.
+    write(
+        "hf-journal",
+        "hf-journal",
+        "input.jsonl",
+        '{"depthLog10": 3.5, "elapsedSeconds": 1, "imaginary": "0.1", "period": 3, '
+        '"real": "-0.1", "round": 0}\n'
+        '{"depthLog10": 12.25, "elapsedSeconds": 9, "imaginary": "0.13182", "period": 58, '
+        '"real": "-0.74364", "round": 1}\n'
+        '{"depthLog10": 12.25, "elapsedSeconds": 11, "imaginary": "1.31825e-1", '
+        '"navDepthLog10": 12.3, "period": 58, "real": "-0.743643", "round": 2}\n'
+        '{"depthLog10": 11.0, "elapsedSeconds": 12, "imaginary": "0.2", "period": 7, '
+        '"real": "-0.5", "round": 3}\n'
+        '{"depthLog10": 99.0, "imaginary": "0.3", "real": -0.5}\n'
+        '{"depthLog10": NaN, "imaginary": "0.3", "real": "-0.5"}\n'
+        '{"depthLog10": 13.0, "imag',
     )
 
 

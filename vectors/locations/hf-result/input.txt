@@ -1,0 +1,6 @@
+# Heaton Fractal DeepZoomSearch result
+# period 998 minibrot nucleus, depth 1e15.2
+# verified: does not escape in 4,000 iterations at 2 limbs
+
+re = -7.436438870371588707780645434936425750476e-1
+im	=	0.1318259042053122928210973548747672652630

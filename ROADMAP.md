@@ -53,7 +53,7 @@ Per `spec/deep-zoom.md` (contract already in core since Phase 1):
 - Escape-time engine, T0 float64 direct path; smooth coloring.
 - Perturbation + rebasing engine (T1): cached reference orbits, NumPy lockstep iteration with fancy-indexed `Z[m]` gather. (Orbits were a gmpy2/mpmath floating-point shim until 2026-09-23; they are now the spec's fixed-point arithmetic on Python ints, gmpy2 mpz optional, identical to the C# port.)
 - Mandelbrot, Julia, Burning Ship (diffabs), Newton (T0 only) — T1 validated against T0 (exact for Julia/Ship; Mandelbrot agreement equals T0's own 1-ulp chaos bound).
-- Playground: click/wheel zoom (cursor-anchored, Decimal-precise recentering), pan via Ctrl-click; zoom movies via `fractal.zoom_animation`.
+- Playground: click recenters, Ctrl-click recenters and zooms ×4, the wheel zooms anchored at the cursor — exact decimal arithmetic through the library's `fractal.navigation` since 2026-09-23 ([spec/navigation.md](spec/navigation.md)); zoom movies via `fractal.zoom_animation`.
 - Vectors: int32 iteration/root grids (bit-exact) incl. a deep-zoom case with its exported reference orbit.
 - Deferred (see Future work): progressive refinement with cancellation (renders are single-pass), optional numba kernels.
 

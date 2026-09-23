@@ -29,7 +29,14 @@ namespace HeatonLife
         /// calls made the bit-exact tier platform-dependent at fractional zooms.
         /// </summary>
         public static double PixelScale(int width, Viewport viewport) =>
-            (BaseSpan / width) * Pow10.Compute(-viewport.ZoomLog10);
+            PixelScale(width, viewport.ZoomLog10);
+
+        /// <summary>
+        /// <see cref="PixelScale(int, Viewport)"/> for a zoom with no viewport at hand — the
+        /// one expression every consumer shares, so a navigation step and a render agree.
+        /// </summary>
+        public static double PixelScale(int width, double zoomLog10) =>
+            (BaseSpan / width) * Pow10.Compute(-zoomLog10);
 
         /// <summary>
         /// Whether the viewport's off-center reference lies within its frame — the

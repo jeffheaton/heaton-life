@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Callable
-from decimal import Decimal, localcontext
 from math import log10
 from typing import Any, Protocol
 
@@ -19,13 +18,11 @@ from numpy.typing import NDArray
 
 from heaton_life.core.params import Params
 from heaton_life.core.viewport import Viewport
-from heaton_life.fractal import BurningShip, Julia, Mandelbrot, Newton
+from heaton_life.fractal import BurningShip, Julia, Mandelbrot, Newton, pan, zoom_at
 
 
 class _RenderField(Protocol):
-    def render(
-        self, size: tuple[int, int], viewport: Viewport
-    ) -> NDArray[np.float64]: ...
+    def render(self, size: tuple[int, int], viewport: Viewport) -> NDArray[np.float64]: ...
 
 
 _VIEW_META = {"label": "Center Re"}
@@ -103,7 +100,7 @@ def make_newton(p: Params) -> _RenderField:
 
 
 AUTOZOOM_ZOOM_PER_STEP = 0.02  # decades of magnification per step (speed slider throttles)
-_AUTOZOOM_DRIFT = Decimal("0.2")  # fraction of the way toward the target per step
+_AUTOZOOM_DRIFT = 0.2  # fraction of the way toward the target per step
 
 
 class FractalSim:
@@ -140,18 +137,19 @@ class FractalSim:
         if target is None:  # nothing non-black to chase: hold center, keep zooming
             self.params = p.replace(zoom_log10=new_zoom)
         else:
+            # Drift a fraction of the way toward the target pixel, landing at the new
+            # zoom -- exact decimal arithmetic at the frame's places (spec/navigation.md).
             x, y = target
-            with localcontext() as ctx:
-                ctx.prec = max(int(old_zoom), 0) + 40
-                pixel = (
-                    Decimal(4) / (Decimal(10) ** Decimal(repr(old_zoom))) / Decimal(p.width)
-                )
-                off_x = (Decimal(x) + Decimal("0.5") - Decimal(p.width) / 2) * pixel
-                off_y = (Decimal(y) + Decimal("0.5") - Decimal(p.height) / 2) * pixel
-                new_re = Decimal(p.center_re) + off_x * _AUTOZOOM_DRIFT
-                new_im = Decimal(p.center_im) - off_y * _AUTOZOOM_DRIFT
+            size = (p.width, p.height)
+            moved = pan(
+                Viewport(p.center_re, p.center_im, old_zoom),
+                (x + 0.5 - p.width / 2) * _AUTOZOOM_DRIFT,
+                (y + 0.5 - p.height / 2) * _AUTOZOOM_DRIFT,
+                size,
+                new_zoom,
+            )
             self.params = p.replace(
-                center_re=str(new_re), center_im=str(new_im), zoom_log10=new_zoom
+                center_re=moved.center_re, center_im=moved.center_im, zoom_log10=new_zoom
             )
         self._frame = None  # counts stay until the next render refreshes them
 
@@ -220,27 +218,21 @@ def zoom_paint(
     delta = {1: 0.0, 2: -_LOG4, 3: _LOG4, 4: _LOG2, 5: -_LOG2}[button]
     new_zoom = min(max(old_zoom + delta, -2.0), zoom_max)
 
-    with localcontext() as ctx:
-        ctx.prec = max(int(old_zoom), 0) + 40
-        pixel = (
-            Decimal(4)
-            / (Decimal(10) ** Decimal(repr(old_zoom)))
-            / Decimal(p.width)
-        )
-        off_x = (Decimal(x) + Decimal("0.5") - Decimal(p.width) / 2) * pixel
-        off_y = (Decimal(y) + Decimal("0.5") - Decimal(p.height) / 2) * pixel
-        point_re = Decimal(p.center_re) + off_x
-        point_im = Decimal(p.center_im) - off_y
-        if button in (1, 3):  # recenter on the click
-            new_re, new_im = point_re, point_im
-        elif button == 2:  # zoom out about the current center
-            new_re, new_im = Decimal(p.center_re), Decimal(p.center_im)
-        else:  # wheel: keep the point under the cursor fixed
-            shrink = Decimal(10) ** (Decimal(repr(old_zoom)) - Decimal(repr(new_zoom)))
-            new_re = point_re - (point_re - Decimal(p.center_re)) * shrink
-            new_im = point_im - (point_im - Decimal(p.center_im)) * shrink
+    # Exact decimal arithmetic at the frame's places (spec/navigation.md): the click's
+    # offset is the one a render gives that pixel, and a moved center never carries
+    # more digits than the frame resolves, so its orbit costs what the zoom asks.
+    viewport = Viewport(p.center_re, p.center_im, old_zoom)
+    size = (p.width, p.height)
+    dx = x + 0.5 - p.width / 2
+    dy = y + 0.5 - p.height / 2
+    if button in (1, 3):  # recenter on the click (3 also zooms in)
+        moved = pan(viewport, dx, dy, size, new_zoom)
+    elif button == 2:  # zoom out about the current center
+        moved = dataclasses.replace(viewport, zoom_log10=new_zoom)
+    else:  # wheel: keep the point under the cursor fixed
+        moved = zoom_at(viewport, dx, dy, size, new_zoom)
 
     new_params = sim.params.replace(
-        center_re=str(new_re), center_im=str(new_im), zoom_log10=new_zoom
+        center_re=moved.center_re, center_im=moved.center_im, zoom_log10=new_zoom
     )
     return build(new_params)

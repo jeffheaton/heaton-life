@@ -1,0 +1,23 @@
+{
+  "dx": 100.3,
+  "dy": -50.2,
+  "expected": {
+    "center_im": "0.131825904205312057009",
+    "center_re": "-0.743643887037158531893",
+    "zoom_log10": 14.0375
+  },
+  "family": "navigation",
+  "operation": "zoom_at",
+  "size": [
+    1920,
+    1080
+  ],
+  "spec_version": "0.5.0",
+  "tier": "bit-exact",
+  "viewport": {
+    "center_im": "0.131825904205311970493132056385139",
+    "center_re": "-0.743643887037158704752191506114774",
+    "zoom_log10": 14.0
+  },
+  "zoom_log10": 14.0375
+}

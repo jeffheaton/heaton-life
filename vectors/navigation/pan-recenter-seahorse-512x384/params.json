@@ -1,0 +1,22 @@
+{
+  "dx": 44.5,
+  "dy": -174.5,
+  "expected": {
+    "center_im": "0.1318259042053256033",
+    "center_re": "-0.7436438870371552282",
+    "zoom_log10": 14.0
+  },
+  "family": "navigation",
+  "operation": "pan",
+  "size": [
+    512,
+    384
+  ],
+  "spec_version": "0.5.0",
+  "tier": "bit-exact",
+  "viewport": {
+    "center_im": "0.131825904205311970493132056385139",
+    "center_re": "-0.743643887037158704752191506114774",
+    "zoom_log10": 14.0
+  }
+}

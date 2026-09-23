@@ -286,7 +286,8 @@ Tier selection is automatic and invisible to the caller; the API surface is iden
   resumes it. Julia's critical orbit depends on `(c, F)` alone and is hit every frame.
   A pan moves the center, so a centered frame needs a new orbit (≈ `max_iter` bignum
   steps, ms to 100s of ms), while a frame that keeps an
-  [off-center reference](#off-center-reference) pans on the cached one.
+  [off-center reference](#off-center-reference) pans on the cached one
+  ([navigation.md](navigation.md)'s exact `pan` carries the reference over).
 - C# steps the orbit on fixed-width 32-bit limbs in preallocated buffers
   (`FixedOrbit`), falling back to `System.Numerics.BigInteger` for centers or `c` of
   magnitude `2¹⁶` or more. Both run the same integer operations, so the choice cannot

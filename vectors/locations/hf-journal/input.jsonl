@@ -1,0 +1,7 @@
+{"depthLog10": 3.5, "elapsedSeconds": 1, "imaginary": "0.1", "period": 3, "real": "-0.1", "round": 0}
+{"depthLog10": 12.25, "elapsedSeconds": 9, "imaginary": "0.13182", "period": 58, "real": "-0.74364", "round": 1}
+{"depthLog10": 12.25, "elapsedSeconds": 11, "imaginary": "1.31825e-1", "navDepthLog10": 12.3, "period": 58, "real": "-0.743643", "round": 2}
+{"depthLog10": 11.0, "elapsedSeconds": 12, "imaginary": "0.2", "period": 7, "real": "-0.5", "round": 3}
+{"depthLog10": 99.0, "imaginary": "0.3", "real": -0.5}
+{"depthLog10": NaN, "imaginary": "0.3", "real": "-0.5"}
+{"depthLog10": 13.0, "imag

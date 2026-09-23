@@ -43,7 +43,13 @@ def pixel_scale(size: tuple[int, int], viewport: Viewport) -> float:
     the bit-exact tier platform-dependent at fractional zooms.
     """
     width, _ = size
-    return (BASE_SPAN / width) * pow10(-viewport.zoom_log10)
+    return scale_at(width, viewport.zoom_log10)
+
+
+def scale_at(width: int, zoom_log10: float) -> float:
+    """pixel_scale for a frame ``width`` pixels wide at ``zoom_log10`` -- the one
+    expression every consumer shares, so a navigation step and a render agree."""
+    return (BASE_SPAN / width) * pow10(-zoom_log10)
 
 
 def pixel_offsets(size: tuple[int, int], viewport: Viewport) -> ComplexArray:

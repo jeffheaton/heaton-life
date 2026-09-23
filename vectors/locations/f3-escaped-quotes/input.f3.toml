@@ -1,0 +1,8 @@
+program = "fraktaler-3"
+location.real = "-0.75"
+
+[[formula]]
+note = """see \"""
+[location]
+real = "9"
+"""

@@ -115,3 +115,49 @@ def difference(minuend: str, subtrahend: str) -> float:
         return diff / denominator
     except OverflowError:
         return float("inf") if diff > 0 else float("-inf")
+
+
+def digits_of(value: int) -> str:
+    """``str(value)`` for a non-negative int of any length. CPython refuses ``str()`` of
+    an int past 4,300 digits by default, and the grammar allows 10,000: longer values
+    are split at a power of ten and each half converted."""
+    if value.bit_length() <= 13_000:  # under 3,914 digits
+        return str(value)
+    half = value.bit_length() * 30_103 // 200_000  # about half the digit count
+    high, low = divmod(value, 10**half)
+    return digits_of(high) + digits_of(low).rjust(half, "0")
+
+
+def format_scaled(value: int, places: int) -> str:
+    """``value * 10^-places`` written positionally with exactly ``places`` fraction digits
+    (none, and no point, when ``places`` is 0): "-" only for a nonzero negative, no "+",
+    one "0" before the point when the magnitude is below 1. Raises ValueError when the
+    result would carry more than MAX_DIGITS digits -- it could not be read back.
+    """
+    if places < 0:
+        raise ValueError(f"places must be non-negative, got {places}")
+    # 10^MAX_DIGITS has 33,220 bits: refuse a longer value before converting it.
+    if places >= MAX_DIGITS or abs(value).bit_length() > 33_220:
+        raise ValueError(f"more than {MAX_DIGITS} digits in a positional decimal")
+    magnitude = digits_of(abs(value)).rjust(places + 1, "0")
+    if len(magnitude) > MAX_DIGITS:
+        raise ValueError(f"more than {MAX_DIGITS} digits in a positional decimal")
+    body = f"{magnitude[:-places]}.{magnitude[-places:]}" if places else magnitude
+    return f"-{body}" if value < 0 else body
+
+
+def positional(text: str) -> str:
+    """The same value written positionally: no exponent, no "+", no sign on zero, no
+    leading zeros beyond one -- and the same number of decimal places the precision
+    rule counts (max(-net_exponent, 0), spec/deep-zoom.md), so an orbit's working bits
+    do not change. "1e-5" -> "0.00001", "-1.2E-7" -> "-0.00000012", "2.5E1" -> "25",
+    "0.10" -> "0.10". Raises ValueError outside the grammar, or when the positional
+    form would exceed MAX_DIGITS digits ("1e-20000" has 20,000 places).
+    """
+    negative, digits, net_exponent = scan(text)
+    signed = -digits if negative else digits
+    if net_exponent >= 0:
+        if len(digits_of(digits)) + net_exponent > MAX_DIGITS:
+            raise ValueError(f"more than {MAX_DIGITS} digits in a positional decimal")
+        return format_scaled(signed * 10**net_exponent, 0)
+    return format_scaled(signed, -net_exponent)

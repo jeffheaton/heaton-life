@@ -1,0 +1,40 @@
+{
+  "epsilon": 1e-12,
+  "expected": {
+    "center_im": "0.131825",
+    "center_re": "-0.743643",
+    "format": "hf-journal",
+    "half_height_log10": -12.25,
+    "max_iter": null,
+    "reference": null,
+    "warnings": []
+  },
+  "family": "locations",
+  "format": "hf-journal",
+  "input": "input.jsonl",
+  "spec_version": "0.5.0",
+  "tier": "epsilon",
+  "viewports": [
+    {
+      "size": [
+        512,
+        512
+      ],
+      "zoom_log10": 12.551029995663981
+    },
+    {
+      "size": [
+        1920,
+        1080
+      ],
+      "zoom_log10": 12.301152522447381
+    },
+    {
+      "size": [
+        1080,
+        1920
+      ],
+      "zoom_log10": 12.800907468880581
+    }
+  ]
+}

@@ -22,8 +22,8 @@ Each family gets one page structured as:
 
 | Tier | Families | Test |
 |---|---|---|
-| Bit-exact | Life-like, Elementary, Cyclic, Wireworld, MergeLife (and its decoded rule table), fractal iteration counts and Newton root indices, colormap LUTs and per-family frame indexing, patterns (RLE, transforms, stamp/extract), PNG grid I/O (decoded grids), evolve (objective statistics, operators, whole runs); pow10 via the known-answer bit patterns on its page | byte-for-byte equality with the vector: states at each checkpoint step, or the one-shot output |
-| ε-tolerance | Lenia ×3, Gray-Scott, Boids, smooth fractal coloring (the fractal render) | max abs deviation ≤ the `epsilon` in the case's `params.json` (1e-6 for Lenia and boids, 1e-9 for Gray-Scott and the fractal render) |
+| Bit-exact | Life-like, Elementary, Cyclic, Wireworld, MergeLife (and its decoded rule table), fractal iteration counts and Newton root indices, colormap LUTs and per-family frame indexing, patterns (RLE, transforms, stamp/extract), PNG grid I/O (decoded grids), evolve (objective statistics, operators, whole runs); pow10 via the known-answer bit patterns on its page; navigation (moved centers, pixel deltas) | byte-for-byte equality with the vector: states at each checkpoint step, or the one-shot output |
+| ε-tolerance | Lenia ×3, Gray-Scott, Boids, smooth fractal coloring (the fractal render), location framing (the zoom an imported location converts to, compared relatively: ε·max(1, |value|); its centers are exact) | max abs deviation ≤ the `epsilon` in the case's `params.json` (1e-6 for Lenia and boids, 1e-9 for Gray-Scott and the fractal render) |
 
 ## Conventions
 
@@ -47,6 +47,8 @@ Each family gets one page structured as:
 - [evolve.md](evolve.md) — the MergeLife GA and paper objective (bit-exact tier: objective statistics, GA operators, and whole seeded runs replay across languages; vectors in `../vectors/evolve/`)
 - [fractals.md](fractals.md) — escape-time + Newton conventions, pixel mapping, vector schema
 - [deep-zoom.md](deep-zoom.md) — fractal precision architecture (perturbation + rebasing)
+- [locations.md](locations.md) — the framing conventions of heaton-life, Heaton Fractal, Kalles Fraktaler and Fraktaler-3, the conversions between them, and the importers for their files
+- [navigation.md](navigation.md) — exact viewport arithmetic: pan, anchored zoom and pixel offsets on decimal centers, printed at the frame's places so the orbit's precision never ratchets (bit-exact tier)
 - [render.md](render.md) — colormap LUT construction and frame indexing (bit-exact tier)
 - [patterns.md](patterns.md) — pattern model, RLE dialects, transforms, extract/stamp, family-bound compatibility
 - [png-io.md](png-io.md) — MergeLife PNG import/export at integer scale; grid-level bit-exact contract (PNG bytes are per-encoder)

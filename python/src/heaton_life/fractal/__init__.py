@@ -10,6 +10,7 @@ from heaton_life.fractal.escape_fields import (
     Mandelbrot,
     MandelbrotParams,
 )
+from heaton_life.fractal.navigation import center_places, pan, pixel_delta, zoom_at
 from heaton_life.fractal.newton import Newton, NewtonParams
 
 __all__ = [
@@ -23,6 +24,10 @@ __all__ = [
     "MandelbrotParams",
     "Newton",
     "NewtonParams",
+    "center_places",
+    "pan",
+    "pixel_delta",
     "tier_of",
     "zoom_animation",
+    "zoom_at",
 ]

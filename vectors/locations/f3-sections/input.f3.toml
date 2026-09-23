@@ -1,0 +1,18 @@
+# a hand-written file
+[location]
+real = "-7.5e-1"  # the neck, "quoted"
+imag = '0.1'
+zoom = 1_000.5
+[transform]
+reflect = true
+rotate = 15
+stretch_amount = 0.5
+exponential_map = true
+[[history]]
+real = "9"
+note = """
+real = 5
+"""
+[image]
+width = 1920
+colors = [1, 2]

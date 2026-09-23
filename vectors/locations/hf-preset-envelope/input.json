@@ -1,0 +1,22 @@
+{
+  "formatVersion": 1,
+  "id": "B2E1D0C9-8A76-4F54-B321-0E9D8C7B6A55",
+  "name": "Seahorse Valley",
+  "settings": {
+    "location": {
+      "baseHalfHeight": "1.0",
+      "centerImag": "1.31825904205311970493132056385139E-1",
+      "centerReal": "-0.743643887037158704752191506114774",
+      "name": "Seahorse Valley"
+    },
+    "quality": {
+      "height": 1080,
+      "maxIterationsOverride": 60000,
+      "width": 1920
+    },
+    "zoom": {
+      "startDepthLog10": 0,
+      "targetDepthLog10": 30
+    }
+  }
+}

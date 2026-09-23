@@ -1,0 +1,24 @@
+{
+  "expected": {
+    "dx_bits": "0x7FF0000000000000",
+    "dy_bits": "0x7FF0000000000000"
+  },
+  "family": "navigation",
+  "from": {
+    "center_im": "0",
+    "center_re": "0",
+    "zoom_log10": 280.0
+  },
+  "operation": "pixel_delta",
+  "size": [
+    32,
+    32
+  ],
+  "spec_version": "0.5.0",
+  "tier": "bit-exact",
+  "to": {
+    "center_im": "-1e30",
+    "center_re": "1e30",
+    "zoom_log10": 280.0
+  }
+}

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 
 namespace HeatonLife
@@ -165,6 +166,49 @@ namespace HeatonLife
             return common >= 0
                 ? RatioToDouble(negative, magnitude * BigInteger.Pow(10, common), BigInteger.One)
                 : RatioToDouble(negative, magnitude, BigInteger.Pow(10, -common));
+        }
+
+        /// <summary>
+        /// <paramref name="value"/> × 10^-<paramref name="places"/> written positionally
+        /// with exactly <paramref name="places"/> fraction digits (none, and no point, when
+        /// it is 0): "-" only for a nonzero negative, no "+", one "0" before the point when
+        /// the magnitude is below 1 (spec/navigation.md "Conventions"). Throws when the
+        /// result would carry more than <see cref="MaxDigits"/> digits — it could not be
+        /// read back. The Python reference's decimal_text.format_scaled.
+        /// </summary>
+        internal static string FormatScaled(BigInteger value, int places)
+        {
+            if (places < 0)
+                throw new ArgumentOutOfRangeException(nameof(places), "places must be non-negative");
+            // 10^MaxDigits has 33,220 bits: refuse a longer value before formatting it.
+            if (places >= MaxDigits || BitLength(BigInteger.Abs(value)) > 33220)
+                throw new ArgumentException($"more than {MaxDigits} digits in a positional decimal");
+            // Format the magnitude: a culture's negative sign never enters the digits.
+            string magnitude = BigInteger.Abs(value).ToString(CultureInfo.InvariantCulture).PadLeft(places + 1, '0');
+            if (magnitude.Length > MaxDigits)
+                throw new ArgumentException($"more than {MaxDigits} digits in a positional decimal");
+            string body = places > 0
+                ? magnitude.Substring(0, magnitude.Length - places) + "." + magnitude.Substring(magnitude.Length - places)
+                : magnitude;
+            return value.Sign < 0 ? "-" + body : body;
+        }
+
+        /// <summary>
+        /// The same value written positionally, with the same number of decimal places the
+        /// precision rule counts (max(-net exponent, 0)) — no exponent, no "+", no sign on
+        /// zero. The Python reference's decimal_text.positional.
+        /// </summary>
+        internal static string Positional(string text)
+        {
+            Scan(text, out bool negative, out BigInteger digits, out int netExponent);
+            BigInteger signed = negative ? -digits : digits;
+            if (netExponent >= 0)
+            {
+                if (digits.ToString(CultureInfo.InvariantCulture).Length + netExponent > MaxDigits)
+                    throw new ArgumentException($"more than {MaxDigits} digits in a positional decimal");
+                return FormatScaled(signed * BigInteger.Pow(10, netExponent), 0);
+            }
+            return FormatScaled(signed, -netExponent);
         }
 
         /// <summary>
