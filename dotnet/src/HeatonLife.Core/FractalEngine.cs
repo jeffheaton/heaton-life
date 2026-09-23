@@ -31,6 +31,19 @@ namespace HeatonLife
         public static double PixelScale(int width, Viewport viewport) =>
             (BaseSpan / width) * Pow10.Compute(-viewport.ZoomLog10);
 
+        /// <summary>
+        /// Whether the viewport's off-center reference lies within its frame — the
+        /// suggested rule for keeping a reference while panning (spec/deep-zoom.md
+        /// "Off-center reference"); true when there is none. Advisory: a frame is defined
+        /// for any reference.
+        /// </summary>
+        public static bool ReferenceOnScreen(int width, int height, Viewport viewport)
+        {
+            double ps = PixelScale(width, viewport);
+            return Math.Abs(viewport.ReferenceOffsetRe) <= width / 2.0 * ps
+                && Math.Abs(viewport.ReferenceOffsetIm) <= height / 2.0 * ps;
+        }
+
         /// <summary>Per-pixel real offset from the viewport center for column x.</summary>
         public static double OffsetRe(int x, int width, double pixelScale) =>
             (x + 0.5 - width / 2.0) * pixelScale;
@@ -38,6 +51,19 @@ namespace HeatonLife
         /// <summary>Per-pixel imaginary offset for row y; im decreases downward.</summary>
         public static double OffsetIm(int y, int height, double pixelScale) =>
             -(y + 0.5 - height / 2.0) * pixelScale;
+
+        /// <summary>
+        /// Column x's real delta from an off-center reference: fl(d + offset), with
+        /// d = round64(center − reference) (<see cref="Viewport.ReferenceOffsetRe"/>) — one
+        /// add, the components kept apart (spec/deep-zoom.md "Off-center reference"). Every
+        /// family forms its deltas here; the test suites pin it against a shared table.
+        /// </summary>
+        internal static double DeltaRe(int x, int width, double pixelScale, double referenceOffsetRe) =>
+            referenceOffsetRe + OffsetRe(x, width, pixelScale);
+
+        /// <summary>Row y's imaginary delta from an off-center reference: fl(d + offset).</summary>
+        internal static double DeltaIm(int y, int height, double pixelScale, double referenceOffsetIm) =>
+            referenceOffsetIm + OffsetIm(y, height, pixelScale);
 
         /// <summary>
         /// The tier a zoom selects (spec/fractals.md "Tiering"), for a host deciding what
@@ -134,7 +160,13 @@ namespace HeatonLife
             const double split = 134217729.0; // 2^27 + 1, Veltkamp splitting constant
             double p = a * b;
             if (a == 0.0 || b == 0.0 || !IsFinite(a) || !IsFinite(b) || !IsFinite(c))
+            {
+                // Finite factors keep an exact finite product even where p overflowed,
+                // so an infinite c wins (p + c would make inf - inf = NaN of it).
+                if (double.IsInfinity(c) && IsFinite(a) && IsFinite(b))
+                    return c;
                 return p + c;                                  // an exact signed-zero product, or IEEE's inf/NaN rules
+            }
             double absP = Math.Abs(p);
             if (absP < TinyProduct)
                 return Math.Abs(c) >= DominantAddend ? c : ExactFma(a, b, c);

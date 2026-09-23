@@ -56,6 +56,49 @@ def pixel_offsets(size: tuple[int, int], viewport: Viewport) -> ComplexArray:
     return grid.ravel()
 
 
+def reference_offset(viewport: Viewport) -> complex:
+    """round64(center - reference), per component, exactly from the decimal strings;
+    0 when the viewport has no reference (spec/deep-zoom.md "Off-center reference")."""
+    if viewport.reference_re is None or viewport.reference_im is None:
+        return 0j
+    return complex(
+        decimal_text.difference(viewport.center_re, viewport.reference_re),
+        decimal_text.difference(viewport.center_im, viewport.reference_im),
+    )
+
+
+def pixel_deltas(size: tuple[int, int], viewport: Viewport) -> ComplexArray:
+    """Each pixel's offset from the point a T1 frame iterates (``viewport.orbit_center``).
+
+    Without a reference these are exactly ``pixel_offsets``. With one, each component is
+    fl(d + offset), d = round64(center - reference): one float64 add after the exact
+    difference, the operation order the C# port runs. The components are stored, not
+    combined as ``xs + 1j * ys``: that is a complex multiply, whose real part is
+    0 * inf = NaN when d's imaginary part overflows.
+    """
+    if not viewport.has_reference:
+        return pixel_offsets(size, viewport)
+    width, height = size
+    ps = pixel_scale(size, viewport)
+    d = reference_offset(viewport)
+    xs = d.real + (np.arange(width, dtype=np.float64) + 0.5 - width / 2.0) * ps
+    ys = d.imag + -(np.arange(height, dtype=np.float64) + 0.5 - height / 2.0) * ps
+    grid: ComplexArray = np.empty((height, width), dtype=np.complex128)
+    grid.real = xs[None, :]
+    grid.imag = ys[:, None]
+    return grid.ravel()
+
+
+def reference_on_screen(size: tuple[int, int], viewport: Viewport) -> bool:
+    """Whether the viewport's reference lies within its frame -- the suggested rule for
+    keeping a reference while panning (True when there is none). Advisory: output is
+    defined for any reference."""
+    width, height = size
+    ps = pixel_scale(size, viewport)
+    d = reference_offset(viewport)
+    return abs(d.real) <= width / 2.0 * ps and abs(d.imag) <= height / 2.0 * ps
+
+
 def pixel_grid(size: tuple[int, int], viewport: Viewport) -> ComplexArray:
     """Absolute pixel coordinates in float64 (T0 only — collapses past zoom ~1e13)."""
     center = complex(
@@ -96,19 +139,13 @@ def escape_time(
     return counts, final
 
 
-def smooth_iterations(
-    counts: IntArray, final: ComplexArray, escape_radius: float
-) -> FloatArray:
+def smooth_iterations(counts: IntArray, final: ComplexArray, escape_radius: float) -> FloatArray:
     """mu = n + 1 - log2(log|z| / log R) for escaped pixels; 0 for interior."""
     mu = np.zeros(counts.shape, dtype=np.float64)
     escaped = counts > 0
     if escaped.any():
         abs_z = np.abs(final[escaped])
-        mu[escaped] = (
-            counts[escaped]
-            + 1.0
-            - np.log2(np.log(abs_z) / np.log(escape_radius))
-        )
+        mu[escaped] = counts[escaped] + 1.0 - np.log2(np.log(abs_z) / np.log(escape_radius))
     return mu
 
 

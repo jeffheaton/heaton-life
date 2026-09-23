@@ -142,6 +142,32 @@ namespace HeatonLife
         }
 
         /// <summary>
+        /// The double nearest <paramref name="minuend"/> − <paramref name="subtrahend"/>,
+        /// computed exactly from the digits and rounded once (ties to even; infinities past
+        /// the float64 range; an exact zero is +0.0) — the off-center reference's offset
+        /// (spec/deep-zoom.md "Off-center reference"), never a difference of two
+        /// already-rounded doubles. The Python reference's decimal_text.difference.
+        /// </summary>
+        internal static double Difference(string minuend, string subtrahend)
+        {
+            Scan(minuend, out bool negA, out BigInteger a, out int expA);
+            Scan(subtrahend, out bool negB, out BigInteger b, out int expB);
+            int common = Math.Min(expA, expB);
+            if (negA)
+                a = -a;
+            if (negB)
+                b = -b;
+            BigInteger diff = a * BigInteger.Pow(10, expA - common) - b * BigInteger.Pow(10, expB - common);
+            if (diff.IsZero)
+                return 0.0;
+            bool negative = diff.Sign < 0;
+            BigInteger magnitude = negative ? -diff : diff;
+            return common >= 0
+                ? RatioToDouble(negative, magnitude * BigInteger.Pow(10, common), BigInteger.One)
+                : RatioToDouble(negative, magnitude, BigInteger.Pow(10, -common));
+        }
+
+        /// <summary>
         /// ±numerator/denominator (both positive) to the nearest double, ties to even,
         /// with IEEE-754's subnormal and overflow behavior.
         /// </summary>

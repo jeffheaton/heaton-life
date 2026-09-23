@@ -92,3 +92,26 @@ def to_float(text: str) -> float:
     """
     scan(text)
     return float(text.strip(_WHITESPACE))
+
+
+def difference(minuend: str, subtrahend: str) -> float:
+    """The float64 nearest ``minuend - subtrahend``, computed exactly from the digits and
+    rounded once (ties to even; infinities past the float64 range; an exact zero is
+    +0.0). The off-center reference's offset (spec/deep-zoom.md "Off-center
+    reference") -- never a difference of two already-rounded doubles.
+    """
+    neg_a, digits_a, exp_a = scan(minuend)
+    neg_b, digits_b, exp_b = scan(subtrahend)
+    common = min(exp_a, exp_b)
+    a = digits_a * 10 ** (exp_a - common) * (-1 if neg_a else 1)
+    b = digits_b * 10 ** (exp_b - common) * (-1 if neg_b else 1)
+    diff: int = a - b
+    if diff == 0:
+        return 0.0
+    try:
+        if common >= 0:
+            return float(diff * 10**common)
+        denominator: int = 10**-common
+        return diff / denominator
+    except OverflowError:
+        return float("inf") if diff > 0 else float("-inf")

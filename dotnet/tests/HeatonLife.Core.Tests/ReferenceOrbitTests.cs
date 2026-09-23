@@ -40,8 +40,10 @@ namespace HeatonLife.Tests
             var root = doc.RootElement;
             var viewport = root.GetProperty("viewport");
             var p = root.GetProperty("params");
-            string centerRe = viewport.GetProperty("center_re").GetString()!;
-            string centerIm = viewport.GetProperty("center_im").GetString()!;
+            // The orbit is the reference point's: the center unless the viewport names another.
+            bool offCenter = viewport.TryGetProperty("reference_re", out _);
+            string centerRe = viewport.GetProperty(offCenter ? "reference_re" : "center_re").GetString()!;
+            string centerIm = viewport.GetProperty(offCenter ? "reference_im" : "center_im").GetString()!;
             double zoom = viewport.GetProperty("zoom_log10").GetDouble();
             int maxIter = p.GetProperty("max_iter").GetInt32();
             string family = root.GetProperty("family").GetString()!;

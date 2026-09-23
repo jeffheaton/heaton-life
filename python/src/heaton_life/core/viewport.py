@@ -27,7 +27,7 @@ def _normalize(value: object, field_name: str) -> str:
         raise TypeError(
             f"Viewport.{field_name} must be a decimal string, not a float: float64 "
             f"cannot hold a deep-zoom center, so {value!r} would silently lose its "
-            f"tail. Quote it instead: \"{value!r}\"."
+            f'tail. Quote it instead: "{value!r}".'
         )
     if isinstance(value, decimal.Decimal):
         value = str(value)
@@ -44,7 +44,9 @@ def _normalize(value: object, field_name: str) -> str:
     try:
         decimal_text.scan(value)
     except ValueError:
-        raise ValueError(f"Viewport.{field_name} is not a valid decimal string: {value!r}") from None
+        raise ValueError(
+            f"Viewport.{field_name} is not a valid decimal string: {value!r}"
+        ) from None
     return value
 
 
@@ -55,18 +57,49 @@ class Viewport:
     center_re: str = "-0.5"
     center_im: str = "0.0"
     zoom_log10: float = 0.0
+    # Optional off-center reference (spec/deep-zoom.md "Off-center reference"): a T1 frame
+    # iterates this point's orbit and offsets every pixel by round64(center - reference),
+    # so a host can pan without a new orbit per frame. Both or neither; T0 ignores it.
+    reference_re: str | None = None
+    reference_im: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "center_re", _normalize(self.center_re, "center_re"))
         object.__setattr__(self, "center_im", _normalize(self.center_im, "center_im"))
         object.__setattr__(self, "zoom_log10", float(self.zoom_log10))
+        if (self.reference_re is None) != (self.reference_im is None):
+            raise ValueError(
+                "Viewport reference needs both reference_re and reference_im, or neither"
+            )
+        if self.reference_re is not None:
+            object.__setattr__(self, "reference_re", _normalize(self.reference_re, "reference_re"))
+            object.__setattr__(self, "reference_im", _normalize(self.reference_im, "reference_im"))
+
+    @property
+    def has_reference(self) -> bool:
+        return self.reference_re is not None
+
+    @property
+    def orbit_center(self) -> tuple[str, str]:
+        """The point a T1 frame iterates at high precision: the reference, else the center."""
+        if self.reference_re is not None and self.reference_im is not None:
+            return self.reference_re, self.reference_im
+        return self.center_re, self.center_im
+
+    def with_reference(self, reference_re: str | None, reference_im: str | None) -> Viewport:
+        """This viewport with another reference point (None, None drops it)."""
+        return dataclasses.replace(self, reference_re=reference_re, reference_im=reference_im)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "center_re": self.center_re,
             "center_im": self.center_im,
             "zoom_log10": self.zoom_log10,
         }
+        if self.reference_re is not None:
+            data["reference_re"] = self.reference_re
+            data["reference_im"] = self.reference_im
+        return data
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> Viewport:
@@ -74,6 +107,8 @@ class Viewport:
             center_re=data["center_re"],
             center_im=data["center_im"],
             zoom_log10=float(data["zoom_log10"]),
+            reference_re=data.get("reference_re"),
+            reference_im=data.get("reference_im"),
         )
 
     def to_json(self) -> str:

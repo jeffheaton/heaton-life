@@ -22,7 +22,7 @@ namespace HeatonLife.Tests
         // Everything this runner understands. A key outside these sets fails the case
         // rather than being skipped: a runner that ignored, say, "critical_orbit" would
         // replay a deep Julia case the old way and fail confusingly or pass wrongly.
-        private static readonly HashSet<string> SpecVersions = new HashSet<string> { "0.2.0", "0.3.0" };
+        private static readonly HashSet<string> SpecVersions = new HashSet<string> { "0.2.0", "0.3.0", "0.4.0" };
         private static readonly HashSet<string> TopKeys = new HashSet<string>
         {
             "spec_version", "family", "tier", "params", "viewport", "size", "outputs",
@@ -62,7 +62,19 @@ namespace HeatonLife.Tests
                 paramNames.Add(property.Name);
             Assert.True(ParamKeys[family].SetEquals(paramNames), $"{family}/{caseName}: unexpected params");
             Assert.True(family == "julia" || !root.TryGetProperty("critical_orbit", out _));
-            AssertKeys(root.GetProperty("viewport"), $"{family}/{caseName} viewport", "center_re", "center_im", "zoom_log10");
+            var vp = root.GetProperty("viewport");
+            bool offCenter = vp.TryGetProperty("reference_re", out _) || vp.TryGetProperty("reference_im", out _);
+            if (offCenter)
+            {
+                // An off-center reference (spec/deep-zoom.md) arrived in 0.4.0; an older
+                // runner would iterate the center instead and replay the case wrongly.
+                Assert.Equal("0.4.0", root.GetProperty("spec_version").GetString());
+                AssertKeys(vp, $"{family}/{caseName} viewport", "center_re", "center_im", "zoom_log10", "reference_re", "reference_im");
+            }
+            else
+            {
+                AssertKeys(vp, $"{family}/{caseName} viewport", "center_re", "center_im", "zoom_log10");
+            }
             foreach (string key in new[] { "reference_orbit", "critical_orbit" })
             {
                 if (!root.TryGetProperty(key, out var orbit))
@@ -81,11 +93,12 @@ namespace HeatonLife.Tests
                 Assert.Equal(root.GetProperty("size")[1].GetInt32(), output.GetProperty("shape")[0].GetInt32());
                 Assert.Equal(root.GetProperty("size")[0].GetInt32(), output.GetProperty("shape")[1].GetInt32());
             }
-            var vp = root.GetProperty("viewport");
             var viewport = new Viewport(
                 vp.GetProperty("center_re").GetString()!,
                 vp.GetProperty("center_im").GetString()!,
-                vp.GetProperty("zoom_log10").GetDouble());
+                vp.GetProperty("zoom_log10").GetDouble(),
+                offCenter ? vp.GetProperty("reference_re").GetString() : null,
+                offCenter ? vp.GetProperty("reference_im").GetString() : null);
             int width = root.GetProperty("size")[0].GetInt32();
             int height = root.GetProperty("size")[1].GetInt32();
 

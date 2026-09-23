@@ -1,0 +1,32 @@
+{
+  "family": "burning-ship",
+  "outputs": [
+    {
+      "file": "iterations.i32",
+      "kind": "iterations",
+      "shape": [
+        32,
+        32
+      ]
+    }
+  ],
+  "params": {
+    "escape_radius": 1000.0,
+    "max_iter": 1000
+  },
+  "reference_orbit": {
+    "file": "orbit.c128",
+    "length": 252
+  },
+  "size": [
+    32,
+    32
+  ],
+  "spec_version": "0.3.0",
+  "tier": "bit-exact",
+  "viewport": {
+    "center_im": "-0.595275727121703516488710194270",
+    "center_re": "0.403269293475576420989278613990",
+    "zoom_log10": 13.0
+  }
+}

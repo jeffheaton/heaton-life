@@ -36,5 +36,6 @@ Vectors are versioned with the spec: every generated `params.json` carries `"spe
 |---|---|
 | `0.2.0` | Everything up to 2026-09-22. |
 | `0.3.0` | Fractal cases from 2026-09-23 ([deep-zoom.md](../spec/deep-zoom.md)): Julia's `critical_orbit` (rebased pixels restart on it), the fixed-point orbit arithmetic, the shared center grammar and exact float64 projection, orbit components far below `1e-292` converting without error, a deep Julia smooth render that needs an exact fma, and the optional `source` attribution key. (The precision rule's digit term and subnormal rounding are pinned by unit tests in both suites, not by a shipped vector.) |
+| `0.4.0` | Fractal cases with an off-center reference ([deep-zoom.md](../spec/deep-zoom.md#off-center-reference)): `reference_re` / `reference_im` in the viewport; the stored orbit is the reference's, and every pixel's delta is `fl(round64(center − reference) + offset)`. |
 
 Fractal runners are strict: a key at any level, a parameter, output kind, codec, or `spec_version` a runner does not know fails the case instead of being skipped.

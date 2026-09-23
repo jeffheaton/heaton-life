@@ -11,6 +11,13 @@ namespace HeatonLife
     /// projections are provided for the T0 tier only. Both centers follow the one
     /// decimal grammar every consumer shares (<see cref="DecimalText"/>, the Python
     /// reference's core/decimal_text.py): no NaN, no infinities, ASCII digits.
+    ///
+    /// A viewport may also carry an off-center <b>reference</b> (spec/deep-zoom.md
+    /// "Off-center reference"): a T1 frame then iterates the reference's orbit and
+    /// offsets every pixel by round64(center − reference), so a host can pan without a
+    /// new orbit per frame. The reference is part of the frame's definition — counts
+    /// can differ from the centered frame's on chaotic pixels — so it is explicit, never
+    /// remembered by the library. T0 ignores it.
     /// </summary>
     public sealed class Viewport
     {
@@ -18,11 +25,84 @@ namespace HeatonLife
         public string CenterIm { get; }
         public double ZoomLog10 { get; }
 
+        /// <summary>The off-center reference's real part, or null for a centered frame.</summary>
+        public string? ReferenceRe { get; }
+
+        /// <summary>The off-center reference's imaginary part, or null for a centered frame.</summary>
+        public string? ReferenceIm { get; }
+
         public Viewport(string centerRe = "-0.5", string centerIm = "0.0", double zoomLog10 = 0.0)
         {
             CenterRe = Validate(centerRe, nameof(centerRe));
             CenterIm = Validate(centerIm, nameof(centerIm));
             ZoomLog10 = zoomLog10;
+        }
+
+        /// <summary>
+        /// A viewport whose T1 frames iterate the orbit of (referenceRe, referenceIm) — both
+        /// parts, or neither (null, null) for a centered frame.
+        /// </summary>
+        public Viewport(string centerRe, string centerIm, double zoomLog10, string? referenceRe, string? referenceIm)
+            : this(centerRe, centerIm, zoomLog10)
+        {
+            if ((referenceRe == null) != (referenceIm == null))
+                throw new ArgumentException("a reference needs both parts, or neither");
+            if (referenceRe == null)
+                return;
+            ReferenceRe = Validate(referenceRe, nameof(referenceRe));
+            ReferenceIm = Validate(referenceIm!, nameof(referenceIm));
+        }
+
+        /// <summary>This viewport with the given reference (null, null for none).</summary>
+        public Viewport WithReference(string? referenceRe, string? referenceIm)
+            => new Viewport(CenterRe, CenterIm, ZoomLog10, referenceRe, referenceIm);
+
+        /// <summary>True when T1 frames iterate a reference other than the center.</summary>
+        public bool HasReference => ReferenceRe != null;
+
+        /// <summary>The real part of the point a T1 frame iterates: the reference, else the center.</summary>
+        public string OrbitCenterRe => ReferenceRe ?? CenterRe;
+
+        /// <summary>The imaginary part of the point a T1 frame iterates.</summary>
+        public string OrbitCenterIm => ReferenceIm ?? CenterIm;
+
+        private double _referenceOffsetRe;
+        private double _referenceOffsetIm;
+        private int _offsetComputed;
+
+        /// <summary>
+        /// round64(center − reference), real part: exact from the decimal strings, rounded
+        /// once; 0 without a reference. Every T1 pixel's delta is fl(this + its offset).
+        /// </summary>
+        public double ReferenceOffsetRe
+        {
+            get
+            {
+                ComputeOffset();
+                return _referenceOffsetRe;
+            }
+        }
+
+        /// <summary>round64(center − reference), imaginary part; 0 without a reference.</summary>
+        public double ReferenceOffsetIm
+        {
+            get
+            {
+                ComputeOffset();
+                return _referenceOffsetIm;
+            }
+        }
+
+        private void ComputeOffset()
+        {
+            if (Volatile.Read(ref _offsetComputed) != 0)
+                return;
+            if (ReferenceRe != null)
+            {
+                _referenceOffsetRe = DecimalText.Difference(CenterRe, ReferenceRe);
+                _referenceOffsetIm = DecimalText.Difference(CenterIm, ReferenceIm!);
+            }
+            Volatile.Write(ref _offsetComputed, 1);
         }
 
         private double _centerReDouble;

@@ -24,7 +24,9 @@ Deep-zoom architecture (tiers, perturbation, rebasing): [deep-zoom.md](deep-zoom
   (imaginary axis points up).
 - T0 computes absolute coordinates in float64, from the center's float64
   projection ([deep-zoom.md](deep-zoom.md#viewport-contract-lands-in-core-on-day-one));
-  T1 computes only the offsets in float64 and keeps the center in the reference orbit.
+  T1 computes only the offsets in float64 and keeps the center in the reference orbit
+  — or an [off-center reference](deep-zoom.md#off-center-reference), whose orbit a pixel
+  then follows from `δc = fl(round64(C − R) + offset)`.
 
 ## Counts convention
 
@@ -39,8 +41,9 @@ conformance output.
 
 - **Mandelbrot**: `z ← z² + c`, `z₀ = 0`, `c` = pixel.
 - **Julia**: `z ← z² + c`, `c` fixed, `z₀` = pixel. Perturbation uses the center's
-  orbit under the same `c`; `δ₀` = pixel offset, no `δc` term. Rebased pixels
-  restart on the critical orbit (`z₀ = 0`), never on the center's orbit
+  orbit (or the off-center reference's) under the same `c`; `δ₀` = pixel offset (from
+  that point), no `δc` term. Rebased pixels restart on the critical orbit (`z₀ = 0`),
+  never on the reference orbit
   ([deep-zoom.md](deep-zoom.md#rebasing-single-reference-no-glitches)).
 - **Burning Ship**: `x' = x² − y² + cx`, `y' = 2|x||y| + cy`. Perturbation in
   component form with `diffabs(X, d) = |X+d| − |X|` evaluated by case analysis
@@ -90,7 +93,7 @@ or stops the work and **never changes a completed frame's output**:
 
 - **Progress** (`RenderProgress`): rows completed, and — for a T1 frame whose orbit is
   not cached — a reference-orbit phase counting iterations first (Julia runs two, its
-  center's orbit and then the critical orbit). Each render resets it, so one object can
+  reference orbit and then the critical orbit). Each render resets it, so one object can
   be reused frame after frame.
 - **Cancellation** (`CancellationToken`): checked before each row and every 4,096 orbit
   iterations. A canceled render throws `OperationCanceledException` with its output
@@ -125,6 +128,10 @@ or stops the work and **never changes a completed frame's output**:
   A replay must use both stored orbits.
 - `source` (optional string): attribution for a third-party location; runners accept
   and ignore it.
-- Cases written from 2026-09-23 carry `"spec_version": "0.3.0"` (earlier ones keep
-  `0.2.0`; [vectors/README.md](../vectors/README.md) lists what each adds). Runners are
-  strict: a key, output kind, codec or version they do not know fails the case.
+- The viewport may carry `reference_re` / `reference_im`, an
+  [off-center reference](deep-zoom.md#off-center-reference); the stored reference orbit
+  is then the reference's, and a replay must offset every pixel by `round64(C − R)`.
+- Cases written from 2026-09-23 carry `"spec_version": "0.3.0"`, and those with a
+  reference `"0.4.0"` (earlier ones keep `0.2.0`; [vectors/README.md](../vectors/README.md)
+  lists what each adds). Runners are strict: a key, output kind, codec or version they
+  do not know fails the case.

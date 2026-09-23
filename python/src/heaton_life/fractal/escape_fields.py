@@ -21,8 +21,8 @@ from heaton_life.fractal.engine import (
     IntArray,
     escape_time,
     normalize_render,
+    pixel_deltas,
     pixel_grid,
-    pixel_offsets,
     smooth_iterations,
 )
 from heaton_life.fractal.perturbation import perturb_burning_ship, perturb_z2
@@ -49,9 +49,7 @@ class _EscapeField:
         self.max_iter = max_iter
         self.escape_radius = escape_radius
 
-    def _compute(
-        self, size: tuple[int, int], viewport: Viewport
-    ) -> tuple[IntArray, ComplexArray]:
+    def _compute(self, size: tuple[int, int], viewport: Viewport) -> tuple[IntArray, ComplexArray]:
         zoom = viewport.zoom_log10
         if zoom <= T0_MAX_ZOOM:
             return self._compute_t0(size, viewport)
@@ -123,10 +121,9 @@ class Mandelbrot(_EscapeField):
         self, size: tuple[int, int], viewport: Viewport
     ) -> tuple[IntArray, ComplexArray]:
         orbit = reference_orbit(
-            "mandelbrot", viewport.center_re, viewport.center_im,
-            viewport.zoom_log10, self.max_iter,
+            "mandelbrot", *viewport.orbit_center, viewport.zoom_log10, self.max_iter
         )
-        dc = pixel_offsets(size, viewport)
+        dc = pixel_deltas(size, viewport)
         return perturb_z2(orbit, np.zeros_like(dc), dc, self.max_iter, self.escape_radius)
 
 
@@ -161,22 +158,28 @@ class Julia(_EscapeField):
         self, size: tuple[int, int], viewport: Viewport
     ) -> tuple[IntArray, ComplexArray]:
         orbit = reference_orbit(
-            "julia", viewport.center_re, viewport.center_im,
-            viewport.zoom_log10, self.max_iter,
-            c_re=self.c.real, c_im=self.c.imag,
+            "julia",
+            *viewport.orbit_center,
+            viewport.zoom_log10,
+            self.max_iter,
+            c_re=self.c.real,
+            c_im=self.c.imag,
         )
         # Rebasing restarts a pixel on an orbit that begins at 0; the reference
         # above begins at the center, so rebased pixels follow the critical orbit
         # (spec/deep-zoom.md "Rebasing"): center "0", so the zoom alone sets its precision.
         critical = reference_orbit(
-            "julia", "0", "0", viewport.zoom_log10, self.max_iter,
-            c_re=self.c.real, c_im=self.c.imag,
+            "julia",
+            "0",
+            "0",
+            viewport.zoom_log10,
+            self.max_iter,
+            c_re=self.c.real,
+            c_im=self.c.imag,
         )
-        dz0 = pixel_offsets(size, viewport)
+        dz0 = pixel_deltas(size, viewport)
         dc = np.zeros_like(dz0)
-        return perturb_z2(
-            orbit, dz0, dc, self.max_iter, self.escape_radius, rebase_orbit=critical
-        )
+        return perturb_z2(orbit, dz0, dc, self.max_iter, self.escape_radius, rebase_orbit=critical)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -199,8 +202,7 @@ class BurningShip(_EscapeField):
         self, size: tuple[int, int], viewport: Viewport
     ) -> tuple[IntArray, ComplexArray]:
         orbit = reference_orbit(
-            "burning_ship", viewport.center_re, viewport.center_im,
-            viewport.zoom_log10, self.max_iter,
+            "burning_ship", *viewport.orbit_center, viewport.zoom_log10, self.max_iter
         )
-        dc = pixel_offsets(size, viewport)
+        dc = pixel_deltas(size, viewport)
         return perturb_burning_ship(orbit, dc, self.max_iter, self.escape_radius)

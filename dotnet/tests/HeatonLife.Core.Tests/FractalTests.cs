@@ -87,10 +87,33 @@ namespace HeatonLife.Tests
             for (int i = 0; i < 400_000; i++)
             {
                 double a = Any(), b = Any(), c = Any();
-                if (double.IsInfinity(a * b) || double.IsInfinity(c))
-                    continue;
-                Check(a, b, c, "random bits");
-                Check(a, b, -(a * b), "near cancellation");
+                Check(a, b, c, "random bits");                    // products that overflow included
+                if (!double.IsInfinity(a * b))
+                    Check(a, b, -(a * b), "near cancellation");
+            }
+
+            // Infinities and NaN in every position, against finite, zero and overflowing
+            // products. NaN payloads are not compared, only NaN-ness.
+            double[] specials =
+            {
+                0.0, -0.0, 1.5, -2.5e-300, 2e154, -2e154, 1.7976931348623157e308, 4.9e-324,
+                double.PositiveInfinity, double.NegativeInfinity, double.NaN,
+            };
+            foreach (double a in specials)
+            {
+                foreach (double b in specials)
+                {
+                    foreach (double c in specials)
+                    {
+                        double expected = Math.FusedMultiplyAdd(a, b, c);
+                        double got = FractalEngine.Fma(a, b, c);
+                        Assert.True(
+                            double.IsNaN(expected)
+                                ? double.IsNaN(got)
+                                : BitConverter.DoubleToInt64Bits(expected) == BitConverter.DoubleToInt64Bits(got),
+                            $"fma mismatch (specials) for ({a:R}, {b:R}, {c:R}): {expected:R} vs {got:R}");
+                    }
+                }
             }
         }
 

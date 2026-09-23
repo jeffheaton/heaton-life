@@ -160,9 +160,57 @@ One reference orbit (plus Julia's critical orbit) suffices for the whole frame; 
 ### Per-family formulas
 
 - **Mandelbrot**: recurrence above; `δc` = pixel offset, `δ₀ = 0`.
-- **Julia**: `c` is a fixed global parameter; the reference orbit iterates the viewport center as `z₀`; pixels have `δ₀` = pixel offset and `δₙ₊₁ = 2·Zₙ·δₙ + δₙ²` (no `δc` term — the same computed shape with `δc = 0`). Rebased pixels continue on the critical orbit `W` with the same recurrence (`Wₙ` in place of `Zₙ`).
+- **Julia**: `c` is a fixed global parameter; the reference orbit iterates the viewport center (or its [off-center reference](#off-center-reference)) as `z₀`; pixels have `δ₀` = pixel offset and `δₙ₊₁ = 2·Zₙ·δₙ + δₙ²` (no `δc` term — the same computed shape with `δc = 0`). Rebased pixels continue on the critical orbit `W` with the same recurrence (`Wₙ` in place of `Zₙ`).
 - **Burning Ship**: component form; the `|·|` folds use the stable piecewise `diffabs(X, x) = |X + x| − |X|` so cancellation never happens inside an abs. Computed as real-array operations (no FMA): `a = diffabs(X, δx)`, `b = diffabs(Y, δy)`, `δx' = (2X + δx)·δx − (2Y + δy)·δy + δcₓ`, `δy' = 2·(|X|·b + |Y|·a + a·b) + δc_y`.
 - **Newton**: root-basin rendering, no self-similar deep zoom of the same kind — float64 direct only in v1; no perturbation tier.
+
+### Off-center reference
+
+Nothing above needs the reference to be the frame's center, and a host that pans pays
+for a new orbit every frame if it is. A viewport may therefore name a **reference**
+`R = (reference_re, reference_im)` apart from its center `C`
+([Viewport contract](#viewport-contract-lands-in-core-on-day-one)). A T1 frame with a
+reference:
+
+- iterates the reference orbit of `R`, not `C`: `Zₙ` (and for Julia, `Z₀ = R`) at
+  `F` = the [precision rule](#reference-orbit-the-only-high-precision-computation)
+  applied to `R`'s digits and the zoom. Julia's critical orbit does not change.
+- offsets every pixel by `d = round64(C − R)`, per component: the exact decimal
+  difference of the two strings, rounded once to the nearest double — ties to even,
+  subnormals like everything else, ±∞ past the float64 range, and `+0.0` for an exact
+  zero. Never the difference of two already-rounded doubles, which is not even close
+  once the centers share more than 16 digits. (Python `decimal_text.difference`, C#
+  `DecimalText.Difference`.)
+- gives pixel `(x, y)` the delta `δc = ( fl(dᵣ + oₓ), fl(dᵢ + o_y) )`, where `(oₓ, o_y)`
+  is the pixel's offset from the center exactly as a centered frame computes it
+  ([fractals.md](fractals.md)): one float64 add per component. The components are
+  formed apart, never through a complex multiply such as NumPy's `xs + 1j·ys`, whose
+  real part is `0·∞ = NaN` once `dᵢ` overflows. For Julia that sum is `δ₀`; everything
+  after it — recurrence, escape, rebasing — is unchanged.
+
+Without a reference, `R = C`, `d` is not computed, and `δc = (oₓ, o_y)`: every
+frame without one is the frame it always was. **T0 ignores the reference.**
+
+The reference is part of the frame's definition, so it is explicit: the library never
+remembers one between frames or picks one. Iteration counts can differ from the
+centered frame's where the dynamics amplify the one-rounding difference in `δc` —
+chaotic boundary pixels that no float64 method gets right anyway (on the Seahorse at
+1e14 the centered and off-center frames each match 1200-bit direct iteration on all
+but 5 or 6 of 2,304 pixels, and each other on all but 5). The vectors
+`*/deep-zoom13-offref-32` and `mandelbrot/deep-zoom14-offref-48` pin the rule across
+ports: iterating `C` with these deltas, or `R` without `d`, fails all three, and
+ignoring the reference fails the Seahorse's. The Julia and Burning Ship frames are
+well conditioned — their counts equal the centered frames' — so neither vector can see
+the one rounding in `δc`; a table of deltas that both suites share pins that.
+
+**Choosing `R` is the host's job.** Accuracy does not depend on `R` being on screen
+(rebasing takes care of the orbit), but `δc` is rounded relative to its own size:
+a reference `k` frames away costs about `log₂ k` bits of every pixel's position.
+The suggested rule: keep `R` while it lies within the frame (Python
+`engine.reference_on_screen`, C# `FractalEngine.ReferenceOnScreen`) and the zoom keeps
+`F` unchanged, and re-center (`R = C`, or a point of the host's choosing) otherwise.
+While it is kept, a pan hits the [orbit cache](#caching--interactivity), whose key does
+not involve `C`.
 
 ## Precision tiers (auto-selected from zoom)
 
@@ -209,13 +257,17 @@ Tier selection is automatic and invisible to the caller; the API surface is iden
   — that would round twice. `vectors/mandelbrot/seahorse-zoom6-48x32` pins it (and,
   being the first non-square vector, the width-based framing of
   [fractals.md](fractals.md)).
+- `reference_re` / `reference_im` (optional, both or neither, same grammar): an
+  [off-center reference](#off-center-reference) for T1 frames to iterate instead of
+  the center. JSON writers omit them when there is none.
 - `zoom_log10` is a float; span derives from it. The public API never represents a viewport center as complex128 — retrofitting precision into a complex128 API breaks every downstream consumer, which is why this contract exists before the first fractal is implemented.
 
 ## Caching & interactivity
 
-- The reference orbit depends on `(kind, C, F)`, plus `c` for Julia, where `F` comes
-  from `zoom_log10` and the center's digits ([Precision](#reference-orbit-the-only-high-precision-computation)),
-  and on `max_iter` only through where it stops. Cache on `(kind, C, F, c)`, keeping
+- The reference orbit depends on `(kind, R, F)`, plus `c` for Julia, where `R` is the
+  point it iterates — the center, or the viewport's [off-center reference](#off-center-reference)
+  — and `F` comes from `zoom_log10` and `R`'s digits ([Precision](#reference-orbit-the-only-high-precision-computation)),
+  and on `max_iter` only through where it stops. Cache on `(kind, R, F, c)`, keeping
   each orbit's samples **and** the exact fixed-point `Z` at its last sample. A request
   with `max_iter < length` (the cached orbit already holds `max_iter + 1` samples) — or
   any request, once the cached orbit has hit the stopping rule — is answered by the
@@ -229,11 +281,12 @@ Tier selection is automatic and invisible to the caller; the API surface is iden
   keeping the two most recent — a Julia frame uses two orbits, and a cap between one
   and two must not make them evict each other every frame. A computation that is
   canceled is never cached.
-- The cache helps a fixed center only: zooming toward it reuses the orbit while `F` is
+- The cache helps a fixed `R` only: zooming toward it reuses the orbit while `F` is
   unchanged (a deeper zoom raises `F` and needs a new orbit), and raising `max_iter`
   resumes it. Julia's critical orbit depends on `(c, F)` alone and is hit every frame.
-  A pan moves the center, so v1 computes a new orbit (≈ `max_iter` bignum steps, ms to
-  100s of ms); reusing an off-center reference is future work.
+  A pan moves the center, so a centered frame needs a new orbit (≈ `max_iter` bignum
+  steps, ms to 100s of ms), while a frame that keeps an
+  [off-center reference](#off-center-reference) pans on the cached one.
 - C# steps the orbit on fixed-width 32-bit limbs in preallocated buffers
   (`FixedOrbit`), falling back to `System.Numerics.BigInteger` for centers or `c` of
   magnitude `2¹⁶` or more. Both run the same integer operations, so the choice cannot
@@ -274,8 +327,13 @@ Hard-won; each has broken, or would break, bit-exact agreement between the ports
   subnormals; with Dekker alone the product differed from the hardware in a third of
   those cases — the counts survived, but the smooth render of
   `vectors/render/fractal-render-julia-deep157` moved by `3e-7` (ε = `1e-9`). The fma
-  is pinned bitwise against the hardware over every exponent. Its price: an all-interior deep Julia frame runs about 3× slower in
-  C# than an escaping one.
+  is pinned bitwise against the hardware over every exponent, and on infinities and
+  NaN: finite factors whose product overflows still meet an infinite addend as a
+  finite product, so `fma(2e154, 2e154, −∞) = −∞`, where `a·b + c` gives NaN.
+  (Correction 2026-09-23: C# returned NaN there, a Python/C# divergence reachable by
+  a Julia center near `2e154` or an [off-center reference](#off-center-reference) that far
+  away.) Its price: an all-interior deep Julia frame runs about 3× slower in C# than an
+  escaping one.
 - **Squared magnitudes** are exact enough at T1 and only at T1 (see
   [Rebasing](#rebasing-single-reference-no-glitches)).
 - **Magnitude forms.** Smooth coloring's `|z|` is `np.abs` (hypot) in Python and

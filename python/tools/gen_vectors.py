@@ -27,7 +27,7 @@ from heaton_life.core.viewport import Viewport
 from heaton_life.fractal import BurningShip, Julia, Mandelbrot, Newton
 from heaton_life.init import place, rle_decode
 
-SPEC_VERSION = "0.2.0"  # what existing cases were written under; new fractal cases pass "0.3.0"
+SPEC_VERSION = "0.2.0"  # what existing cases were written under; new fractal cases pass theirs
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VECTOR_ROOT = REPO_ROOT / "vectors"
 
@@ -409,6 +409,76 @@ def main() -> None:
         Viewport("-0.5", "-0.5", -0.2),
         (64, 64),
     )
+    # The first Burning Ship T1 case: a main-body boundary frame whose pixels rebase and
+    # take every diffabs sign case. Every pixel matches a 400-bit direct iteration.
+    write_fractal_case(
+        "burning-ship",
+        "deep-zoom13-32",
+        BurningShip(max_iter=1000),
+        {"max_iter": 1000, "escape_radius": 1000.0},
+        Viewport("0.403269293475576420989278613990", "-0.595275727121703516488710194270", 13.0),
+        (32, 32),
+        orbit_kind="burning_ship",
+        spec_version="0.3.0",
+    )
+
+    # -- off-center references (spec/deep-zoom.md "Off-center reference") ------------
+    # Each deep frame above again, iterating a reference a fraction of a frame from the
+    # center, so every pixel's delta is round64(center - reference) + its offset. They
+    # match direct iteration of each pixel's exact coordinate as well as the centered
+    # frames do: Julia and the Burning Ship on every pixel, the Seahorse on 2298 of 2304
+    # (the centered frame: 2299; the rest are chaotic boundary pixels). Being well
+    # conditioned, the Julia and Burning Ship counts equal their centered frames', so
+    # test_off_center_reference.py's shared delta table and orbit-selection test (and
+    # their C# twins) cover the rounding and orbit choice these two cannot see.
+    write_fractal_case(
+        "mandelbrot",
+        "deep-zoom14-offref-48",
+        Mandelbrot(max_iter=5000),
+        {"max_iter": 5000, "escape_radius": 1000.0},
+        Viewport(
+            "-0.743643887037158704752191506114774",
+            "0.131825904205311970493132056385139",
+            14.0,
+            reference_re="-0.743643887037146704752191506114774",  # (+0.3, -0.2) frames
+            reference_im="0.131825904205303970493132056385139",
+        ),
+        (48, 48),
+        orbit_kind="mandelbrot",
+        spec_version="0.4.0",
+    )
+    write_fractal_case(
+        "julia",
+        "deep-zoom13-offref-32",
+        Julia(c=complex(-0.123, 0.745), max_iter=600),
+        {"c_re": -0.123, "c_im": 0.745, "max_iter": 600, "escape_radius": 1000.0},
+        Viewport(
+            "1.27658194945592591790467276337476",
+            "-0.47966605489732779175475867397901",
+            13.0,
+            reference_re="1.27658194945578591790467276337476",  # (-0.35, +0.25) frames
+            reference_im="-0.47966605489722779175475867397901",
+        ),
+        (32, 32),
+        orbit_kind="julia",
+        spec_version="0.4.0",
+    )
+    write_fractal_case(
+        "burning-ship",
+        "deep-zoom13-offref-32",
+        BurningShip(max_iter=1000),
+        {"max_iter": 1000, "escape_radius": 1000.0},
+        Viewport(
+            "0.403269293475576420989278613990",
+            "-0.595275727121703516488710194270",
+            13.0,
+            reference_re="0.403269293475696420989278613990",  # (+0.3, +0.3) frames
+            reference_im="-0.595275727121583516488710194270",
+        ),
+        (32, 32),
+        orbit_kind="burning_ship",
+        spec_version="0.4.0",
+    )
     write_fractal_case(
         "newton",
         "z3-64",
@@ -465,8 +535,7 @@ def write_fractal_case(
         c_im = params.get("c_im", 0.0)
         orbit = reference_orbit(
             orbit_kind,
-            viewport.center_re,
-            viewport.center_im,
+            *viewport.orbit_center,
             viewport.zoom_log10,
             params["max_iter"],
             c_re=c_re,

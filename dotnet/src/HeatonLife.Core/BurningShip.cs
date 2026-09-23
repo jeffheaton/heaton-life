@@ -44,7 +44,8 @@ namespace HeatonLife
 
         /// <summary>
         /// T1 (perturbation + rebasing, diffabs) escape counts against a precomputed
-        /// reference orbit for the viewport center. Zoom &lt;= 1e290.
+        /// reference orbit for the viewport's reference point (<see cref="Viewport.OrbitCenterRe"/>:
+        /// its center unless it names another). Zoom &lt;= 1e290.
         /// </summary>
         public void Iterations(
             int width, int height, Viewport viewport, double[] orbitRe, double[] orbitIm, int[] counts)
@@ -149,20 +150,25 @@ namespace HeatonLife
                 // sanctions BigInteger fixed point for exactly this, and until it
                 // existed the only reachable T1 render was a replay of a vector.
                 (orbitRe, orbitIm) = ReferenceOrbit.Compute(
-                    ReferenceOrbit.Kind.BurningShip, viewport.CenterRe, viewport.CenterIm, viewport.ZoomLog10, MaxIter,
+                    ReferenceOrbit.Kind.BurningShip, viewport.OrbitCenterRe, viewport.OrbitCenterIm, viewport.ZoomLog10, MaxIter,
                     0.0, 0.0, progress, cancellationToken, whole: true);
             }
             double ps = FractalEngine.PixelScale(width, viewport);
+            // Off-center reference: every T1 delta is fl(d + offset), d = round64(center -
+            // reference), exact from the strings (FractalEngine.DeltaRe/DeltaIm).
+            bool offCenter = t1 && viewport.HasReference;
+            double dRe = offCenter ? viewport.ReferenceOffsetRe : 0.0;
+            double dIm = offCenter ? viewport.ReferenceOffsetIm : 0.0;
             double centerRe = t1 ? 0.0 : viewport.CenterReDouble;
             double centerIm = t1 ? 0.0 : viewport.CenterImDouble;
             double r2 = EscapeRadius * EscapeRadius;
             double logR = Math.Log(EscapeRadius);
             void Row(int y)
             {
-                double oy = FractalEngine.OffsetIm(y, height, ps);
+                double oy = offCenter ? FractalEngine.DeltaIm(y, height, ps, dIm) : FractalEngine.OffsetIm(y, height, ps);
                 for (int x = 0; x < width; x++)
                 {
-                    double ox = FractalEngine.OffsetRe(x, width, ps);
+                    double ox = offCenter ? FractalEngine.DeltaRe(x, width, ps, dRe) : FractalEngine.OffsetRe(x, width, ps);
                     int count;
                     double fr, fi;
                     if (t1)

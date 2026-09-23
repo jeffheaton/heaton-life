@@ -47,7 +47,8 @@ namespace HeatonLife
 
         /// <summary>
         /// T1 (perturbation + rebasing) escape counts against a precomputed reference orbit
-        /// for the viewport center (Julia orbit: same c, z0 = center). The critical orbit
+        /// for the viewport's reference point (Julia orbit: same c, z0 = <see cref="Viewport.OrbitCenterRe"/>,
+        /// the center unless the viewport names another). The critical orbit
         /// rebased pixels restart on is computed here (<see cref="ReferenceOrbit.JuliaCritical"/>).
         /// Zoom &lt;= 1e290.
         /// </summary>
@@ -183,7 +184,7 @@ namespace HeatonLife
                 // sanctions BigInteger fixed point for exactly this, and until it
                 // existed the only reachable T1 render was a replay of a vector.
                 (orbitRe, orbitIm) = ReferenceOrbit.Compute(
-                    ReferenceOrbit.Kind.Julia, viewport.CenterRe, viewport.CenterIm, viewport.ZoomLog10, MaxIter,
+                    ReferenceOrbit.Kind.Julia, viewport.OrbitCenterRe, viewport.OrbitCenterIm, viewport.ZoomLog10, MaxIter,
                     CRe, CIm, progress, cancellationToken, whole: true);
             }
             if (t1 && criticalRe == null)
@@ -201,16 +202,21 @@ namespace HeatonLife
                        || criticalRe[0] != 0.0 || criticalIm[0] != 0.0))
                 throw new ArgumentException("the critical orbit must be two equal-length, non-empty arrays beginning at 0");
             double ps = FractalEngine.PixelScale(width, viewport);
+            // Off-center reference: every T1 delta is fl(d + offset), d = round64(center -
+            // reference), exact from the strings (FractalEngine.DeltaRe/DeltaIm).
+            bool offCenter = t1 && viewport.HasReference;
+            double dRe = offCenter ? viewport.ReferenceOffsetRe : 0.0;
+            double dIm = offCenter ? viewport.ReferenceOffsetIm : 0.0;
             double centerRe = t1 ? 0.0 : viewport.CenterReDouble;
             double centerIm = t1 ? 0.0 : viewport.CenterImDouble;
             double r2 = EscapeRadius * EscapeRadius;
             double logR = Math.Log(EscapeRadius);
             void Row(int y)
             {
-                double oy = FractalEngine.OffsetIm(y, height, ps);
+                double oy = offCenter ? FractalEngine.DeltaIm(y, height, ps, dIm) : FractalEngine.OffsetIm(y, height, ps);
                 for (int x = 0; x < width; x++)
                 {
-                    double ox = FractalEngine.OffsetRe(x, width, ps);
+                    double ox = offCenter ? FractalEngine.DeltaRe(x, width, ps, dRe) : FractalEngine.OffsetRe(x, width, ps);
                     int count;
                     double fr, fi;
                     if (t1)
