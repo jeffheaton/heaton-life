@@ -26,11 +26,13 @@ from heaton_life.fractal.escape_fields import (
 )
 from heaton_life.fractal.navigation import center_places, pan, pixel_delta, zoom_at
 from heaton_life.fractal.newton import Newton, NewtonParams
+from heaton_life.fractal.nucleus import BoxResult, Nucleus, box_period, find_nucleus
 from heaton_life.fractal.policy import auto_max_iter, need_from_counts, suggest_max_iter
 
 __all__ = [
     "T0_MAX_ZOOM",
     "T1_MAX_ZOOM",
+    "BoxResult",
     "BurningShip",
     "BurningShipParams",
     "EscapeFields",
@@ -41,14 +43,17 @@ __all__ = [
     "MandelbrotParams",
     "Newton",
     "NewtonParams",
+    "Nucleus",
     "PhaseParams",
     "ShadeParams",
     "Stretch",
     "apply_stretch",
     "auto_max_iter",
+    "box_period",
     "center_places",
     "color_scale",
     "depth_phase",
+    "find_nucleus",
     "measure_frequency",
     "measure_stretch",
     "need_from_counts",

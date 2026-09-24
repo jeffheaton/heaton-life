@@ -62,7 +62,8 @@ An importer returns:
 - `half_height_log10` — `log10 h`, or none when the file gives no scale;
 - `max_iter` — the file's iteration budget, or none;
 - `reference` — F3's `[reference] real, imag` (its perturbation reference), or none;
-- `format` — `kfr`, `f3`, `hf-preset`, `hf-result`, `hf-journal`;
+- `format` — `kfr`, `f3`, `hf-preset`, `hf-result`, `hf-journal`, or `nucleus` for the
+  record a found nucleus makes of itself ([nucleus.md](nucleus.md) "The result");
 - `warnings` — codes for what the file asks that heaton-life does not do, in this
   order: `rotation-ignored`, `stretch-ignored`, `reflect-ignored` (the source shows the
   view mirrored top to bottom: F3's `reflect`, or KF's default downward imaginary

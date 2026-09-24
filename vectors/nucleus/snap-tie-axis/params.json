@@ -1,0 +1,24 @@
+{
+  "expected": {
+    "box": {
+      "halvings": 0,
+      "period": null,
+      "radius": "0x3F90000000000000",
+      "reason": "budget"
+    },
+    "location": null,
+    "nucleus": null
+  },
+  "family": "nucleus",
+  "input": {
+    "center_im": "0.015625",
+    "center_re": "-1.3",
+    "max_period": 500,
+    "radius": "0x3F90000000000000",
+    "zoom_log10": 0.0
+  },
+  "operation": "snap",
+  "relative_epsilon": 1e-12,
+  "spec_version": "0.9.0",
+  "tier": "bit-exact"
+}

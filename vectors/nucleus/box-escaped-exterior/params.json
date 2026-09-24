@@ -1,0 +1,22 @@
+{
+  "expected": {
+    "box": {
+      "halvings": 8,
+      "period": null,
+      "radius": "0x3F147AE147AE147B",
+      "reason": "escaped"
+    }
+  },
+  "family": "nucleus",
+  "input": {
+    "center_im": "1",
+    "center_re": "1",
+    "max_period": 1000,
+    "radius": null,
+    "zoom_log10": 2.0
+  },
+  "operation": "box",
+  "relative_epsilon": 1e-12,
+  "spec_version": "0.9.0",
+  "tier": "bit-exact"
+}

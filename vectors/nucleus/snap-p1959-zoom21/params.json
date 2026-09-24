@@ -1,0 +1,38 @@
+{
+  "expected": {
+    "box": {
+      "halvings": 0,
+      "period": 1924,
+      "radius": "0x3BA2E3B40A0E9B4F",
+      "reason": "surrounded"
+    },
+    "location": null,
+    "nucleus": {
+      "bits": 417,
+      "center_im": "0.12397794172469597171617847045",
+      "center_re": "-0.74179270142920012328546029673",
+      "converged": false,
+      "depth_bits": 131,
+      "evaluations": 5,
+      "found": false,
+      "inside": false,
+      "lower_period": null,
+      "period": 1924,
+      "size_log10": "0x7FF8000000000000",
+      "steps": 4,
+      "stop": "left-view"
+    }
+  },
+  "family": "nucleus",
+  "input": {
+    "center_im": "0.1239779417246959717116896203392233208927965744164153733905536369850466608213725129489699597506805010116194",
+    "center_re": "-0.7417927014292001232841548624613348654659797595596692133814229089779333158651146245001356794980988932282797",
+    "max_period": 5000,
+    "radius": null,
+    "zoom_log10": 21.0
+  },
+  "operation": "snap",
+  "relative_epsilon": 1e-12,
+  "spec_version": "0.9.0",
+  "tier": "bit-exact"
+}

@@ -1,0 +1,38 @@
+{
+  "expected": {
+    "location": {
+      "half_height_log10": "0xC017258895FD1E3C",
+      "max_iter": 2300
+    },
+    "nucleus": {
+      "bits": 149,
+      "center_im": "0.584946647230390",
+      "center_re": "-0.553728477271515",
+      "converged": true,
+      "depth_bits": 21,
+      "evaluations": 14,
+      "found": true,
+      "inside": true,
+      "lower_period": null,
+      "period": 23,
+      "size_log10": "0xC018BF222F96B7D6",
+      "steps": 10,
+      "stop": "floor"
+    }
+  },
+  "family": "nucleus",
+  "input": {
+    "center_im": "0.584268606794",
+    "center_re": "-0.552826135186",
+    "max_escalations": 4,
+    "max_evaluations": 200,
+    "max_steps": 64,
+    "period": 23,
+    "radius": null,
+    "zoom_log10": 3.0
+  },
+  "operation": "find",
+  "relative_epsilon": 1e-12,
+  "spec_version": "0.9.0",
+  "tier": "bit-exact"
+}

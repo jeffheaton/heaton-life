@@ -1,0 +1,35 @@
+{
+  "expected": {
+    "location": null,
+    "nucleus": {
+      "bits": 141,
+      "center_im": "0.0000000000",
+      "center_re": "-1.0000000000",
+      "converged": true,
+      "depth_bits": 1,
+      "evaluations": 5,
+      "found": false,
+      "inside": true,
+      "lower_period": 2,
+      "period": 4,
+      "size_log10": "0x7FF8000000000000",
+      "steps": 4,
+      "stop": "floor"
+    }
+  },
+  "family": "nucleus",
+  "input": {
+    "center_im": "0.0003",
+    "center_re": "-1.001",
+    "max_escalations": 4,
+    "max_evaluations": 200,
+    "max_steps": 64,
+    "period": 4,
+    "radius": null,
+    "zoom_log10": 2.0
+  },
+  "operation": "find",
+  "relative_epsilon": 1e-12,
+  "spec_version": "0.9.0",
+  "tier": "bit-exact"
+}

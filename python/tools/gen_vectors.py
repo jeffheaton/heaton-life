@@ -570,6 +570,9 @@ def main() -> None:
     # -- locations (framing conventions and importers, spec/locations.md) ------------
     write_location_cases()
 
+    # -- discovery (box period, Newton's nucleus, atom size, spec/nucleus.md) ---------
+    write_nucleus_cases()
+
     print("done")
 
 
@@ -2048,6 +2051,261 @@ def write_navigation_cases() -> None:
             "expected": expected,
         },
     )
+
+
+# Heaton Fractal's hunt result for a period-998 nucleus (vectors/locations/hf-result).
+NUCLEUS_P998 = (
+    "-0.7436438870371588707780645434936425750476",
+    "0.1318259042053122928210973548747672652630",
+)
+# Heaton Fractal's r7-a round-1 nucleus (period 6308, depth 106.17; hunts/r7-a.jsonl).
+P6308_HF = (
+    (
+        "-0.74179270142920012328415486246133486822181337292254710214402418375004664084945569585"
+        "246011078130725915411031437453364085735507047308210616986538010966660804513830391512170"
+    ),
+    (
+        "0.123977941724695971711689620339223317838367247673535822857200096883849880494974599965"
+        "16886304789610234791243018841746592856594306471080784322388395732723828262276304644199"
+    ),
+)
+
+
+def write_nucleus_cases() -> None:
+    """spec/nucleus.md (0.9.0): the box period, Newton's nucleus and a snap (the box, then
+    Newton with its period and square), every field exact but the sizes (relative 1e-12)."""
+    from heaton_life.fractal.nucleus import (
+        MAX_ESCALATIONS,
+        MAX_EVALUATIONS,
+        MAX_STEPS,
+        Nucleus,
+        box_period,
+        find_nucleus,
+    )
+
+    root = VECTOR_ROOT / "nucleus"
+
+    def radius_bits(radius: float | None) -> str | None:
+        return None if radius is None else _bits(radius)
+
+    def nucleus_record(n: Nucleus) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        record = dataclasses.asdict(n)
+        record["size_log10"] = _bits(n.size_log10)
+        if not n.found:
+            return record, None
+        loc = n.location()
+        assert loc.half_height_log10 is not None
+        return record, {
+            "half_height_log10": _bits(loc.half_height_log10),
+            "max_iter": loc.max_iter,
+        }
+
+    def write(name: str, operation: str, inputs: dict[str, Any], expected: dict[str, Any]) -> None:
+        meta = {
+            "spec_version": "0.9.0",
+            "family": "nucleus",
+            "tier": "bit-exact",
+            "relative_epsilon": 1e-12,
+            "operation": operation,
+            "input": inputs,
+            "expected": expected,
+        }
+        case_dir = root / name
+        case_dir.mkdir(parents=True, exist_ok=True)
+        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+        print(f"wrote vectors/nucleus/{name}")
+
+    def snap(
+        name: str,
+        center: tuple[str, str],
+        zoom: float,
+        max_period: int,
+        radius: float | None = None,
+        *,
+        box_only: bool = False,
+    ) -> None:
+        box = box_period(center[0], center[1], zoom, max_period, radius)
+        expected: dict[str, Any] = {
+            "box": {
+                "period": box.period,
+                "reason": box.reason,
+                "halvings": box.halvings,
+                "radius": _bits(box.radius),
+            }
+        }
+        inputs = {
+            "center_re": center[0],
+            "center_im": center[1],
+            "zoom_log10": zoom,
+            "radius": radius_bits(radius),
+            "max_period": max_period,
+        }
+        if box_only:
+            write(name, "box", inputs, expected)
+            return
+        expected["nucleus"] = expected["location"] = None
+        if box.period is not None:
+            n = find_nucleus(center[0], center[1], box.period, zoom, box.radius)
+            expected["nucleus"], expected["location"] = nucleus_record(n)
+        write(name, "snap", inputs, expected)
+
+    def find(
+        name: str,
+        center: tuple[str, str],
+        zoom: float,
+        period: int,
+        radius: float | None = None,
+        max_steps: int = MAX_STEPS,
+        max_evaluations: int = MAX_EVALUATIONS,
+        max_escalations: int = MAX_ESCALATIONS,
+    ) -> None:
+        n = find_nucleus(
+            center[0],
+            center[1],
+            period,
+            zoom,
+            radius,
+            max_steps=max_steps,
+            max_evaluations=max_evaluations,
+            max_escalations=max_escalations,
+        )
+        record, location = nucleus_record(n)
+        inputs = {
+            "center_re": center[0],
+            "center_im": center[1],
+            "zoom_log10": zoom,
+            "radius": radius_bits(radius),
+            "period": period,
+            "max_steps": max_steps,
+            "max_evaluations": max_evaluations,
+            "max_escalations": max_escalations,
+        }
+        write(name, "find", inputs, {"nucleus": record, "location": location})
+
+    # Snaps. The textbook squares: a period-4 bulb's, and mandelbrot-numerics' period 48.
+    snap("snap-p4", ("-0.158", "1.033"), 0.0, 100, 0.015)
+    snap("snap-p48", ("-0.8691524744", "0.2556487868"), 0.0, 1000, 1.25e-5)
+    # A frame's own square (half its width): the period-3 minibrot; the home view's p = 1.
+    snap("snap-p3", ("-1.75", "0.001"), 1.0, 100)
+    snap("snap-home-p1", ("-0.5", "0.0"), 0.0, 1000)
+    # Shifted deep frames find the nucleus they were built around, printed at the view's
+    # places when those are finer than the size's.
+    snap("snap-p16-shifted", _shifted(NUCLEUS_P16, 25.0, 0.3, 0.1), 25.0, 1000)
+    snap("snap-p24-shifted", _shifted(NUCLEUS_P24, 30.0, 0.04625, 0.0), 30.0, 1000)
+    snap("snap-p1959", _shifted(NUCLEUS_P1959, 23.0, 0.2, 0.1), 23.0, 5000)
+    # From the zoom-5 frame the box sees period 11, the square's lowest, and Newton finds
+    # that nucleus.
+    snap("snap-p24-zoom5", _shifted(NUCLEUS_P24, 5.0, 0.04625, 0.0), 5.0, 1000)
+    # Halvings: the first square's corners escape just before the period.
+    snap("snap-p998-halved", _shifted(NUCLEUS_P998, 8.5, 0.13, -0.21), 8.5, 5000)
+    snap("snap-p1959-halved", _shifted(NUCLEUS_P1959, 22.0, 0.2, 0.1), 22.0, 5000)
+    # A period whose nucleus Newton cannot reach from the center: the walk leaves the view.
+    snap("snap-p1959-zoom21", NUCLEUS_P1959, 21.0, 5000)
+    # The crossing rule's ties: a corner on the real axis (half-open), a corner at 0.
+    snap("snap-tie-axis", ("-1.3", "0.015625"), 0.0, 500, 0.015625)
+    snap("snap-tie-p18", ("-1.75", "0.00390625"), 0.0, 500, 2.0**-8)
+    snap("snap-corner-at-origin", ("0.25", "0.25"), 0.0, 500, 0.25)
+    # The surround and a corner's escape at the same n: the surround wins; the center's
+    # own orbit then escapes before the period.
+    snap("snap-surround-at-escape", ("0.1971666508", "-0.9661096566"), 1.0, 300)
+    # Boxes with no period: every square escapes; the budget runs out; an interior square.
+    snap("box-escaped", ("-1.8361778519", "-1.1683968203"), 2.0, 300, box_only=True)
+    snap("box-escaped-exterior", ("1", "1"), 2.0, 1000, box_only=True)
+    snap("box-budget", ("-0.8691524744", "0.2556487868"), 0.0, 40, 1.25e-5, box_only=True)
+    snap("box-interior", ("-0.1", "0"), 3.0, 2000, box_only=True)
+    # Finds. Newton on 24 from the zoom-5 frame lands on another period-24 nucleus.
+    find("find-p24-zoom5", _shifted(NUCLEUS_P24, 5.0, 0.04625, 0.0), 5.0, 24)
+    # Lower periods: 4 from beside the period-2 nucleus -1; 30 reaching a period-3 nucleus.
+    find("find-lower-p2", ("-1.001", "0.0003"), 2.0, 4)
+    find("find-lower-p3", ("-0.051864297299", "0.712433553581"), 1.0, 30)
+    # Precision escalation: once (141 -> 149 bits), after a window reset (141 -> 184), and
+    # from Heaton Fractal's p6308 cut to 60 places (264 -> 484), where the first F's
+    # verdict would fail; with no escalation allowed.
+    find("find-escalate-p53", ("-0.730396817344", "0.209723589240"), 2.0, 53)
+    find("find-escalate-p379", ("-0.61692945555572", "0.44575892537665"), 2.0, 379)
+    find("find-escalate-p6308", (P6308_HF[0][:63], P6308_HF[1][:62]), 20.0, 6308)
+    find(
+        "find-no-escalation", ("-0.61692945555572", "0.44575892537665"), 2.0, 379, max_escalations=0
+    )
+    # The other stops: zero derivative (c = -1/2 is z_2's critical point), an escaped
+    # start, a walk out of the view, a walk that stagnates, and the two budgets.
+    find("find-zero-derivative", ("-0.5", "0"), 1.0, 2)
+    find("find-start-escaped", ("0.5", "0.5"), 0.0, 5)
+    find("find-left-view", ("-0.869051116225", "0.143453726593"), 4.0, 30)
+    find("find-stagnated", ("-1.260923117193", "0.051828001608"), 2.0, 28)
+    find("find-max-evaluations", _shifted(NUCLEUS_P16, 3.0, 0.3, 0.1), 3.0, 16, max_evaluations=3)
+    find("find-max-steps", _shifted(NUCLEUS_P16, 3.0, 0.3, 0.1), 3.0, 16, max_steps=2)
+
+    # Cases that pin one rule each: a port that changes the rule named fails the case.
+    # The box: its escape bound 2^(F+16) (not 15, not 17), per component (not |z|), and the
+    # crossing test's strict > 0 (an edge through 0 does not cross).
+    snap("box-escape-bound-not-15", ("-1.474862400191", "0.464302265200"), 1.0, 400, box_only=True)
+    snap("box-escape-bound-not-17", ("-0.374787416731", "0.979283882032"), 1.0, 400, box_only=True)
+    snap("box-escape-bound-halved", ("-1.835612984996", "0.441294964135"), 1.0, 300, box_only=True)
+    snap("box-escape-per-component", ("0.463752545985", "0.384819085923"), 4.0, 400, box_only=True)
+    snap("box-crossing-strict", ("0.25", "0"), 0.0, 10, 0.25, box_only=True)
+    snap("snap-edge-through-origin", ("0.5", "0.5"), 0.0, 500, 0.5)
+    # Evaluation: a component past 2 escapes (exactly 2 does not; |z| > 2 alone does not).
+    find("find-escape-boundary", ("-2", "0"), 0.0, 3)
+    find("find-escape-per-component", ("-0.319504188240", "0.663541825182"), 2.0, 13)
+    # The line search: 25 halvings, failing far from a root (no-improvement), also on a
+    # run's first pass with a cap of 1 (26 evaluations); strictly smaller only; two
+    # roundings, clamp then halving; rshift's and rdiv's ties away from zero.
+    find("find-no-improvement", ("-0.5", "0.00000001"), 0.0, 2)
+    find("find-no-improvement-after-steps", ("-1.92595622146355", "0.00000000000020"), 1.0, 22)
+    find(
+        "find-no-improvement-cap-1",
+        ("-1.91720887071420", "-0.00000000000047"),
+        2.0,
+        35,
+        max_evaluations=1,
+    )
+    find("find-strictly-smaller", ("0.085874447262", "0.711017235052"), 0.0, 3)
+    snap("snap-strictly-smaller", ("-0.755011260542", "0.418144241042"), 1.0, 400)
+    find("find-rounded-twice", ("-0.552826135186", "0.584268606794"), 3.0, 23)
+    # The clamp takes the least s with |step|^2 <= M^2 4^s: on period 1 the step is c
+    # itself, so a start of 1/2 with a reach of 1/2 is the tie, taken whole.
+    find("find-clamp-tie", ("0.5", "0"), 0.0, 1, 0.5)
+    find("find-rshift-tie", ("-1.1503693135", "0.2135525983"), 4.0, 125)
+    find("find-print-tie", ("0.5", "-0.001953125"), 0.0, 5)
+    # The stagnation window: opens at step 1, 13, ...; the factor is 4.
+    find("find-stagnated-factor", ("-0.6261115", "0.3935821"), 1.0, 56)
+    find("find-stagnated-window-start", ("-1.0240235", "0.2517738"), 1.0, 56)
+    find("find-not-stagnated", ("-0.517476061", "0.521148583"), 3.0, 153)
+    # Escalation only after floor; each run with fresh budgets.
+    find(
+        "find-escalate-after-floor-only",
+        ("0.349002577268", "0.431654293468"),
+        0.0,
+        22,
+        max_evaluations=20,
+    )
+    find(
+        "find-escalate-fresh-evaluations",
+        ("-0.61692945555572", "0.44575892537665"),
+        2.0,
+        379,
+        max_evaluations=99,
+    )
+    find(
+        "find-escalate-fresh-steps",
+        ("-0.61692945555572", "0.44575892537665"),
+        2.0,
+        379,
+        max_steps=23,
+    )
+    # The verdict: the bar K exactly (neither K - 1 nor K + 1), and the precision gate: a
+    # coarse F that does not place the atom is not converged (64 bits exactly).
+    find("find-verdict-bar-k", ("-1.366370191192", "0.025274663134"), 1.0, 17, max_evaluations=20)
+    find("find-verdict-not-k-minus-1", ("-1.579504579480", "0"), 2.0, 60, max_steps=5)
+    find("find-verdict-not-k-plus-1", ("-1.899828024626", "0"), 3.0, 14, max_evaluations=6)
+    find("find-coarse-precision", ("-2", "0"), 0.0, 42, max_escalations=0)
+    find("find-coarse-precision-cut-short", ("-2", "0"), 0.0, 42, max_evaluations=6)
+    find("find-resolve-not-56", ("-1.575722063958", "0"), 1.0, 65, max_escalations=0)
+    find("find-resolve-not-72", ("-1.661640627101", "0.00000000000047"), 1.0, 55, max_escalations=0)
+    # Printing: the view's places round the zoom up (ceil 0.5 = 1, ceil 5.5 = 6).
+    find("find-view-places-failed", ("0.5", "0.5"), 0.5, 5)
+    find("find-view-places-found", ("-1.75", "0.001"), 5.5, 3)
 
 
 def write_location_cases() -> None:

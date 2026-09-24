@@ -35,7 +35,7 @@ namespace HeatonLife
         /// <summary>log10 of the half-height, or null when the file gives no scale.</summary>
         public double? HalfHeightLog10 { get; }
 
-        /// <summary>kfr, f3, hf-preset, hf-result or hf-journal.</summary>
+        /// <summary>kfr, f3, hf-preset, hf-result, hf-journal, or nucleus (<see cref="Nucleus.ToLocation"/>).</summary>
         public string Format { get; }
 
         /// <summary>The file's iteration budget, or null.</summary>
