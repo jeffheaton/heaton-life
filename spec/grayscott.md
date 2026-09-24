@@ -3,7 +3,10 @@
 Conformance tier: **ε-tolerance** (ε = 1e-9). Vectors: [`vectors/grayscott/`](../vectors/grayscott/).
 Same-language replay is exact; the ε absorbs cross-language summation differences. The
 update is pure arithmetic (no transcendentals), so an implementation that follows the
-spec'd operation order should in practice match bit-for-bit.
+spec'd operation order should in practice match bit-for-bit. Both ports do today on
+`mitosis-center-64` at step 100, and the [platform self-check](self-check.md) pins those
+bits as a probe of the platform's IEEE arithmetic; a deliberate change to the update's
+expressions re-pins it.
 
 ## State
 

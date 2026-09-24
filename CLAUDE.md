@@ -21,7 +21,10 @@ This repo's identity is that Python and .NET produce **the same output** for the
 - **Never regenerate existing vectors casually** — they are the cross-language contract. Regenerate only when a deliberate spec change justifies it. New families/cases are added additively: append their `write_case(...)` calls to `python/tools/gen_vectors.py`, run it, and confirm with `git status vectors/` that only the new case directories changed (the script has no section selector and regenerates every family except `png-io`, whose `write_png_io_cases()` is deliberately left out of `main()` because PNG bytes are encoder-specific and is run by hand; existing vectors must come back byte-identical). `vectors/mergelife-upstream/` tracks the upstream repo and is never regenerated here.
 
 **Parity change protocol** — an algorithm/behavior change touches, in order:
-1. `spec/` page + `python/` implementation (+ additive vectors if new surface),
+1. `spec/` page + `python/` implementation (+ additive vectors if new surface; if a
+   deliberate change regenerates a vector the platform self-check draws on
+   (spec/self-check.md), rerun `python/tools/gen_self_check.py` — both suites' self-check
+   tests fail until it is rerun),
 2. `dotnet/` port (expression-for-expression where a bit-exact tier applies),
 3. both suites green: Python pytest and `dotnet test`.
 

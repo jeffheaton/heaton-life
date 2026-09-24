@@ -513,7 +513,9 @@ hold it to their ε, and `vectors/t2-steps/` pins `(dw, dE)` bit for bit.
 
 ### Platform contract
 
-T2's bits rest on the platform, not only on the operations spelled out here:
+T2's bits rest on the platform, not only on the operations spelled out here (the
+[README's determinism contract](README.md#determinism-contract) states it for every float
+bit-exact output):
 
 - every operation is IEEE-754 binary64, rounded to nearest even;
 - nothing contracts `a·b ± c` into a fused multiply-add (a C++ backend such as IL2CPP is
@@ -523,12 +525,13 @@ T2's bits rest on the platform, not only on the operations spelled out here:
 - gradual underflow: no flush-to-zero and no denormals-are-zero. T2 rounds into the
   subnormals constantly (`to_double`, `δ_d`, `dcS`, the smaller part of `w`).
 
-RyuJIT on x64 and ARM64 and NumPy's real ufuncs meet it. C#'s internal
-`FloatingPointContract.Violation()` runs canaries a host can call inside its real
+RyuJIT on x64 and ARM64 and NumPy's real ufuncs meet it. The [platform
+self-check](self-check.md)'s `fp-contract` check runs canaries a host calls inside its real
 player (no fusing either way in `(a·a − b·b) + c` and `a·a − 1`, a subnormal product
 rounding ties to even, a subnormal operand read as itself, `2^−1082` underflowing between
 two multiplies, `(1 + 2^−52) + 2^−53` rounding at double precision), with inputs read at
-run time so no compiler folds them. The Python suite runs the same canaries on NumPy.
+run time so no compiler folds them — in C# `SelfCheck`, in Python `heaton_life.self_check`,
+on floats and on NumPy arrays.
 
 ### BLA at T2
 

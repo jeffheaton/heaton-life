@@ -8,9 +8,10 @@ namespace HeatonLife
     /// contract"): IEEE-754 binary64 for every operation, no contraction of a·b ± c into a
     /// fused multiply-add, no x87 extended precision or range, and gradual underflow (no
     /// flush-to-zero, no denormals-are-zero). RyuJIT on x64 and ARM64 meets it; a C++
-    /// backend (IL2CPP) meets it only when built without contraction. A host runs
-    /// <see cref="Violation"/> inside its real player: the canaries read their inputs
-    /// from an array at run time, so no compiler can fold them away.
+    /// backend (IL2CPP) meets it only when built without contraction. A host runs it
+    /// inside its real player through <see cref="SelfCheck"/> (the fp-contract check): the
+    /// canaries read their inputs from an array at run time, so no compiler can fold them
+    /// away.
     /// </summary>
     internal static class FloatingPointContract
     {

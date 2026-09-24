@@ -167,8 +167,9 @@ Vectors in [`../vectors/render/`](../vectors/render/):
   rebuild the LUT from the anchors and must match byte-for-byte.
 - `apply-ramp-fire/` — a 16×16 float frame (`frame.f64`, row-major, values
   `i/255`) applied through `fire`; expected RGB as `rgb.png`.
-- `apply-half-rainbow/` — a 16×32 float frame (values `i/512`, hitting exact
-  `.5` index products) applied through `rainbow`; pins half-even rounding.
+- `apply-half-rainbow/` — a 16×32 float frame (values `i/512`) applied through
+  `rainbow`: round-to-nearest indices. Its one exact tie (127.5) rounds to 128 under
+  half-even and half-away alike; `phase-apply-halfway` is the case that pins half-even.
 - `frame-<family>/` — an explicit input state (family codec encoding) and the
   expected frame (bit-exact). Inputs are explicit so the frame contract stays
   decoupled from the ε of evolved states.

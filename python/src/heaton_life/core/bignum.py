@@ -17,10 +17,12 @@ included).
 from __future__ import annotations
 
 import collections
+import contextlib
+import contextvars
 import dataclasses
 import math
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import Any
 
 import numpy as np
@@ -120,6 +122,20 @@ class _Entry:
 
 _CACHE: collections.OrderedDict[tuple[object, ...], _Entry] = collections.OrderedDict()
 _CACHE_LOCK = threading.Lock()
+# Set inside uncached(): orbits are computed afresh and never stored, so a caller that
+# must not disturb the cache (the platform self-check) leaves a host's orbits in place.
+_BYPASS: contextvars.ContextVar[bool] = contextvars.ContextVar("bignum_bypass", default=False)
+
+
+@contextlib.contextmanager
+def uncached() -> Iterator[None]:
+    """Within the block (this thread or task only), every reference orbit is computed
+    afresh and not cached: the same arithmetic, the cache neither read nor written."""
+    token = _BYPASS.set(True)
+    try:
+        yield
+    finally:
+        _BYPASS.reset(token)
 
 
 def clear_cache() -> None:
@@ -187,6 +203,8 @@ def _orbit_entry(
     if max_iter < 1:
         raise ValueError("max_iter must be positive")
     bits = working_bits(center_re, center_im, zoom_log10)
+    if _BYPASS.get():
+        return _fresh(kind, center_re, center_im, bits, max_iter, c_re, c_im, _integer_type())
     key = (kind, center_re, center_im, bits, c_re, c_im)
     with _CACHE_LOCK:
         start = _CACHE.get(key)

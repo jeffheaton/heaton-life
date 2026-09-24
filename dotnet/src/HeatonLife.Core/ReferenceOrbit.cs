@@ -143,6 +143,36 @@ namespace HeatonLife
         // frame, and a phone cannot hold 8 long orbits.
         private const int CacheCapacity = 8;
         private static readonly object CacheLock = new object();
+
+        // Set on this thread inside Uncached(): orbits are computed afresh and never stored,
+        // so a caller that must not disturb the cache (the platform self-check) leaves a
+        // host's cached orbits in place.
+        [ThreadStatic]
+        private static bool _uncached;
+
+        /// <summary>
+        /// Until the returned scope is disposed, every orbit this thread asks for is computed
+        /// afresh and not cached: the same arithmetic, the cache neither read nor written.
+        /// </summary>
+        internal static UncachedScope Uncached()
+        {
+            bool previous = _uncached;
+            _uncached = true;
+            return new UncachedScope(previous);
+        }
+
+        /// <summary>Restores the thread's caching when disposed.</summary>
+        internal readonly struct UncachedScope : IDisposable
+        {
+            private readonly bool _previous;
+
+            internal UncachedScope(bool previous)
+            {
+                _previous = previous;
+            }
+
+            public void Dispose() => _uncached = _previous;
+        }
         private static readonly List<Key> CacheOrder = new List<Key>();
         private static readonly Dictionary<Key, Entry> Cache = new Dictionary<Key, Entry>();
         private static long _cacheByteLimit = 64L << 20;
@@ -378,6 +408,8 @@ namespace HeatonLife
                 throw new ArgumentOutOfRangeException(nameof(maxIter), "max_iter must be positive");
 
             int bits = WorkingBits(centerRe, centerIm, zoomLog10);
+            if (_uncached)
+                return Fresh(kind, centerRe, centerIm, bits, maxIter, cRe, cIm, progress, cancellationToken);
             var key = new Key(kind, centerRe, centerIm, bits, cRe, cIm);
             Entry? start = null;
             lock (CacheLock)
@@ -459,6 +491,14 @@ namespace HeatonLife
                 Cache.Clear();
                 CacheOrder.Clear();
             }
+        }
+
+        /// <summary>Whether this orbit is in the cache (tests).</summary>
+        internal static bool IsCached(Kind kind, string centerRe, string centerIm, double zoomLog10, double cRe, double cIm)
+        {
+            var key = new Key(kind, centerRe, centerIm, WorkingBits(centerRe, centerIm, zoomLog10), cRe, cIm);
+            lock (CacheLock)
+                return Cache.ContainsKey(key);
         }
 
         /// <summary>Cached orbits and their sample bytes (tests).</summary>

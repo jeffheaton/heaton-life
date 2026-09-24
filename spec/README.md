@@ -19,6 +19,7 @@ Each family gets one page structured as:
 - **RNG is pinned**: PCG32 (`state = state * 6364136223846793005 + inc`, XSH-RR output). Both implementations carry their own ~10-line copy; native RNGs never touch simulation state. Seeding and draw order are part of each family's init spec.
 - **Discrete CAs are specified in integer math** (Life-like, Elementary, Cyclic, Wireworld, MergeLife) so cross-language runs match bit-for-bit.
 - **Float families** (Lenia, Gray-Scott, boids, smooth fractal coloring) conform within a per-family ε after N steps; transcendentals and FFT rounding make bitwise equality unrealistic.
+- **The platform is part of the contract.** Every float bit-exact output rests on IEEE-754 binary64 rounded to nearest even, with no contraction of `a·b ± c` into a fused multiply-add (a C++ backend such as IL2CPP is built with `-ffp-contract=off`), no x87 extended precision or exponent range, and gradual underflow (no flush-to-zero, no denormals-are-zero). Where the ports rely on a fused multiply-add they say so and compute it exactly ([deep-zoom.md](deep-zoom.md)). A host on a runtime the suites do not cover runs the [platform self-check](self-check.md) there.
 
 | Tier | Families | Test |
 |---|---|---|
@@ -54,6 +55,7 @@ Each family gets one page structured as:
 - [navigation.md](navigation.md) — exact viewport arithmetic: pan, anchored zoom and pixel offsets on decimal centers, printed at the frame's places so the orbit's precision never ratchets (bit-exact tier)
 - [render.md](render.md) — colormap LUT construction and frame indexing, the cyclic palettes and the phase lookup (bit-exact tier)
 - [fractal-color.md](fractal-color.md) — fractal color that holds still: stretch (and a frozen stretch), depth phase, frequency, distance shading (bit-exact given its inputs)
+- [self-check.md](self-check.md) — the platform self-check: embedded known answers a host runs on its own runtime (IL2CPP, Mono, a phone) to learn whether it reproduces the bit-exact contract, and what each failure invalidates
 - [zoom.md](zoom.md) — zoom movies: Heaton Fractal's schedule with its end pinned, each frame's zoom, the movie iteration budget and the survey that measures it (bit-exact tier); the frame renderer (Python presentation)
 - [patterns.md](patterns.md) — pattern model, RLE dialects, transforms, extract/stamp, family-bound compatibility
 - [png-io.md](png-io.md) — MergeLife PNG import/export at integer scale; grid-level bit-exact contract (PNG bytes are per-encoder)
