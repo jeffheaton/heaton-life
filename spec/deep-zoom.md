@@ -23,6 +23,19 @@ exactly like a reference orbit — the Julia recurrence from center `"0"`, so it
 precision is the zoom term alone, with the same arithmetic and stopping rule — and
 depends only on `(c, zoom_log10, max_iter)`.
 
+**A Julia frame's orbits run at twice its zoom** (0.10.0): both the reference and the
+critical orbit take `F` from `zoom_log10' = 2·zoom_log10` below (Python
+`engine.orbit_zoom`, C# `FractalEngine.OrbitZoom`), at T1 and T2. A reference that
+passes near the critical point squares the pixels' differences: near a preimage of 0,
+two pixels' `z` differ by about `ps²`, not `ps`. A rounding of `2^−F` in the orbit
+there moves the whole frame by `2^−F / ps²` pixels, so `F` must reach `ps²`. At c = i,
+zoom 100, 2.3 and −1.7 pixels off `√(−i)`, the frame's own `F` gets 51 of 144 counts
+wrong and twice it gets all 144 right against a 1466-bit direct iteration
+(`vectors/julia/t1-julia-i-precision-zoom100-12`). Mandelbrot and the Burning Ship
+iterate `c` itself, so their pixels differ by `ps` and they keep the frame's `F`. No
+earlier vector changed: their stored orbits are bit-identical at twice the zoom. A host
+that hands in its own Julia orbits computes them at `2·zoom_log10`.
+
 - **Precision**: the orbit runs in binary fixed point with `F` fractional bits,
 
   ```
@@ -40,9 +53,11 @@ depends only on `(c, zoom_log10, max_iter)`.
   before it unchanged (Seahorse: `10³³` is 110 bits, exactly zoom 14's `46 + 64`). Its
   cost is paid at every T1 zoom — a 256-place center runs at 915 bits — but only T1
   computes an orbit at all. Trailing zeros count (`"0.0"` has one place). The term
-  stops at 340 places: digits past `10⁻³⁴⁰` sit below half the smallest float64
-  subnormal, cannot reach a sample, and would otherwise let a long string set `F`
-  on its own.
+  stops at 340 places, so a long string cannot set `F` on its own. Below zoom 290 the
+  digits past `10⁻³⁴⁰` sit below half the smallest float64 subnormal and cannot reach
+  a sample. At T2 they can reach a small sample's floatexp, but from zoom 320.3 on the
+  zoom term exceeds the digit term anyway (`3.33·z + 64 ≥ 1130` bits), so the cap never
+  decides `F` where it would matter.
 - **Arithmetic (normative, both ports)**: a real `x` is held as the integer
   `round(x · 2^F)`, and every rounding is pinned.
   - A decimal center is parsed exactly (`digits · 10^e`, never through float64) and
@@ -150,11 +165,14 @@ had both `|z|²` and `|δ|²` below `2^-960` — although a reference centered o
 itself passes arbitrarily close to 0, limited only by the center's digits (`4.1e-182` at
 iteration 26,699 of that center). Second, a rebase skipped in that zone would change the
 next `δ` by at most `|δ|·|z| < 1e-308`, below the ulp of `δc ≥ ~1e-292`, after which the
-reference and the pixel restart together as `C + δc`. Past T1 neither holds: **T2 and any
-BLA radius test must compare exponent-scaled magnitudes** (scale every operand by one
-exact `2^k` before squaring), never plain squares.
+reference and the pixel restart together as `C + δc`. Past T1 neither holds: **T2 at a
+small reference sample, and any BLA radius test, must compare exponent-scaled magnitudes**
+(floatexp, or every operand scaled by one exact `2^k` before squaring), never plain
+squares. At a normal sample T2's plain squares are sound
+([T2, step 5](#one-iteration)).
 
-Julia has no `δc` floor, and that is a real T1 limit rather than a comparison problem:
+Julia has no `δc` floor, and that is a real T1 limit rather than a comparison problem
+(T2 lifts it, [below](#t2-perturbation-past-1e290)):
 a reference passing within ~`1e-154` of 0 (a center that close to a preimage of 0, deep
 in T1) underflows `2·Zₙ·δₙ + δₙ²` itself, so `δ` becomes `0.0` and the pixel follows the
 reference from then on. Rebasing onto `W` does not help, since the next `δ` is `δ²`. The
@@ -331,15 +349,204 @@ count −1 when n reaches max_iter
   pixel's number of skips — a diagnostic for conformance and tests; families without BLA
   reject it.
 
+## T2: perturbation past 1e290
+
+Past zoom 290 a pixel's delta falls below float64's range. T2 keeps T1's recurrence,
+rebasing and conventions, and changes only how numbers are held. Python
+`heaton_life.fractal.perturbation_t2`, C# `PerturbationT2`, bit for bit.
+
+**The idea (Pauldelbrot's rescaled iterations, as in Kalles Fraktaler 2.15.3).** A delta
+almost never meets anything its own size: while it is far below the reference sample it
+steps against, the step is linear and its scale can live in an integer exponent. Only at
+the rare reference samples that pass near 0 does the full floatexp arithmetic run.
+
+### What each pixel carries
+
+- `w = (wr, wi)`, a double pair, and an integer `E`: `δ = w · 2^E`.
+- `m`, its reference index, on the reference or (Julia, after a rebase) the critical
+  orbit, as at T1.
+- `δc`, its [floatexp](floatexp.md) pixel delta per component, and the cached pair
+  `dcS = (scaled(δc_re, E), scaled(δc_im, E))`, recomputed whenever `E` changes.
+- `δ_d`, `δ` as a double pair: `w · 2^E` when `E ≥ −1022` (one multiply by an exact
+  normal power of two, which may round into the subnormals), `(0, 0)` below. When
+  `E < −1022`, `|δ| < 2^(E+65) < 2^−957`, far below the ulp of any `|2Z| ≥ 2^−399`.
+
+### Small reference samples
+
+A reference sample is **small** when it is `0`, or when `k = binade(max(|Re Z|, |Im Z|))`
+has `k < −400` or `k > 900`, decided exactly from the fixed-point integers (bit length
+below `F − 399` or above `F + 901`). The orbit records, for every small index, each
+component rounded once from the fixed point to floatexp (`from_fixed`): its **small
+table**. A *large* sample comes from a huge center: `Z_1 = C` for a Mandelbrot center
+past `2^900`, and `Z_0` or `Z_1 ≈ Z_0²` for a Julia center past about `2^900` or `2^450`.
+Past index 0 it is always the orbit's last, since the reference stops once
+`|Z|² > 1e100`. It goes through the table because floatexp cannot overflow. With it,
+every fast index has `|Z| < 2^901`, `|w| ≤ 2^64` and `|dcS| < 2^962`, so no fast step
+overflows. A normal landing's `|z|²` can still overflow to `+∞` next to a huge normal
+sample, and that reads, correctly, as an escape.
+
+- Every orbit builds its table at every tier, inside the step loop. The cache key is the
+  same for T1 and T2 requests, so the table must not depend on which tier asked.
+- A resume appends to it; a prefix keeps the entries below its length.
+- It counts 40 bytes an entry against the cache's byte cap, alongside 16 bytes a sample.
+- Index 0 of a Mandelbrot orbit, or of Julia's critical orbit, is always small.
+
+At an exactly periodic reference (a center on a low-period nucleus, such as `0` or `−1`)
+every period's return to 0 is small, and T2 steps through floatexp there: correct, but
+up to ~14× slower.
+
+### One iteration
+
+1. **Distance derivative**, when asked (below).
+2. **The step.**
+   - **Fast**, at a normal index `m`, when every *nonzero* component of `δc` has
+     `e − E ≤ 960` (a zero component never forces the slow step):
+     ```
+     t_r = 2·Z_r + δ_d_r ;  t_i = 2·Z_i + δ_d_i
+     wr' = (t_r·wr − t_i·wi) + dcS_r ;  wi' = (t_r·wi + t_i·wr) + dcS_i
+     ```
+     plain float64 operations in this order, no fma. This is T1's factored shape on `w`:
+     scaling by `2^E` commutes with every rounding in the normal range.
+   - **Slow** otherwise, in floatexp per component, with `Z` from the small table (or the
+     double sample, exactly, at a normal index):
+     ```
+     t  = (add(twice(Z_r), δ_r), add(twice(Z_i), δ_i))
+     p  = (sub(mul(t_r, δ_r), mul(t_i, δ_i)), add(mul(t_r, δ_i), mul(t_i, δ_r)))
+     δ' = (add(p_r, δc_r), add(p_i, δc_i))
+     ```
+     then `(w, E)` from `δ'`: `E` is the larger exponent of the nonzero components (both
+     zero keeps `E`), and `w = (scaled(δ'_r, E), scaled(δ'_i, E))`.
+3. `m ← min(m + 1, last)`, as at T1.
+4. **Renormalize** when `w ≠ 0` and `max(|wr|, |wi|)` leaves `[2^−64, 2^64]`:
+   `k = binade(max)`, `w ← (w · 2^−k)` (one multiply by an exact power of two, or two when
+   the max was subnormal), `E ← E + k`. If `E` falls below `−2^31`, `w ← 0` (the
+   [floor](floatexp.md#exponent-floor)). Recompute `dcS`.
+5. **Landing tests** at the new `m`, escape before rebase:
+   - At a small index, in floatexp: `z = Z + δ` per component; escape iff
+     `|z|² > from_double(R·R)`; rebase iff `|z|² < |δ|²` (floatexp squares and sums).
+     The final `z` is `to_double` of each component.
+   - At a normal index, in doubles: `z = Z + δ_d`; escape iff `z_r² + z_i² > R²`; rebase
+     iff `z_r² + z_i² < δ_d_r² + δ_d_i²`. These plain squares are sound here: a rebase
+     needs `|δ| > |Z|/2 ≥ 2^−401`, so `|δ_d|²` is normal, and a `|z|²` that flushes to 0
+     makes the test true, as it should be.
+6. **Rebase**: `δ ← z` (floatexp at a small landing; otherwise the double `z`, each
+   component by `from_double`), `(w, E)` from it as after a slow step, `m ← 0` on the
+   rebase orbit, `dcS` recomputed. Rebase and rescale are one transition (Kalles
+   Fraktaler shipped bugs where they were not). The band rule of step 4 runs only after
+   a step; the split leaves the larger part of `w` in `[1, 2)`.
+
+A pixel starts with `δ₀ = 0` (Mandelbrot) or `δ₀` = its pixel delta (Julia, `δc = 0`),
+with `(w, E)` from it as after a slow step. For Mandelbrot `E` is the larger exponent of
+`δc`'s nonzero parts (`0` if both are zero); no output depends on it, since index 0 is
+small, the first step is slow and it yields `δ₁ = δc` exactly.
+
+**Zero never has an exponent.** Floatexp zero is `(0.0, 0)`, and no rule reads its
+exponent: a zero component of `δc` (the center row or column of an odd-sized frame) or
+of `ps` imposes no gap condition and scales to `0`, a zero part never sets `E`, and
+`scaled`, `to_double` and `compare` test for zero first ([floatexp.md](floatexp.md)).
+
+**The gap rule is a guard.** A fast step divides `δc` by `2^E`, which overflows once a
+component sits more than about 1023 binades above `E`. After a step `|w'|` is at least
+about `2^−53` of the `dcS` term it absorbed, or exactly 0 with `E` kept, so a natural
+frame never reaches the slow step for this reason: it would need `δc`'s own parts about
+`2^900` apart. It is there so no double ever overflows, and `vectors/t2-steps/delta-gap`
+pins it on crafted state.
+
+**Julia.** `δc = 0`, so `dcS = 0` and the gap rule never fires; the reference starts at
+the center and rebases go to the critical orbit, whose small table serves its returns
+to 0. This lifts T1's Julia limit below: a pixel whose delta squares past the double
+range keeps its exponent, and one following an exact zero of the orbit meets the floor
+and follows the reference exactly (a Julia interior renders interior).
+
+Both Julia orbits run at twice the frame's zoom, as at T1 ([Reference
+orbit](#reference-orbit-the-only-high-precision-computation)):
+`vectors/julia/t2-julia-i-precision-zoom400-12` pins it at T2, where the frame's own `F`
+gets 45 of its 144 counts wrong.
+
+**Distance estimate** ([fractals.md](fractals.md#distance-estimate)). The derivative
+`d = ps·dz/dc` carries its own `(dw, dE)`, never sharing `δ`'s scale (a rebase resets `δ`,
+not `d`), and `addS = scaled(ps, dE)` (Mandelbrot; Julia adds nothing). Each iteration,
+from the pre-step `z`, which is the previous landing's `z` (for the first iteration, the
+landing rule's `z` at index 0: `add(Z_0, δ_0)` in floatexp when index 0 is small, as for
+a Julia frame centered at 0, never a double that has underflowed):
+- after a normal landing (a double `z`), when `ps`'s exponent minus `dE` is at most 960
+  (always, for Julia, which adds nothing):
+  `dw' = (2·(z_r·dw_r − z_i·dw_i) + addS, 2·(z_r·dw_i + z_i·dw_r))`, plain operations;
+- otherwise in floatexp: `d' = twice(z·d) + ps` (Julia: no `+ ps`), with the double `z`
+  converted exactly after a normal landing, then `(dw, dE)` from it as after a slow step.
+
+Then `dw` renormalizes as `w` does. `d` starts at `0` (`dE` = `ps`'s exponent) for
+Mandelbrot and at `ps` for Julia. At escape, `q` is fractals.md's formula on `dw`; if `q`
+is `+∞`, `0` or NaN (no finite derivative, or none at all) the estimate is `q`,
+otherwise `to_double(normalize(q, −dE))`: `q / 2^dE` rounded once.
+
+**What is bit-exact.** The count, the final `z` and the escape derivative `(dw, dE)` are
+IEEE-exact in both ports. The estimate itself goes through `log`, so the render vectors
+hold it to their ε, and `vectors/t2-steps/` pins `(dw, dE)` bit for bit.
+
+### Platform contract
+
+T2's bits rest on the platform, not only on the operations spelled out here:
+
+- every operation is IEEE-754 binary64, rounded to nearest even;
+- nothing contracts `a·b ± c` into a fused multiply-add (a C++ backend such as IL2CPP is
+  built with `-ffp-contract=off`, or `/fp:precise` without `/fp:contract`); every fast-step
+  and landing expression has that shape;
+- no x87 extended precision or exponent range (ECMA-335 allows both for locals);
+- gradual underflow: no flush-to-zero and no denormals-are-zero. T2 rounds into the
+  subnormals constantly (`to_double`, `δ_d`, `dcS`, the smaller part of `w`).
+
+RyuJIT on x64 and ARM64 and NumPy's real ufuncs meet it. C#'s internal
+`FloatingPointContract.Violation()` runs canaries a host can call inside its real
+player (no fusing either way in `(a·a − b·b) + c` and `a·a − 1`, a subnormal product
+rounding ties to even, a subnormal operand read as itself, `2^−1082` underflowing between
+two multiplies, `(1 + 2^−52) + 2^−53` rounding at double precision), with inputs read at
+run time so no compiler folds them. The Python suite runs the same canaries on NumPy.
+
+### Pixel deltas at T2
+
+- `ps = normalize(fl(fl(4/W) · m), n)` with `(m, n) = pow10x(−zoom)`
+  ([pow10.md](pow10.md#floatexp)): T1's pixel scale wherever that is normal.
+- Column `j`: `normalize((j + 0.5 − W/2) · ps.m, ps.e)`; row `i`:
+  `normalize(−((i + 0.5 − H/2) · ps.m), ps.e)`: one rounding each, T1's values wherever
+  normal.
+- With an off-center reference: `add(d, offset)` per component, `d` the exact decimal
+  difference `center − reference` rounded once to floatexp (53 bits, ties to even).
+- `reference_on_screen` compares `|d|` with `(W/2)·ps` and `(H/2)·ps` in floatexp at every
+  tier, the float64 answer wherever those values are normal.
+
+### What T2 does not do yet
+
+BLA (a Mandelbrot `bla=True` frame renders the plain T2 loop), the Burning Ship,
+period-bounded orbits, and interior shortcuts at T2 (statuses are escaped or exhausted).
+Counts may differ from T1's across zoom 290 on float64-chaotic pixels, since T2 has no
+fma, as they do across zoom 12.
+
+**Against truth.** Every T2 render vector matches a direct fixed-point iteration of each
+pixel (at twice the zoom's bits plus 800) on every pixel, except 4 of the 64 in
+`t2-hf-p135310-zoom320-8`, one orbit under the frame's 90° symmetry that escapes at
+170,601 instead of 170,602. The float64 samples decide it, not T2's arithmetic: the same
+pixel with 200-bit deltas against 53-bit samples still escapes at 170,601, and with
+200-bit samples at 170,602. Storing the orbit in float64 is the perturbation method's
+own limit (Kalles Fraktaler and Heaton Fractal store theirs the same way), and past a
+deep nucleus a pixel that runs 170,000 iterations can land one count off.
+
+**Cost.** A T2 pixel-iteration costs about 1.3–2× T1's (C#) and the orbit grows
+superlinearly with `F`; the ceiling of 9000 is a correctness bound, not a usability one.
+The C# pixel loop polls its cancellation token every 2^16 iterations.
+
 ## Precision tiers (auto-selected from zoom)
 
 | Tier | Range (zoom = 10^k) | δ arithmetic | Status |
 |---|---|---|---|
 | T0 direct | k ≤ 12 | none — plain float64 escape-time | v1 |
 | T1 perturbation | 12 < k ≲ 290 | float64 (δc underflows near 1e308; margin kept) | v1 |
-| T2 perturbation | k > 290 | floatexp (float64 mantissa + int64 exponent) | reserved, future |
+| T2 perturbation | 290 < k ≤ 9000 | rescaled float64 plus [floatexp](floatexp.md) at small reference samples ([T2](#t2-perturbation-past-1e290)) | 0.10.0 (Mandelbrot, Julia) |
 
 Tier selection is automatic and invisible to the caller; the API surface is identical across tiers.
+A zoom that is not finite raises. Each family renders to its own ceiling: Mandelbrot and
+Julia to 9000 (centers stay within the 10,000-digit grammar), the Burning Ship to 290
+(its `diffabs` needs per-component smallness at T2, not yet specified), Newton to 12.
 
 ## Viewport contract (lands in core on day one)
 
@@ -476,6 +683,5 @@ Hard-won; each has broken, or would break, bit-exact agreement between the ports
 
 - BLA for Julia (`B = 0`, a table on the critical orbit as well) and the Burning Ship (an
   ABS-BLA); Mandelbrot BLA landed in 0.8.0 ([BLA](#bla-bivariate-linear-approximation-mandelbrot-opt-in)).
-- T2 floatexp arithmetic.
 - Distance-estimation anti-aliasing (the [distance estimate](fractals.md#distance-estimate)
   itself, interior shortcuts and palette antialiasing landed in 0.6.0 and 0.7.0).

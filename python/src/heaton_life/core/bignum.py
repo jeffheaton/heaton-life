@@ -26,7 +26,7 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from heaton_life.core import decimal_text
+from heaton_life.core import decimal_text, floatexp
 
 GUARD_BITS = 64  # zoom-precision guard: precision_bits() = trunc(3.33 * zoom) + this
 WORKING_GUARD_BITS = 64  # fixed-point headroom beyond the precision rule
@@ -76,6 +76,31 @@ CACHE_BYTES = 64 << 20
 _KEEP_RECENT = 2
 
 
+SMALL_BINADE = -400  # a sample is small when binade(max(|Re|, |Im|)) < this (or it is 0)
+LARGE_BINADE = 900  # ... or > this: a huge Julia center, whose doubles T2 could overflow
+
+
+@dataclasses.dataclass(frozen=True)
+class SmallSamples:
+    """The orbit's small samples in floatexp (spec/deep-zoom.md "T2"): the indices where
+    Z = 0 or binade(max(|Re Z|, |Im Z|)) < -400, and each component there rounded once
+    from the fixed point to (mantissa, exponent) -- the values T2 steps through exactly."""
+
+    index: NDArray[np.int64]
+    re_m: NDArray[np.float64]
+    re_e: NDArray[np.int64]
+    im_m: NDArray[np.float64]
+    im_e: NDArray[np.int64]
+
+
+@dataclasses.dataclass(frozen=True)
+class OrbitX:
+    """A reference orbit for T2: the double samples and the small samples in floatexp."""
+
+    samples: NDArray[np.complex128]
+    small: SmallSamples
+
+
 @dataclasses.dataclass(frozen=True)
 class _Entry:
     orbit: NDArray[np.complex128]  # read-only
@@ -84,6 +109,7 @@ class _Entry:
     zi: int
     cr: int
     ci: int
+    small: tuple[tuple[int, int, int], ...] = ()  # (index, fixed Re, fixed Im) when small
 
     def covers(self, max_iter: int) -> bool:
         return self.escaped or len(self.orbit) - 1 >= max_iter
@@ -116,6 +142,46 @@ def reference_orbit(
     kinds: "mandelbrot" (Z0=0, Z^2+C), "julia" (Z0=center, Z^2+c),
     "burning_ship" (Z0=0, (|X|+i|Y|)^2+C).
     """
+    entry = _orbit_entry(kind, center_re, center_im, zoom_log10, max_iter, c_re, c_im)
+    return entry.prefix(max_iter)
+
+
+def reference_orbit_x(
+    kind: str,
+    center_re: str,
+    center_im: str,
+    zoom_log10: float,
+    max_iter: int,
+    c_re: float = 0.0,
+    c_im: float = 0.0,
+) -> OrbitX:
+    """reference_orbit's samples and, for T2, its small samples in floatexp (the same
+    cached orbit)."""
+    entry = _orbit_entry(kind, center_re, center_im, zoom_log10, max_iter, c_re, c_im)
+    samples = entry.prefix(max_iter)
+    bits = working_bits(center_re, center_im, zoom_log10)
+    rows = [row for row in entry.small if row[0] < len(samples)]
+    re = [floatexp.from_fixed(row[1], bits) for row in rows]
+    im = [floatexp.from_fixed(row[2], bits) for row in rows]
+    small = SmallSamples(
+        np.array([row[0] for row in rows], dtype=np.int64),
+        np.array([x[0] for x in re], dtype=np.float64),
+        np.array([x[1] for x in re], dtype=np.int64),
+        np.array([x[0] for x in im], dtype=np.float64),
+        np.array([x[1] for x in im], dtype=np.int64),
+    )
+    return OrbitX(samples, small)
+
+
+def _orbit_entry(
+    kind: str,
+    center_re: str,
+    center_im: str,
+    zoom_log10: float,
+    max_iter: int,
+    c_re: float,
+    c_im: float,
+) -> _Entry:
     if kind not in ("mandelbrot", "julia", "burning_ship"):
         raise ValueError(f"unknown reference orbit kind: {kind!r}")
     if max_iter < 1:
@@ -127,7 +193,7 @@ def reference_orbit(
         if start is not None:
             _CACHE.move_to_end(key)
             if start.covers(max_iter):
-                return start.prefix(max_iter)
+                return start
 
     integer = _integer_type()
     if start is None:
@@ -140,11 +206,17 @@ def reference_orbit(
         if existing is None or len(existing.orbit) < len(computed.orbit):
             _CACHE[key] = computed  # else another thread stored a longer one
         _CACHE.move_to_end(key)
-        total = sum(entry.orbit.nbytes for entry in _CACHE.values())
+        total = sum(_entry_bytes(entry) for entry in _CACHE.values())
         while len(_CACHE) > _KEEP_RECENT and (len(_CACHE) > CACHE_ENTRIES or total > CACHE_BYTES):
             _, oldest = _CACHE.popitem(last=False)
-            total -= oldest.orbit.nbytes
-    return computed.prefix(max_iter)
+            total -= _entry_bytes(oldest)
+    return computed
+
+
+def _entry_bytes(entry: _Entry) -> int:
+    """What an orbit counts against CACHE_BYTES: 16 per sample, 40 per small sample (the
+    C# port's measure)."""
+    return int(entry.orbit.nbytes) + 40 * len(entry.small)
 
 
 def _integer_type() -> Callable[[int], Any]:
@@ -191,14 +263,19 @@ def _fresh(
         cr, ci = center_r, center_i
     # orbit[0] is Z0 itself, never escape-tested.
     first = complex(_to_double(zr, 1 << bits), _to_double(zi, 1 << bits))
-    return _run(kind, bits, zr, zi, cr, ci, [first], max_iter, integer)
+    small = [(0, zr, zi)] if _is_small(zr, zi, bits) else []
+    return _run(kind, bits, zr, zi, cr, ci, [first], max_iter, integer, small, 1)
 
 
 def _resume(
     kind: str, start: _Entry, bits: int, max_iter: int, integer: Callable[[int], Any]
 ) -> _Entry:
     steps = max_iter - (len(start.orbit) - 1)
-    tail = _run(kind, bits, start.zr, start.zi, start.cr, start.ci, [], steps, integer)
+    first = len(start.orbit)
+    small = list(start.small)
+    tail = _run(
+        kind, bits, start.zr, start.zi, start.cr, start.ci, [], steps, integer, small, first
+    )
     orbit = np.concatenate([start.orbit, tail.orbit])
     orbit.setflags(write=False)
     return dataclasses.replace(tail, orbit=orbit)
@@ -214,6 +291,8 @@ def _run(
     samples: list[complex],
     steps: int,
     integer: Callable[[int], Any],
+    small: list[tuple[int, int, int]] | None = None,
+    first_index: int = 1,
 ) -> _Entry:
     """Up to ``steps`` steps from Z = (zr0, zi0), appending each rounded sample and stopping
     after the first that trips the stopping rule -- ReferenceOrbit.Run in C#, operation for
@@ -232,6 +311,8 @@ def _run(
         return -((-product + half) >> bits)
 
     escaped = False
+    small = [] if small is None else small
+    index = first_index  # the index of the sample each step appends
     for _ in range(steps):
         next_r = mul(zr, zr) - mul(zi, zi) + cr
         if kind == "burning_ship":
@@ -241,13 +322,23 @@ def _run(
         zr, zi = next_r, next_i
         sr, si = _to_double(zr, scale), _to_double(zi, scale)
         samples.append(complex(sr, si))
+        if _is_small(zr, zi, bits):
+            small.append((index, int(zr), int(zi)))
+        index += 1
         # The escape test runs on the ROUNDED sample.
         if sr * sr + si * si > _ESCAPE_ABS2:
             escaped = True
             break
     orbit = np.array(samples, dtype=np.complex128)
     orbit.setflags(write=False)
-    return _Entry(orbit, escaped, int(zr), int(zi), int(cr), int(ci))
+    return _Entry(orbit, escaped, int(zr), int(zi), int(cr), int(ci), tuple(small))
+
+
+def _is_small(zr: Any, zi: Any, bits: int) -> bool:
+    """Z = 0, or binade(max(|Re|, |Im|)) < SMALL_BINADE or > LARGE_BINADE, from the exact
+    fixed point: the samples T2 steps through in floatexp."""
+    top = int(max(abs(zr), abs(zi)).bit_length())
+    return top == 0 or not SMALL_BINADE <= top - 1 - bits <= LARGE_BINADE
 
 
 def _to_double(value: Any, scale: int) -> float:

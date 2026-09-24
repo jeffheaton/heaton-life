@@ -244,6 +244,18 @@ namespace HeatonLife.Tests
             Assert.True(FractalEngine.ReferenceOnScreen(32, 48, at0034));
             Assert.False(FractalEngine.ReferenceOnScreen(48, 32, vp.WithReference("1e400", "0")));  // d = inf
         }
+
+        /// <summary>Past zoom 290 the comparison runs in floatexp: the same fractions give the same answers at zoom 1000.</summary>
+        [Fact]
+        public void ReferenceOnScreenAtT2()
+        {
+            var vp = new Viewport("0", "0", 1000.0);   // 4e-1000 is one frame width
+            Assert.True(FractalEngine.ReferenceOnScreen(48, 32, vp.WithReference("1.2e-1000", "-8e-1001")));     // (0.3, -0.2)
+            Assert.True(FractalEngine.ReferenceOnScreen(48, 32, vp.WithReference("-1.96e-1000", "1.32e-1000")));  // (-0.49, 0.33)
+            Assert.False(FractalEngine.ReferenceOnScreen(48, 32, vp.WithReference("2.04e-1000", "0")));          // (0.51, 0)
+            Assert.False(FractalEngine.ReferenceOnScreen(48, 32, vp.WithReference("0", "1.36e-1000")));          // (0, 0.34)
+            Assert.True(FractalEngine.ReferenceOnScreen(32, 48, vp.WithReference("0", "1.36e-1000")));
+        }
     }
 
     /// <summary>The cache half: it runs alone, like every test that asserts what the cache holds.</summary>
@@ -319,7 +331,8 @@ namespace HeatonLife.Tests
             int OrbitWork(string re, string im)
             {
                 var progress = new RenderProgress();
-                ReferenceOrbit.Compute(kind, re, im, zoom, maxIter, cRe, cIm, progress);
+                // A Julia frame's orbits run at twice its zoom (FractalEngine.OrbitZoom).
+                ReferenceOrbit.Compute(kind, re, im, FractalEngine.OrbitZoom(family == "julia", zoom), maxIter, cRe, cIm, progress);
                 return progress.OrbitTotal;
             }
             Assert.Equal(0, OrbitWork(refRe, refIm));                   // cached by the render

@@ -31,7 +31,7 @@ def test_center_places_come_from_the_frame() -> None:
     assert center_places(-1.5, (64, 48)) == 0 + 2 + 2  # never below zero
     assert center_places(0.0, (1, 1)) == 3
     assert center_places(14.0, (720, 1280)) == 14 + 4 + 2  # the height's digits
-    for bad in (300.5, -301.0, math.nan):
+    for bad in (9000.5, -301.0, math.nan):
         with pytest.raises(ValueError):
             center_places(bad, (64, 64))
 
@@ -168,10 +168,36 @@ def test_bad_inputs_are_refused() -> None:
             zoom_at(vp, 0.0, 1.0, (64, 64), bad)
     with pytest.raises(ValueError):
         pan(vp, 1.0, 1.0, (0, 64))
-    for bad_zoom in (301.0, -300.5):  # outside the pixel scale's domain, refused at once
+    for bad_zoom in (9001.0, -300.5):  # outside the zoom domain, refused at once
         with pytest.raises(ValueError):
             pan(vp, 1.0, 0.0, (64, 64), bad_zoom)
         with pytest.raises(ValueError):
             zoom_at(vp, 1.0, 0.0, (64, 64), bad_zoom)
     with pytest.raises(ValueError):
         pan(Viewport("0", "0", -300.0), 1e300, 0.0, (1, 1))  # the offset overflows
+
+
+def test_t2_pans_use_the_floatexp_offsets_a_render_gives() -> None:
+    """Past zoom 290 a pan's offset is pixels * ps rounded once to floatexp -- the value
+    engine.pixel_deltas_x gives that pixel -- so a click recenters exactly on the pixel a
+    T2 render drew, and the center is printed at the frame's places."""
+    from fractions import Fraction
+
+    from heaton_life.core import decimal_text
+    from heaton_life.fractal.engine import pixel_deltas_x
+
+    size = (8, 6)
+    vp = Viewport("-1.25", "0.0", 700.0)
+    moved = pan(vp, 2.5, -1.5, size)  # the pixel at column 6.5 - 4 = 2.5, row 1 - 3 + 0.5
+    dc = pixel_deltas_x(size, vp)
+    k = 1 * 8 + 6  # row 1, column 6
+    want_re = Fraction(dc.rm[k]) * Fraction(2) ** int(dc.re[k])
+    want_im = Fraction(dc.im[k]) * Fraction(2) ** int(dc.ie[k])
+    places = center_places(700.0, size)
+    got_re = Fraction(decimal_text.positional(moved.center_re)) + Fraction(125, 100)
+    got_im = Fraction(decimal_text.positional(moved.center_im))
+    assert abs(got_re - want_re) <= Fraction(1, 2 * 10**places)
+    assert abs(got_im - want_im) <= Fraction(1, 2 * 10**places)
+    assert len(moved.center_re.split(".")[1]) == places
+    back = pixel_delta(vp, moved, size)
+    assert abs(back[0] - 2.5) < 1e-3 and abs(back[1] + 1.5) < 1e-3

@@ -11,6 +11,9 @@ namespace HeatonLife
     /// (<see cref="CenterPlaces"/>) — never by the center's digits or the orbit's bits —
     /// so repeating a pan at one zoom never changes the orbit's working precision.
     ///
+    /// Past zoom 290 (T2) the offsets are pixels·ps rounded once to floatexp, the render's
+    /// own pixel deltas there (spec/deep-zoom.md "Pixel deltas at T2").
+    ///
     /// Pixel offsets are in pixels of a width × height frame from its center: dx to the
     /// right, dy DOWN (the row direction of spec/fractals.md "Pixel mapping"), fractional
     /// allowed. A move whose offsets are both exactly zero keeps the center strings, so a
@@ -56,10 +59,9 @@ namespace HeatonLife
             RequireFinite(dx, nameof(dx));
             RequireFinite(dy, nameof(dy));
             int places = CenterPlaces(zoomLog10, width, height);
-            double ps = FractalEngine.PixelScale(width, viewport);
-            double offsetRe = dx * ps;
-            double offsetIm = -dy * ps;
-            return Moved(viewport, ExactOffset(offsetRe), ExactOffset(offsetIm), zoomLog10, places);
+            RequireZoom(viewport.ZoomLog10);
+            return Moved(
+                viewport, Offset(dx, width, viewport.ZoomLog10), Offset(-dy, width, viewport.ZoomLog10), zoomLog10, places);
         }
 
         /// <summary>
@@ -76,10 +78,10 @@ namespace HeatonLife
             RequireFinite(dx, nameof(dx));
             RequireFinite(dy, nameof(dy));
             int places = CenterPlaces(zoomLog10, width, height);
-            double ps0 = FractalEngine.PixelScale(width, viewport);
-            double ps1 = FractalEngine.PixelScale(width, zoomLog10);
-            Rational shiftRe = ExactOffset(dx * ps0) - ExactOffset(dx * ps1);
-            Rational shiftIm = ExactOffset(-dy * ps0) - ExactOffset(-dy * ps1);
+            double zoom0 = viewport.ZoomLog10;
+            RequireZoom(zoom0);
+            Rational shiftRe = Offset(dx, width, zoom0) - Offset(dx, width, zoomLog10);
+            Rational shiftIm = Offset(-dy, width, zoom0) - Offset(-dy, width, zoomLog10);
             return Moved(viewport, shiftRe, shiftIm, zoomLog10, places);
         }
 
@@ -97,7 +99,8 @@ namespace HeatonLife
             if (to == null)
                 throw new ArgumentNullException(nameof(to));
             RequireFrame(width, height);
-            Rational ps = Rational.Of(FractalEngine.PixelScale(width, from));
+            RequireZoom(from.ZoomLog10);
+            Rational ps = Scale(width, from.ZoomLog10);
             Rational across = (Rational.Of(to.CenterRe) - Rational.Of(from.CenterRe)) / ps;
             Rational down = (Rational.Of(from.CenterIm) - Rational.Of(to.CenterIm)) / ps;
             return (across.ToDouble(), down.ToDouble());
@@ -140,6 +143,24 @@ namespace HeatonLife
             return DecimalText.FormatScaled(scaled.Sign < 0 ? -whole : whole, places);
         }
 
+        /// <summary>The exact pixel scale a render of this frame uses: the double at T0 and T1, the floatexp at T2.</summary>
+        private static Rational Scale(int width, double zoomLog10) =>
+            zoomLog10 <= FractalEngine.T1MaxZoom
+                ? Rational.Of(FractalEngine.PixelScale(width, zoomLog10))
+                : Rational.Of(FractalEngine.PixelScaleX(width, zoomLog10));
+
+        /// <summary>
+        /// The exact offset a render gives a point <paramref name="pixels"/> from the center:
+        /// fl(pixels·ps) at T0 and T1, pixels·ps rounded once to floatexp at T2.
+        /// </summary>
+        private static Rational Offset(double pixels, int width, double zoomLog10)
+        {
+            if (zoomLog10 <= FractalEngine.T1MaxZoom)
+                return ExactOffset(pixels * FractalEngine.PixelScale(width, zoomLog10));
+            FloatExp ps = FractalEngine.PixelScaleX(width, zoomLog10);
+            return Rational.Of(FloatExp.Normalize(pixels * ps.M, ps.E));
+        }
+
         private static Rational ExactOffset(double offset)
         {
             if (double.IsNaN(offset) || double.IsInfinity(offset))
@@ -153,12 +174,13 @@ namespace HeatonLife
                 throw new ArgumentOutOfRangeException(nameof(width), $"frame must be at least 1x1, got {width}x{height}");
         }
 
-        /// <summary>A zoom the pixel scale can take: finite, |z| &lt;= 300 (spec/pow10.md's domain).</summary>
+        /// <summary>A zoom the pixel scale can take: finite, within [-300, <see cref="FractalEngine.T2MaxZoom"/>].</summary>
         private static void RequireZoom(double zoomLog10)
         {
             RequireFinite(zoomLog10, nameof(zoomLog10));
-            if (Math.Abs(zoomLog10) > 300.0)
-                throw new ArgumentOutOfRangeException(nameof(zoomLog10), $"zoom must lie within [-300, 300], got {zoomLog10}");
+            if (zoomLog10 < -300.0 || zoomLog10 > FractalEngine.T2MaxZoom)
+                throw new ArgumentOutOfRangeException(
+                    nameof(zoomLog10), $"zoom must lie within [-300, {FractalEngine.T2MaxZoom:g}], got {zoomLog10}");
         }
 
         private static void RequireFinite(double value, string name)
@@ -189,6 +211,17 @@ namespace HeatonLife
                 return netExponent >= 0
                     ? new Rational(signed * BigInteger.Pow(10, netExponent), BigInteger.One)
                     : new Rational(signed, BigInteger.Pow(10, -netExponent));
+            }
+
+            /// <summary>The exact value of a floatexp: m × 2^e.</summary>
+            internal static Rational Of(FloatExp value)
+            {
+                Rational m = Of(value.M);
+                if (value.IsZero || value.E == 0)
+                    return m;
+                return value.E > 0
+                    ? new Rational(m.Numerator << (int)value.E, m.Denominator)
+                    : new Rational(m.Numerator, m.Denominator << (int)-value.E);
             }
 
             /// <summary>The exact value of a finite double: mantissa × 2^exponent.</summary>

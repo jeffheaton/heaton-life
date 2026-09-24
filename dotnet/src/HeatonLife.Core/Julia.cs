@@ -22,6 +22,8 @@ namespace HeatonLife
                 throw new ArgumentException("max_iter must be positive");
             if (workers < 1)
                 throw new ArgumentException("workers must be positive");
+            if (double.IsNaN(escapeRadius * escapeRadius) || double.IsInfinity(escapeRadius * escapeRadius))
+                throw new ArgumentException($"escape_radius squared must be finite, got {escapeRadius}");   // |z|² > R² could never fire
             CRe = cRe;
             CIm = cIm;
             MaxIter = maxIter;
@@ -48,9 +50,10 @@ namespace HeatonLife
         /// <summary>
         /// T1 (perturbation + rebasing) escape counts against a precomputed reference orbit
         /// for the viewport's reference point (Julia orbit: same c, z0 = <see cref="Viewport.OrbitCenterRe"/>,
-        /// the center unless the viewport names another). The critical orbit
-        /// rebased pixels restart on is computed here (<see cref="ReferenceOrbit.JuliaCritical"/>).
-        /// Zoom &lt;= 1e290.
+        /// the center unless the viewport names another), computed at twice the viewport's
+        /// zoom (spec/deep-zoom.md "Reference orbit": a Julia orbit's precision is that of
+        /// <c>2 · ZoomLog10</c>). The critical orbit rebased pixels restart on is computed
+        /// here (<see cref="ReferenceOrbit.JuliaCritical"/>). Zoom &lt;= 1e290.
         /// </summary>
         public void Iterations(
             int width, int height, Viewport viewport, double[] orbitRe, double[] orbitIm, int[] counts)
@@ -67,9 +70,9 @@ namespace HeatonLife
 
         /// <summary>
         /// T1 escape counts against precomputed reference AND critical orbits — the
-        /// replay path for a stored vector, needing no bignum at all. The critical orbit
-        /// (z0 = 0, same c, precision from the zoom) is where rebased pixels restart
-        /// (spec/deep-zoom.md "Rebasing"); it must begin at 0. Zoom &lt;= 1e290.
+        /// replay path for a stored vector, needing no bignum at all. Both orbits run at
+        /// twice the viewport's zoom. The critical orbit (z0 = 0, same c) is where rebased
+        /// pixels restart (spec/deep-zoom.md "Rebasing"); it must begin at 0. Zoom &lt;= 1e290.
         /// </summary>
         public void Iterations(
             int width, int height, Viewport viewport, double[] orbitRe, double[] orbitIm,
@@ -205,8 +208,8 @@ namespace HeatonLife
         /// <summary>Whether this family has a distance estimate: yes (spec/fractals.md "Distance estimate").</summary>
         public bool SupportsDistance => true;
 
-        /// <summary>The deepest zoom this family renders: the T1 ceiling (spec/fractals.md "Tiering").</summary>
-        public double MaxZoomLog10 => FractalEngine.T1MaxZoom;
+        /// <summary>The deepest zoom this family renders: the T2 ceiling (spec/fractals.md "Tiering").</summary>
+        public double MaxZoomLog10 => FractalEngine.T2MaxZoom;
 
         /// <summary>Smooth-colored field in [0,1] (Field protocol); interior is 0. ε tier.</summary>
         public double[] Render(int width, int height, Viewport viewport)
@@ -242,14 +245,24 @@ namespace HeatonLife
                 throw new ArgumentException($"expected {width * height} smooth values, got {mu.Length}");
             progress?.Reset();
             // Zoom picks the tier, not orbit presence (spec/deep-zoom.md).
-            bool t1 = FractalEngine.IsPerturbationTier(viewport);
+            FractalTier tier = FractalEngine.TierFor(viewport, MaxZoomLog10, "Julia");
+            if (tier == FractalTier.T2)
+            {
+                if (orbitRe != null || criticalRe != null)
+                    throw new ArgumentException("a T2 frame computes its own orbits and small samples; no replay");
+                ComputeT2(width, height, viewport, counts, mu, progress, cancellationToken, status, distance, null);
+                return;
+            }
+            bool t1 = tier == FractalTier.T1;
             if (t1 && orbitRe == null)
             {
                 // Deep zoom with no orbit handed in: make one. spec/deep-zoom.md
                 // sanctions BigInteger fixed point for exactly this, and until it
                 // existed the only reachable T1 render was a replay of a vector.
+                // Twice the frame's precision (FractalEngine.OrbitZoom).
                 (orbitRe, orbitIm) = ReferenceOrbit.Compute(
-                    ReferenceOrbit.Kind.Julia, viewport.OrbitCenterRe, viewport.OrbitCenterIm, viewport.ZoomLog10, MaxIter,
+                    ReferenceOrbit.Kind.Julia, viewport.OrbitCenterRe, viewport.OrbitCenterIm,
+                    FractalEngine.OrbitZoom(true, viewport.ZoomLog10), MaxIter,
                     CRe, CIm, progress, cancellationToken, whole: true);
             }
             if (t1 && criticalRe == null)
@@ -258,8 +271,8 @@ namespace HeatonLife
                 // pixel at index 0 of an orbit that must begin at 0) needs the
                 // critical orbit under the same c (spec/deep-zoom.md "Rebasing").
                 (criticalRe, criticalIm) = ReferenceOrbit.Compute(
-                    ReferenceOrbit.Kind.Julia, "0", "0", viewport.ZoomLog10, MaxIter, CRe, CIm, progress, cancellationToken,
-                    whole: true);
+                    ReferenceOrbit.Kind.Julia, "0", "0", FractalEngine.OrbitZoom(true, viewport.ZoomLog10), MaxIter,
+                    CRe, CIm, progress, cancellationToken, whole: true);
             }
             if (t1 && (orbitRe!.Length == 0 || orbitIm!.Length != orbitRe.Length))
                 throw new ArgumentException("the reference orbit must be two equal-length, non-empty arrays");
@@ -314,6 +327,60 @@ namespace HeatonLife
                         mu[y * width + x] = FractalEngine.SmoothMu(count, fr, fi, logR);
                     if (distance != null)
                         distance[y * width + x] = FractalEngine.DistanceEstimate(count, fr, fi, fdr, fdi);
+                }
+            }
+
+            FractalEngine.ForRows(height, Workers, Row, progress, cancellationToken);
+        }
+
+        /// <summary>
+        /// The T2 path (spec/deep-zoom.md "T2"): the orbit and its small samples, floatexp
+        /// pixel deltas, and <see cref="PerturbationT2"/> per pixel. BLA does not run at T2
+        /// yet; statuses are Escaped or Exhausted.
+        /// </summary>
+        private void ComputeT2(
+            int width, int height, Viewport viewport, int[] counts, double[]? mu, RenderProgress? progress,
+            CancellationToken cancellationToken, byte[]? status, double[]? distance, int[]? blaApplications)
+        {
+            PerturbationT2.Orbit orbit, rebase;
+            double zoom = FractalEngine.OrbitZoom(true, viewport.ZoomLog10);   // twice the frame's precision
+            var (re, im, small) = ReferenceOrbit.ComputeX(
+                ReferenceOrbit.Kind.Julia, viewport.OrbitCenterRe, viewport.OrbitCenterIm, zoom, MaxIter,
+                CRe, CIm, progress, cancellationToken);
+            orbit = new PerturbationT2.Orbit(re, im, small);
+            var (wre, wim, wsmall) = ReferenceOrbit.ComputeX(
+                ReferenceOrbit.Kind.Julia, "0", "0", zoom, MaxIter, CRe, CIm, progress, cancellationToken);
+            rebase = new PerturbationT2.Orbit(wre, wim, wsmall);
+            FloatExp ps = FractalEngine.PixelScaleX(width, viewport.ZoomLog10);
+            bool offCenter = viewport.HasReference;
+            FloatExp dRe = offCenter ? DecimalText.DifferenceX(viewport.CenterRe, viewport.ReferenceRe!) : FloatExp.Zero;
+            FloatExp dIm = offCenter ? DecimalText.DifferenceX(viewport.CenterIm, viewport.ReferenceIm!) : FloatExp.Zero;
+            double logR = Math.Log(EscapeRadius);
+            bool track = distance != null;
+            void Row(int y)
+            {
+                FloatExp oy = FractalEngine.OffsetImX(y, height, ps);
+                if (offCenter)
+                    oy = FloatExp.Add(dIm, oy);
+                for (int x = 0; x < width; x++)
+                {
+                    FloatExp ox = FractalEngine.OffsetReX(x, width, ps);
+                    if (offCenter)
+                        ox = FloatExp.Add(dRe, ox);
+                    int count = PerturbationT2.Perturb(
+                        orbit, rebase, ox, oy, FloatExp.Zero, FloatExp.Zero, MaxIter, EscapeRadius,
+                        track, ps, FloatExp.Zero, FloatExp.Zero, false,
+                        out double fr, out double fi, out double dr, out double di, out long dE,
+                        cancellationToken);
+                    counts[y * width + x] = count;
+                    if (status != null)
+                        status[y * width + x] = (byte)(count > 0 ? PixelStatus.Escaped : PixelStatus.Exhausted);
+                    if (mu != null)
+                        mu[y * width + x] = FractalEngine.SmoothMu(count, fr, fi, logR);
+                    if (distance != null)
+                        distance[y * width + x] = PerturbationT2.DistanceEstimate(count, fr, fi, dr, di, dE);
+                    if (blaApplications != null)
+                        blaApplications[y * width + x] = 0;
                 }
             }
 

@@ -3,7 +3,7 @@
 A host that pans, recenters on a click, or zooms about the cursor moves a viewport's
 decimal center by a pixel offset. Doing that in float64, or in C# `decimal` (28
 places), runs out of digits long before the renderer does ([deep-zoom.md](deep-zoom.md)
-goes to 1e290). Printing "enough digits" naively has the opposite failure: a center
+goes to 1e9000). Printing "enough digits" naively has the opposite failure: a center
 printed with the bits its frame's orbit uses raises the next orbit's precision by the
 64 guard bits, every step. These operations are exact instead, and they print a moved
 center with a number of places set by the frame alone.
@@ -37,9 +37,13 @@ doubles. Python `heaton_life.fractal.navigation`, C# `HeatonLife.Navigation`.
   no motion that did not happen. **Any other move prints both components** at `P`,
   including one whose own shift is zero: a horizontal pan re-prints the imaginary part
   too, which is what keeps the orbit's precision at the zoom's own (below).
-- Zooms must lie in `[−300, 300]`, [pow10.md](pow10.md)'s domain: the current zoom, a
-  `pan`'s target zoom and `zoom_at`'s, and the argument of `P`. Anything else is an error,
-  before any arithmetic.
+- Zooms must lie in `[−300, 9000]` (T2's ceiling, [deep-zoom.md](deep-zoom.md#t2-perturbation-past-1e290)):
+  the current zoom, a `pan`'s target zoom and `zoom_at`'s, and the argument of `P`.
+  Anything else is an error, before any arithmetic.
+- **At T2** (zoom above 290) the pixel scale and every offset are the floatexp values a
+  T2 render uses: `ps` as [pow10.md](pow10.md#floatexp)'s `pow10x` gives it, and an
+  offset of `p` pixels as `normalize(p · ps.m, ps.e)`, one rounding. Their exact values
+  enter the sum. At zoom 290 and below nothing changes.
 - Centers that did not move keep whatever notation they arrived in. A host writing
   centers for a reader that takes no exponent (C# `decimal.Parse`) passes them through
   `positional` first.

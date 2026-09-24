@@ -13,12 +13,14 @@ from collections.abc import Callable
 import numpy as np
 from numpy.typing import NDArray
 
-from heaton_life.core import decimal_text
-from heaton_life.core.pow10 import pow10
+from heaton_life.core import decimal_text, floatexp
+from heaton_life.core.pow10 import pow10, pow10x
 from heaton_life.core.viewport import Viewport
+from heaton_life.fractal.perturbation_t2 import XPair
 
 T0_MAX_ZOOM = 12.0  # beyond this, float64 pixel spacing collapses -> perturbation
-T1_MAX_ZOOM = 290.0  # beyond this, float64 pixel *deltas* underflow -> future floatexp
+T1_MAX_ZOOM = 290.0  # beyond this, float64 pixel *deltas* underflow -> T2 (floatexp deltas)
+T2_MAX_ZOOM = 9000.0  # the deepest T2 frame (centers stay within the 10,000-digit grammar)
 BASE_SPAN = 4.0
 
 ComplexArray = NDArray[np.complex128]
@@ -26,10 +28,23 @@ FloatArray = NDArray[np.float64]
 IntArray = NDArray[np.int32]
 
 
+def orbit_zoom(kind: str, zoom_log10: float) -> float:
+    """The zoom whose precision rule a perturbation orbit runs at, T1 and T2 alike
+    (spec/deep-zoom.md "Reference orbit"): the frame's own for Mandelbrot and the Burning
+    Ship, twice it for Julia. A Julia reference that passes the critical point at the
+    frame's scale squares the pixels' differences to ~ps^2, which an orbit rounded at the
+    frame's own 2^-F cannot resolve (Mandelbrot's delta_c keeps them at ps). Once;
+    repeated passes at sub-frame scales would need more."""
+    return 2.0 * zoom_log10 if kind == "julia" else zoom_log10
+
+
 def tier_of(zoom_log10: float) -> str:
     """The tier a zoom selects (spec/fractals.md "Tiering"): "T0" through 1e12, "T1"
-    through 1e290, "T2" beyond -- reserved for floatexp, so rendering there raises today.
-    What a family can render is its own ``max_zoom_log10`` (Newton stops at T0)."""
+    through 1e290, "T2" beyond (floatexp deltas). What a family can render is its own
+    ``max_zoom_log10`` (Newton stops at T0, the Burning Ship at T1, the others at
+    T2_MAX_ZOOM). A zoom that is not finite raises."""
+    if not math.isfinite(zoom_log10):
+        raise ValueError(f"zoom_log10 must be finite, got {zoom_log10!r}")
     if zoom_log10 <= T0_MAX_ZOOM:
         return "T0"
     return "T1" if zoom_log10 <= T1_MAX_ZOOM else "T2"
@@ -51,6 +66,43 @@ def scale_at(width: int, zoom_log10: float) -> float:
     """pixel_scale for a frame ``width`` pixels wide at ``zoom_log10`` -- the one
     expression every consumer shares, so a navigation step and a render agree."""
     return (BASE_SPAN / width) * pow10(-zoom_log10)
+
+
+def pixel_scale_x(size: tuple[int, int], viewport: Viewport) -> floatexp.X:
+    """pixel_scale as floatexp (spec/deep-zoom.md "T2"): (4/W) times pow10x's mantissa,
+    one rounding, over pow10x's exponent -- equal to pixel_scale wherever that is normal."""
+    width, _ = size
+    return scale_at_x(width, viewport.zoom_log10)
+
+
+def scale_at_x(width: int, zoom_log10: float) -> floatexp.X:
+    """scale_at as floatexp: (4/W) times pow10x's mantissa, one rounding, over its exponent."""
+    mantissa, exponent = pow10x(-zoom_log10)
+    return floatexp.normalize((BASE_SPAN / width) * mantissa, exponent)
+
+
+def pixel_deltas_x(size: tuple[int, int], viewport: Viewport) -> XPair:
+    """pixel_deltas as floatexp per component: offset * ps, one rounding each (the same
+    values pixel_deltas gives wherever those are normal), plus the exact off-center offset
+    rounded to floatexp and added once."""
+    width, height = size
+    ps_m, ps_e = pixel_scale_x(size, viewport)
+    xs = np.arange(width, dtype=np.float64) + 0.5 - width / 2.0
+    ys = np.arange(height, dtype=np.float64) + 0.5 - height / 2.0
+    xr, xe = floatexp.vnormalize(xs * ps_m, np.full(width, ps_e, dtype=np.int64))
+    yr, ye = floatexp.vnormalize(-(ys * ps_m), np.full(height, ps_e, dtype=np.int64))
+    rm = np.broadcast_to(xr[None, :], (height, width)).ravel().copy()
+    re = np.broadcast_to(xe[None, :], (height, width)).ravel().copy()
+    im = np.broadcast_to(yr[:, None], (height, width)).ravel().copy()
+    ie = np.broadcast_to(ye[:, None], (height, width)).ravel().copy()
+    if viewport.has_reference:
+        assert viewport.reference_re is not None and viewport.reference_im is not None
+        dr = decimal_text.difference_x(viewport.center_re, viewport.reference_re)
+        di = decimal_text.difference_x(viewport.center_im, viewport.reference_im)
+        n = rm.size
+        rm, re = floatexp.vadd(np.full(n, dr[0]), np.full(n, dr[1], dtype=np.int64), rm, re)
+        im, ie = floatexp.vadd(np.full(n, di[0]), np.full(n, di[1], dtype=np.int64), im, ie)
+    return XPair(rm, re, im, ie)
 
 
 def pixel_offsets(size: tuple[int, int], viewport: Viewport) -> ComplexArray:
@@ -100,10 +152,20 @@ def reference_on_screen(size: tuple[int, int], viewport: Viewport) -> bool:
     """Whether the viewport's reference lies within its frame -- the suggested rule for
     keeping a reference while panning (True when there is none). Advisory: output is
     defined for any reference."""
+    if viewport.reference_re is None or viewport.reference_im is None:
+        return True
     width, height = size
-    ps = pixel_scale(size, viewport)
-    d = reference_offset(viewport)
-    return abs(d.real) <= width / 2.0 * ps and abs(d.imag) <= height / 2.0 * ps
+    # In floatexp at every tier (spec/deep-zoom.md "Off-center reference"): the same answer
+    # as the float64 comparison wherever those values are normal, and defined at T2.
+    ps = pixel_scale_x(size, viewport)
+    half_w = floatexp.mul(floatexp.from_double(width / 2.0), ps)
+    half_h = floatexp.mul(floatexp.from_double(height / 2.0), ps)
+    d_re = decimal_text.difference_x(viewport.center_re, viewport.reference_re)
+    d_im = decimal_text.difference_x(viewport.center_im, viewport.reference_im)
+    return (
+        floatexp.compare((abs(d_re[0]), d_re[1]), half_w) <= 0
+        and floatexp.compare((abs(d_im[0]), d_im[1]), half_h) <= 0
+    )
 
 
 def pixel_grid(size: tuple[int, int], viewport: Viewport) -> ComplexArray:
@@ -265,6 +327,24 @@ def distance_estimate(
         si = di * s
         value = ((np.sqrt(m2) * (0.5 * np.log(m2))) / np.sqrt(sr * sr + si * si)) * s
     de[escaped] = np.where(a == 0.0, np.inf, np.where(finite, value, 0.0))
+    return de
+
+
+def distance_estimate_t2(
+    counts: IntArray,
+    final: ComplexArray,
+    final_dr: FloatArray,
+    final_di: FloatArray,
+    d_exponent: NDArray[np.int64],
+) -> FloatArray:
+    """distance_estimate for a T2 derivative d = (dr, di) * 2^d_exponent: the T1 formula on
+    (dr, di), then that value / 2^d_exponent rounded once (floatexp.to_double) -- +inf, 0
+    and NaN as distance_estimate gives them."""
+    de = distance_estimate(counts, final, final_dr, final_di)
+    scale = np.isfinite(de) & (de != 0.0)
+    if scale.any():
+        m, e = floatexp.vnormalize(de[scale], -d_exponent[scale])
+        de[scale] = floatexp.vto_double(m, e)
     return de
 
 

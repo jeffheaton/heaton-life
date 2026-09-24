@@ -16,8 +16,14 @@ namespace HeatonLife
         /// <summary>Beyond this, float64 pixel spacing collapses — perturbation takes over.</summary>
         public const double T0MaxZoom = 12.0;
 
-        /// <summary>Beyond this, float64 pixel *deltas* underflow — future floatexp tier.</summary>
+        /// <summary>Beyond this, float64 pixel *deltas* underflow — the floatexp tier T2 takes over.</summary>
         public const double T1MaxZoom = 290.0;
+
+        /// <summary>
+        /// The deepest T2 frame (centers stay within the 10,000-digit grammar). A host should
+        /// read a family's MaxZoomLog10, not this constant: the Burning Ship stops at T1.
+        /// </summary>
+        public static readonly double T2MaxZoom = 9000.0;   // not const: hosts read it at run time
 
         public const double BaseSpan = 4.0;
 
@@ -46,9 +52,17 @@ namespace HeatonLife
         /// </summary>
         public static bool ReferenceOnScreen(int width, int height, Viewport viewport)
         {
-            double ps = PixelScale(width, viewport);
-            return Math.Abs(viewport.ReferenceOffsetRe) <= width / 2.0 * ps
-                && Math.Abs(viewport.ReferenceOffsetIm) <= height / 2.0 * ps;
+            if (!viewport.HasReference)
+                return true;
+            // In floatexp at every tier: the float64 comparison's answer wherever those values
+            // are normal, and defined at T2 (spec/deep-zoom.md "Off-center reference").
+            FloatExp ps = PixelScaleX(width, viewport.ZoomLog10);
+            FloatExp halfW = FloatExp.Mul(FloatExp.FromDouble(width / 2.0), ps);
+            FloatExp halfH = FloatExp.Mul(FloatExp.FromDouble(height / 2.0), ps);
+            FloatExp dRe = DecimalText.DifferenceX(viewport.CenterRe, viewport.ReferenceRe!);
+            FloatExp dIm = DecimalText.DifferenceX(viewport.CenterIm, viewport.ReferenceIm!);
+            return FloatExp.Compare(dRe.M < 0.0 ? dRe.Neg() : dRe, halfW) <= 0
+                && FloatExp.Compare(dIm.M < 0.0 ? dIm.Neg() : dIm, halfH) <= 0;
         }
 
         /// <summary>Per-pixel real offset from the viewport center for column x.</summary>
@@ -76,11 +90,14 @@ namespace HeatonLife
         /// The tier a zoom selects (spec/fractals.md "Tiering"), for a host deciding what
         /// a frame will cost before it asks: <see cref="FractalTier.T0"/> through 1e12,
         /// <see cref="FractalTier.T1"/> through 1e290, and <see cref="FractalTier.T2"/>
-        /// beyond — reserved for floatexp, so rendering there throws today. What a family
-        /// can render is its own MaxZoomLog10 (Newton stops at T0).
+        /// beyond (floatexp deltas). What a family can render is its own MaxZoomLog10
+        /// (Newton stops at T0, the Burning Ship at T1, Mandelbrot and Julia at
+        /// <see cref="T2MaxZoom"/>). A zoom that is not finite throws.
         /// </summary>
         public static FractalTier TierOf(double zoomLog10)
         {
+            if (double.IsNaN(zoomLog10) || double.IsInfinity(zoomLog10))
+                throw new ArgumentException($"zoom_log10 must be finite, got {zoomLog10}");
             if (zoomLog10 <= T0MaxZoom)
                 return FractalTier.T0;
             return zoomLog10 <= T1MaxZoom ? FractalTier.T1 : FractalTier.T2;
@@ -100,31 +117,46 @@ namespace HeatonLife
                     "this family has no perturbation tier");
         }
 
-        internal static void RequireT1(Viewport viewport)
+        /// <summary>
+        /// The zoom whose precision rule a perturbation orbit runs at, T1 and T2 alike
+        /// (spec/deep-zoom.md "Reference orbit"): the frame's own for Mandelbrot and the
+        /// Burning Ship, twice it for Julia, whose reference can pass the critical point at
+        /// the frame's scale and square the pixels' differences to ~ps².
+        /// </summary>
+        internal static double OrbitZoom(bool julia, double zoomLog10) => julia ? 2.0 * zoomLog10 : zoomLog10;
+
+        /// <summary>
+        /// The tier that renders this viewport for a family whose deepest zoom is
+        /// <paramref name="maxZoomLog10"/>; throws past it, or on a zoom that is not finite.
+        /// </summary>
+        internal static FractalTier TierFor(Viewport viewport, double maxZoomLog10, string family)
         {
-            if (viewport.ZoomLog10 > T1MaxZoom)
+            FractalTier tier = TierOf(viewport.ZoomLog10);
+            if (viewport.ZoomLog10 > maxZoomLog10)
                 throw new ArgumentException(
-                    $"zoom 1e{viewport.ZoomLog10:g} exceeds the float64 perturbation tier " +
-                    $"(~1e{T1MaxZoom:g}); the floatexp tier is not implemented yet");
+                    $"zoom 1e{viewport.ZoomLog10:g} exceeds {family}'s deepest zoom (1e{maxZoomLog10:g})");
+            return tier;
         }
 
         /// <summary>
-        /// Which tier renders this viewport. spec/deep-zoom.md: "Tier selection is
-        /// automatic and invisible to the caller" — so the ZOOM decides, never
-        /// whether the caller happened to hand us an orbit. Selecting on orbit
-        /// presence let two callers with the same viewport get different counts,
-        /// because T0 and T1 legitimately disagree on a few percent of boundary
-        /// pixels (spec/fractals.md "Tiering"). At or below the T0 ceiling a
-        /// supplied orbit is therefore ignored, which is exactly what the Python
-        /// reference does — it tiers on zoom alone and takes no orbit at all.
+        /// <see cref="PixelScale(int, double)"/> as floatexp (spec/deep-zoom.md "T2"): (4/W)
+        /// times pow10x's mantissa, one rounding, over its exponent — equal to PixelScale
+        /// wherever that is normal.
         /// </summary>
-        internal static bool IsPerturbationTier(Viewport viewport)
+        internal static FloatExp PixelScaleX(int width, double zoomLog10)
         {
-            if (viewport.ZoomLog10 <= T0MaxZoom)
-                return false;
-            RequireT1(viewport);
-            return true;
+            var (mantissa, exponent) = Pow10.ComputeX(-zoomLog10);
+            return FloatExp.Normalize((BaseSpan / width) * mantissa, exponent);
         }
+
+        /// <summary>Column x's real offset as floatexp: offset·ps, one rounding (OffsetRe wherever that is normal).</summary>
+        internal static FloatExp OffsetReX(int x, int width, FloatExp pixelScale) =>
+            FloatExp.Normalize((x + 0.5 - width / 2.0) * pixelScale.M, pixelScale.E);
+
+        /// <summary>Row y's imaginary offset as floatexp; im decreases downward.</summary>
+        internal static FloatExp OffsetImX(int y, int height, FloatExp pixelScale) =>
+            FloatExp.Normalize(-((y + 0.5 - height / 2.0) * pixelScale.M), pixelScale.E);
+
 
         /// <summary>
         /// The reference's complex multiply, (a+bi)(c+di): NumPy's SIMD kernels contract
@@ -575,7 +607,7 @@ namespace HeatonLife
         /// <summary>Float64 perturbation against a bignum reference orbit (zoom &lt;= 1e290).</summary>
         T1 = 1,
 
-        /// <summary>Beyond 1e290: reserved for floatexp; no family renders it yet.</summary>
+        /// <summary>Beyond 1e290: floatexp perturbation (spec/deep-zoom.md "T2"), Mandelbrot and Julia to 1e9000.</summary>
         T2 = 2,
     }
 }

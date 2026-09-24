@@ -23,6 +23,7 @@ from heaton_life.core.bignum import from_double, parse_fixed, working_bits
 from heaton_life.core.viewport import Viewport
 from heaton_life.fractal import BurningShip, Julia, Mandelbrot
 from heaton_life.fractal.engine import (
+    orbit_zoom,
     pixel_deltas,
     pixel_offsets,
     pixel_scale,
@@ -295,9 +296,10 @@ def test_each_family_iterates_the_references_orbit(
     reference = (_moved(center[0], "0.3", int(zoom)), _moved(center[1], "-0.2", int(zoom)))
     bignum.clear_cache()
     make().iterations((16, 16), Viewport(*center, zoom, *reference))
-    expected: list[tuple[object, ...]] = [(name, *reference, working_bits(*reference, zoom))]
+    at = orbit_zoom(name, zoom)  # a Julia frame's orbits run at twice its zoom
+    expected: list[tuple[object, ...]] = [(name, *reference, working_bits(*reference, at))]
     if name == "julia":
-        expected.append(("julia", "0", "0", working_bits("0", "0", zoom)))
+        expected.append(("julia", "0", "0", working_bits("0", "0", at)))
     assert calls == expected
     bignum.clear_cache()
 
@@ -316,6 +318,21 @@ def test_reference_on_screen_measures_width_and_height() -> None:
     assert reference_on_screen((32, 48), at("0", "0.34"))
     assert not reference_on_screen((48, 32), vp.with_reference("1e400", "0"))  # d = inf
     assert pixel_scale((48, 32), vp) == pixel_scale((48, 48), vp)  # framing is by width
+
+
+def test_reference_on_screen_at_t2() -> None:
+    """Past zoom 290 the comparison runs in floatexp (spec/deep-zoom.md "Off-center
+    reference"): the same fractions of the frame give the same answers at zoom 1000."""
+    vp = Viewport("0", "0", 1000.0)
+
+    def at(re: str, im: str) -> Viewport:  # 4e-1000 is one frame width
+        return vp.with_reference(re, im)
+
+    assert reference_on_screen((48, 32), at("1.2e-1000", "-8e-1001"))  # (0.3, -0.2)
+    assert reference_on_screen((48, 32), at("-1.96e-1000", "1.32e-1000"))  # (-0.49, 0.33)
+    assert not reference_on_screen((48, 32), at("2.04e-1000", "0"))  # (0.51, 0)
+    assert not reference_on_screen((48, 32), at("0", "1.36e-1000"))  # (0, 0.34)
+    assert reference_on_screen((32, 48), at("0", "1.36e-1000"))
 
 
 def _direct(

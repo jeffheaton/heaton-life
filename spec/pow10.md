@@ -18,9 +18,10 @@ arithmetic. (`mpmath` ground-truth comparison belongs in each suite's tests.)
 
 ## Domain
 
-Finite `x` with `|x| ≤ 300` (the tier ceiling in [deep-zoom.md](deep-zoom.md)
+Finite `x` with `|x| ≤ 300` (the T1 ceiling in [deep-zoom.md](deep-zoom.md)
 is zoom 290; results stay comfortably inside float64 normal range, so no
 subnormal handling exists). Out-of-domain input is a caller error — raise.
+Beyond it, `pow10x` ("Floatexp" below) returns the same bits as a floatexp.
 
 ## Algorithm
 
@@ -77,10 +78,31 @@ Steps, given float64 `x`:
    (|x| ≤ 300 keeps n within ±997, so the result is always normal.)
 ```
 
+## Floatexp
+
+`pow10x(x)` returns `10^x` as a [floatexp](floatexp.md) `(m, n)`: steps 1-6 as above, then
+`m = mant · 2^−52` (exact: in `[1, 2)`) and the exponent `n`, with no step 7. Its domain is
+finite `|x| ≤ 10,000`. Where `pow10` is defined, `m · 2^n` is `pow10(x)` exactly, bit for
+bit. The algorithm's error stays near `|x| · 2^−129` relative, about `2^−115` at 10,000;
+the contract is sameness, and both ports run the same integers. Its consumers are T2's pixel scale
+([deep-zoom.md](deep-zoom.md#t2-perturbation-past-1e290)) and, through it, T2's pixel
+deltas, `reference_on_screen` (at every tier) and navigation past zoom 290.
+
+Known answers (mantissa bit pattern, exponent):
+
+```
+pow10x(  -300.5) = (0x3FFB1B75833790CA,    -999)
+pow10x(  -320.0) = (0x3FFFA01712E8F047,   -1064)
+pow10x(  -996.5) = (0x3FF9F7C393991048,   -3311)
+pow10x( -9000.0) = (0x3FF90E9C5BFAC594,  -29898)
+pow10x( 10000.0) = (0x3FF3709D450AAD7E,   33219)
+```
+
 ## Use sites
 
 The **only** sanctioned consumer in the conformance surface is the fractal
-pixel scale ([fractals.md](fractals.md) "Pixel mapping"):
+pixel scale ([fractals.md](fractals.md) "Pixel mapping"; past zoom 290 its floatexp
+form through `pow10x`, above):
 
 ```
 ps = (4.0 / width) · pow10(−zoom_log10)

@@ -102,7 +102,9 @@ namespace HeatonLife
         /// <summary>
         /// Z0..ZK for Z -&gt; Z^2 + c with Z0 = the center and c fixed
         /// (spec/fractals.md: Julia's reference uses the center's orbit under the
-        /// same c, and its delta carries no dc term).
+        /// same c, and its delta carries no dc term). <paramref name="zoomLog10"/> sets the
+        /// precision: a Julia frame's orbits run at twice its zoom (spec/deep-zoom.md
+        /// "Reference orbit"), so pass <c>2 · viewport.ZoomLog10</c> for a frame's orbit.
         /// </summary>
         public static (double[] Re, double[] Im) Julia(
             string centerRe, string centerIm, double zoomLog10, int maxIter, double cRe, double cIm) =>
@@ -112,7 +114,7 @@ namespace HeatonLife
         /// W0..WK for W -&gt; W^2 + c with W0 = 0: the Julia critical orbit, which a
         /// rebased Julia pixel restarts on (spec/deep-zoom.md "Rebasing"). Exactly
         /// <see cref="Julia(string,string,double,int,double,double)"/> at center "0",
-        /// so it shares that method's precision (set by the zoom) and cache.
+        /// so it shares that method's precision (set by the zoom: twice the frame's) and cache.
         /// </summary>
         public static (double[] Re, double[] Im) JuliaCritical(
             double cRe, double cIm, double zoomLog10, int maxIter) =>
@@ -148,8 +150,25 @@ namespace HeatonLife
         /// <summary>Orbits the cache keeps whatever its byte cap: the two a Julia frame needs.</summary>
         private const int KeepRecent = 2;
 
-        /// <summary>How often (in iterations) a running orbit polls for cancellation and reports progress.</summary>
+        /// <summary>How often (in iterations) a running orbit polls for cancellation and reports progress, up to 1024 bits.</summary>
         internal const int PollInterval = 4096;
+
+        /// <summary>
+        /// The poll interval for an orbit at <paramref name="bits"/>: PollInterval up to 1024
+        /// bits, then halved while the work between polls (iterations × bits², a step's
+        /// multiplies) exceeds PollInterval steps at 1024 bits — every 4 iterations at zoom
+        /// 9000's ~30,000 bits, every one at a Julia frame's ~60,000, so a cancel lands
+        /// promptly at any depth.
+        /// </summary>
+        internal static int PollIntervalFor(int bits)
+        {
+            long work = (long)bits * bits;
+            long budget = PollInterval * 1024L * 1024L;
+            int interval = PollInterval;
+            while (interval > 1 && interval * work > budget)
+                interval >>= 1;
+            return interval;
+        }
 
         /// <summary>
         /// Most bytes of orbit samples the cache holds (16 per sample; default 64 MB).
@@ -204,10 +223,88 @@ namespace HeatonLife
             public override int GetHashCode() => HashCode.Combine(KindOf, Re, Im, Bits, CRe, CIm);
         }
 
-        /// <summary>A cached orbit: its samples and the exact state to resume from.</summary>
+        /// <summary>A sample is small when binade(max(|Re|, |Im|)) is below this (or it is 0).</summary>
+        internal const int SmallBinade = -400;
+
+        /// <summary>... or above this: a huge Julia center, whose doubles T2 could overflow.</summary>
+        internal const int LargeBinade = 900;
+
+        /// <summary>
+        /// An orbit's small samples in floatexp (spec/deep-zoom.md "T2"): the indices where
+        /// Z = 0 or binade(max(|Re Z|, |Im Z|)) &lt; −400, and each component there rounded once
+        /// from the fixed point — the values T2 steps through exactly.
+        /// </summary>
+        internal sealed class SmallSamples
+        {
+            internal static readonly SmallSamples Empty = new SmallSamples(new int[0], new FloatExp[0], new FloatExp[0]);
+
+            internal SmallSamples(int[] index, FloatExp[] re, FloatExp[] im)
+            {
+                Index = index;
+                Re = re;
+                Im = im;
+            }
+
+            internal int[] Index { get; }
+            internal FloatExp[] Re { get; }
+            internal FloatExp[] Im { get; }
+
+            /// <summary>The entries with an index below <paramref name="length"/>.</summary>
+            internal SmallSamples Prefix(int length)
+            {
+                int keep = 0;
+                while (keep < Index.Length && Index[keep] < length)
+                    keep++;
+                if (keep == Index.Length)
+                    return this;
+                var index = new int[keep];
+                var re = new FloatExp[keep];
+                var im = new FloatExp[keep];
+                Array.Copy(Index, index, keep);
+                Array.Copy(Re, re, keep);
+                Array.Copy(Im, im, keep);
+                return new SmallSamples(index, re, im);
+            }
+        }
+
+        /// <summary>Accumulates small samples as an orbit runs.</summary>
+        private sealed class SmallBuilder
+        {
+            private readonly List<int> _index = new List<int>();
+            private readonly List<FloatExp> _re = new List<FloatExp>(), _im = new List<FloatExp>();
+
+            internal SmallBuilder(SmallSamples? start)
+            {
+                if (start == null)
+                    return;
+                _index.AddRange(start.Index);
+                _re.AddRange(start.Re);
+                _im.AddRange(start.Im);
+            }
+
+            internal void Add(int index, BigInteger zr, BigInteger zi, int bits)
+            {
+                _index.Add(index);
+                _re.Add(FloatExp.FromFixed(zr, bits));
+                _im.Add(FloatExp.FromFixed(zi, bits));
+            }
+
+            internal SmallSamples Build() => new SmallSamples(_index.ToArray(), _re.ToArray(), _im.ToArray());
+        }
+
+        /// <summary>Z = 0, or binade(max(|Re|, |Im|)) &lt; −400, from the exact fixed point.</summary>
+        private static bool IsSmall(BigInteger zr, BigInteger zi, int bits)
+        {
+            int top = Math.Max(DecimalText.BitLength(BigInteger.Abs(zr)), DecimalText.BitLength(BigInteger.Abs(zi)));
+            return top == 0 || top - 1 - bits < SmallBinade || top - 1 - bits > LargeBinade;
+        }
+
+        /// <summary>A cached orbit: its samples, its small samples, and the exact state to resume from.</summary>
         private sealed class Entry
         {
-            internal Entry(double[] re, double[] im, bool escaped, BigInteger zr, BigInteger zi, BigInteger cr, BigInteger ci)
+            internal Entry(
+                double[] re, double[] im, bool escaped, BigInteger zr, BigInteger zi, BigInteger cr, BigInteger ci,
+                SmallSamples small)
             {
                 Re = re;
                 Im = im;
@@ -216,10 +313,14 @@ namespace HeatonLife
                 Zi = zi;
                 Cr = cr;
                 Ci = ci;
+                Small = small;
             }
 
             internal double[] Re { get; }
             internal double[] Im { get; }
+
+            /// <summary>The small samples in floatexp (T2).</summary>
+            internal SmallSamples Small { get; }
 
             /// <summary>The last sample tripped the stopping rule: longer requests get the same orbit.</summary>
             internal bool Escaped { get; }
@@ -230,7 +331,7 @@ namespace HeatonLife
             internal BigInteger Cr { get; }
             internal BigInteger Ci { get; }
 
-            internal long Bytes => Re.Length * 16L;
+            internal long Bytes => Re.Length * 16L + Small.Index.Length * 40L;
 
             /// <summary>Whether this orbit answers a request for <paramref name="maxIter"/> without iterating.</summary>
             internal bool Covers(int maxIter) => Escaped || Re.Length - 1 >= maxIter;
@@ -248,6 +349,26 @@ namespace HeatonLife
             Kind kind, string centerRe, string centerIm, double zoomLog10, int maxIter,
             double cRe, double cIm, RenderProgress? progress = null, CancellationToken cancellationToken = default,
             bool whole = false)
+        {
+            var entry = ComputeEntry(kind, centerRe, centerIm, zoomLog10, maxIter, cRe, cIm, progress, cancellationToken);
+            return whole ? (entry.Re, entry.Im) : Prefix(entry, maxIter);
+        }
+
+        /// <summary>
+        /// The orbit for T2 (spec/deep-zoom.md "T2"): its samples (the whole cached orbit, as
+        /// <see cref="Compute"/> with whole: true gives them) and its small samples in floatexp.
+        /// </summary>
+        internal static (double[] Re, double[] Im, SmallSamples Small) ComputeX(
+            Kind kind, string centerRe, string centerIm, double zoomLog10, int maxIter,
+            double cRe, double cIm, RenderProgress? progress = null, CancellationToken cancellationToken = default)
+        {
+            var entry = ComputeEntry(kind, centerRe, centerIm, zoomLog10, maxIter, cRe, cIm, progress, cancellationToken);
+            return (entry.Re, entry.Im, entry.Small);
+        }
+
+        private static Entry ComputeEntry(
+            Kind kind, string centerRe, string centerIm, double zoomLog10, int maxIter,
+            double cRe, double cIm, RenderProgress? progress, CancellationToken cancellationToken)
         {
             if (centerRe == null)
                 throw new ArgumentNullException(nameof(centerRe));
@@ -268,7 +389,7 @@ namespace HeatonLife
                 }
             }
             if (start != null && start.Covers(maxIter))
-                return whole ? (start.Re, start.Im) : Prefix(start, maxIter);
+                return start;
 
             // A canceled run throws out of here, so nothing partial is ever cached.
             Entry computed = start == null
@@ -282,7 +403,7 @@ namespace HeatonLife
                 Touch(key);
                 Evict();
             }
-            return whole ? (computed.Re, computed.Im) : Prefix(computed, maxIter);
+            return computed;
         }
 
         /// <summary>
@@ -368,6 +489,15 @@ namespace HeatonLife
             return (entry.Re, entry.Im);
         }
 
+        /// <summary>Tests: <see cref="ComputeUncached"/>'s small samples, on either path.</summary>
+        internal static SmallSamples ComputeUncachedSmall(
+            Kind kind, string centerRe, string centerIm, double zoomLog10, int maxIter,
+            double cRe, double cIm, bool bigInteger)
+        {
+            int bits = WorkingBits(centerRe, centerIm, zoomLog10);
+            return Fresh(kind, centerRe, centerIm, bits, maxIter, cRe, cIm, null, CancellationToken.None, bigInteger).Small;
+        }
+
         private static Entry Fresh(
             Kind kind, string centerRe, string centerIm, int bits, int maxIter,
             double cRe, double cIm, RenderProgress? progress, CancellationToken cancellationToken,
@@ -393,7 +523,10 @@ namespace HeatonLife
             // orbit[0] is Z0 itself, never escape-tested, exactly as the Python reference.
             var samples = new Samples(Math.Min(maxIter + 1, PollInterval), maxIter + 1);
             samples.Add(ToDouble(zr, bits), ToDouble(zi, bits));
-            return Run(kind, bits, zr, zi, cr, ci, samples, maxIter, progress, cancellationToken, bigInteger);
+            var small = new SmallBuilder(null);
+            if (IsSmall(zr, zi, bits))
+                small.Add(0, zr, zi, bits);
+            return Run(kind, bits, zr, zi, cr, ci, samples, maxIter, progress, cancellationToken, small, 1, bigInteger);
         }
 
         private static Entry Resume(
@@ -401,7 +534,7 @@ namespace HeatonLife
         {
             var samples = new Samples(start.Re, start.Im, maxIter + 1);
             return Run(kind, bits, start.Zr, start.Zi, start.Cr, start.Ci, samples,
-                maxIter - (start.Re.Length - 1), progress, cancellationToken);
+                maxIter - (start.Re.Length - 1), progress, cancellationToken, new SmallBuilder(start.Small), start.Re.Length);
         }
 
         /// <summary>
@@ -413,10 +546,11 @@ namespace HeatonLife
         private static Entry Run(
             Kind kind, int bits, BigInteger zr, BigInteger zi, BigInteger cr, BigInteger ci,
             Samples samples, int steps, RenderProgress? progress, CancellationToken cancellationToken,
-            bool bigInteger = false)
+            SmallBuilder small, int firstIndex, bool bigInteger = false)
         {
             progress?.BeginOrbit(steps);
             cancellationToken.ThrowIfCancellationRequested();
+            int pollMask = PollIntervalFor(bits) - 1;
             bool escaped = false;
             bool burningShip = kind == Kind.BurningShip;
             int executed = 0;
@@ -425,13 +559,18 @@ namespace HeatonLife
                 var orbit = new FixedOrbit(burningShip, bits, zr, zi, cr, ci);
                 for (int i = 0; i < steps; i++)
                 {
-                    if ((i & (PollInterval - 1)) == 0 && i > 0)
+                    if ((i & pollMask) == 0 && i > 0)
                         Poll(i, progress, cancellationToken);
                     orbit.Step();
                     executed++;
                     double sr = orbit.SampleRe;
                     double si = orbit.SampleIm;
                     samples.Add(sr, si);
+                    if (orbit.IsSmall)
+                    {
+                        var (sre, sim) = orbit.State;
+                        small.Add(firstIndex + i, sre, sim, bits);
+                    }
                     // The escape test runs on the ROUNDED sample, like the reference.
                     if (sr * sr + si * si > EscapeAbs2)
                     {
@@ -445,7 +584,7 @@ namespace HeatonLife
             {
                 for (int i = 0; i < steps; i++)
                 {
-                    if ((i & (PollInterval - 1)) == 0 && i > 0)
+                    if ((i & pollMask) == 0 && i > 0)
                         Poll(i, progress, cancellationToken);
                     BigInteger nextR = Mul(zr, zr, bits) - Mul(zi, zi, bits) + cr;
                     BigInteger nextI = burningShip
@@ -457,6 +596,8 @@ namespace HeatonLife
                     double sr = ToDouble(zr, bits);
                     double si = ToDouble(zi, bits);
                     samples.Add(sr, si);
+                    if (IsSmall(zr, zi, bits))
+                        small.Add(firstIndex + i, zr, zi, bits);
                     if (sr * sr + si * si > EscapeAbs2)
                     {
                         escaped = true;
@@ -466,7 +607,7 @@ namespace HeatonLife
             }
             progress?.OrbitAt(executed);
             var (re, im) = samples.ToArrays();
-            return new Entry(re, im, escaped, zr, zi, cr, ci);
+            return new Entry(re, im, escaped, zr, zi, cr, ci, small.Build());
         }
 
         private static void Poll(int completed, RenderProgress? progress, CancellationToken cancellationToken)

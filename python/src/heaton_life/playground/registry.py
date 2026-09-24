@@ -30,6 +30,7 @@ from heaton_life.core import decimal_text
 from heaton_life.core.neighbors import Boundary
 from heaton_life.core.params import Params
 from heaton_life.core.protocols import Simulation
+from heaton_life.fractal import BurningShip, Julia, Mandelbrot, Newton
 from heaton_life.lenia import (
     AsymptoticLenia,
     ClassicLenia,
@@ -594,7 +595,7 @@ def _register_fractal(
     make_field: Callable[[Params], object],
     default_cmap: str,
     presets: dict[str, dict[str, object]],
-    zoom_max: float = 290.0,
+    zoom_max: float,
 ) -> None:
     def build(params: Params) -> Simulation:
         return FractalSim(params, make_field, zoom_max=zoom_max)  # type: ignore[arg-type]
@@ -642,6 +643,7 @@ _register_fractal(
             "max_iter": 5000,
         },
     },
+    zoom_max=Mandelbrot.max_zoom_log10,
 )
 
 _register_fractal(
@@ -655,6 +657,7 @@ _register_fractal(
         "Douady rabbit": {"c_re": -0.123, "c_im": 0.745},
         "Dendrite (c = i)": {"c_re": 0.0, "c_im": 1.0},
     },
+    zoom_max=Julia.max_zoom_log10,
 )
 
 _register_fractal(
@@ -672,6 +675,7 @@ _register_fractal(
             "max_iter": 1500,
         },
     },
+    zoom_max=BurningShip.max_zoom_log10,
 )
 
 _register_fractal(
@@ -684,7 +688,7 @@ _register_fractal(
         "z³ − 1": {},
         "z⁵ − 1": {"degree": 5},
     },
-    zoom_max=12.0,
+    zoom_max=Newton.max_zoom_log10,
 )
 
 

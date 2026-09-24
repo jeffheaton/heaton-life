@@ -26,15 +26,19 @@ class _RenderField(Protocol):
 
 
 _VIEW_META = {"label": "Center Re"}
-_ZOOM_META = {"min": -2.0, "max": 290.0, "step": 0.5, "label": "Zoom (log10)"}
-_ITER_META = {"min": 16, "max": 200000}
+_ITER_META = {"min": 16, "max": 1_000_000}  # T2 frames can need hundreds of thousands
+
+
+def _zoom_meta(family: type[Any]) -> dict[str, Any]:
+    """The zoom slider reaches the family's deepest zoom (spec/fractals.md "Tiering")."""
+    return {"min": -2.0, "max": family.max_zoom_log10, "step": 0.5, "label": "Zoom (log10)"}
 
 
 @dataclasses.dataclass(frozen=True)
 class MandelbrotSimParams(Params):
     center_re: str = dataclasses.field(default="-0.5", metadata=_VIEW_META)
     center_im: str = dataclasses.field(default="0.0", metadata={"label": "Center Im"})
-    zoom_log10: float = dataclasses.field(default=0.0, metadata=_ZOOM_META)
+    zoom_log10: float = dataclasses.field(default=0.0, metadata=_zoom_meta(Mandelbrot))
     max_iter: int = dataclasses.field(default=500, metadata=_ITER_META)
     width: int = dataclasses.field(default=384, metadata={"min": 64, "max": 1024})
     height: int = dataclasses.field(default=384, metadata={"min": 64, "max": 1024})
@@ -50,7 +54,7 @@ class JuliaSimParams(Params):
     )
     center_re: str = dataclasses.field(default="0.0", metadata=_VIEW_META)
     center_im: str = dataclasses.field(default="0.0", metadata={"label": "Center Im"})
-    zoom_log10: float = dataclasses.field(default=0.0, metadata=_ZOOM_META)
+    zoom_log10: float = dataclasses.field(default=0.0, metadata=_zoom_meta(Julia))
     max_iter: int = dataclasses.field(default=500, metadata=_ITER_META)
     width: int = dataclasses.field(default=384, metadata={"min": 64, "max": 1024})
     height: int = dataclasses.field(default=384, metadata={"min": 64, "max": 1024})
@@ -60,7 +64,7 @@ class JuliaSimParams(Params):
 class BurningShipSimParams(Params):
     center_re: str = dataclasses.field(default="-0.5", metadata=_VIEW_META)
     center_im: str = dataclasses.field(default="-0.5", metadata={"label": "Center Im"})
-    zoom_log10: float = dataclasses.field(default=-0.2, metadata=_ZOOM_META)
+    zoom_log10: float = dataclasses.field(default=-0.2, metadata=_zoom_meta(BurningShip))
     max_iter: int = dataclasses.field(default=500, metadata=_ITER_META)
     width: int = dataclasses.field(default=384, metadata={"min": 64, "max": 1024})
     height: int = dataclasses.field(default=384, metadata={"min": 64, "max": 1024})
@@ -71,9 +75,7 @@ class NewtonSimParams(Params):
     degree: int = dataclasses.field(default=3, metadata={"min": 2, "max": 8})
     center_re: str = dataclasses.field(default="0.0", metadata=_VIEW_META)
     center_im: str = dataclasses.field(default="0.0", metadata={"label": "Center Im"})
-    zoom_log10: float = dataclasses.field(
-        default=-0.1, metadata={"min": -2.0, "max": 12.0, "step": 0.5, "label": "Zoom (log10)"}
-    )
+    zoom_log10: float = dataclasses.field(default=-0.1, metadata=_zoom_meta(Newton))
     max_iter: int = dataclasses.field(default=60, metadata={"min": 8, "max": 500})
     width: int = dataclasses.field(default=384, metadata={"min": 64, "max": 1024})
     height: int = dataclasses.field(default=384, metadata={"min": 64, "max": 1024})
@@ -116,7 +118,7 @@ class FractalSim:
         params: Params,
         make_field: Callable[[Params], _RenderField],
         *,
-        zoom_max: float = 290.0,
+        zoom_max: float = Mandelbrot.max_zoom_log10,
     ) -> None:
         self.params = params
         self.zoom_max = zoom_max

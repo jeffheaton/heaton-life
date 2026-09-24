@@ -23,9 +23,9 @@ import dataclasses
 import math
 from fractions import Fraction
 
-from heaton_life.core import decimal_text
+from heaton_life.core import decimal_text, floatexp
 from heaton_life.core.viewport import Viewport
-from heaton_life.fractal.engine import scale_at
+from heaton_life.fractal.engine import T1_MAX_ZOOM, T2_MAX_ZOOM, scale_at, scale_at_x
 
 __all__ = ["center_places", "pan", "pixel_delta", "zoom_at"]
 
@@ -53,13 +53,11 @@ def pan(
     """
     width, _ = _frame(size)
     zoom = viewport.zoom_log10 if zoom_log10 is None else _zoom(zoom_log10)
-    ps = scale_at(width, viewport.zoom_log10)
-    offset_re = _finite(dx, "dx") * ps
-    offset_im = -_finite(dy, "dy") * ps
+    current = _zoom(viewport.zoom_log10)
     return _moved(
         viewport,
-        _exact_offset(offset_re),
-        _exact_offset(offset_im),
+        _offset(_finite(dx, "dx"), width, current),
+        _offset(-_finite(dy, "dy"), width, current),
         zoom,
         center_places(zoom, size),
     )
@@ -75,12 +73,11 @@ def zoom_at(
     """
     width, _ = _frame(size)
     zoom = _zoom(zoom_log10)
-    ps0 = scale_at(width, viewport.zoom_log10)
-    ps1 = scale_at(width, zoom)
+    current = _zoom(viewport.zoom_log10)
     dx = _finite(dx, "dx")
     dy = _finite(dy, "dy")
-    shift_re = _exact_offset(dx * ps0) - _exact_offset(dx * ps1)
-    shift_im = _exact_offset(-dy * ps0) - _exact_offset(-dy * ps1)
+    shift_re = _offset(dx, width, current) - _offset(dx, width, zoom)
+    shift_im = _offset(-dy, width, current) - _offset(-dy, width, zoom)
     return _moved(viewport, shift_re, shift_im, zoom, center_places(zoom, size))
 
 
@@ -90,7 +87,7 @@ def pixel_delta(frm: Viewport, to: Viewport, size: tuple[int, int]) -> tuple[flo
     scale, rounded once to float64 (ties to even; +-inf past the range; an exact zero,
     e.g. "0.1" against "0.10", is +0.0). ``to``'s zoom does not enter."""
     width, _ = _frame(size)
-    ps = Fraction(scale_at(width, frm.zoom_log10))
+    ps = _scale(width, _zoom(frm.zoom_log10))
     across = (_exact(to.center_re) - _exact(frm.center_re)) / ps
     down = (_exact(frm.center_im) - _exact(to.center_im)) / ps
     return _to_float(across), _to_float(down)
@@ -104,11 +101,33 @@ def _frame(size: tuple[int, int]) -> tuple[int, int]:
 
 
 def _zoom(value: float) -> float:
-    """A zoom the pixel scale can take: finite, |z| <= 300 (spec/pow10.md's domain)."""
+    """A zoom the pixel scale can take: finite, within [-300, T2_MAX_ZOOM]."""
     value = _finite(value, "zoom")
-    if abs(value) > 300.0:
-        raise ValueError(f"zoom must lie within [-300, 300], got {value!r}")
+    if not -300.0 <= value <= T2_MAX_ZOOM:
+        raise ValueError(f"zoom must lie within [-300, {T2_MAX_ZOOM:g}], got {value!r}")
     return value
+
+
+def _scale(width: int, zoom: float) -> Fraction:
+    """The exact pixel scale a render of this frame uses: the double at T0 and T1, the
+    floatexp at T2."""
+    if zoom <= T1_MAX_ZOOM:
+        return Fraction(scale_at(width, zoom))
+    return _fraction(scale_at_x(width, zoom))
+
+
+def _offset(pixels: float, width: int, zoom: float) -> Fraction:
+    """The exact offset a render gives a point ``pixels`` from the center: fl(pixels * ps)
+    at T0 and T1, pixels * ps rounded once to floatexp at T2 (engine.pixel_deltas_x)."""
+    if zoom <= T1_MAX_ZOOM:
+        return _exact_offset(pixels * scale_at(width, zoom))
+    ps_m, ps_e = scale_at_x(width, zoom)
+    return _fraction(floatexp.normalize(pixels * ps_m, ps_e))
+
+
+def _fraction(value: floatexp.X) -> Fraction:
+    mantissa, exponent = value
+    return Fraction(mantissa) * Fraction(2) ** exponent
 
 
 def _finite(value: float, name: str) -> float:

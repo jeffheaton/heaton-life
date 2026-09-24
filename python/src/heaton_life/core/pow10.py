@@ -22,23 +22,46 @@ _LOG2_10_Q128 = 1130393554869435518674010122299176348979
 _LN2_Q128 = 235865763225513294137944142764154484399
 
 
+POW10X_DOMAIN = 10_000.0  # pow10x: finite |x| <= this (T2 needs 9,000)
+
+
 def pow10(x: float) -> float:
     """10**x as float64 via the spec/pow10.md integer algorithm (bit-portable).
 
-    Domain: finite ``|x| <= 300`` (deep-zoom.md's tier ceiling is 290; results
+    Domain: finite ``|x| <= 300`` (deep-zoom.md's T1 ceiling is 290; results
     stay normal). Raises ``ValueError`` outside it.
     """
     if not math.isfinite(x) or abs(x) > 300.0:
         raise ValueError(f"pow10 domain is finite |x| <= 300, got {x!r}")
     if x == 0.0:
         return 1.0
+    mant, n = _mantissa_exponent(x)
+    # 7. Assemble the IEEE-754 double directly — no ldexp, no libm.
+    assembled = ((n + 1023) << 52) | (mant - (1 << 52))
+    result: float = struct.unpack("<d", struct.pack("<q", assembled))[0]
+    return result
 
+
+def pow10x(x: float) -> tuple[float, int]:
+    """10**x as floatexp (m, n): the same steps 1-6 as pow10, the 53-bit mantissa as
+    m = mant * 2^-52 in [1, 2) and the binary exponent n (spec/pow10.md "Floatexp").
+    Where pow10 is defined, m * 2^n is pow10(x) exactly. Domain: finite |x| <= 10,000."""
+    if not math.isfinite(x) or abs(x) > POW10X_DOMAIN:
+        raise ValueError(f"pow10x domain is finite |x| <= {POW10X_DOMAIN:g}, got {x!r}")
+    if x == 0.0:
+        return 1.0, 0
+    mant, n = _mantissa_exponent(x)
+    return math.ldexp(float(mant), -52), n  # exact: mant has 53 bits
+
+
+def _mantissa_exponent(x: float) -> tuple[int, int]:
+    """Steps 1-6: the 53-bit mantissa (in [2^52, 2^53)) and binary exponent of 10^x."""
     # 1. Exact decompose: x = m * 2**e, sign carried by m.
     bits = struct.unpack("<q", struct.pack("<d", x))[0]
     exp_field = (bits >> 52) & 0x7FF
     frac = bits & ((1 << 52) - 1)
     if exp_field == 0:
-        m, e = frac, -1074  # subnormal (|x| <= 300 never is, but exactness is free)
+        m, e = frac, -1074  # subnormal (never in the domain, but exactness is free)
     else:
         m, e = frac | (1 << 52), exp_field - 1075
     if bits < 0:
@@ -76,8 +99,4 @@ def pow10(x: float) -> float:
     if mant == 1 << 53:
         mant = 1 << 52
         n += 1
-
-    # 7. Assemble the IEEE-754 double directly — no ldexp, no libm.
-    assembled = ((n + 1023) << 52) | (mant - (1 << 52))
-    result: float = struct.unpack("<d", struct.pack("<q", assembled))[0]
-    return result
+    return mant, n

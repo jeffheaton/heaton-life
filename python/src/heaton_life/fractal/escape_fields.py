@@ -1,16 +1,19 @@
 """Mandelbrot, Julia, and Burning Ship fields: tiered escape-time rendering.
 
 Tier selection is automatic and invisible: T0 (direct float64) through zoom 1e12,
-T1 (perturbation + rebasing) through ~1e290, beyond raises until floatexp lands.
+T1 (perturbation + rebasing) through ~1e290, T2 (floatexp deltas) beyond, to each
+family's max_zoom_log10.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import math
 
 import numpy as np
+from numpy.typing import NDArray
 
-from heaton_life.core.bignum import reference_orbit
+from heaton_life.core.bignum import reference_orbit, reference_orbit_x
 from heaton_life.core.params import Params
 from heaton_life.core.viewport import Viewport
 from heaton_life.fractal.bla import build_table, frame_dc_bound, perturb_z2_bla
@@ -18,29 +21,36 @@ from heaton_life.fractal.engine import (
     CARDIOID_OR_BULB,
     ESCAPED,
     EXHAUSTED,
-    T0_MAX_ZOOM,
     T1_MAX_ZOOM,
+    T2_MAX_ZOOM,
     ComplexArray,
     FloatArray,
     IntArray,
     StatusArray,
     cardioid_or_bulb,
     distance_estimate,
+    distance_estimate_t2,
     escape_time,
     escape_time_distance,
     normalize_render,
+    orbit_zoom,
     pixel_deltas,
+    pixel_deltas_x,
     pixel_grid,
     pixel_scale,
+    pixel_scale_x,
     smooth_iterations,
+    tier_of,
 )
 from heaton_life.fractal.perturbation import (
     perturb_burning_ship,
     perturb_z2,
     perturb_z2_distance,
 )
+from heaton_life.fractal.perturbation_t2 import T2Result, XPair, perturb_t2
 
-Derivative = tuple[FloatArray, FloatArray]
+# The derivative at escape: (dr, di), or at T2 (dr, di, exponent) for d = (dr, di) 2^exponent.
+Derivative = tuple[FloatArray, FloatArray] | tuple[FloatArray, FloatArray, NDArray[np.int64]]
 # (counts, final z, status, derivative at escape, BLA applications); the last two only
 # when asked for (distance) or taken (BLA at T1).
 _Computed = tuple[IntArray, ComplexArray, StatusArray, Derivative | None, IntArray | None]
@@ -74,13 +84,16 @@ class EscapeFields:
 class _EscapeField:
     """Shared tiering + output logic; subclasses define the two tier paths."""
 
-    max_zoom_log10 = T1_MAX_ZOOM  # the deepest zoom these families render
+    max_zoom_log10 = T2_MAX_ZOOM  # the deepest zoom this family renders
     supports_distance = True  # a distance estimate needs an analytic map (not Burning Ship)
     supports_bla = False  # bivariate linear approximation at T1 (Mandelbrot only so far)
 
     def __init__(self, max_iter: int = 500, escape_radius: float = 1000.0) -> None:
         if max_iter < 1:
             raise ValueError("max_iter must be positive")
+        if not math.isfinite(escape_radius * escape_radius):
+            # |z|^2 > R^2 could never fire (spec/fractals.md "Counts convention")
+            raise ValueError(f"escape_radius squared must be finite, got {escape_radius!r}")
         self.max_iter = max_iter
         self.escape_radius = escape_radius
 
@@ -88,16 +101,20 @@ class _EscapeField:
         self, size: tuple[int, int], viewport: Viewport, distance: bool = False
     ) -> _Computed:
         zoom = viewport.zoom_log10
-        if zoom <= T0_MAX_ZOOM:
+        tier = tier_of(zoom)  # raises on a zoom that is not finite
+        if zoom > self.max_zoom_log10:
+            raise ValueError(
+                f"zoom 1e{zoom:g} exceeds {type(self).__name__}'s deepest zoom "
+                f"(1e{self.max_zoom_log10:g})"
+            )
+        if tier == "T0":
             return self._compute_t0(size, viewport, distance)
-        if zoom <= T1_MAX_ZOOM:
+        if tier == "T1":
             counts, final, derivative, applications = self._compute_t1(size, viewport, distance)
-            status = np.where(counts > 0, ESCAPED, EXHAUSTED).astype(np.int8)
-            return counts, final, status, derivative, applications
-        raise ValueError(
-            f"zoom 1e{zoom:g} exceeds the float64 perturbation tier (~1e{T1_MAX_ZOOM:g}); "
-            "the floatexp tier is not implemented yet"
-        )
+        else:
+            counts, final, derivative, applications = self._compute_t2(size, viewport, distance)
+        status = np.where(counts > 0, ESCAPED, EXHAUSTED).astype(np.int8)
+        return counts, final, status, derivative, applications
 
     def _compute_t0(
         self, size: tuple[int, int], viewport: Viewport, distance: bool = False
@@ -105,6 +122,11 @@ class _EscapeField:
         raise NotImplementedError
 
     def _compute_t1(
+        self, size: tuple[int, int], viewport: Viewport, distance: bool = False
+    ) -> _ComputedT1:
+        raise NotImplementedError
+
+    def _compute_t2(
         self, size: tuple[int, int], viewport: Viewport, distance: bool = False
     ) -> _ComputedT1:
         raise NotImplementedError
@@ -137,7 +159,10 @@ class _EscapeField:
         counts, final, statuses, derivative, applications = self._compute(size, viewport, distance)
         de = None
         if derivative is not None:
-            de = distance_estimate(counts, final, *derivative).reshape(height, width)
+            if len(derivative) == 3:
+                de = distance_estimate_t2(counts, final, *derivative).reshape(height, width)
+            else:
+                de = distance_estimate(counts, final, *derivative).reshape(height, width)
         mu = smooth_iterations(counts, final, self.escape_radius) if smooth else None
         return EscapeFields(
             counts=counts.reshape(height, width),
@@ -264,6 +289,29 @@ class Mandelbrot(_EscapeField):
             None,
         )
 
+    def _compute_t2(
+        self, size: tuple[int, int], viewport: Viewport, distance: bool = False
+    ) -> _ComputedT1:
+        # BLA does not run at T2 yet (spec/deep-zoom.md "T2"): the plain T2 loop.
+        orbit = reference_orbit_x(
+            "mandelbrot", *viewport.orbit_center, viewport.zoom_log10, self.max_iter
+        )
+        dc = pixel_deltas_x(size, viewport)
+        derivative = None
+        if distance:
+            derivative = (XPair.zeros(dc.rm.size), pixel_scale_x(size, viewport))
+        result = perturb_t2(
+            orbit, None, dc, self.max_iter, self.escape_radius, derivative=derivative
+        )
+        return _t2_output(result, distance)
+
+
+def _t2_output(result: T2Result, distance: bool) -> _ComputedT1:
+    derivative: Derivative | None = None
+    if distance:
+        derivative = (result.dr, result.di, result.d_exponent)
+    return result.counts, result.final, derivative, None
+
 
 @dataclasses.dataclass(frozen=True)
 class JuliaParams(Params):
@@ -301,10 +349,11 @@ class Julia(_EscapeField):
     def _compute_t1(
         self, size: tuple[int, int], viewport: Viewport, distance: bool = False
     ) -> _ComputedT1:
+        zoom = orbit_zoom("julia", viewport.zoom_log10)  # twice the frame's precision
         orbit = reference_orbit(
             "julia",
             *viewport.orbit_center,
-            viewport.zoom_log10,
+            zoom,
             self.max_iter,
             c_re=self.c.real,
             c_im=self.c.imag,
@@ -316,7 +365,7 @@ class Julia(_EscapeField):
             "julia",
             "0",
             "0",
-            viewport.zoom_log10,
+            zoom,
             self.max_iter,
             c_re=self.c.real,
             c_im=self.c.imag,
@@ -336,6 +385,39 @@ class Julia(_EscapeField):
             None,
         )
 
+    def _compute_t2(
+        self, size: tuple[int, int], viewport: Viewport, distance: bool = False
+    ) -> _ComputedT1:
+        zoom = orbit_zoom("julia", viewport.zoom_log10)  # twice the frame's precision
+        orbit = reference_orbit_x(
+            "julia", *viewport.orbit_center, zoom, self.max_iter, c_re=self.c.real, c_im=self.c.imag
+        )
+        critical = reference_orbit_x(
+            "julia", "0", "0", zoom, self.max_iter, c_re=self.c.real, c_im=self.c.imag
+        )
+        dz0 = pixel_deltas_x(size, viewport)
+        derivative = None
+        if distance:
+            ps_m, ps_e = pixel_scale_x(size, viewport)
+            n = dz0.rm.size
+            start = XPair(
+                np.full(n, ps_m),
+                np.full(n, ps_e, dtype=np.int64),
+                np.zeros(n),
+                np.zeros(n, dtype=np.int64),
+            )
+            derivative = (start, None)
+        result = perturb_t2(
+            orbit,
+            dz0,
+            None,
+            self.max_iter,
+            self.escape_radius,
+            rebase_orbit=critical,
+            derivative=derivative,
+        )
+        return _t2_output(result, distance)
+
 
 @dataclasses.dataclass(frozen=True)
 class BurningShipParams(Params):
@@ -347,6 +429,7 @@ class BurningShip(_EscapeField):
     """z <- (|Re z| + i |Im z|)^2 + c, c = pixel, z0 = 0."""
 
     supports_distance = False  # the folds make the map non-analytic
+    max_zoom_log10 = T1_MAX_ZOOM  # T2 needs per-component smallness for diffabs: not yet
 
     def _compute_t0(
         self, size: tuple[int, int], viewport: Viewport, distance: bool = False

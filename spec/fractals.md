@@ -31,7 +31,9 @@ Deep-zoom architecture (tiers, perturbation, rebasing): [deep-zoom.md](deep-zoom
 ## Counts convention
 
 `counts[i] = n`, the 1-based iteration at which |z| first exceeds `escape_radius`
-(default 1000); `−1` if it never does within `max_iter`. Smooth (presentation only):
+(default 1000); `−1` if it never does within `max_iter`. A field refuses an
+`escape_radius` whose square is not a finite double (past about `1.34e154`, or NaN):
+`|z|² > R²` could never fire, and every count would read `−1`. Smooth (presentation only):
 `mu = n + 1 − log2(log|z| / log R)`, then per-frame contrast stretching between the
 1st/99th escaped percentiles for display — deep frames cluster counts near
 `max_iter`, and an absolute mapping would render monochrome. `counts` is the
@@ -207,11 +209,18 @@ themselves.
 |---|---|---|
 | T0 | ≤ 12 | direct float64 |
 | T1 | ≤ 290 | perturbation + rebasing, reference index clamped to the last orbit sample |
-| T2 | > 290 | not implemented (raises); floatexp reserved |
+| T2 | ≤ 9000 | perturbation in rescaled float64, floatexp at small reference samples ([deep-zoom.md](deep-zoom.md#t2-perturbation-past-1e290)); Mandelbrot and Julia |
 
 A host can ask which tier a zoom selects before rendering (C# `FractalEngine.TierOf`,
-Python `tier_of`), and how deep a family goes (`MaxZoomLog10` / `max_zoom_log10`:
-1e290 for the escape-time fields, 1e12 for Newton).
+Python `tier_of`; a zoom that is not finite raises), and how deep a family goes
+(`MaxZoomLog10` / `max_zoom_log10`: 1e9000 for Mandelbrot and Julia, 1e290 for the
+Burning Ship, 1e12 for Newton). At T2 statuses are escaped or exhausted, and the distance
+estimate carries its derivative with its own exponent (deep-zoom.md "T2").
+
+At T2 the iteration policy's `auto_max_iter` is a floor, not an estimate: frames there
+need budgets near their minibrots' periods (hundreds of thousands to millions). A host
+that sees a frame come back all exhausted raises the budget (doubling, say) until
+something escapes.
 
 Determinism note: T1 counts are bit-stable given the reference orbit, and the orbit
 itself is pinned — both ports run one fixed-point arithmetic and produce
@@ -243,8 +252,9 @@ or stops the work and **never changes a completed frame's output**:
   not cached — a reference-orbit phase counting iterations first (Julia runs two, its
   reference orbit and then the critical orbit). Each render resets it, so one object can
   be reused frame after frame.
-- **Cancellation** (`CancellationToken`): checked before each row and every 4,096 orbit
-  iterations. A canceled render throws `OperationCanceledException` with its output
+- **Cancellation** (`CancellationToken`): checked before each row, every 4,096 orbit
+  iterations up to 1,024 bits of precision (proportionally more often above, down to
+  every iteration of a T2 Julia orbit), and every 2^16 iterations of a T2 pixel. A canceled render throws `OperationCanceledException` with its output
   buffers partly written; a canceled orbit is never cached.
 - **Caller buffers**: counts and raw smooth values `μ` (before normalization; 0 where
   interior) into the host's arrays, and the normalization into another pair — nothing
@@ -294,8 +304,17 @@ or stops the work and **never changes a completed frame's output**:
   orbit and the frame's `dc_bound`, level by level `ar, ai, br, bi, r`, compared value for
   value with every NaN equal to every NaN — build differences flip table bits on every
   frame but counts only on rare pixels.
+- A T2 case ([deep-zoom.md](deep-zoom.md#t2-perturbation-past-1e290), zoom past 290)
+  ships no orbit file: its orbits run to tens of thousands of bits. It carries
+  `"reference_small"` (and, for Julia, `"critical_small"`) =
+  `{ "length": N, "sha256": "…", "rows": [[index, re mantissa bits, re exponent, im mantissa bits, im exponent], …] }`:
+  the orbit's length, the SHA-256 of its samples as little-endian complex128, and its
+  small samples in floatexp. A runner regenerates each orbit at the family's orbit zoom
+  (twice the frame's for Julia) and checks all three, then renders the case itself.
+  Such cases carry `"spec_version": "0.10.0"`, and a Julia case's stored orbits at any
+  tier are its orbits at twice the frame's zoom.
 - Cases written from 2026-09-23 carry `"spec_version": "0.3.0"`, those with a reference
   `"0.4.0"` or later, those with a status `"0.6.0"` or later, those with a distance
-  `"0.7.0"` or later, those with BLA `"0.8.0"` (earlier ones keep `0.2.0`; [vectors/README.md](../vectors/README.md) lists
+  `"0.7.0"` or later, those with BLA `"0.8.0"`, those at T2 `"0.10.0"` (earlier ones keep `0.2.0`; [vectors/README.md](../vectors/README.md) lists
   what each adds). Versions compare numerically, component by component. Runners are
   strict: a key, output kind, codec or version they do not know fails the case.

@@ -22,7 +22,7 @@ Each family gets one page structured as:
 
 | Tier | Families | Test |
 |---|---|---|
-| Bit-exact | Life-like, Elementary, Cyclic, Wireworld, MergeLife (and its decoded rule table), fractal iteration counts (with or without BLA), their status, and Newton root indices, colormap LUTs and per-family frame indexing, patterns (RLE, transforms, stamp/extract), PNG grid I/O (decoded grids), evolve (objective statistics, operators, whole runs); pow10 via the known-answer bit patterns on its page; navigation (moved centers, pixel deltas); discovery (box periods, Newton's nucleus: its verdict, stop, counts and printed center); the iteration policy; fractal color given its inputs (stretch, depth phase, frequency, distance shading) and the phase lookup with its dither and cyclic palettes | byte-for-byte equality with the vector: states at each checkpoint step, or the one-shot output (float64 outputs by value, every NaN equal to every NaN) |
+| Bit-exact | Life-like, Elementary, Cyclic, Wireworld, MergeLife (and its decoded rule table), fractal iteration counts (with or without BLA), their status, and Newton root indices, colormap LUTs and per-family frame indexing, patterns (RLE, transforms, stamp/extract), PNG grid I/O (decoded grids), evolve (objective statistics, operators, whole runs); pow10 and floatexp via the known-answer bit patterns on their pages; the T2 loop on crafted states; navigation (moved centers, pixel deltas); discovery (box periods, Newton's nucleus: its verdict, stop, counts and printed center); the iteration policy; fractal color given its inputs (stretch, depth phase, frequency, distance shading) and the phase lookup with its dither and cyclic palettes | byte-for-byte equality with the vector: states at each checkpoint step, or the one-shot output (float64 outputs by value, every NaN equal to every NaN) |
 | ε-tolerance | Lenia ×3, Gray-Scott, Boids, smooth fractal coloring (the fractal render), the fractal distance estimate (relative: ε·|value|, its NaN, 0 and ±∞ exact), location framing (the zoom an imported location converts to, compared relatively: ε·max(1, |value|); its centers are exact), the atom size estimate (relative, its NaN exact) | max abs deviation ≤ the `epsilon` in the case's `params.json` (1e-6 for Lenia and boids, 1e-9 for Gray-Scott and the fractal render), or the output's `relative_epsilon` (1e-12 for the distance estimate and the atom size) |
 
 ## Conventions
@@ -36,6 +36,7 @@ Each family gets one page structured as:
 
 - [rng.md](rng.md) — pinned PCG32 algorithm, known-answer test, draw-order convention
 - [pow10.md](pow10.md) — pinned deterministic 10^x (the fractal pixel scale's power; libm `pow` is forbidden on bit-exact paths)
+- [floatexp.md](floatexp.md) — a float64 mantissa with an unbounded exponent: T2's numbers, every operation correctly rounded (bit-exact tier)
 - [lifelike.md](lifelike.md) — Life-like CA (bit-exact tier)
 - [elementary.md](elementary.md) — Wolfram elementary CA (bit-exact tier)
 - [cyclic.md](cyclic.md) — cyclic CA (bit-exact tier)
@@ -46,7 +47,7 @@ Each family gets one page structured as:
 - [boids.md](boids.md) — Reynolds flocking (ε tier, point-cloud state)
 - [evolve.md](evolve.md) — the MergeLife GA and paper objective (bit-exact tier: objective statistics, GA operators, and whole seeded runs replay across languages; vectors in `../vectors/evolve/`)
 - [fractals.md](fractals.md) — escape-time + Newton conventions, pixel mapping, vector schema
-- [deep-zoom.md](deep-zoom.md) — fractal precision architecture (perturbation + rebasing)
+- [deep-zoom.md](deep-zoom.md) — fractal precision architecture (perturbation + rebasing; T2 past 1e290 and its platform contract)
 - [locations.md](locations.md) — the framing conventions of heaton-life, Heaton Fractal, Kalles Fraktaler and Fraktaler-3, the conversions between them, and the importers for their files
 - [nucleus.md](nucleus.md) — discovery: the box period test, Newton's method for a minibrot's nucleus, and the atom size estimate (bit-exact tier, the size ε)
 - [navigation.md](navigation.md) — exact viewport arithmetic: pan, anchored zoom and pixel offsets on decimal centers, printed at the frame's places so the orbit's precision never ratchets (bit-exact tier)

@@ -22,6 +22,8 @@ namespace HeatonLife
             Workers = workers;
             if (maxIter < 1)
                 throw new ArgumentException("max_iter must be positive");
+            if (double.IsNaN(escapeRadius * escapeRadius) || double.IsInfinity(escapeRadius * escapeRadius))
+                throw new ArgumentException($"escape_radius squared must be finite, got {escapeRadius}");   // |z|² > R² could never fire
             MaxIter = maxIter;
             EscapeRadius = escapeRadius;
         }
@@ -189,7 +191,7 @@ namespace HeatonLife
                 throw new ArgumentException($"expected {width * height} smooth values, got {mu.Length}");
             progress?.Reset();
             // Zoom picks the tier, not orbit presence (spec/deep-zoom.md).
-            bool t1 = FractalEngine.IsPerturbationTier(viewport);
+            bool t1 = FractalEngine.TierFor(viewport, MaxZoomLog10, "BurningShip") != FractalTier.T0;
             if (t1 && orbitRe == null)
             {
                 // Deep zoom with no orbit handed in: make one. spec/deep-zoom.md

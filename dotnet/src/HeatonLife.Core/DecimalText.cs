@@ -169,6 +169,56 @@ namespace HeatonLife
         }
 
         /// <summary>
+        /// <paramref name="minuend"/> − <paramref name="subtrahend"/> as floatexp: the exact
+        /// difference of the digits rounded once to a 53-bit mantissa (ties to even), with no
+        /// exponent range limit — <see cref="Difference"/> for T2, where the off-center offset
+        /// lies far below float64 (spec/deep-zoom.md "T2"). The Python reference's
+        /// decimal_text.difference_x.
+        /// </summary>
+        internal static FloatExp DifferenceX(string minuend, string subtrahend)
+        {
+            Scan(minuend, out bool negA, out BigInteger a, out int expA);
+            Scan(subtrahend, out bool negB, out BigInteger b, out int expB);
+            int common = Math.Min(expA, expB);
+            if (negA)
+                a = -a;
+            if (negB)
+                b = -b;
+            BigInteger diff = a * BigInteger.Pow(10, expA - common) - b * BigInteger.Pow(10, expB - common);
+            if (diff.IsZero)
+                return FloatExp.Zero;
+            BigInteger numerator = BigInteger.Abs(diff) * (common >= 0 ? BigInteger.Pow(10, common) : BigInteger.One);
+            BigInteger denominator = common < 0 ? BigInteger.Pow(10, -common) : BigInteger.One;
+            // A 53-bit quotient: q = floor(value * 2^s) in [2^52, 2^53).
+            long s = 52 - (BitLength(numerator) - BitLength(denominator));
+            BigInteger q, r, den;
+            BigInteger low = BigInteger.One << 52, high = BigInteger.One << 53;
+            while (true)
+            {
+                BigInteger num = s >= 0 ? numerator << (int)s : numerator;
+                den = s >= 0 ? denominator : denominator << (int)(-s);
+                q = BigInteger.DivRem(num, den, out r);
+                if (q >= high)
+                    s -= 1;
+                else if (q < low)
+                    s += 1;
+                else
+                    break;
+            }
+            if (r * 2 > den || (r * 2 == den && !q.IsEven))
+            {
+                q += BigInteger.One;
+                if (q == high)
+                {
+                    q >>= 1;
+                    s -= 1;
+                }
+            }
+            double mantissa = (double)(long)q * FloatExp.Pow2(-52);   // exact: q has 53 bits
+            return FloatExp.Normalize(diff.Sign < 0 ? -mantissa : mantissa, 52 - s);
+        }
+
+        /// <summary>
         /// <paramref name="value"/> × 10^-<paramref name="places"/> written positionally
         /// with exactly <paramref name="places"/> fraction digits (none, and no point, when
         /// it is 0): "-" only for a nonzero negative, no "+", one "0" before the point when

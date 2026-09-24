@@ -185,10 +185,12 @@ namespace HeatonLife.Tests
             Assert.Equal(FractalTier.T1, FractalEngine.TierOf(12.0000001));
             Assert.Equal(FractalTier.T1, FractalEngine.TierOf(290.0));
             Assert.Equal(FractalTier.T2, FractalEngine.TierOf(290.5));
-            Assert.Equal(290.0, new Mandelbrot().MaxZoomLog10);
-            Assert.Equal(290.0, new Julia().MaxZoomLog10);
+            Assert.Equal(9000.0, new Mandelbrot().MaxZoomLog10);
+            Assert.Equal(9000.0, new Julia().MaxZoomLog10);
             Assert.Equal(290.0, new BurningShip().MaxZoomLog10);
             Assert.Equal(12.0, new Newton().MaxZoomLog10);
+            foreach (double bad in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity })
+                Assert.Throws<ArgumentException>(() => FractalEngine.TierOf(bad));
         }
     }
 }

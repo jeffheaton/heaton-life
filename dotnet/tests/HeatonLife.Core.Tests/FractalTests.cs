@@ -240,13 +240,30 @@ namespace HeatonLife.Tests
             Assert.InRange(mu, 6.0, 9.0);      // near its escape iteration
         }
 
-        /// <summary>Above the T1 ceiling there is still no tier to fall back to.</summary>
-        [Fact]
-        public void BeyondThePerturbationTierStillThrows()
+        /// <summary>spec/fractals.md "Counts convention": |z|² &gt; R² could never fire.</summary>
+        [Theory]
+        [InlineData(1e200)]
+        [InlineData(double.PositiveInfinity)]
+        [InlineData(double.NaN)]
+        public void EscapeRadiusSquaredMustBeFinite(double radius)
         {
-            var field = new Mandelbrot();
-            var tooDeep = new Viewport("-0.75", "0.1", 400.0);
-            Assert.Throws<ArgumentException>(() => field.Iterations(16, 16, tooDeep));
+            Assert.Throws<ArgumentException>(() => new Mandelbrot(100, radius));
+            Assert.Throws<ArgumentException>(() => new Julia(0.0, 1.0, 100, radius));
+            Assert.Throws<ArgumentException>(() => new BurningShip(100, radius));
+            _ = new Mandelbrot(100, 1.3e154);   // its square is still finite
+        }
+
+        /// <summary>Past a family's own ceiling there is no tier to fall back to.</summary>
+        [Fact]
+        public void EachFamilyRefusesZoomsPastItsCeiling()
+        {
+            // Mandelbrot and Julia render T2 to 1e9000; the Burning Ship stops at T1; a zoom
+            // that is not finite is refused before any orbit work.
+            Assert.Throws<ArgumentException>(() => new Mandelbrot().Iterations(16, 16, new Viewport("-0.75", "0.1", 9000.5)));
+            Assert.Throws<ArgumentException>(() => new BurningShip().Iterations(16, 16, new Viewport("-0.75", "0.1", 300.0)));
+            ReferenceOrbit.ClearCache();
+            Assert.Throws<ArgumentException>(() => new Julia().Iterations(16, 16, new Viewport("-0.75", "0.1", double.NaN)));
+            Assert.Equal(0, ReferenceOrbit.CacheUsage.Count);
         }
 
         /// <summary>Newton has no perturbation tier at all (spec/fractals.md).</summary>

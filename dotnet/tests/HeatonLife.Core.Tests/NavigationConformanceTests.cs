@@ -54,7 +54,9 @@ namespace HeatonLife.Tests
             var root = doc.RootElement;
             Assert.Equal("navigation", root.GetProperty("family").GetString());
             Assert.Equal("bit-exact", root.GetProperty("tier").GetString());
-            Assert.Equal("0.5.0", root.GetProperty("spec_version").GetString());
+            // 0.10.0 added T2 navigation (spec/navigation.md): zooms past 290, floatexp offsets.
+            string version = root.GetProperty("spec_version").GetString()!;
+            Assert.True(version == "0.5.0" || version == "0.10.0", $"{caseName}: unknown spec_version {version}");
             string operation = root.GetProperty("operation").GetString()!;
             Assert.True(OperationKeys.ContainsKey(operation), $"{caseName}: unknown operation {operation}");
             var allowed = new HashSet<string>(BaseKeys);

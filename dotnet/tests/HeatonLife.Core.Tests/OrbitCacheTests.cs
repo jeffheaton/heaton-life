@@ -70,6 +70,16 @@ namespace HeatonLife.Tests
         }
 
         [Fact]
+        public void DeepOrbitsPollByWork()
+        {
+            Assert.Equal(ReferenceOrbit.PollInterval, ReferenceOrbit.PollIntervalFor(171));
+            Assert.Equal(ReferenceOrbit.PollInterval, ReferenceOrbit.PollIntervalFor(1024));
+            Assert.Equal(ReferenceOrbit.PollInterval / 2, ReferenceOrbit.PollIntervalFor(1025));
+            Assert.Equal(4, ReferenceOrbit.PollIntervalFor(30_100));
+            Assert.Equal(1, ReferenceOrbit.PollIntervalFor(60_000));
+        }
+
+        [Fact]
         public void AnEscapedOrbitAnswersEveryLongerRequest()
         {
             ReferenceOrbit.ClearCache();
@@ -111,12 +121,13 @@ namespace HeatonLife.Tests
                 ReferenceOrbit.CacheByteLimit = 0;
                 Assert.Equal(2, ReferenceOrbit.CacheUsage.Count);
 
-                // Room for exactly three: the three newest stay, the oldest goes.
-                ReferenceOrbit.CacheByteLimit = 101 * 16 * 3;
+                // Room for exactly three: the three newest stay, the oldest goes. Each orbit is
+                // 101 samples at 16 bytes and one small sample (Z0 = 0) at 40.
+                ReferenceOrbit.CacheByteLimit = (101 * 16 + 40) * 3;
                 ReferenceOrbit.ClearCache();
                 for (int i = 0; i < 4; i++)
                     Cached(ReferenceOrbit.Kind.Mandelbrot, "-0.2" + i, "0.1", 13.0, 100, 0.0, 0.0);
-                Assert.Equal((3, 101L * 16 * 3), ReferenceOrbit.CacheUsage);
+                Assert.Equal((3, (101L * 16 + 40) * 3), ReferenceOrbit.CacheUsage);
                 Assert.True(IsHit("-0.23") && IsHit("-0.22") && IsHit("-0.21"));
                 Assert.False(IsHit("-0.20"));
             }

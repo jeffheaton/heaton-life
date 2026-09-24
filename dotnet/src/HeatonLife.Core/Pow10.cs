@@ -25,9 +25,12 @@ namespace HeatonLife
         private static readonly BigInteger Ln2Q128 =
             BigInteger.Parse("235865763225513294137944142764154484399");
 
+        /// <summary>The domain of <see cref="ComputeX"/>: finite |x| &lt;= 10,000.</summary>
+        public const double DomainX = 10000.0;
+
         /// <summary>
         /// 10^x as float64 via the spec/pow10.md integer algorithm (bit-portable).
-        /// Domain: finite |x| &lt;= 300 (deep-zoom.md's tier ceiling is 290;
+        /// Domain: finite |x| &lt;= 300 (deep-zoom.md's T1 ceiling is 290;
         /// results stay normal). Throws <see cref="ArgumentException"/> outside it.
         /// </summary>
         public static double Compute(double x)
@@ -36,7 +39,31 @@ namespace HeatonLife
                 throw new ArgumentException($"pow10 domain is finite |x| <= 300, got {x}");
             if (x == 0.0)
                 return 1.0;
+            var (mant, n) = MantissaExponent(x);
+            // 7. Assemble the IEEE-754 double directly — no ldexp, no libm.
+            long assembled = ((long)(n + 1023) << 52) | (mant - (1L << 52));
+            return BitConverter.Int64BitsToDouble(assembled);
+        }
 
+        /// <summary>
+        /// 10^x as floatexp (spec/pow10.md "Floatexp"): the same steps 1-6 as
+        /// <see cref="Compute"/>, the 53-bit mantissa as m = mant·2^-52 in [1, 2) and the
+        /// binary exponent n. Where Compute is defined, m·2^n is Compute(x) exactly.
+        /// Domain: finite |x| &lt;= 10,000.
+        /// </summary>
+        internal static (double Mantissa, int Exponent) ComputeX(double x)
+        {
+            if (double.IsNaN(x) || double.IsInfinity(x) || Math.Abs(x) > DomainX)
+                throw new ArgumentException($"pow10x domain is finite |x| <= {DomainX}, got {x}");
+            if (x == 0.0)
+                return (1.0, 0);
+            var (mant, n) = MantissaExponent(x);
+            return ((double)mant * FloatExp.Pow2(-52), n);   // exact: mant has 53 bits
+        }
+
+        /// <summary>Steps 1-6: the 53-bit mantissa (in [2^52, 2^53)) and binary exponent of 10^x.</summary>
+        private static (long Mantissa, int Exponent) MantissaExponent(double x)
+        {
             // 1. Exact decompose: x = m * 2^e, sign carried by m.
             long bits = BitConverter.DoubleToInt64Bits(x);
             int expField = (int)((bits >> 52) & 0x7FF);
@@ -45,7 +72,7 @@ namespace HeatonLife
             int e;
             if (expField == 0)
             {
-                m = frac; // subnormal (|x| <= 300 never is, but exactness is free)
+                m = frac; // subnormal (never in the domain, but exactness is free)
                 e = -1074;
             }
             else
@@ -94,10 +121,7 @@ namespace HeatonLife
                 mant = BigInteger.One << 52;
                 n += 1;
             }
-
-            // 7. Assemble the IEEE-754 double directly — no ldexp, no libm.
-            long assembled = ((long)(n + 1023) << 52) | (long)(mant - (BigInteger.One << 52));
-            return BitConverter.Int64BitsToDouble(assembled);
+            return ((long)mant, n);
         }
     }
 }

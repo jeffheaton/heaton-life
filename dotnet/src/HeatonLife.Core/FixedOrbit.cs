@@ -68,6 +68,25 @@ namespace HeatonLife
         /// <summary>The current Z as BigIntegers (for the orbit cache to resume from).</summary>
         internal (BigInteger Re, BigInteger Im) State => (ToBigInteger(_zrNeg, _zr), ToBigInteger(_ziNeg, _zi));
 
+        /// <summary>
+        /// Whether the current Z is small (spec/deep-zoom.md "T2"): 0, or its larger
+        /// component's bit length below F − 399 (binade &lt; −400).
+        /// </summary>
+        internal bool IsSmall
+        {
+            get
+            {
+                int top = Math.Max(BitLengthOf(_zr), BitLengthOf(_zi));
+                return top == 0 || top - 1 - _bits < ReferenceOrbit.SmallBinade || top - 1 - _bits > ReferenceOrbit.LargeBinade;
+            }
+        }
+
+        private static int BitLengthOf(uint[] x)
+        {
+            int used = Used(x);
+            return used == 0 ? 0 : (used - 1) * 32 + BitLength(x[used - 1]);
+        }
+
         /// <summary>The current Z rounded to float64, one ties-to-even rounding per component.</summary>
         internal double SampleRe => ToDouble(_zrNeg, _zr);
 

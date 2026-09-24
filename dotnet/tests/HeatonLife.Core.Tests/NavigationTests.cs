@@ -23,7 +23,7 @@ namespace HeatonLife.Tests
             Assert.Equal(0 + 2 + 2, Navigation.CenterPlaces(-1.5, 64, 48));
             Assert.Equal(3, Navigation.CenterPlaces(0.0, 1, 1));
             Assert.Equal(14 + 4 + 2, Navigation.CenterPlaces(14.0, 720, 1280));   // the height's digits
-            foreach (double bad in new[] { 300.5, -301.0, double.NaN, 1e10 })
+            foreach (double bad in new[] { 9000.5, -301.0, double.NaN, 1e10 })
                 Assert.ThrowsAny<ArgumentException>(() => Navigation.CenterPlaces(bad, 64, 64));
         }
 
@@ -129,7 +129,7 @@ namespace HeatonLife.Tests
                 Assert.ThrowsAny<ArgumentException>(() => Navigation.ZoomAt(vp, 0.0, 1.0, 64, 64, bad));
             }
             Assert.ThrowsAny<ArgumentException>(() => Navigation.Pan(vp, 1.0, 1.0, 0, 64));
-            foreach (double badZoom in new[] { 301.0, -300.5 })
+            foreach (double badZoom in new[] { 9001.0, -300.5 })
             {
                 Assert.ThrowsAny<ArgumentException>(() => Navigation.Pan(vp, 1.0, 0.0, 64, 64, badZoom));
                 Assert.ThrowsAny<ArgumentException>(() => Navigation.ZoomAt(vp, 1.0, 0.0, 64, 64, badZoom));

@@ -9,6 +9,7 @@ Usage: .venv/bin/python tools/gen_vectors.py
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import json
 import struct
 import sys
@@ -23,10 +24,11 @@ from heaton_life.boids import BoidsParams
 from heaton_life.ca import LifeLike, Wireworld, wireworld_from_text
 from heaton_life.conformance import CODECS, TIERS, build_sim
 from heaton_life.core import decimal_text
-from heaton_life.core.bignum import reference_orbit, working_bits
+from heaton_life.core.bignum import reference_orbit, reference_orbit_x, working_bits
 from heaton_life.core.protocols import Field, Simulation
 from heaton_life.core.viewport import Viewport
 from heaton_life.fractal import BurningShip, Julia, Mandelbrot, Newton, pan, pixel_delta, zoom_at
+from heaton_life.fractal.engine import orbit_zoom
 from heaton_life.init import place, rle_decode
 
 SPEC_VERSION = "0.2.0"  # what existing cases were written under; new fractal cases pass theirs
@@ -573,6 +575,11 @@ def main() -> None:
     # -- discovery (box period, Newton's nucleus, atom size, spec/nucleus.md) ---------
     write_nucleus_cases()
 
+    # -- T2: perturbation past 1e290 (spec/deep-zoom.md "T2") -------------------------
+    write_floatexp_cases()
+    write_t2_step_cases()
+    write_t2_cases()
+
     print("done")
 
 
@@ -590,6 +597,7 @@ def write_fractal_case(
     distance: bool = False,
     bla: bool = False,
     bla_table: bool = False,
+    small_orbits: bool = False,
 ) -> None:
     case_dir = VECTOR_ROOT / family / name
     case_dir.mkdir(parents=True, exist_ok=True)
@@ -658,13 +666,42 @@ def write_fractal_case(
     }
     if source is not None:
         meta["source"] = source  # attribution for a third-party location
+    if small_orbits:  # T2 (spec/deep-zoom.md "T2"): the orbits' length and small samples
+        c_re = params.get("c_re", 0.0)
+        c_im = params.get("c_im", 0.0)
+        kind = "julia" if family == "julia" else "mandelbrot"
+        pins = [("reference_small", viewport.orbit_center)]
+        if family == "julia":
+            pins.append(("critical_small", ("0", "0")))
+        for key, (re_text, im_text) in pins:
+            orbit_x = reference_orbit_x(
+                kind,
+                re_text,
+                im_text,
+                orbit_zoom(kind, viewport.zoom_log10),
+                params["max_iter"],
+                c_re=c_re,
+                c_im=c_im,
+            )
+            small = orbit_x.small
+            samples = np.ascontiguousarray(orbit_x.samples, dtype="<c16").tobytes()
+            meta[key] = {
+                "length": len(orbit_x.samples),
+                "sha256": hashlib.sha256(samples).hexdigest(),
+                "rows": [
+                    [int(i), _bits(float(rm)), int(re), _bits(float(im)), int(ie)]
+                    for i, rm, re, im, ie in zip(
+                        small.index, small.re_m, small.re_e, small.im_m, small.im_e, strict=True
+                    )
+                ],
+            }
     if orbit_kind is not None:
         c_re = params.get("c_re", 0.0)
         c_im = params.get("c_im", 0.0)
         orbit = reference_orbit(
             orbit_kind,
             *viewport.orbit_center,
-            viewport.zoom_log10,
+            orbit_zoom(orbit_kind, viewport.zoom_log10),
             params["max_iter"],
             c_re=c_re,
             c_im=c_im,
@@ -679,7 +716,7 @@ def write_fractal_case(
                 "julia",
                 "0",
                 "0",
-                viewport.zoom_log10,
+                orbit_zoom("julia", viewport.zoom_log10),
                 params["max_iter"],
                 c_re=c_re,
                 c_im=c_im,
@@ -1872,10 +1909,15 @@ def write_navigation_cases() -> None:
     def bits(value: float) -> str:
         return f"0x{int.from_bytes(np.float64(value).tobytes(), 'little'):016X}"
 
-    def write(name: str, meta: dict[str, Any]) -> None:
+    def write(name: str, meta: dict[str, Any], spec_version: str = "0.5.0") -> None:
         case_dir = root / name
         case_dir.mkdir(parents=True, exist_ok=True)
-        full = {"spec_version": "0.5.0", "family": "navigation", "tier": "bit-exact", **meta}
+        full = {
+            "spec_version": spec_version,
+            "family": "navigation",
+            "tier": "bit-exact",
+            **meta,
+        }
         (case_dir / "params.json").write_text(json.dumps(full, indent=2, sort_keys=True) + "\n")
         print(f"wrote vectors/navigation/{name}")
 
@@ -1890,6 +1932,7 @@ def write_navigation_cases() -> None:
         dy: float,
         size: tuple[int, int],
         zoom: float | None = None,
+        spec_version: str = "0.5.0",
     ) -> None:
         meta: dict[str, Any] = {
             "operation": "pan",
@@ -1901,10 +1944,16 @@ def write_navigation_cases() -> None:
         if zoom is not None:
             meta["zoom_log10"] = zoom
         meta["expected"] = pan(vp, dx, dy, size, zoom).to_dict()
-        write(name, meta)
+        write(name, meta, spec_version)
 
     def zoom_case(
-        name: str, vp: Viewport, dx: float, dy: float, size: tuple[int, int], zoom: float
+        name: str,
+        vp: Viewport,
+        dx: float,
+        dy: float,
+        size: tuple[int, int],
+        zoom: float,
+        spec_version: str = "0.5.0",
     ) -> None:
         write(
             name,
@@ -1917,9 +1966,12 @@ def write_navigation_cases() -> None:
                 "zoom_log10": zoom,
                 "expected": zoom_at(vp, dx, dy, size, zoom).to_dict(),
             },
+            spec_version,
         )
 
-    def delta_case(name: str, frm: Viewport, to: Viewport, size: tuple[int, int]) -> None:
+    def delta_case(
+        name: str, frm: Viewport, to: Viewport, size: tuple[int, int], spec_version: str = "0.5.0"
+    ) -> None:
         dx, dy = pixel_delta(frm, to, size)
         write(
             name,
@@ -1930,6 +1982,7 @@ def write_navigation_cases() -> None:
                 "size": list(size),
                 "expected": {"dx_bits": bits(dx), "dy_bits": bits(dy)},
             },
+            spec_version,
         )
 
     # A click on pixel (300, 17) of a 512x384 frame, and a fractional drag at a
@@ -2002,6 +2055,25 @@ def write_navigation_cases() -> None:
         seahorse,
         dataclasses.replace(pan(seahorse, 3.5, 4.5, (256, 256)), zoom_log10=20.0),
         (256, 256),
+    )
+    # T2 (0.10.0): past zoom 290 the offsets are pixels * ps rounded once to floatexp, the
+    # render's own pixel deltas, and the strings print at the frame's places.
+    deep = Viewport(P830_CENTER, "0", 996.5)
+    pan_case("pan-t2-zoom996", deep, 7.25, -3.5, (64, 48), spec_version="0.10.0")
+    pan_case("pan-t2-and-zoom", deep, -20.5, 11.0, (64, 48), 1200.25, spec_version="0.10.0")
+    # Across the T1/T2 boundary: the old offset in doubles, the new one in floatexp.
+    zoom_case(
+        "zoom-at-t1-to-t2",
+        Viewport("-2", "1e-295", 289.0),
+        5.5,
+        -2.25,
+        (32, 32),
+        291.5,
+        spec_version="0.10.0",
+    )
+    zoom_case("zoom-at-t2-deep", deep, -13.0, 6.5, (64, 48), 4000.5, spec_version="0.10.0")
+    delta_case(
+        "pixel-delta-t2", deep, pan(deep, 123.25, -7.75, (64, 48)), (64, 48), spec_version="0.10.0"
     )
     positional_inputs = [
         "1e-5",
@@ -2306,6 +2378,515 @@ def write_nucleus_cases() -> None:
     # Printing: the view's places round the zoom up (ceil 0.5 = 1, ceil 5.5 = 6).
     find("find-view-places-failed", ("0.5", "0.5"), 0.5, 5)
     find("find-view-places-found", ("-1.75", "0.001"), 5.5, 3)
+
+
+# Heaton Fractal's r7-a round-3 nucleus (period 135,310, atom depth 492.45;
+# hunts/record-1e3800.jsonl line 4): at zoom 320 its frame needs T2 -- forcing T1's float64
+# deltas there gets 40 of 60 stable pixels wrong (s7 fixtures, direct 1975-bit truth).
+P135310_HF = (
+    (
+        "-0.741792701429200123284154862461334868221813372922547102144024183750046640849455695852"
+        "4601107813072590503748891436212127479577047464648763773999979858719418329443348430068544"
+        "9058507595536148294552732379756707780794222699765000849087600291978563682324493986718595"
+        "0074262322834978538067718665583985329749868156199699220173492198401425704925527587600208"
+        "6883505827441015045268093972948991086466072275902613945125569416888156206984766914435686"
+        "1582557546076637830583086887713413883459538211440585525230757674650009424890308208066547"
+        "43050976796919895706207901632403"
+    ),
+    (
+        "0.1239779417246959717116896203392233178383672476735358228572000968838498804949745999651"
+        "6886304789610236795892717050828606930965765482956408260227797393176255870494542347749814"
+        "2851959359089382284463586348828584693644975471780448665825186148091004452908781981837840"
+        "3581322809742899646252889654253178873102561988119958128682003235153307346440858028796081"
+        "2841874729036553371370952360251901067221660828905627588552213162681623605300692082473681"
+        "8462669846804509549922600511114219000705289709923573886959595161901670687125581755625183"
+        "2292000295911024905860049683006"
+    ),
+)
+
+
+# A period-830 real-axis nucleus near -2 (atom size 10^-997.65; Newton in 7560-bit gmpy2):
+# every 830th reference sample passes near 2^-1790, so a T2 frame steps through floatexp
+# there, and its pixels rebase there.
+P830_CENTER = (
+    "-1.9999999999999999999999999999999999999999999999999999999999999999999999999999999999999"
+    "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999"
+    "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999"
+    "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999"
+    "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999"
+    "9999999999999999999999999999999999999999999999999999999999999711199326143338396279551682"
+    "0158352667668421775474495910794967943422662000692646445990640234832212261092547632171691"
+    "1321206646008861351575233246246034974193051472401988983501593597640242041012955178343453"
+    "6108675383869370370816883089118385843279993102003044858160092623636776683936518329990836"
+    "1962232240358567462087526404957637856826585234454529238776330196863889881090912330481327"
+    "1126938382212835731785632066962134412208534377012860249416663023130075352372483535146902"
+    "706382978665946410862147292130810713557667285759648870726772730621622048"
+)
+# The golden ratio (the basilica's beta fixed point), 400 places.
+GOLDEN_RATIO = (
+    "1.61803398874989484820458683436563811772030917980576286213544862270526046281890244970720"
+    "7204189391137484754088075386891752126633862223536931793180060766726354433389086595939582"
+    "9056383226613199282902678806752087668925017116962070322210432162695486262963136144381497"
+    "5870122034080588795445474924618569536486444924104432077134494704956584678850987433944221"
+    "2544877066478091588460749988712400765217057517978"
+)
+# Julia c = i: sqrt(-i) (a preimage of 0) plus 3e-322, 405 places.
+JULIA_I_PREIMAGE = (
+    (
+        "0.7071067811865475244008443621048490392848359376884740365883398689953662392310535194"
+        "251937671638207863675069231154561485124624180279253686063220607485499679157066113329"
+        "637527963778999752505763910302857350547799858029851372672984310073642587093204445993"
+        "047761646152421543571607254198813018139976257039948436266982731659044151203103076291"
+        "7619752737287514387998086491778761016876592850567718730170424942358019"
+    ),
+    (
+        "-0.707106781186547524400844362104849039284835937688474036588339868995366239231053519"
+        "425193767163820786367506923115456148512462418027925368606322060748549967915706611332"
+        "963752796377899975250576391030285735054779985802985137267298431007364258709320444599"
+        "304776164615242154357160725419881301813997625703994843626698273165904414820310307629"
+        "17619752737287514387998086491778761016876592850567718730170424942358019"
+    ),
+)
+
+
+def write_floatexp_cases() -> None:
+    """spec/floatexp.md (0.10.0): each operation at its boundaries; values as [mantissa
+    bits, exponent], doubles as bits, fixed-point integers as decimal strings."""
+    from heaton_life.core import floatexp as fx
+
+    def x(value: tuple[float, int]) -> list[Any]:
+        return [_bits(value[0]), int(value[1])]
+
+    cases: list[dict[str, Any]] = []
+
+    def add(a: tuple[float, int], b: tuple[float, int], note: str) -> None:
+        cases.append({"op": "add", "a": x(a), "b": x(b), "expected": x(fx.add(a, b)), "note": note})
+
+    def mul(a: tuple[float, int], b: tuple[float, int], note: str) -> None:
+        cases.append({"op": "mul", "a": x(a), "b": x(b), "expected": x(fx.mul(a, b)), "note": note})
+
+    def to_double(a: tuple[float, int], note: str) -> None:
+        cases.append(
+            {"op": "to_double", "a": x(a), "expected": _bits(fx.to_double(a)), "note": note}
+        )
+
+    def from_fixed(value: int, bits: int, note: str) -> None:
+        cases.append(
+            {
+                "op": "from_fixed",
+                "value": str(value),
+                "bits": bits,
+                "expected": x(fx.from_fixed(value, bits)),
+                "note": note,
+            }
+        )
+
+    def normalize(value: float, exponent: int, note: str) -> None:
+        cases.append(
+            {
+                "op": "normalize",
+                "value": _bits(value),
+                "exponent": exponent,
+                "expected": x(fx.normalize(value, exponent)),
+                "note": note,
+            }
+        )
+
+    def compare(a: tuple[float, int], b: tuple[float, int], note: str) -> None:
+        cases.append(
+            {"op": "compare", "a": x(a), "b": x(b), "expected": fx.compare(a, b), "note": note}
+        )
+
+    one = (1.0, 0)
+    add(one, (1.0, -63), "gap 63: below half an ulp, rounds to a")
+    add(one, (1.0, -64), "gap 64: still aligned exactly, rounds to a")
+    add(one, (1.0, -65), "gap 65: a, by the drop rule")
+    add(one, (1.0, -53), "exactly half an ulp: ties to even, down")
+    add((1.0000000000000002, 0), (1.0, -53), "exactly half an ulp: ties to even, up")
+    add(one, (1.5, -53), "just over half an ulp: up")
+    add((1.5, 3), (-1.5, 3), "cancellation to zero")
+    add(one, (-1.9999999999999998, -1), "cancellation to 2^-53")
+    add((1.75, -1000), (1.25, -1001), "a carry into the next binade")
+    add((-1.5, 7), (1.5, 5), "mixed signs, renormalized down")
+    add(fx.ZERO, (1.25, -5000), "zero plus b is b")
+    mul((1.5, 1), (1.5, 1), "exact: 2.25 * 4 = 9")
+    mul((1.0000000000000002, -3000), (1.9999999999999998, -4000), "one rounding")
+    mul((1.0, -(2**30)), (1.0, -(2**30)), "exponent exactly -2^31: kept")
+    mul((1.0, -(2**30)), (1.0, -(2**30) - 1), "below -2^31: zero (the floor)")
+    mul((-1.25, 12), fx.ZERO, "times zero")
+    to_double((1.0, -1022), "the smallest normal")
+    to_double((1.5, -1023), "a subnormal, exact")
+    to_double((1.0, -1074), "the smallest subnormal")
+    to_double((1.0, -1075), "half the smallest subnormal: ties to even, zero")
+    to_double((1.5, -1075), "over half: the smallest subnormal")
+    to_double((-1.9999999999999998, -1060), "a subnormal, rounded once")
+    to_double((1.0, -2044), "the two-step path's floor: zero")
+    to_double((-1.0, -2045), "below it: a signed zero")
+    to_double((1.9999999999999998, 1023), "the largest finite")
+    to_double((1.0, 1024), "past the top: infinity")
+    from_fixed((1 << 60) + 3, 7, "rounded to 53 bits")
+    from_fixed((1 << 54) - 1, 0, "rounding carries into a new binade")
+    from_fixed(-((1 << 53) + 1), 100, "a tie, to even (down), negative")
+    from_fixed((1 << 53) + 3, 100, "a tie, to even (up)")
+    from_fixed(3 << 1500, 1024, "far past the double range")
+    from_fixed(1, 3000, "far below it")
+    normalize(5e-324, 0, "the smallest subnormal, exact")
+    normalize(-3.0, -(2**31) + 1, "exponent -2^31 + 2: kept")
+    normalize(1.5, -(2**31) - 1, "below the floor: zero")
+    compare((1.5, 3), (1.25, 3), "same exponent: by mantissa")
+    compare((1.0, 11), (1.9999999999999998, 10), "the exponent first")
+    compare((-1.0, 11), (-1.9999999999999998, 10), "negatives: the order reversed")
+    compare((-1.0, 900), (1.0, -900), "the sign first")
+    compare((1.0, -5000), fx.ZERO, "positive over zero")
+    compare((-1.0, 5000), fx.ZERO, "negative under zero")
+    compare(fx.ZERO, fx.ZERO, "zero equals zero")
+    compare((-1.75, 10), (-1.75, 10), "equal values")
+
+    case_dir = VECTOR_ROOT / "floatexp" / "operations"
+    case_dir.mkdir(parents=True, exist_ok=True)
+    meta = {"spec_version": "0.10.0", "family": "floatexp", "tier": "bit-exact", "cases": cases}
+    (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+    print("wrote vectors/floatexp/operations")
+
+
+def write_t2_step_cases() -> None:
+    """T2's rare branches on crafted orbits and pixels (spec/deep-zoom.md "T2", 0.10.0):
+    the internal loop (perturbation_t2.perturb_t2 / PerturbationT2.Perturb) run on a
+    stated orbit and small table, every output bit for bit -- the paths no natural frame
+    reaches (the 960-binade gap guards, a sample past 2^900)."""
+    from heaton_life.core import floatexp as fx
+    from heaton_life.core.bignum import OrbitX, SmallSamples
+    from heaton_life.fractal.perturbation_t2 import XPair, perturb_t2
+
+    def x(value: tuple[float, int]) -> list[Any]:
+        return [_bits(value[0]), int(value[1])]
+
+    def orbit(
+        samples: list[complex], small: list[tuple[int, tuple[float, int], tuple[float, int]]]
+    ) -> OrbitX:
+        return OrbitX(
+            np.array(samples, dtype=np.complex128),
+            SmallSamples(
+                np.array([row[0] for row in small], dtype=np.int64),
+                np.array([row[1][0] for row in small], dtype=np.float64),
+                np.array([row[1][1] for row in small], dtype=np.int64),
+                np.array([row[2][0] for row in small], dtype=np.float64),
+                np.array([row[2][1] for row in small], dtype=np.int64),
+            ),
+        )
+
+    def orbit_json(o: OrbitX) -> dict[str, Any]:
+        return {
+            "samples": [[_bits(z.real), _bits(z.imag)] for z in o.samples],
+            "small": [
+                [int(i), _bits(float(rm)), int(re), _bits(float(im)), int(ie)]
+                for i, rm, re, im, ie in zip(
+                    o.small.index,
+                    o.small.re_m,
+                    o.small.re_e,
+                    o.small.im_m,
+                    o.small.im_e,
+                    strict=True,
+                )
+            ],
+        }
+
+    def pair(p: tuple[tuple[float, int], tuple[float, int]] | None) -> XPair | None:
+        if p is None:
+            return None
+        return XPair(
+            np.array([p[0][0]]),
+            np.array([p[0][1]], dtype=np.int64),
+            np.array([p[1][0]]),
+            np.array([p[1][1]], dtype=np.int64),
+        )
+
+    def case(
+        name: str,
+        ref: OrbitX,
+        rebase: OrbitX | None,
+        delta0: tuple[tuple[float, int], tuple[float, int]] | None,
+        delta_c: tuple[tuple[float, int], tuple[float, int]] | None,
+        max_iter: int,
+        radius: float,
+        derivative: tuple[tuple[tuple[float, int], tuple[float, int]], tuple[float, int] | None]
+        | None = None,
+        expect_paths: tuple[str, ...] = (),
+    ) -> None:
+        stats: dict[str, int] = {}
+        der = None if derivative is None else (pair(derivative[0]), derivative[1])
+        result = perturb_t2(
+            ref,
+            pair(delta0),
+            pair(delta_c),
+            max_iter,
+            radius,
+            rebase_orbit=rebase,
+            derivative=der,
+            stats=stats,  # type: ignore[arg-type]
+        )
+        for path in expect_paths:
+            assert stats.get(path, 0) > 0, f"t2-steps/{name}: {path} never ran"
+        meta = {
+            "spec_version": "0.10.0",
+            "family": "t2-steps",
+            "tier": "bit-exact",
+            "orbit": orbit_json(ref),
+            "rebase_orbit": None if rebase is None else orbit_json(rebase),
+            "delta0": None if delta0 is None else [x(delta0[0]), x(delta0[1])],
+            "delta_c": None if delta_c is None else [x(delta_c[0]), x(delta_c[1])],
+            "derivative": None
+            if derivative is None
+            else {
+                "d0": [x(derivative[0][0]), x(derivative[0][1])],
+                "add": None if derivative[1] is None else x(derivative[1]),
+            },
+            "max_iter": max_iter,
+            "escape_radius": radius,
+            "paths": list(expect_paths),
+            "expected": {
+                "count": int(result.counts[0]),
+                "final": [_bits(float(result.final[0].real)), _bits(float(result.final[0].imag))],
+                "derivative": [
+                    _bits(float(result.dr[0])),
+                    _bits(float(result.di[0])),
+                    int(result.d_exponent[0]),
+                ],
+            },
+        }
+        case_dir = VECTOR_ROOT / "t2-steps" / name
+        case_dir.mkdir(parents=True, exist_ok=True)
+        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+        print(f"wrote vectors/t2-steps/{name}")
+
+    zero = (0.0, 0)
+
+    def fx_double(value: tuple[float, int]) -> float:
+        return fx.to_double(value)
+
+    # Samples near 2^40 under an escape radius of 2^60: a delta grows ~41 binades a step,
+    # so a pixel started thousands of binades down escapes within a few dozen iterations
+    # and its final z and derivative carry every step's bits. The rebase orbit starts at an
+    # exact zero (a small index, as Mandelbrot's does).
+    grow = [
+        complex(3, 4) * 2.0**38,
+        complex(-5, 12) * 2.0**36,
+        complex(8, -15) * 2.0**36,
+        complex(-7, -24) * 2.0**35,
+        complex(20, 21) * 2.0**35,
+    ] * 8
+    ref = orbit(grow, [])
+    rebase = orbit([0j, *grow], [(0, zero, zero)])
+    radius = 2.0**60
+    # A delta 2000 binades below its delta_c: a fast step would need delta_c / 2^E ~ 2^2000,
+    # so the step runs in floatexp (the guard against dcS overflowing).
+    case(
+        "delta-gap",
+        ref,
+        rebase,
+        ((1.0, -3000), (1.5, -3001)),
+        ((1.0, -1000), (1.25, -1000)),
+        60,
+        radius,
+        expect_paths=("slow_gap",),
+    )
+    # A derivative 3000 binades below the ps it adds: its update runs in floatexp.
+    case(
+        "derivative-gap",
+        ref,
+        rebase,
+        ((1.0, -800), (-1.75, -801)),
+        None,
+        60,
+        radius,
+        derivative=(((1.0, -4000), zero), (1.0, -1000)),
+        expect_paths=("d_slow_gap",),
+    )
+    # A sample past 2^900 (a huge Julia center) goes through the table like a small one:
+    # the step, the derivative update, and the escape test there run in floatexp, which
+    # cannot overflow. The huge sample at index 0 multiplies the delta up from 2^-1000.
+    huge = orbit(
+        [0j, *grow],
+        [(0, (1.5, 950), (1.25, 949))],
+    )
+    case(
+        "huge-sample",
+        huge,
+        rebase,
+        ((1.0, -1000), (1.0, -1001)),
+        None,
+        60,
+        radius,
+        derivative=(((1.0, -1000), zero), (1.0, -1000)),
+        expect_paths=("slow_small", "d_slow_small"),
+    )
+    # The final z is to_double of each component: a landing on a huge sample escapes with
+    # an infinite part beside a part that underflows to -0.0, and both keep their bits.
+    for name, re_x, im_x in (
+        ("final-inf-imaginary", (-1.0, -2000), (1.25, 1100)),
+        ("final-inf-real", (1.5, 1100), (-1.0, -2000)),
+    ):
+        landing = orbit(
+            [complex(0.5, 0.5), complex(fx_double(re_x), fx_double(im_x))],
+            [(1, re_x, im_x)],
+        )
+        case(
+            name,
+            landing,
+            rebase,
+            ((1.0, -3000), (1.0, -3001)),  # below the tiny part, which underflows to -0.0
+            None,
+            5,
+            radius,
+            derivative=(((1.0, -1000), zero), None),
+            expect_paths=("escape_small",),
+        )
+
+
+def write_t2_cases() -> None:
+    """T2 (spec/deep-zoom.md "T2", 0.10.0): counts, statuses and distances past zoom 290,
+    with the orbits' lengths and small samples pinned."""
+
+    def mandelbrot(
+        name: str, viewport: Viewport, size: tuple[int, int], max_iter: int, **kw: Any
+    ) -> None:
+        write_fractal_case(
+            "mandelbrot",
+            name,
+            Mandelbrot(max_iter=max_iter, escape_radius=1000.0),
+            {"max_iter": max_iter, "escape_radius": 1000.0},
+            viewport,
+            size,
+            spec_version="0.10.0",
+            small_orbits=True,
+            **kw,
+        )
+
+    def julia(
+        name: str, c: complex, viewport: Viewport, size: tuple[int, int], max_iter: int, **kw: Any
+    ) -> None:
+        write_fractal_case(
+            "julia",
+            name,
+            Julia(c=c, max_iter=max_iter, escape_radius=1000.0),
+            {"c_re": c.real, "c_im": c.imag, "max_iter": max_iter, "escape_radius": 1000.0},
+            viewport,
+            size,
+            spec_version="0.10.0",
+            small_orbits=True,
+            **kw,
+        )
+
+    # HF's p135310 nucleus at zoom 320, where T1's float64 deltas fail.
+    mandelbrot("t2-hf-p135310-zoom320-8", Viewport(*P135310_HF, 320.0), (8, 8), 200000, status=True)
+    # A period-830 nucleus near -2 at zoom 996.5: floatexp steps and tests every 830
+    # iterations, rebases there; on the axis, off it, and with the distance estimate.
+    mandelbrot("t2-p830-zoom996-16", Viewport(P830_CENTER, "0", 996.5), (16, 16), 11620)
+    mandelbrot(
+        "t2-p830-offaxis-zoom996-16",
+        Viewport(P830_CENTER, "3e-997", 996.5),
+        (16, 16),
+        11620,
+        distance=True,
+    )
+    # An off-center reference at T2: the p830 nucleus iterates, the center sits a few
+    # pixels away (the exact decimal difference, rounded once to floatexp).
+    mandelbrot(
+        "t2-offref-p830-zoom996-8",
+        Viewport(
+            _decimal_sum(P830_CENTER, "1.12e-997"),
+            "-7.1e-998",
+            996.5,
+            reference_re=P830_CENTER,
+            reference_im="0",
+        ),
+        (8, 8),
+        11620,
+    )
+    # Julia c = i near a preimage of 0 (sqrt(-i) + 3e-322): the reference passes 1e-321
+    # of 0 at index 1, the pixels' deltas square to 1e-642 and rebase onto the critical
+    # orbit there -- T1's Julia limit, which T2 lifts.
+    julia(
+        "t2-julia-i-preimage-zoom320-16",
+        1j,
+        Viewport(*JULIA_I_PREIMAGE, 320.0),
+        (16, 16),
+        4000,
+        distance=True,
+    )
+    # The basilica (c = -1), whose critical orbit is exactly 0 at every other index: inside,
+    # a delta squares past 2^-(2^31) and meets the floor (every pixel interior, as direct
+    # iteration says); on its boundary at the golden ratio (its beta fixed point), pixels
+    # escape while landing on those exact zeros.
+    julia(
+        "t2-julia-basilica-interior-zoom300-4", -1 + 0j, Viewport("0.1", "0", 300.0), (4, 4), 3000
+    )
+    julia(
+        "t2-julia-basilica-phi-zoom320-16",
+        -1 + 0j,
+        Viewport(GOLDEN_RATIO, "0", 320.0),
+        (16, 16),
+        3000,
+        distance=True,
+    )
+    # Julia c = i at zoom 400, 2.3 and -1.7 pixels off a preimage of 0: pixel differences
+    # square to ~ps^2 there, so the orbits run at twice the frame's precision (at the
+    # frame's own precision 45 of these 144 counts come out wrong); and a frame centered at
+    # 0 itself, with the distance estimate starting from a small index 0.
+    julia(
+        "t2-julia-i-precision-zoom400-12", 1j, Viewport(*_julia_i_offset(400.0, 12)), (12, 12), 5000
+    )
+    # The same rule at T1 (0.10.0 moved T1 Julia orbits to twice the zoom as well): at
+    # zoom 100 the frame's own precision gets 51 of these 144 counts wrong. The orbits
+    # ship with the case, as every T1 case's do.
+    write_fractal_case(
+        "julia",
+        "t1-julia-i-precision-zoom100-12",
+        Julia(c=1j, max_iter=5000, escape_radius=1000.0),
+        {"c_re": 0.0, "c_im": 1.0, "max_iter": 5000, "escape_radius": 1000.0},
+        Viewport(*_julia_i_offset(100.0, 12)),
+        (12, 12),
+        orbit_kind="julia",
+        spec_version="0.10.0",
+    )
+    julia(
+        "t2-julia-i-center0-zoom400-12",
+        1j,
+        Viewport("0", "0", 400.0),
+        (12, 12),
+        5000,
+        distance=True,
+    )
+    # An odd frame: its center column's delta has a zero real part, which must not force
+    # the slow step (only nonzero components meet the 960-binade gap rule).
+    mandelbrot("t2-p830-offaxis-zoom996-9", Viewport(P830_CENTER, "3e-997", 996.5), (9, 9), 11620)
+
+
+def _julia_i_offset(zoom: float, width: int) -> tuple[str, str, float]:
+    """sqrt(-i) moved (2.3, -1.7) pixels of a ``width``-wide frame at ``zoom``, to zoom + 60
+    places (decimal arithmetic, correctly rounded, the same everywhere)."""
+    import decimal
+
+    with decimal.localcontext() as ctx:
+        ctx.prec = int(zoom) + 200
+        half = decimal.Decimal(2).sqrt() / 2
+        ps = decimal.Decimal(4) / width * decimal.Decimal(10) ** decimal.Decimal(repr(-zoom))
+        re_text = str(half + decimal.Decimal("2.3") * ps)
+        im_text = str(-half - decimal.Decimal("1.7") * ps)
+    places = int(zoom) + 60
+    return (
+        re_text[: re_text.index(".") + 1 + places],
+        im_text[: im_text.index(".") + 1 + places],
+        zoom,
+    )
+
+
+def _decimal_sum(a: str, b: str) -> str:
+    import decimal
+
+    with decimal.localcontext() as ctx:
+        ctx.prec = 2000
+        return str(decimal.Decimal(a) + decimal.Decimal(b))
 
 
 def write_location_cases() -> None:

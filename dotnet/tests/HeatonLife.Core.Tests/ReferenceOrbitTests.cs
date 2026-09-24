@@ -44,9 +44,10 @@ namespace HeatonLife.Tests
             bool offCenter = viewport.TryGetProperty("reference_re", out _);
             string centerRe = viewport.GetProperty(offCenter ? "reference_re" : "center_re").GetString()!;
             string centerIm = viewport.GetProperty(offCenter ? "reference_im" : "center_im").GetString()!;
-            double zoom = viewport.GetProperty("zoom_log10").GetDouble();
             int maxIter = p.GetProperty("max_iter").GetInt32();
             string family = root.GetProperty("family").GetString()!;
+            // A Julia orbit runs at twice the frame's zoom (FractalEngine.OrbitZoom).
+            double zoom = FractalEngine.OrbitZoom(family == "julia", viewport.GetProperty("zoom_log10").GetDouble());
 
             (double[] Re, double[] Im) orbit = family switch
             {
@@ -323,6 +324,39 @@ namespace HeatonLife.Tests
             var julia = new Julia(-0.123, 0.745, 600);
             int[] counts = julia.Iterations(32, 32, new Viewport(RabbitBetaRe, RabbitBetaIm, 13.0));
             Assert.Equal(expected, counts);
+        }
+
+        /// <summary>
+        /// A Julia frame's orbits run at twice its zoom (spec/deep-zoom.md "Reference
+        /// orbit"): near a preimage of 0 the pixels' differences square to ~ps², which an
+        /// orbit at the frame's own precision cannot resolve. With its own orbits the
+        /// render reproduces the vector (which matches a 1466-bit direct iteration on
+        /// every pixel); with orbits at the frame's zoom, 51 of 144 counts differ.
+        /// </summary>
+        [Fact]
+        public void JuliaOrbitsRunAtTwiceTheZoom()
+        {
+            byte[] bytes = File.ReadAllBytes(
+                Path.Combine(TestPaths.VectorRoot(), "julia", "t1-julia-i-precision-zoom100-12", "iterations.i32"));
+            var expected = new int[bytes.Length / 4];
+            Buffer.BlockCopy(bytes, 0, expected, 0, bytes.Length);
+            var viewport = new Viewport(
+                "0.7071067811865475244008443621048490392848359376884740365883398689953662392310535194251937671638207864441735897821228151791290846945920352729887274152166345823732",
+                "-0.7071067811865475244008443621048490392848359376884740365883398689953662392310535194251937671638207864241735897821228151791290846945920352729887274152166345823732",
+                100.0);
+            var julia = new Julia(0.0, 1.0, 5000);
+            Assert.Equal(expected, julia.Iterations(12, 12, viewport));
+
+            var (re, im) = ReferenceOrbit.Julia(viewport.CenterRe, viewport.CenterIm, 100.0, 5000, 0.0, 1.0);
+            var (wr, wi) = ReferenceOrbit.JuliaCritical(0.0, 1.0, 100.0, 5000);
+            int[] frameZoom = julia.Iterations(12, 12, viewport, re, im, wr, wi);
+            int differ = 0;
+            for (int k = 0; k < expected.Length; k++)
+            {
+                if (frameZoom[k] != expected[k])
+                    differ++;
+            }
+            Assert.Equal(51, differ);
         }
 
         [Fact]

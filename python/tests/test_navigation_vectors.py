@@ -42,7 +42,8 @@ def test_navigation_vectors_exist() -> None:
 def test_navigation_vector(case: Path) -> None:
     meta: dict[str, Any] = json.loads(case.read_text())
     assert meta["family"] == "navigation" and meta["tier"] == "bit-exact"
-    assert meta["spec_version"] == "0.5.0"
+    # 0.10.0 added T2 navigation (spec/navigation.md): zooms past 290, floatexp offsets.
+    assert meta["spec_version"] in ("0.5.0", "0.10.0")
     operation = meta["operation"]
     allowed = BASE_KEYS | OPERATION_KEYS[operation]
     if operation == "pan":

@@ -7,18 +7,20 @@ orbit bit-for-bit (the orbit is fixed-point integer arithmetic; plain ints and g
 mpz are tested identical, so this holds with or without gmpy2).
 """
 
+import hashlib
 import json
+import struct
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pytest
 
-from heaton_life.core.bignum import reference_orbit
+from heaton_life.core.bignum import reference_orbit, reference_orbit_x
 from heaton_life.core.viewport import Viewport
 from heaton_life.fractal import BurningShip, Julia, Mandelbrot, Newton
 from heaton_life.fractal.bla import build_table, frame_dc_bound, table_words
-from heaton_life.fractal.engine import pixel_deltas
+from heaton_life.fractal.engine import orbit_zoom, pixel_deltas
 
 VECTOR_ROOT = Path(__file__).resolve().parents[2] / "vectors"
 
@@ -40,7 +42,7 @@ ORBIT_KINDS = {"mandelbrot": "mandelbrot", "julia": "julia", "burning-ship": "bu
 # Everything this runner understands. A key outside these sets fails the case rather
 # than being skipped: a runner that ignored, say, "critical_orbit" would replay a deep
 # Julia case the old way and either fail confusingly or pass for the wrong reason.
-SPEC_VERSIONS = {"0.2.0", "0.3.0", "0.4.0", "0.6.0", "0.7.0", "0.8.0"}
+SPEC_VERSIONS = {"0.2.0", "0.3.0", "0.4.0", "0.6.0", "0.7.0", "0.8.0", "0.10.0"}
 TOP_KEYS = {
     "spec_version",
     "family",
@@ -52,6 +54,8 @@ TOP_KEYS = {
     "reference_orbit",
     "critical_orbit",
     "source",
+    "reference_small",
+    "critical_small",
 }
 PARAM_KEYS = {
     "mandelbrot": {"max_iter", "escape_radius"},
@@ -62,6 +66,10 @@ PARAM_KEYS = {
 OUTPUT_KINDS = {"iterations", "roots", "status", "distance", "bla_applications", "bla_table"}
 BLA_FAMILIES = {"mandelbrot"}
 DISTANCE_FAMILIES = {"mandelbrot", "julia"}
+
+
+def _bits(value: float) -> str:
+    return f"0x{struct.unpack('<Q', struct.pack('<d', value))[0]:016X}"
 
 
 def _version(text: str) -> tuple[int, ...]:
@@ -201,7 +209,7 @@ def test_fractal_vector(case: Path) -> None:
         regenerated = reference_orbit(
             ORBIT_KINDS[family],
             *viewport.orbit_center,
-            viewport.zoom_log10,
+            orbit_zoom(ORBIT_KINDS[family], viewport.zoom_log10),  # Julia: twice the zoom
             meta["params"]["max_iter"],
             c_re=meta["params"].get("c_re", 0.0),
             c_im=meta["params"].get("c_im", 0.0),
@@ -209,6 +217,37 @@ def test_fractal_vector(case: Path) -> None:
         assert np.array_equal(stored, regenerated), (
             "reference orbit regeneration diverged from the stored contract"
         )
+
+    for key, center in (("reference_small", viewport.orbit_center), ("critical_small", ("0", "0"))):
+        # T2 (0.10.0, spec/deep-zoom.md "T2"): the orbit's length and its small samples in
+        # floatexp, each component rounded once from the fixed point.
+        if key not in meta:
+            continue
+        assert _version(meta["spec_version"]) >= (0, 10, 0), f"{case}: {key} before 0.10.0"
+        assert key == "reference_small" or family == "julia", case
+        assert set(meta[key]) == {"length", "sha256", "rows"}, case
+        kind = "julia" if family == "julia" else "mandelbrot"
+        orbit_x = reference_orbit_x(
+            kind,
+            *center,
+            orbit_zoom(kind, viewport.zoom_log10),
+            meta["params"]["max_iter"],
+            c_re=meta["params"].get("c_re", 0.0),
+            c_im=meta["params"].get("c_im", 0.0),
+        )
+        assert len(orbit_x.samples) == meta[key]["length"], f"{case}: {key} length"
+        digest = hashlib.sha256(
+            np.ascontiguousarray(orbit_x.samples, dtype="<c16").tobytes()
+        ).hexdigest()
+        assert digest == meta[key]["sha256"], f"{case}: {key} samples"
+        small = orbit_x.small
+        rows = [
+            [int(i), _bits(float(rm)), int(re), _bits(float(im)), int(ie)]
+            for i, rm, re, im, ie in zip(
+                small.index, small.re_m, small.re_e, small.im_m, small.im_e, strict=True
+            )
+        ]
+        assert rows == meta[key]["rows"], f"{case}: {key} rows"
 
     if "critical_orbit" in meta:
         # Julia's rebase target: the critical orbit (z0 = 0), same c and precision.
@@ -220,7 +259,7 @@ def test_fractal_vector(case: Path) -> None:
             "julia",
             "0",
             "0",
-            viewport.zoom_log10,
+            orbit_zoom("julia", viewport.zoom_log10),
             meta["params"]["max_iter"],
             c_re=meta["params"]["c_re"],
             c_im=meta["params"]["c_im"],

@@ -15,6 +15,8 @@ string a caller can hand in.
 
 from __future__ import annotations
 
+import math
+
 MAX_DIGITS = 10_000
 MAX_EXPONENT = 100_000
 _WHITESPACE = " \t\r\n"
@@ -115,6 +117,41 @@ def difference(minuend: str, subtrahend: str) -> float:
         return diff / denominator
     except OverflowError:
         return float("inf") if diff > 0 else float("-inf")
+
+
+def difference_x(minuend: str, subtrahend: str) -> tuple[float, int]:
+    """``minuend - subtrahend`` as floatexp (m, e): the exact difference of the digits
+    rounded once to a 53-bit mantissa (ties to even), with no exponent range limit --
+    difference() for T2, where the off-center offset lies far below float64
+    (spec/deep-zoom.md "T2"). An exact zero is (0.0, 0)."""
+    neg_a, digits_a, exp_a = scan(minuend)
+    neg_b, digits_b, exp_b = scan(subtrahend)
+    common = min(exp_a, exp_b)
+    a = digits_a * 10 ** (exp_a - common) * (-1 if neg_a else 1)
+    b = digits_b * 10 ** (exp_b - common) * (-1 if neg_b else 1)
+    diff: int = a - b
+    if diff == 0:
+        return 0.0, 0
+    numerator = abs(diff) * (10**common if common >= 0 else 1)
+    denominator = 10**-common if common < 0 else 1
+    # A 53-bit quotient: q = floor(value * 2^s) in [2^52, 2^53).
+    s = 52 - (numerator.bit_length() - denominator.bit_length())
+    while True:
+        num, den = (numerator << s, denominator) if s >= 0 else (numerator, denominator << -s)
+        q, r = divmod(num, den)
+        if q >= 1 << 53:
+            s -= 1
+        elif q < 1 << 52:
+            s += 1
+        else:
+            break
+    if 2 * r > den or (2 * r == den and q & 1):
+        q += 1
+        if q == 1 << 53:
+            q >>= 1
+            s -= 1
+    mantissa = math.ldexp(float(q), -52)  # exact: q has 53 bits
+    return (-mantissa if diff < 0 else mantissa), 52 - s
 
 
 def digits_of(value: int) -> str:

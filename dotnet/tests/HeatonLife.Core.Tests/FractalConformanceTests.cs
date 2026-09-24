@@ -22,11 +22,11 @@ namespace HeatonLife.Tests
         // Everything this runner understands. A key outside these sets fails the case
         // rather than being skipped: a runner that ignored, say, "critical_orbit" would
         // replay a deep Julia case the old way and fail confusingly or pass wrongly.
-        private static readonly HashSet<string> SpecVersions = new HashSet<string> { "0.2.0", "0.3.0", "0.4.0", "0.6.0", "0.7.0", "0.8.0" };
+        private static readonly HashSet<string> SpecVersions = new HashSet<string> { "0.2.0", "0.3.0", "0.4.0", "0.6.0", "0.7.0", "0.8.0", "0.10.0" };
         private static readonly HashSet<string> TopKeys = new HashSet<string>
         {
             "spec_version", "family", "tier", "params", "viewport", "size", "outputs",
-            "reference_orbit", "critical_orbit", "source",
+            "reference_orbit", "critical_orbit", "source", "reference_small", "critical_small",
         };
         private static readonly Dictionary<string, HashSet<string>> ParamKeys = new Dictionary<string, HashSet<string>>
         {
@@ -159,6 +159,49 @@ namespace HeatonLife.Tests
                 (criticalRe, criticalIm) = ReadC128(
                     Path.Combine(caseDir, criticalMeta.GetProperty("file").GetString()!));
                 Assert.Equal(criticalMeta.GetProperty("length").GetInt32(), criticalRe.Length);
+            }
+
+            // T2 (0.10.0, spec/deep-zoom.md "T2"): the orbits' length and small samples in
+            // floatexp, each component rounded once from the fixed point.
+            foreach (var (key, re, im) in new[] { ("reference_small", viewport.OrbitCenterRe, viewport.OrbitCenterIm), ("critical_small", "0", "0") })
+            {
+                if (!root.TryGetProperty(key, out var smallMeta))
+                    continue;
+                Assert.True(AtLeast(root.GetProperty("spec_version").GetString()!, 0, 10, 0), $"{family}/{caseName}: {key} before 0.10.0");
+                Assert.True(key == "reference_small" || family == "julia", $"{family}/{caseName}: {key}");
+                AssertKeys(smallMeta, $"{family}/{caseName} {key}", "length", "sha256", "rows");
+                int maxIter = p.GetProperty("max_iter").GetInt32();
+                var kind = family == "julia" ? ReferenceOrbit.Kind.Julia : ReferenceOrbit.Kind.Mandelbrot;
+                double cRe = family == "julia" ? p.GetProperty("c_re").GetDouble() : 0.0;
+                double cIm = family == "julia" ? p.GetProperty("c_im").GetDouble() : 0.0;
+                double orbitZoom = FractalEngine.OrbitZoom(family == "julia", viewport.ZoomLog10);
+                var (sre, _, small) = ReferenceOrbit.ComputeX(kind, re, im, orbitZoom, maxIter, cRe, cIm);
+                int length = (int)Math.Min(sre.Length, (long)maxIter + 1);
+                Assert.Equal(smallMeta.GetProperty("length").GetInt32(), length);
+                var (sreAll, simAll, _) = ReferenceOrbit.ComputeX(kind, re, im, orbitZoom, maxIter, cRe, cIm);
+                var bytes = new byte[length * 16];
+                for (int i = 0; i < length; i++)
+                {
+                    Buffer.BlockCopy(BitConverter.GetBytes(sreAll[i]), 0, bytes, 16 * i, 8);
+                    Buffer.BlockCopy(BitConverter.GetBytes(simAll[i]), 0, bytes, 16 * i + 8, 8);
+                }
+                using (var sha = System.Security.Cryptography.SHA256.Create())
+                {
+                    string digest = BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant();
+                    Assert.Equal(smallMeta.GetProperty("sha256").GetString(), digest);
+                }
+                var rows = smallMeta.GetProperty("rows");
+                int count = 0;
+                for (int i = 0; i < small.Index.Length && small.Index[i] < length; i++)
+                {
+                    var row = rows[count++];
+                    Assert.Equal(row[0].GetInt32(), small.Index[i]);
+                    Assert.Equal(row[1].GetString(), Bits(small.Re[i].M));
+                    Assert.Equal(row[2].GetInt64(), small.Re[i].E);
+                    Assert.Equal(row[3].GetString(), Bits(small.Im[i].M));
+                    Assert.Equal(row[4].GetInt64(), small.Im[i].E);
+                }
+                Assert.Equal(rows.GetArrayLength(), count);
             }
 
             // Serial and parallel must both match the vectors byte-for-byte
@@ -409,6 +452,8 @@ namespace HeatonLife.Tests
                         $"{what}: pixel {i} is {got[i]:R}, want {want[i]:R}");
             }
         }
+
+        private static string Bits(double value) => $"0x{BitConverter.DoubleToInt64Bits(value):X16}";
 
         /// <summary>Raw little-endian float64.</summary>
         private static double[] ReadF64(string path)

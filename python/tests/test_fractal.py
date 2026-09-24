@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import pytest
 
@@ -190,6 +192,34 @@ def test_julia_t1_rebases_onto_the_critical_orbit() -> None:
     assert np.array_equal(counts, truth)
 
 
+@pytest.mark.parametrize("radius", [1e200, math.inf, math.nan])
+def test_escape_radius_squared_must_be_finite(radius: float) -> None:
+    """spec/fractals.md "Counts convention": |z|^2 > R^2 could never fire."""
+    for family in (Mandelbrot, Julia, BurningShip):
+        with pytest.raises(ValueError, match="escape_radius"):
+            family(escape_radius=radius)
+    Mandelbrot(escape_radius=1.3e154)  # its square is still finite
+
+
+def test_julia_orbits_run_at_twice_the_zoom(monkeypatch: pytest.MonkeyPatch) -> None:
+    """spec/deep-zoom.md "Reference orbit": near a preimage of 0 a Julia frame's pixels
+    differ by ~ps^2, so its orbits run at twice its zoom. The vector matches a 1466-bit
+    direct iteration on all 144 pixels; at the frame's own zoom 51 counts differ."""
+    import json
+    from pathlib import Path
+
+    from heaton_life.fractal import escape_fields
+
+    case = Path(__file__).resolve().parents[2] / "vectors/julia/t1-julia-i-precision-zoom100-12"
+    view = json.loads((case / "params.json").read_text())["viewport"]
+    vp = Viewport(view["center_re"], view["center_im"], 100.0)
+    expected = np.fromfile(case / "iterations.i32", dtype="<i4").reshape(12, 12)
+    assert np.array_equal(Julia(c=1j, max_iter=5000).iterations((12, 12), vp), expected)
+    monkeypatch.setattr(escape_fields, "orbit_zoom", lambda kind, zoom: zoom)
+    frame_zoom = Julia(c=1j, max_iter=5000).iterations((12, 12), vp)
+    assert int((frame_zoom != expected).sum()) == 51
+
+
 def test_deep_zoom_past_float64_produces_structure() -> None:
     counts = Mandelbrot(max_iter=5000).iterations(
         (32, 32), Viewport(SEAHORSE_RE, SEAHORSE_IM, 14.0)
@@ -199,9 +229,15 @@ def test_deep_zoom_past_float64_produces_structure() -> None:
     assert escaped.max() - escaped.min() > 100, "and with varied counts (structure)"
 
 
-def test_zoom_beyond_t1_raises() -> None:
-    with pytest.raises(ValueError, match="floatexp"):
-        Mandelbrot(max_iter=50).iterations((8, 8), Viewport("-0.5", "0.0", 300.0))
+def test_each_family_refuses_zooms_past_its_ceiling() -> None:
+    """Mandelbrot and Julia render T2 to 1e9000; the Burning Ship stops at T1 (1e290);
+    a zoom that is not finite is refused everywhere."""
+    with pytest.raises(ValueError, match="deepest zoom"):
+        Mandelbrot(max_iter=50).iterations((8, 8), Viewport("-0.5", "0.0", 9000.5))
+    with pytest.raises(ValueError, match="deepest zoom"):
+        BurningShip(max_iter=50).iterations((8, 8), Viewport("-0.5", "0.0", 300.0))
+    with pytest.raises(ValueError, match="finite"):
+        Julia(max_iter=50).iterations((8, 8), Viewport("-0.5", "0.0", math.inf))
 
 
 def test_render_range_and_interior_black() -> None:
@@ -258,7 +294,7 @@ def test_newton_refuses_to_leave_the_direct_tier() -> None:
     The C# port enforced this all along.
     """
     field = Newton(degree=3, max_iter=60)
-    field.basins((16, 16), Viewport("0.3", "0.5", 12.0))          # at the ceiling: fine
+    field.basins((16, 16), Viewport("0.3", "0.5", 12.0))  # at the ceiling: fine
 
     for zoom in (12.5, 14.0, 300.0):
         with pytest.raises(ValueError, match="no perturbation tier"):
@@ -322,7 +358,8 @@ def test_orbit_cache_evicts_least_recently_used_under_both_caps(
     reference_orbit("mandelbrot", "-0.20", "0.1", 13.0, 100)
     assert [key[1] for key in bignum._CACHE] == ["-0.10", "-0.20"]
 
-    monkeypatch.setattr(bignum, "CACHE_BYTES", 101 * 16 * 3)  # three 101-sample orbits
+    # Three 101-sample orbits, each with its one small sample (Z0 = 0) at 40 bytes.
+    monkeypatch.setattr(bignum, "CACHE_BYTES", (101 * 16 + 40) * 3)
     for i in range(1, 5):
         reference_orbit("mandelbrot", f"-0.2{i}", "0.1", 13.0, 100)  # new keys: each inserts
     assert [key[1] for key in bignum._CACHE] == ["-0.22", "-0.23", "-0.24"]
@@ -340,8 +377,11 @@ def test_tiers_ceilings_and_raw_smooth_values() -> None:
         "T1",
         "T2",
     ]
-    assert Mandelbrot().max_zoom_log10 == Julia().max_zoom_log10 == BurningShip().max_zoom_log10
-    assert Mandelbrot().max_zoom_log10 == 290.0 and Newton().max_zoom_log10 == 12.0
+    assert Mandelbrot().max_zoom_log10 == Julia().max_zoom_log10 == 9000.0
+    assert BurningShip().max_zoom_log10 == 290.0 and Newton().max_zoom_log10 == 12.0
+    for bad in (math.nan, math.inf, -math.inf):
+        with pytest.raises(ValueError):
+            tier_of(bad)
 
     frames = [
         (Mandelbrot(max_iter=800), Viewport("-0.5", "0.0", 0.0)),

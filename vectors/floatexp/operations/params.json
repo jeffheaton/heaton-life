@@ -1,0 +1,547 @@
+{
+  "cases": [
+    {
+      "a": [
+        "0x3FF0000000000000",
+        0
+      ],
+      "b": [
+        "0x3FF0000000000000",
+        -63
+      ],
+      "expected": [
+        "0x3FF0000000000000",
+        0
+      ],
+      "note": "gap 63: below half an ulp, rounds to a",
+      "op": "add"
+    },
+    {
+      "a": [
+        "0x3FF0000000000000",
+        0
+      ],
+      "b": [
+        "0x3FF0000000000000",
+        -64
+      ],
+      "expected": [
+        "0x3FF0000000000000",
+        0
+      ],
+      "note": "gap 64: still aligned exactly, rounds to a",
+      "op": "add"
+    },
+    {
+      "a": [
+        "0x3FF0000000000000",
+        0
+      ],
+      "b": [
+        "0x3FF0000000000000",
+        -65
+      ],
+      "expected": [
+        "0x3FF0000000000000",
+        0
+      ],
+      "note": "gap 65: a, by the drop rule",
+      "op": "add"
+    },
+    {
+      "a": [
+        "0x3FF0000000000000",
+        0
+      ],
+      "b": [
+        "0x3FF0000000000000",
+        -53
+      ],
+      "expected": [
+        "0x3FF0000000000000",
+        0
+      ],
+      "note": "exactly half an ulp: ties to even, down",
+      "op": "add"
+    },
+    {
+      "a": [
+        "0x3FF0000000000001",
+        0
+      ],
+      "b": [
+        "0x3FF0000000000000",
+        -53
+      ],
+      "expected": [
+        "0x3FF0000000000002",
+        0
+      ],
+      "note": "exactly half an ulp: ties to even, up",
+      "op": "add"
+    },
+    {
+      "a": [
+        "0x3FF0000000000000",
+        0
+      ],
+      "b": [
+        "0x3FF8000000000000",
+        -53
+      ],
+      "expected": [
+        "0x3FF0000000000001",
+        0
+      ],
+      "note": "just over half an ulp: up",
+      "op": "add"
+    },
+    {
+      "a": [
+        "0x3FF8000000000000",
+        3
+      ],
+      "b": [
+        "0xBFF8000000000000",
+        3
+      ],
+      "expected": [
+        "0x0000000000000000",
+        0
+      ],
+      "note": "cancellation to zero",
+      "op": "add"
+    },
+    {
+      "a": [
+        "0x3FF0000000000000",
+        0
+      ],
+      "b": [
+        "0xBFFFFFFFFFFFFFFF",
+        -1
+      ],
+      "expected": [
+        "0x3FF0000000000000",
+        -53
+      ],
+      "note": "cancellation to 2^-53",
+      "op": "add"
+    },
+    {
+      "a": [
+        "0x3FFC000000000000",
+        -1000
+      ],
+      "b": [
+        "0x3FF4000000000000",
+        -1001
+      ],
+      "expected": [
+        "0x3FF3000000000000",
+        -999
+      ],
+      "note": "a carry into the next binade",
+      "op": "add"
+    },
+    {
+      "a": [
+        "0xBFF8000000000000",
+        7
+      ],
+      "b": [
+        "0x3FF8000000000000",
+        5
+      ],
+      "expected": [
+        "0xBFF2000000000000",
+        7
+      ],
+      "note": "mixed signs, renormalized down",
+      "op": "add"
+    },
+    {
+      "a": [
+        "0x0000000000000000",
+        0
+      ],
+      "b": [
+        "0x3FF4000000000000",
+        -5000
+      ],
+      "expected": [
+        "0x3FF4000000000000",
+        -5000
+      ],
+      "note": "zero plus b is b",
+      "op": "add"
+    },
+    {
+      "a": [
+        "0x3FF8000000000000",
+        1
+      ],
+      "b": [
+        "0x3FF8000000000000",
+        1
+      ],
+      "expected": [
+        "0x3FF2000000000000",
+        3
+      ],
+      "note": "exact: 2.25 * 4 = 9",
+      "op": "mul"
+    },
+    {
+      "a": [
+        "0x3FF0000000000001",
+        -3000
+      ],
+      "b": [
+        "0x3FFFFFFFFFFFFFFF",
+        -4000
+      ],
+      "expected": [
+        "0x3FF0000000000000",
+        -6999
+      ],
+      "note": "one rounding",
+      "op": "mul"
+    },
+    {
+      "a": [
+        "0x3FF0000000000000",
+        -1073741824
+      ],
+      "b": [
+        "0x3FF0000000000000",
+        -1073741824
+      ],
+      "expected": [
+        "0x3FF0000000000000",
+        -2147483648
+      ],
+      "note": "exponent exactly -2^31: kept",
+      "op": "mul"
+    },
+    {
+      "a": [
+        "0x3FF0000000000000",
+        -1073741824
+      ],
+      "b": [
+        "0x3FF0000000000000",
+        -1073741825
+      ],
+      "expected": [
+        "0x0000000000000000",
+        0
+      ],
+      "note": "below -2^31: zero (the floor)",
+      "op": "mul"
+    },
+    {
+      "a": [
+        "0xBFF4000000000000",
+        12
+      ],
+      "b": [
+        "0x0000000000000000",
+        0
+      ],
+      "expected": [
+        "0x0000000000000000",
+        0
+      ],
+      "note": "times zero",
+      "op": "mul"
+    },
+    {
+      "a": [
+        "0x3FF0000000000000",
+        -1022
+      ],
+      "expected": "0x0010000000000000",
+      "note": "the smallest normal",
+      "op": "to_double"
+    },
+    {
+      "a": [
+        "0x3FF8000000000000",
+        -1023
+      ],
+      "expected": "0x000C000000000000",
+      "note": "a subnormal, exact",
+      "op": "to_double"
+    },
+    {
+      "a": [
+        "0x3FF0000000000000",
+        -1074
+      ],
+      "expected": "0x0000000000000001",
+      "note": "the smallest subnormal",
+      "op": "to_double"
+    },
+    {
+      "a": [
+        "0x3FF0000000000000",
+        -1075
+      ],
+      "expected": "0x0000000000000000",
+      "note": "half the smallest subnormal: ties to even, zero",
+      "op": "to_double"
+    },
+    {
+      "a": [
+        "0x3FF8000000000000",
+        -1075
+      ],
+      "expected": "0x0000000000000001",
+      "note": "over half: the smallest subnormal",
+      "op": "to_double"
+    },
+    {
+      "a": [
+        "0xBFFFFFFFFFFFFFFF",
+        -1060
+      ],
+      "expected": "0x8000000000008000",
+      "note": "a subnormal, rounded once",
+      "op": "to_double"
+    },
+    {
+      "a": [
+        "0x3FF0000000000000",
+        -2044
+      ],
+      "expected": "0x0000000000000000",
+      "note": "the two-step path's floor: zero",
+      "op": "to_double"
+    },
+    {
+      "a": [
+        "0xBFF0000000000000",
+        -2045
+      ],
+      "expected": "0x8000000000000000",
+      "note": "below it: a signed zero",
+      "op": "to_double"
+    },
+    {
+      "a": [
+        "0x3FFFFFFFFFFFFFFF",
+        1023
+      ],
+      "expected": "0x7FEFFFFFFFFFFFFF",
+      "note": "the largest finite",
+      "op": "to_double"
+    },
+    {
+      "a": [
+        "0x3FF0000000000000",
+        1024
+      ],
+      "expected": "0x7FF0000000000000",
+      "note": "past the top: infinity",
+      "op": "to_double"
+    },
+    {
+      "bits": 7,
+      "expected": [
+        "0x3FF0000000000000",
+        53
+      ],
+      "note": "rounded to 53 bits",
+      "op": "from_fixed",
+      "value": "1152921504606846979"
+    },
+    {
+      "bits": 0,
+      "expected": [
+        "0x3FF0000000000000",
+        54
+      ],
+      "note": "rounding carries into a new binade",
+      "op": "from_fixed",
+      "value": "18014398509481983"
+    },
+    {
+      "bits": 100,
+      "expected": [
+        "0xBFF0000000000000",
+        -47
+      ],
+      "note": "a tie, to even (down), negative",
+      "op": "from_fixed",
+      "value": "-9007199254740993"
+    },
+    {
+      "bits": 100,
+      "expected": [
+        "0x3FF0000000000002",
+        -47
+      ],
+      "note": "a tie, to even (up)",
+      "op": "from_fixed",
+      "value": "9007199254740995"
+    },
+    {
+      "bits": 1024,
+      "expected": [
+        "0x3FF8000000000000",
+        477
+      ],
+      "note": "far past the double range",
+      "op": "from_fixed",
+      "value": "105223986331302116242882763880842573980572047640992486472227394074372891551689966610971242659754907784959451220386312552197883646824409879262513116754014102543669869455987291793460408134750388839610046553020415888354066374794839027576150858167944881933995157655254327006527747520083391067388329129656742022941862630652973542297880282199014259825951576401024110690118349891125979681157990001005529856000525160066587176641302547615160146571051139625648128"
+    },
+    {
+      "bits": 3000,
+      "expected": [
+        "0x3FF0000000000000",
+        -3000
+      ],
+      "note": "far below it",
+      "op": "from_fixed",
+      "value": "1"
+    },
+    {
+      "expected": [
+        "0x3FF0000000000000",
+        -1074
+      ],
+      "exponent": 0,
+      "note": "the smallest subnormal, exact",
+      "op": "normalize",
+      "value": "0x0000000000000001"
+    },
+    {
+      "expected": [
+        "0xBFF8000000000000",
+        -2147483646
+      ],
+      "exponent": -2147483647,
+      "note": "exponent -2^31 + 2: kept",
+      "op": "normalize",
+      "value": "0xC008000000000000"
+    },
+    {
+      "expected": [
+        "0x0000000000000000",
+        0
+      ],
+      "exponent": -2147483649,
+      "note": "below the floor: zero",
+      "op": "normalize",
+      "value": "0x3FF8000000000000"
+    },
+    {
+      "a": [
+        "0x3FF8000000000000",
+        3
+      ],
+      "b": [
+        "0x3FF4000000000000",
+        3
+      ],
+      "expected": 1,
+      "note": "same exponent: by mantissa",
+      "op": "compare"
+    },
+    {
+      "a": [
+        "0x3FF0000000000000",
+        11
+      ],
+      "b": [
+        "0x3FFFFFFFFFFFFFFF",
+        10
+      ],
+      "expected": 1,
+      "note": "the exponent first",
+      "op": "compare"
+    },
+    {
+      "a": [
+        "0xBFF0000000000000",
+        11
+      ],
+      "b": [
+        "0xBFFFFFFFFFFFFFFF",
+        10
+      ],
+      "expected": -1,
+      "note": "negatives: the order reversed",
+      "op": "compare"
+    },
+    {
+      "a": [
+        "0xBFF0000000000000",
+        900
+      ],
+      "b": [
+        "0x3FF0000000000000",
+        -900
+      ],
+      "expected": -1,
+      "note": "the sign first",
+      "op": "compare"
+    },
+    {
+      "a": [
+        "0x3FF0000000000000",
+        -5000
+      ],
+      "b": [
+        "0x0000000000000000",
+        0
+      ],
+      "expected": 1,
+      "note": "positive over zero",
+      "op": "compare"
+    },
+    {
+      "a": [
+        "0xBFF0000000000000",
+        5000
+      ],
+      "b": [
+        "0x0000000000000000",
+        0
+      ],
+      "expected": -1,
+      "note": "negative under zero",
+      "op": "compare"
+    },
+    {
+      "a": [
+        "0x0000000000000000",
+        0
+      ],
+      "b": [
+        "0x0000000000000000",
+        0
+      ],
+      "expected": 0,
+      "note": "zero equals zero",
+      "op": "compare"
+    },
+    {
+      "a": [
+        "0xBFFC000000000000",
+        10
+      ],
+      "b": [
+        "0xBFFC000000000000",
+        10
+      ],
+      "expected": 0,
+      "note": "equal values",
+      "op": "compare"
+    }
+  ],
+  "family": "floatexp",
+  "spec_version": "0.10.0",
+  "tier": "bit-exact"
+}
