@@ -149,7 +149,7 @@ namespace HeatonLife
         private (int Root, int Iterations) Pixel(double zr, double zi, double tol2)
         {
             int d = Degree;
-            for (int it = 1; it <= MaxIter; it++)
+            for (long it = 1; it <= MaxIter; it++)
             {
                 // zd1 = z^(d-1); deriv = d * zd1
                 var (pr, pi) = PowInt(zr, zi, d - 1);
@@ -171,7 +171,7 @@ namespace HeatonLife
                 double resRe = rr - 1.0;
                 double resIm = ri;
                 if (resRe * resRe + resIm * resIm < tol2)
-                    return (NearestRoot(zr, zi), it);
+                    return (NearestRoot(zr, zi), (int)it);
             }
             return (-1, -1);
         }

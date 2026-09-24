@@ -61,7 +61,7 @@ namespace HeatonLife
             int m = 0;
             int last = refRe.Length - 1;
             double r2 = escapeRadius * escapeRadius;
-            for (int it = 1; it <= maxIter; it++)
+            for (long it = 1; it <= maxIter; it++)
             {
                 // dz = (2*Z[m] + dz) * dz + dc, with the reference's fma-contracted multiply
                 double tr = 2.0 * refRe[m] + dzr;
@@ -77,7 +77,7 @@ namespace HeatonLife
                 {
                     finalRe = zr;
                     finalIm = zi;
-                    return it;
+                    return (int)it;
                 }
                 if (zabs2 < dzr * dzr + dzi * dzi)
                 {
@@ -131,7 +131,7 @@ namespace HeatonLife
             double dr = d0Re, di = d0Im;
             double zr = refRe[0] + dzr;                   // the pre-square z of iteration 1
             double zi = refIm[0] + dzi;
-            for (int it = 1; it <= maxIter; it++)
+            for (long it = 1; it <= maxIter; it++)
             {
                 double tdr = 2.0 * (zr * dr - zi * di);
                 if (addScale)
@@ -154,7 +154,7 @@ namespace HeatonLife
                     finalIm = zi;
                     finalDr = dr;
                     finalDi = di;
-                    return it;
+                    return (int)it;
                 }
                 if (zabs2 < dzr * dzr + dzi * dzi)
                 {
@@ -298,7 +298,7 @@ namespace HeatonLife
             int m = 0;
             int last = orbitRe.Length - 1;
             double r2 = escapeRadius * escapeRadius;
-            for (int it = 1; it <= maxIter; it++)
+            for (long it = 1; it <= maxIter; it++)
             {
                 double xRef = orbitRe[m];
                 double yRef = orbitIm[m];
@@ -316,7 +316,7 @@ namespace HeatonLife
                 {
                     finalRe = zx;
                     finalIm = zy;
-                    return it;
+                    return (int)it;
                 }
                 if (zabs2 < dx * dx + dy * dy)
                 {

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace HeatonLife
 {
@@ -50,6 +52,20 @@ namespace HeatonLife
 
         internal int Levels => R.Length;
 
+        /// <summary>Whether any entry can ever be taken (a parent is dead when its left child is).</summary>
+        internal bool Live
+        {
+            get
+            {
+                if (R.Length == 0)
+                    return false;
+                foreach (double r in R[0])
+                    if (r > 0.0)
+                        return true;
+                return false;
+            }
+        }
+
         private static double PowerOfTwo(int exponent) => BitConverter.Int64BitsToDouble((long)(1023 + exponent) << 52);
 
         /// <summary>
@@ -75,8 +91,84 @@ namespace HeatonLife
             return Math.Sqrt(xs * xs + ys * ys) * t;
         }
 
-        /// <summary>The frame's bound on |dc|: Mag(max |dc.re| over columns, max |dc.im| over rows).</summary>
-        internal static double DcBound(double maxAbsRe, double maxAbsIm) => Mag(maxAbsRe, maxAbsIm);
+        /// <summary>
+        /// The frame's bound on |dc|: Mag(max |dc.re| over columns, max |dc.im| over rows),
+        /// rounded up to a power of two — conservative (a larger bound only shrinks radii),
+        /// and one table then serves every frame within an octave of zoom.
+        /// </summary>
+        internal static double DcBound(double maxAbsRe, double maxAbsIm) => CeilPowerOfTwo(Mag(maxAbsRe, maxAbsIm));
+
+        /// <summary><see cref="DcBound"/> over a frame's own pixel deltas (an off-center reference's offset included).</summary>
+        internal static double FrameDcBound(int width, int height, Viewport viewport)
+        {
+            double ps = FractalEngine.PixelScale(width, viewport);
+            bool offCenter = viewport.HasReference;
+            double dRe = offCenter ? viewport.ReferenceOffsetRe : 0.0;
+            double dIm = offCenter ? viewport.ReferenceOffsetIm : 0.0;
+            double maxRe = 0.0, maxIm = 0.0;
+            for (int x = 0; x < width; x++)
+            {
+                double v = Math.Abs(offCenter ? FractalEngine.DeltaRe(x, width, ps, dRe) : FractalEngine.OffsetRe(x, width, ps));
+                if (v > maxRe)
+                    maxRe = v;
+            }
+            for (int y = 0; y < height; y++)
+            {
+                double v = Math.Abs(offCenter ? FractalEngine.DeltaIm(y, height, ps, dIm) : FractalEngine.OffsetIm(y, height, ps));
+                if (v > maxIm)
+                    maxIm = v;
+            }
+            return DcBound(maxRe, maxIm);
+        }
+
+        /// <summary>The least power of two &gt;= x (x itself when it is one); 0, +∞ and NaN unchanged.</summary>
+        internal static double CeilPowerOfTwo(double x)
+        {
+            if (!(x > 0.0) || double.IsInfinity(x))
+                return x;
+            long bits = BitConverter.DoubleToInt64Bits(x);
+            int exponent = (int)((bits >> 52) & 0x7FF);
+            long mantissa = bits & 0xFFFFFFFFFFFFFL;
+            if (exponent == 0)
+            {
+                // Subnormal: x = mantissa * 2^-1074; the least 2^k >= mantissa, scaled back.
+                int k = 0;
+                while ((1L << k) < mantissa)
+                    k++;
+                return k >= 52 ? PowerOfTwo(k - 1074) : BitConverter.Int64BitsToDouble(1L << k);
+            }
+            if (mantissa == 0)
+                return x;
+            return exponent + 1 >= 0x7FF ? double.PositiveInfinity : BitConverter.Int64BitsToDouble((long)(exponent + 1) << 52);
+        }
+
+        // Tables built for an orbit, keyed by what they depend on beyond it: a render re-uses
+        // the cached orbit's arrays, so a frame within an octave of the last builds nothing.
+        private static readonly ConditionalWeakTable<double[], List<(double[] Im, int Samples, double R, double Dc, BlaTable Table)>> Tables =
+            new ConditionalWeakTable<double[], List<(double[] Im, int Samples, double R, double Dc, BlaTable Table)>>();
+
+        /// <summary><see cref="Build"/>, re-using a table already built for these same arrays and inputs.</summary>
+        internal static BlaTable Get(double[] orbitRe, double[] orbitIm, int samples, double escapeRadius, double dcBound)
+        {
+            var list = Tables.GetValue(orbitRe, _ => new List<(double[], int, double, double, BlaTable)>());
+            lock (list)
+            {
+                foreach (var entry in list)
+                {
+                    if (ReferenceEquals(entry.Im, orbitIm) && entry.Samples == samples
+                        && entry.R.Equals(escapeRadius) && entry.Dc.Equals(dcBound))
+                        return entry.Table;
+                }
+            }
+            var table = Build(orbitRe, orbitIm, samples, escapeRadius, dcBound);
+            lock (list)
+            {
+                if (list.Count >= 4)
+                    list.RemoveAt(0);
+                list.Add((orbitIm, samples, escapeRadius, dcBound, table));
+            }
+            return table;
+        }
 
         /// <summary>
         /// The radius of x followed by y: num &gt; 0 ? min(r1, num / |A_x|) : 0 with
@@ -93,12 +185,18 @@ namespace HeatonLife
         private static double Alive(double r, double ar, double ai, double br, double bi)
             => r > 0.0 && Mag(ar, ai) < Cap && Mag(br, bi) < Cap ? r : 0.0;
 
-        /// <summary>Build the table (spec/deep-zoom.md "BLA").</summary>
-        internal static BlaTable Build(double[] orbitRe, double[] orbitIm, double escapeRadius, double dcBound)
+        /// <summary>
+        /// Build the table (spec/deep-zoom.md "BLA") over the first <paramref name="samples"/>
+        /// samples of the orbit — max_iter + 1 at most, so a cached orbit longer than the
+        /// frame needs builds the same table the reference does, at the frame's cost.
+        /// </summary>
+        internal static BlaTable Build(double[] orbitRe, double[] orbitIm, int samples, double escapeRadius, double dcBound)
         {
+            if (samples < 1 || samples > orbitRe.Length || samples > orbitIm.Length)
+                throw new ArgumentOutOfRangeException(nameof(samples));
             double r2 = escapeRadius * escapeRadius;
-            int extent = orbitRe.Length - 1;
-            for (int k = 1; k < orbitRe.Length; k++)
+            int extent = samples - 1;
+            for (int k = 1; k < samples; k++)
             {
                 if (orbitRe[k] * orbitRe[k] + orbitIm[k] * orbitIm[k] > r2)
                 {

@@ -34,7 +34,7 @@ namespace HeatonLife.Tests
             var viewport = P1959Zoom30();
             var (orbitRe, orbitIm) = ReferenceOrbit.Mandelbrot(
                 viewport.OrbitCenterRe, viewport.OrbitCenterIm, viewport.ZoomLog10, 20000);
-            var table = BlaTable.Build(orbitRe, orbitIm, 1000.0, BlaTable.DcBound(1e-30, 1e-30));
+            var table = BlaTable.Build(orbitRe, orbitIm, orbitRe.Length, 1000.0, BlaTable.DcBound(1e-30, 1e-30));
             Assert.True(table.Extent < orbitRe.Length - 1, "premise: the reference escapes");
             Assert.True(table.Levels >= 6);
             int live = 0;
@@ -80,6 +80,46 @@ namespace HeatonLife.Tests
                 Assert.True(cached.AsSpan().SequenceEqual(replay), $"max_iter {maxIter}");
                 Assert.True(cachedApplied.AsSpan().SequenceEqual(replayApplied), $"max_iter {maxIter}");
             }
+        }
+
+        [Fact]
+        public void ALiveRenderFromAPrimedCacheMatchesTheVector()
+        {
+            // The public path reuses whatever orbit the cache holds: prime it at 8x max_iter,
+            // then render a BLA vector's frame live — its counts and skips must be the file's.
+            string caseDir = System.IO.Path.Combine(TestPaths.VectorRoot(), "mandelbrot", "bla-p1959-zoom30-16");
+            using var doc = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText(System.IO.Path.Combine(caseDir, "params.json")));
+            var root = doc.RootElement;
+            var vp = root.GetProperty("viewport");
+            var viewport = new Viewport(vp.GetProperty("center_re").GetString()!, vp.GetProperty("center_im").GetString()!, vp.GetProperty("zoom_log10").GetDouble());
+            int maxIter = root.GetProperty("params").GetProperty("max_iter").GetInt32();
+            int w = root.GetProperty("size")[0].GetInt32(), h = root.GetProperty("size")[1].GetInt32();
+            new Mandelbrot(8 * maxIter, 1000.0, 1, false).Iterations(4, 4, viewport);
+            var counts = new int[w * h];
+            var applied = new int[w * h];
+            new Mandelbrot(maxIter, 1000.0, 3, true).Fields(w, h, viewport, counts, applied);
+            Assert.True(counts.AsSpan().SequenceEqual(ReadI32(System.IO.Path.Combine(caseDir, "iterations.i32"))));
+            Assert.True(applied.AsSpan().SequenceEqual(ReadI32(System.IO.Path.Combine(caseDir, "bla_applications.i32"))));
+        }
+
+        private static int[] ReadI32(string path)
+        {
+            byte[] bytes = System.IO.File.ReadAllBytes(path);
+            var values = new int[bytes.Length / 4];
+            Buffer.BlockCopy(bytes, 0, values, 0, bytes.Length);
+            return values;
+        }
+
+        [Fact]
+        public void CeilPowerOfTwo()
+        {
+            Assert.Equal(1.0, BlaTable.CeilPowerOfTwo(1.0));
+            Assert.Equal(2.0, BlaTable.CeilPowerOfTwo(1.0000000000000002));
+            Assert.Equal(0.5, BlaTable.CeilPowerOfTwo(0.3));
+            Assert.Equal(0.0, BlaTable.CeilPowerOfTwo(0.0));
+            Assert.Equal(double.Epsilon * 4, BlaTable.CeilPowerOfTwo(double.Epsilon * 3));
+            Assert.Equal(BitConverter.Int64BitsToDouble(1L << 52), BlaTable.CeilPowerOfTwo(BitConverter.Int64BitsToDouble((1L << 52) - 1)));
+            Assert.Equal(double.PositiveInfinity, BlaTable.CeilPowerOfTwo(double.MaxValue));
         }
 
         [Fact]

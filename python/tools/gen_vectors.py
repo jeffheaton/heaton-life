@@ -586,6 +586,7 @@ def write_fractal_case(
     status: bool = False,
     distance: bool = False,
     bla: bool = False,
+    bla_table: bool = False,
 ) -> None:
     case_dir = VECTOR_ROOT / family / name
     case_dir.mkdir(parents=True, exist_ok=True)
@@ -608,6 +609,26 @@ def write_fractal_case(
                 "kind": "bla_applications",
                 "file": "bla_applications.i32",
                 "shape": list(applied.shape),
+            }
+        )
+    if bla_table:  # the table itself, bit for bit, from this case's orbit and frame
+        from heaton_life.fractal.bla import build_table, frame_dc_bound, table_words
+        from heaton_life.fractal.engine import pixel_deltas
+
+        orbit = reference_orbit(
+            "mandelbrot", *viewport.orbit_center, viewport.zoom_log10, params["max_iter"]
+        )
+        table = build_table(
+            orbit, params["escape_radius"], frame_dc_bound(pixel_deltas(size, viewport))
+        )
+        words = table_words(table)
+        (case_dir / "bla_table.f64").write_bytes(np.ascontiguousarray(words, dtype="<f8").tobytes())
+        outputs.append(
+            {
+                "kind": "bla_table",
+                "file": "bla_table.f64",
+                "shape": [int(words.size)],
+                "entries": [int(level.r.size) for level in table.levels],
             }
         )
     if distance:  # spec/fractals.md "Distance estimate": relative epsilon
@@ -802,6 +823,8 @@ def write_distance_cases() -> None:
     )
 
 
+# A period-24 nucleus on the real axis (|Z_24| < 4e-112).
+NUCLEUS_P24 = ("-1.999969992922335067120936262876770995801628743210648088242038", "0")
 # A period-16 nucleus (the reference passes within 5e-120 of 0 at Z_16, Z_32, ...).
 NUCLEUS_P16 = (
     "-0.15290632811969396953419706326289366549612424542171",
@@ -860,6 +883,7 @@ def write_bla_cases() -> None:
         8000,
         Viewport(*eleven, 30.0).with_reference(*_shifted(eleven, 30.0, 0.2, -0.1)),
         (24, 24),
+        bla_table=True,
     )
     # A reference that escapes, pixels that rebase between skips (the oracle frame).
     case(
@@ -867,6 +891,7 @@ def write_bla_cases() -> None:
         20000,
         Viewport(*_shifted(NUCLEUS_P1959, 30.0, 0.7, 0.0), 30.0),
         (16, 16),
+        bla_table=True,
     )
     # Deltas near 1e-295: the dc bound and |dz| far below 1e-154, exponent-scaled.
     case("bla-tinyim-zoom280-32", 1000, Viewport("-2", "1e-295", 280.0), (32, 32))
@@ -881,6 +906,14 @@ def write_bla_cases() -> None:
     )
     # Skips that land on an escape: the reference escapes at Z_32, a multiple of the stride.
     case("bla-landing-escape-8", 2000, Viewport("-0.75", "0.10999", 30.0), (8, 8))
+    # Skips cut short by max_iter: after rebases n > m, and near 2003 the longest live span
+    # would overrun it (0.37 pixel off a period-24 nucleus).
+    case(
+        "bla-blocked-8",
+        2003,
+        Viewport(*_shifted(NUCLEUS_P24, 30.0, 0.37 / 8, 0.0), 30.0),
+        (8, 8),
+    )
 
 
 def _bits(value: float) -> str:

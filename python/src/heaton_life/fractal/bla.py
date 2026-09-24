@@ -66,14 +66,32 @@ class BlaTable:
     levels: tuple[BlaLevel, ...]
     extent: int  # k*: the steps tabulated are 0 .. extent - 1
 
+    @property
+    def live(self) -> bool:
+        """Whether any entry can ever be taken (a parent is never live when its left
+        child is dead, so level 0 decides)."""
+        return bool(self.levels) and bool((self.levels[0].r > 0.0).any())
+
+
+def ceil_power_of_two(x: float) -> float:
+    """The least power of two >= x (x itself when it is one); 0, inf and NaN unchanged."""
+    if not (x > 0.0) or math.isinf(x):
+        return x
+    mantissa, exponent = math.frexp(x)  # x = mantissa * 2^exponent, 0.5 <= mantissa < 1
+    if mantissa == 0.5:
+        return x
+    return math.inf if exponent > 1023 else math.ldexp(1.0, exponent)
+
 
 def frame_dc_bound(deltas: ComplexArray) -> float:
-    """The frame's bound on |dc|: mag(max |dc.re|, max |dc.im|) over its pixel deltas."""
+    """The frame's bound on |dc|: mag(max |dc.re|, max |dc.im|) over its pixel deltas,
+    rounded up to a power of two -- conservative (a larger bound only shrinks radii), and
+    one table then serves every frame within an octave of zoom."""
     if deltas.size == 0:
         return 0.0
     mr = np.max(np.abs(deltas.real))
     mi = np.max(np.abs(deltas.imag))
-    return float(mag(np.array([mr]), np.array([mi]))[0])
+    return ceil_power_of_two(float(mag(np.array([mr]), np.array([mi]))[0]))
 
 
 def _merge(
@@ -146,6 +164,16 @@ def build_table(orbit: ComplexArray, escape_radius: float, dc_bound: float) -> B
         r = _merge(below.r[x], below.r[y], xar, xai, xbr, xbi, dc_bound)
         levels.append(_level(ar, ai, br, bi, r))
     return BlaTable(tuple(levels), extent)
+
+
+def table_words(table: BlaTable) -> FloatArray:
+    """The table as one float64 array, level by level, each level's ar, ai, br, bi, r in
+    turn -- the layout of a vector's bla_table output (spec/fractals.md)."""
+    parts = [
+        part for level in table.levels for part in (level.ar, level.ai, level.br, level.bi, level.r)
+    ]
+    words: FloatArray = np.concatenate(parts) if parts else np.zeros(0)
+    return words
 
 
 def perturb_z2_bla(

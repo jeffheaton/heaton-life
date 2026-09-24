@@ -18,6 +18,7 @@ from heaton_life.fractal.bla import (
     EPSILON,
     STRIDE,
     build_table,
+    ceil_power_of_two,
     frame_dc_bound,
     mag,
     perturb_z2_bla,
@@ -38,13 +39,22 @@ ELEVEN = (ELEVEN_DIMENSIONS_RE, ELEVEN_DIMENSIONS_IM)
 
 
 def _scalar(
-    orbit: np.ndarray, dc: np.ndarray, max_iter: int, radius: float, table: object
+    orbit: np.ndarray,
+    dc: np.ndarray,
+    max_iter: int,
+    radius: float,
+    table: object,
+    events: dict[str, int] | None = None,
 ) -> tuple[list[int], list[int]]:
     """The per-pixel loop exactly as spec/deep-zoom.md "BLA" writes it, one pixel at a
-    time (the C# port's shape), for the vectorized one to match."""
+    time (the C# port's shape), for the vectorized one to match. ``events`` counts the
+    rare branches: an escape or a rebase right after a skip, a span cut by max_iter."""
     levels = table.levels  # type: ignore[attr-defined]
     sizes = [level.r.size for level in levels]
     last = len(orbit) - 1
+    tally = events if events is not None else {}
+    for key in ("land_escape", "land_rebase", "blocked"):
+        tally.setdefault(key, 0)
     counts, applied = [], []
     for c in dc:
         dz = np.zeros(1, dtype=np.complex128)
@@ -57,7 +67,10 @@ def _scalar(
                 dm = float(mag(dz.real, dz.imag)[0])
                 for index, level in enumerate(levels):
                     span = STRIDE << index
-                    if m % span or m // span >= sizes[index] or n + span > max_iter:
+                    if m % span or m // span >= sizes[index]:
+                        break
+                    if n + span > max_iter:
+                        tally["blocked"] += dm < level.r[m // span]
                         break
                     if not dm < level.r[m // span]:
                         break
@@ -82,8 +95,10 @@ def _scalar(
             zabs2 = float(z.real[0] * z.real[0] + z.imag[0] * z.imag[0])
             if zabs2 > radius * radius:
                 count = n
+                tally["land_escape"] += chosen >= 0
                 break
             if zabs2 < float(dz.real[0] * dz.real[0] + dz.imag[0] * dz.imag[0]):
+                tally["land_rebase"] += chosen >= 0
                 dz = z.copy()
                 m = 0
         counts.append(count)
@@ -106,6 +121,15 @@ def test_mag() -> None:
     assert got[4] == np.inf and np.isnan(got[5])
     assert got[7] == 1e-320  # a subnormal scaled into range and back, exactly
     assert got[8] == pytest.approx(5e-310 * math.sqrt(2.0), rel=1e-15)
+
+
+def test_ceil_power_of_two() -> None:
+    assert ceil_power_of_two(1.0) == 1.0 and ceil_power_of_two(math.nextafter(1.0, 2.0)) == 2.0
+    assert ceil_power_of_two(0.3) == 0.5 and ceil_power_of_two(0.0) == 0.0
+    tiny = 5e-324
+    assert ceil_power_of_two(3 * tiny) == 4 * tiny
+    assert ceil_power_of_two(math.ldexp(1.0, -1022) - tiny) == math.ldexp(1.0, -1022)
+    assert ceil_power_of_two(1.7976931348623157e308) == math.inf
 
 
 def test_table_invariants() -> None:
@@ -191,12 +215,15 @@ def test_bla_is_opt_in_and_t1_only() -> None:
     b = Mandelbrot(max_iter=300).fields((16, 16), home, bla_applications=True)
     assert np.array_equal(a.counts, b.counts)
     assert a.bla_applications is not None and not a.bla_applications.any()
-    assert not Julia().fields((4, 4), home, bla_applications=True).bla_applications.any()  # type: ignore[union-attr]
+    with pytest.raises(ValueError, match="no BLA"):
+        Julia().fields((4, 4), home, bla_applications=True)
     assert Mandelbrot().bla is False
 
 
 def test_the_distance_rides_through_skips() -> None:
-    """d' = A d + B ps through a skip: the estimate stays within span * eps of stepping."""
+    """d' = A d + B ps through a skip. Far from the set the pixel is well conditioned, so
+    the estimate agrees with stepping to 1e-12; near the boundary conditioning amplifies
+    the per-skip error like rounding, and only an oracle can compare the two."""
     viewport = Viewport("-0.75", "0.1", 170.0)
     on = Mandelbrot(max_iter=2000, bla=True).fields(
         (16, 16), viewport, distance=True, bla_applications=True
@@ -227,3 +254,32 @@ def test_bla_counts_match_direct_iteration() -> None:
     stable = oracle._stable(viewport, offsets, truth, 20000, 1000.0)
     assert stable.mean() >= 0.85
     assert int((counts[stable] != truth[stable]).sum()) == 0
+
+
+@pytest.mark.parametrize(
+    ("case", "event"),
+    [
+        ("bla-landing-escape-8", "land_escape"),
+        ("bla-landing-rebase-12", "land_rebase"),
+        ("bla-blocked-8", "blocked"),
+    ],
+)
+def test_the_rare_branches_stay_covered(case: str, event: str) -> None:
+    """Each stored vector exercises the branch it exists for; a regeneration that loses
+    it fails here rather than silently pinning less."""
+    import json
+
+    root = Path(__file__).resolve().parents[2] / "vectors" / "mandelbrot" / case
+    meta = json.loads((root / "params.json").read_text())
+    viewport = Viewport.from_dict(meta["viewport"])
+    size = (meta["size"][0], meta["size"][1])
+    max_iter = meta["params"]["max_iter"]
+    orbit = np.frombuffer((root / "orbit.c128").read_bytes(), dtype="<c16")
+    dc = pixel_deltas(size, viewport)
+    table = build_table(orbit, 1000.0, frame_dc_bound(dc))
+    events: dict[str, int] = {}
+    counts, applied = _scalar(orbit, dc, max_iter, 1000.0, table, events)
+    stored = np.frombuffer((root / "iterations.i32").read_bytes(), dtype="<i4")
+    skips = np.frombuffer((root / "bla_applications.i32").read_bytes(), dtype="<i4")
+    assert counts == stored.tolist() and applied == skips.tolist()
+    assert events[event] > 0, events

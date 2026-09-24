@@ -17,6 +17,8 @@ import pytest
 from heaton_life.core.bignum import reference_orbit
 from heaton_life.core.viewport import Viewport
 from heaton_life.fractal import BurningShip, Julia, Mandelbrot, Newton
+from heaton_life.fractal.bla import build_table, frame_dc_bound, table_words
+from heaton_life.fractal.engine import pixel_deltas
 
 VECTOR_ROOT = Path(__file__).resolve().parents[2] / "vectors"
 
@@ -57,7 +59,7 @@ PARAM_KEYS = {
     "burning-ship": {"max_iter", "escape_radius"},
     "newton": {"degree", "max_iter"},
 }
-OUTPUT_KINDS = {"iterations", "roots", "status", "distance", "bla_applications"}
+OUTPUT_KINDS = {"iterations", "roots", "status", "distance", "bla_applications", "bla_table"}
 BLA_FAMILIES = {"mandelbrot"}
 DISTANCE_FAMILIES = {"mandelbrot", "julia"}
 
@@ -116,6 +118,12 @@ def test_fractal_vector(case: Path) -> None:
         if key in meta:
             assert set(meta[key]) == {"file", "length"} and meta[key]["file"].endswith(".c128")
     for output in meta["outputs"]:
+        if output["kind"] == "bla_table":
+            # spec/deep-zoom.md "BLA": the table, value for value (NaN equal to NaN).
+            assert set(output) == {"kind", "file", "shape", "entries"}, case
+            assert output["file"].endswith(".f64") and "bla" in meta["params"], case
+            assert output["shape"] == [5 * sum(output["entries"])], case
+            continue
         if output["kind"] == "distance":
             # spec/fractals.md "Distance estimate" (0.7.0): float64, relative epsilon.
             assert set(output) == {"kind", "file", "shape", "relative_epsilon"}, case
@@ -162,6 +170,16 @@ def test_fractal_vector(case: Path) -> None:
     assert not bla or "bla_applications" in kinds, f"{case}: a BLA case records its applications"
     for output in meta["outputs"]:
         what = f"{family}/{case_dir.name}: {output['kind']}"
+        if output["kind"] == "bla_table":
+            stored_orbit = np.frombuffer(
+                (case_dir / meta["reference_orbit"]["file"]).read_bytes(), dtype="<c16"
+            )
+            bound = frame_dc_bound(pixel_deltas(size, viewport))
+            table = build_table(stored_orbit, meta["params"]["escape_radius"], bound)
+            assert [int(level.r.size) for level in table.levels] == output["entries"], what
+            want = np.frombuffer((case_dir / output["file"]).read_bytes(), dtype="<f8")
+            assert np.array_equal(table_words(table), want, equal_nan=True), what
+            continue
         if output["kind"] == "distance":
             expected_de = np.frombuffer((case_dir / output["file"]).read_bytes(), dtype="<f8")
             got_de = produced["distance"]

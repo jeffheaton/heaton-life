@@ -76,6 +76,7 @@ class _EscapeField:
 
     max_zoom_log10 = T1_MAX_ZOOM  # the deepest zoom these families render
     supports_distance = True  # a distance estimate needs an analytic map (not Burning Ship)
+    supports_bla = False  # bivariate linear approximation at T1 (Mandelbrot only so far)
 
     def __init__(self, max_iter: int = 500, escape_radius: float = 1000.0) -> None:
         if max_iter < 1:
@@ -125,6 +126,8 @@ class _EscapeField:
         1e64; it runs a separate loop that also carries the derivative.
         ``bla_applications``: how many BLA skips each pixel took (spec/deep-zoom.md "BLA";
         0 wherever BLA is off or the tier is T0)."""
+        if bla_applications and not self.supports_bla:
+            raise ValueError(f"{type(self).__name__} has no BLA")
         if distance:
             if not self.supports_distance:
                 raise ValueError(f"{type(self).__name__} has no distance estimate")
@@ -203,6 +206,8 @@ class Mandelbrot(_EscapeField):
     at T1 (spec/deep-zoom.md "BLA"): far fewer steps at depth, counts that differ from
     BLA-off only on float64-chaotic pixels -- an algorithm choice, so it is a parameter."""
 
+    supports_bla = True
+
     def __init__(
         self, max_iter: int = 500, escape_radius: float = 1000.0, bla: bool = False
     ) -> None:
@@ -242,8 +247,10 @@ class Mandelbrot(_EscapeField):
         dc = pixel_deltas(size, viewport)
         if self.bla:
             table = build_table(orbit, self.escape_radius, frame_dc_bound(dc))
-            scale = pixel_scale(size, viewport) if distance else None
-            return perturb_z2_bla(orbit, dc, self.max_iter, self.escape_radius, table, scale)
+            if table.live:
+                scale = pixel_scale(size, viewport) if distance else None
+                return perturb_z2_bla(orbit, dc, self.max_iter, self.escape_radius, table, scale)
+            # No entry can ever be taken: the BLA loop would be the plain loop, bit for bit.
         if not distance:
             counts, final = perturb_z2(
                 orbit, np.zeros_like(dc), dc, self.max_iter, self.escape_radius

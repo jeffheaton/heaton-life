@@ -268,7 +268,7 @@ namespace HeatonLife
         {
             double savedRe = 0.0, savedIm = 0.0;
             bool haveSaved = false;
-            for (int it = 1; it <= maxIter; it++)
+            for (long it = 1; it <= maxIter; it++)
             {
                 var (sr, si) = ComplexMul(zr, zi, zr, zi);
                 zr = sr + cr;
@@ -278,7 +278,7 @@ namespace HeatonLife
                     finalRe = zr;
                     finalIm = zi;
                     status = PixelStatus.Escaped;
-                    return it;
+                    return (int)it;
                 }
                 if (haveSaved && zr == savedRe && zi == savedIm)
                 {
@@ -316,7 +316,7 @@ namespace HeatonLife
         {
             double savedRe = 0.0, savedIm = 0.0;
             bool haveSaved = false;
-            for (int it = 1; it <= maxIter; it++)
+            for (long it = 1; it <= maxIter; it++)
             {
                 double tr = 2.0 * (zr * dr - zi * di);
                 if (addScale)
@@ -334,7 +334,7 @@ namespace HeatonLife
                     finalDr = dr;
                     finalDi = di;
                     status = PixelStatus.Escaped;
-                    return it;
+                    return (int)it;
                 }
                 if (haveSaved && zr == savedRe && zi == savedIm)
                 {
@@ -399,7 +399,7 @@ namespace HeatonLife
         {
             double savedRe = 0.0, savedIm = 0.0;
             bool haveSaved = false;
-            for (int it = 1; it <= maxIter; it++)
+            for (long it = 1; it <= maxIter; it++)
             {
                 double fr = Math.Abs(zr);
                 double fi = Math.Abs(zi);
@@ -411,7 +411,7 @@ namespace HeatonLife
                     finalRe = zr;
                     finalIm = zi;
                     status = PixelStatus.Escaped;
-                    return it;
+                    return (int)it;
                 }
                 if (haveSaved && zr == savedRe && zi == savedIm)
                 {

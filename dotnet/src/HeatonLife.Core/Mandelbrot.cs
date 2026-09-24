@@ -171,9 +171,10 @@ namespace HeatonLife
         /// <summary>
         /// <see cref="Fields(int,int,Viewport,int[],double[],byte[],double[],RenderProgress,CancellationToken)"/>
         /// that also reports how many BLA skips each pixel took (spec/deep-zoom.md "BLA"; 0
-        /// wherever BLA is off or the tier is T0) into <paramref name="blaApplications"/>.
+        /// wherever BLA is off or the tier is T0) into <paramref name="blaApplications"/> —
+        /// a diagnostic for the conformance runners and hosts' tests.
         /// </summary>
-        public void Fields(
+        internal void Fields(
             int width, int height, Viewport viewport, int[] counts, int[] blaApplications, double[]? smooth = null,
             byte[]? status = null, double[]? distance = null, RenderProgress? progress = null,
             CancellationToken cancellationToken = default)
@@ -266,20 +267,10 @@ namespace HeatonLife
             BlaTable? table = null;
             if (t1 && Bla)
             {
-                double maxRe = 0.0, maxIm = 0.0;
-                for (int x = 0; x < width; x++)
-                {
-                    double v = Math.Abs(offCenter ? FractalEngine.DeltaRe(x, width, ps, dRe) : FractalEngine.OffsetRe(x, width, ps));
-                    if (v > maxRe)
-                        maxRe = v;
-                }
-                for (int y = 0; y < height; y++)
-                {
-                    double v = Math.Abs(offCenter ? FractalEngine.DeltaIm(y, height, ps, dIm) : FractalEngine.OffsetIm(y, height, ps));
-                    if (v > maxIm)
-                        maxIm = v;
-                }
-                table = BlaTable.Build(orbitRe!, orbitIm!, EscapeRadius, BlaTable.DcBound(maxRe, maxIm));
+                int samples = (int)Math.Min(orbitRe!.Length, (long)MaxIter + 1);
+                table = BlaTable.Get(orbitRe, orbitIm!, samples, EscapeRadius, BlaTable.FrameDcBound(width, height, viewport));
+                if (!table.Live)
+                    table = null;                   // nothing can be taken: the plain loop, bit for bit
             }
             void Row(int y)
             {

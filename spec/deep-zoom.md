@@ -237,7 +237,8 @@ is float32's, and at float64 it flips counts on up to 14% of pixels), at most 32
 
 **Arithmetic.** Every BLA operation is plain float64 on real values — NumPy real
 arrays, never complex arrays or Python/NumPy complex scalars (whose multiply may be
-fma-contracted, depending on the compiler), C# plain doubles, never `ComplexMul`. A
+fma-contracted, depending on the compiler), C# plain doubles, never `ComplexMul`, and
+uncontracted on every runtime (a C++ backend such as IL2CPP must not fuse `a·b ± c`). A
 product `x·y` of pairs is `(x.re·y.re − x.im·y.im, x.re·y.im + x.im·y.re)`. Magnitudes
 are exponent-scaled:
 
@@ -251,8 +252,10 @@ mag(x, y):  a = max(|x|, |y|);  s = 2^600 if a < 2^−400,  2^−600 if a > 2^40
 **Table** — a pure function of the float64 orbit samples, `R` and the frame's `dc`
 bound:
 
-- `k*`, the extent: the least `k ≥ 1` with `Zr_k² + Zi_k² > R²`, else `len − 1`. Steps
-  `0 … k* − 1` are tabulated (step `j` uses `Z_j` and lands on `j + 1`).
+- `k*`, the extent: over the first `L = min(len, max_iter + 1)` samples, the least `k ≥ 1`
+  with `Zr_k² + Zi_k² > R²`, else `L − 1`. Steps `0 … k* − 1` are tabulated (step `j`
+  uses `Z_j` and lands on `j + 1`). Capping at `max_iter + 1` makes a cached orbit longer
+  than the frame needs build the same table, at the frame's cost.
 - Level 0: `⌊k*/S⌋` entries; entry `k` folds steps `kS … kS + 7` left to right:
 
   ```
@@ -272,9 +275,16 @@ bound:
 - **Dead rule**, applied to each entry as it is made, before any parent reads it: unless
   `r > 0`, `mag(A) < 2^960` and `mag(B) < 2^960`, `r = 0`. `Z₀ = 0` kills every entry that
   starts at step 0.
-- `dc_bound = mag(max |δc.re|, max |δc.im|)` over the frame's pixel deltas (columns,
-  rows; an off-center reference's offset included), computed once per frame before
-  rows fan out — so tiles of one frame would need the whole frame's bound.
+- `dc_bound` = `mag(max |δc.re|, max |δc.im|)` over the frame's pixel deltas (columns,
+  rows; an off-center reference's offset included), **rounded up to a power of two**
+  (the least `2^k ≥` it, exactly, from its bits), computed once per frame before rows fan
+  out — tiles of one frame need the whole frame's bound. Rounding up is conservative (a
+  larger bound only shrinks radii) and lets one table serve every frame within an octave
+  of zoom: implementations may cache tables keyed by the orbit, the samples used, `R` and
+  `dc_bound`.
+- A table with no live entry at level 0 has none anywhere (a parent is dead when its left
+  child is), and the loop below then is the plain loop step for step: implementations
+  may run the plain loop instead.
 
 **Per pixel** (the BLA-off loop is untouched):
 
@@ -300,20 +310,26 @@ count −1 when n reaches max_iter
 ```
 
 - The ascending search, stopping at the first failure, finds the longest usable span:
-  radii never increase up a level (`merge` takes a minimum), and every other condition
-  holds for a level only if it holds for the ones below.
-- A skip lands at most on `k* ≤ last`, never needing the end clamp. A table built on a
-  longer orbit (a cached one past `max_iter`) gives the same pixels: an entry a pixel
-  could use ends at `m + span ≤ n + span ≤ max_iter`.
+  an entry's radius never exceeds its left child's (`merge` takes a minimum with `r_x`;
+  it can exceed its right child's), and every other condition holds for a level only if
+  it holds for the ones below.
+- A skip lands at most on `k* ≤ last`, never needing the end clamp. `n` is a 64-bit
+  counter and `n + span` is formed in 64 bits, so `max_iter` up to `2³¹ − 1` cannot wrap
+  (the BLA-off loops count in 64 bits too). The cap `n + span ≤ max_iter` stays even
+  with the table capped: after a rebase `n > m`.
 - Inside a live span `|δ_j| < ε|Z_j|`, so no rebase is missed (`|Z_j + δ_j| > |δ_j|`); an
   escape inside a span would need `|Z_j|` within a relative `ε` of `R` — counts follow the
   BLA path by definition. The landing sample is not constrained: a skip may land on an
   escape (a reference that escapes at a multiple of `S`) or a rebase (a reference near 0
   there, as on a nucleus of period `8k`).
 - The distance estimate's derivative through a skip is `A·d + B·ps`, the linearized
-  step; its relative error against stepping grows to about `span·ε`.
-- `fields(..., bla_applications=True)` / C# `Fields(…, blaApplications)` report each
-  pixel's number of skips (0 at T0 or with BLA off).
+  step. Each skip's local error is at most about `span·ε`, amplified by the pixel's
+  conditioning like any rounding: near the boundary BLA-on and BLA-off estimates differ
+  by far more, and neither is closer to the truth (measured against fixed-point
+  derivatives). Distance vectors with BLA pin BLA's own values.
+- `fields(..., bla_applications=True)` (C#: an internal `Fields` overload) reports each
+  pixel's number of skips — a diagnostic for conformance and tests; families without BLA
+  reject it.
 
 ## Precision tiers (auto-selected from zoom)
 

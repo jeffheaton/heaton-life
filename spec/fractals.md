@@ -289,7 +289,11 @@ or stops the work and **never changes a completed frame's output**:
 - A Mandelbrot case may set `"bla": true` in its params ([deep-zoom.md](deep-zoom.md#bla-bivariate-linear-approximation-mandelbrot-opt-in));
   it then carries a `bla_applications` output (`bla_applications.i32`, each pixel's
   number of skips), whose total must be positive — a BLA case that never engages pins
-  nothing — and `"spec_version": "0.8.0"` or later.
+  nothing — and `"spec_version": "0.8.0"` or later. It may add a `bla_table` output
+  (`bla_table.f64`, `"entries"`: the entries per level): the table built from the stored
+  orbit and the frame's `dc_bound`, level by level `ar, ai, br, bi, r`, compared value for
+  value with every NaN equal to every NaN — build differences flip table bits on every
+  frame but counts only on rare pixels.
 - Cases written from 2026-09-23 carry `"spec_version": "0.3.0"`, those with a reference
   `"0.4.0"` or later, those with a status `"0.6.0"` or later, those with a distance
   `"0.7.0"` or later, those with BLA `"0.8.0"` (earlier ones keep `0.2.0`; [vectors/README.md](../vectors/README.md) lists

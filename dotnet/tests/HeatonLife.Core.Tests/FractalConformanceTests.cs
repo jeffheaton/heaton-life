@@ -102,6 +102,14 @@ namespace HeatonLife.Tests
             string version = root.GetProperty("spec_version").GetString()!;
             foreach (var output in root.GetProperty("outputs").EnumerateArray())
             {
+                if (output.GetProperty("kind").GetString() == "bla_table")
+                {
+                    // spec/deep-zoom.md "BLA": the table itself, value for value.
+                    AssertKeys(output, $"{family}/{caseName} output", "kind", "file", "shape", "entries");
+                    Assert.EndsWith(".f64", output.GetProperty("file").GetString()!);
+                    Assert.True(p.TryGetProperty("bla", out _), $"{family}/{caseName}: a table without bla");
+                    continue;
+                }
                 if (output.GetProperty("kind").GetString() == "distance")
                 {
                     // spec/fractals.md "Distance estimate" (0.7.0): float64, relative epsilon.
@@ -168,6 +176,12 @@ namespace HeatonLife.Tests
                 foreach (var output in root.GetProperty("outputs").EnumerateArray())
                 {
                     string kind = output.GetProperty("kind").GetString()!;
+                    if (kind == "bla_table")
+                    {
+                        AssertTable(caseDir, output, viewport, width, height, orbitRe!, orbitIm!,
+                            p.GetProperty("max_iter").GetInt32(), p.GetProperty("escape_radius").GetDouble());
+                        continue;
+                    }
                     if (kind == "distance")
                     {
                         double[] want = ReadF64(Path.Combine(caseDir, output.GetProperty("file").GetString()!));
@@ -348,6 +362,34 @@ namespace HeatonLife.Tests
                 produced["status"] = statusInts;
             }
             return produced;
+        }
+
+        /// <summary>
+        /// The BLA table built from the stored orbit and the frame's dc bound, level by level
+        /// (ar, ai, br, bi, r), must equal the stored words value for value (NaN equal to NaN).
+        /// </summary>
+        private static void AssertTable(
+            string caseDir, JsonElement output, Viewport viewport, int width, int height, double[] orbitRe, double[] orbitIm,
+            int maxIter, double escapeRadius)
+        {
+            int samples = (int)Math.Min(orbitRe.Length, (long)maxIter + 1);
+            var table = BlaTable.Build(orbitRe, orbitIm, samples, escapeRadius, BlaTable.FrameDcBound(width, height, viewport));
+            var entries = output.GetProperty("entries");
+            Assert.Equal(entries.GetArrayLength(), table.Levels);
+            var words = new List<double>();
+            for (int level = 0; level < table.Levels; level++)
+            {
+                Assert.Equal(entries[level].GetInt32(), table.R[level].Length);
+                words.AddRange(table.Ar[level]);
+                words.AddRange(table.Ai[level]);
+                words.AddRange(table.Br[level]);
+                words.AddRange(table.Bi[level]);
+                words.AddRange(table.R[level]);
+            }
+            double[] want = ReadF64(Path.Combine(caseDir, output.GetProperty("file").GetString()!));
+            Assert.Equal(want.Length, words.Count);
+            for (int i = 0; i < want.Length; i++)
+                Assert.True(want[i].Equals(words[i]), $"bla_table word {i}: {words[i]:R}, want {want[i]:R}");
         }
 
         /// <summary>
