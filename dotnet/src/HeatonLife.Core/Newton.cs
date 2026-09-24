@@ -36,9 +36,9 @@ namespace HeatonLife
             _rootIm = new double[degree];
             for (int k = 0; k < degree; k++)
             {
-                double angle = 2.0 * Math.PI * k / degree;
-                _rootRe[k] = Math.Cos(angle);
-                _rootIm[k] = Math.Sin(angle);
+                // The d-th roots of unity, pinned (spec/turns.md): libm Cos/Sin differ by
+                // platform in the last ulp, and the roots feed the bit-exact root index.
+                (_rootRe[k], _rootIm[k]) = Turns.Cis(k, degree);
             }
         }
 

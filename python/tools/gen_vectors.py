@@ -580,6 +580,7 @@ def main() -> None:
     write_t2_step_cases()
     write_t2_cases()
     write_t2_bla_cases()
+    write_turns_cases()
 
     print("done")
 
@@ -2601,6 +2602,52 @@ def write_floatexp_cases() -> None:
         meta = {"spec_version": "0.10.0", "family": "floatexp", "tier": "bit-exact", "cases": ops}
         (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
         print(f"wrote vectors/floatexp/{name}")
+
+
+def write_turns_cases() -> None:
+    """spec/turns.md (0.12.0): cis_turns(k, n) known answers, each component's IEEE-754
+    bit pattern."""
+    from heaton_life.core.turns import cis_turns
+
+    pairs = [
+        (0, 1),
+        (5, 1),
+        (1, 2),
+        (1, 4),
+        (2, 4),
+        (3, 4),
+        (-1, 4),
+        (1, 3),
+        (2, 3),
+        (1, 6),
+        (5, 6),
+        (1, 5),
+        (2, 7),
+        (1, 8),
+        (3, 8),
+        (1, 12),
+        (7, 16),
+        (1, 360),
+        (123, 1000),
+        (-7, 1000),
+        (2501, 1000),
+        (6899, 13800),
+        (13799, 13800),
+        (1, 1 << 20),
+        ((1 << 20) - 1, (1 << 20) + 1),
+        (987654321, 10**12 + 39),
+        (-(10**15), 3 * 10**15 + 1),
+        (1, 1 << 61),
+    ]
+    cases = []
+    for k, n in pairs:
+        re, im = cis_turns(k, n)
+        cases.append({"k": k, "n": n, "expected": [_bits(re), _bits(im)]})
+    case_dir = VECTOR_ROOT / "turns" / "known-answers"
+    case_dir.mkdir(parents=True, exist_ok=True)
+    meta = {"spec_version": "0.12.0", "family": "turns", "tier": "bit-exact", "cases": cases}
+    (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+    print("wrote vectors/turns/known-answers")
 
 
 def write_t2_bla_cases() -> None:

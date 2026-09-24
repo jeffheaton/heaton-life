@@ -8,10 +8,12 @@ Convergence: |z^d - 1| < 1e-9 (TOLERANCE, part of the spec).
 from __future__ import annotations
 
 import dataclasses
+import operator
 
 import numpy as np
 
 from heaton_life.core.params import Params
+from heaton_life.core.turns import cis_turns
 from heaton_life.core.viewport import Viewport
 from heaton_life.fractal.engine import T0_MAX_ZOOM, FloatArray, IntArray, pixel_grid
 
@@ -28,16 +30,17 @@ class Newton:
     max_zoom_log10 = T0_MAX_ZOOM  # no perturbation tier
 
     def __init__(self, degree: int = 3, max_iter: int = 60) -> None:
+        degree = operator.index(degree)
         if degree < 2:
             raise ValueError("degree must be >= 2")
         self.degree = degree
         self.max_iter = max_iter
-        angles = 2.0 * np.pi * np.arange(degree) / degree
-        self.roots = np.cos(angles) + 1j * np.sin(angles)
+        # The d-th roots of unity, pinned (spec/turns.md): libm cos/sin differ by platform
+        # in the last ulp, and the roots feed the bit-exact root index.
+        roots = [cis_turns(k, degree) for k in range(degree)]
+        self.roots = np.array([complex(re, im) for re, im in roots], dtype=np.complex128)
 
-    def basins(
-        self, size: tuple[int, int], viewport: Viewport
-    ) -> tuple[IntArray, IntArray]:
+    def basins(self, size: tuple[int, int], viewport: Viewport) -> tuple[IntArray, IntArray]:
         """(root_index, iterations), each shape (height, width), -1 where unconverged."""
         # spec/fractals.md: "Newton (float64 only, zoom <= 1e12)"; spec/deep-zoom.md
         # gives it no perturbation tier. Every other family here tiers or raises,

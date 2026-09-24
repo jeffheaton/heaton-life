@@ -1,0 +1,231 @@
+{
+  "cases": [
+    {
+      "expected": [
+        "0x3FF0000000000000",
+        "0x0000000000000000"
+      ],
+      "k": 0,
+      "n": 1
+    },
+    {
+      "expected": [
+        "0x3FF0000000000000",
+        "0x0000000000000000"
+      ],
+      "k": 5,
+      "n": 1
+    },
+    {
+      "expected": [
+        "0xBFF0000000000000",
+        "0x0000000000000000"
+      ],
+      "k": 1,
+      "n": 2
+    },
+    {
+      "expected": [
+        "0x0000000000000000",
+        "0x3FF0000000000000"
+      ],
+      "k": 1,
+      "n": 4
+    },
+    {
+      "expected": [
+        "0xBFF0000000000000",
+        "0x0000000000000000"
+      ],
+      "k": 2,
+      "n": 4
+    },
+    {
+      "expected": [
+        "0x0000000000000000",
+        "0xBFF0000000000000"
+      ],
+      "k": 3,
+      "n": 4
+    },
+    {
+      "expected": [
+        "0x0000000000000000",
+        "0xBFF0000000000000"
+      ],
+      "k": -1,
+      "n": 4
+    },
+    {
+      "expected": [
+        "0xBFE0000000000000",
+        "0x3FEBB67AE8584CAA"
+      ],
+      "k": 1,
+      "n": 3
+    },
+    {
+      "expected": [
+        "0xBFE0000000000000",
+        "0xBFEBB67AE8584CAA"
+      ],
+      "k": 2,
+      "n": 3
+    },
+    {
+      "expected": [
+        "0x3FE0000000000000",
+        "0x3FEBB67AE8584CAA"
+      ],
+      "k": 1,
+      "n": 6
+    },
+    {
+      "expected": [
+        "0x3FE0000000000000",
+        "0xBFEBB67AE8584CAA"
+      ],
+      "k": 5,
+      "n": 6
+    },
+    {
+      "expected": [
+        "0x3FD3C6EF372FE950",
+        "0x3FEE6F0E134454FF"
+      ],
+      "k": 1,
+      "n": 5
+    },
+    {
+      "expected": [
+        "0xBFCC7B90E3024582",
+        "0x3FEF329C0558E969"
+      ],
+      "k": 2,
+      "n": 7
+    },
+    {
+      "expected": [
+        "0x3FE6A09E667F3BCD",
+        "0x3FE6A09E667F3BCD"
+      ],
+      "k": 1,
+      "n": 8
+    },
+    {
+      "expected": [
+        "0xBFE6A09E667F3BCD",
+        "0x3FE6A09E667F3BCD"
+      ],
+      "k": 3,
+      "n": 8
+    },
+    {
+      "expected": [
+        "0x3FEBB67AE8584CAA",
+        "0x3FE0000000000000"
+      ],
+      "k": 1,
+      "n": 12
+    },
+    {
+      "expected": [
+        "0xBFED906BCF328D46",
+        "0x3FD87DE2A6AEA963"
+      ],
+      "k": 7,
+      "n": 16
+    },
+    {
+      "expected": [
+        "0x3FEFFEC097F5AF8A",
+        "0x3F91DF0B2B89DD1E"
+      ],
+      "k": 1,
+      "n": 360
+    },
+    {
+      "expected": [
+        "0x3FE6E8F3A092F1DD",
+        "0x3FE6575F0138CDA4"
+      ],
+      "k": 123,
+      "n": 1000
+    },
+    {
+      "expected": [
+        "0x3FEFF813EAC238EF",
+        "0xBFA682FD3C7BD8C8"
+      ],
+      "k": -7,
+      "n": 1000
+    },
+    {
+      "expected": [
+        "0xBFEFFFD69AA0B99D",
+        "0xBF79BC5A9D91F679"
+      ],
+      "k": 2501,
+      "n": 1000
+    },
+    {
+      "expected": [
+        "0xBFEFFFFFC85A60E7",
+        "0x3F3DD6B8A4AB2DB5"
+      ],
+      "k": 6899,
+      "n": 13800
+    },
+    {
+      "expected": [
+        "0x3FEFFFFFC85A60E7",
+        "0xBF3DD6B8A4AB2DB5"
+      ],
+      "k": 13799,
+      "n": 13800
+    },
+    {
+      "expected": [
+        "0x3FEFFFFFFFFD8858",
+        "0x3ED921FB544387BA"
+      ],
+      "k": 1,
+      "n": 1048576
+    },
+    {
+      "expected": [
+        "0x3FEFFFFFFFF62163",
+        "0xBEE921F9C221FB7F"
+      ],
+      "k": 1048575,
+      "n": 1048577
+    },
+    {
+      "expected": [
+        "0x3FEFFFD79EACE093",
+        "0x3F796B046EB081EE"
+      ],
+      "k": 987654321,
+      "n": 1000000000039
+    },
+    {
+      "expected": [
+        "0xBFDFFFFFFFFFFFF5",
+        "0xBFEBB67AE8584CAE"
+      ],
+      "k": -1000000000000000,
+      "n": 3000000000000001
+    },
+    {
+      "expected": [
+        "0x3FF0000000000000",
+        "0x3C4921FB54442D18"
+      ],
+      "k": 1,
+      "n": 2305843009213693952
+    }
+  ],
+  "family": "turns",
+  "spec_version": "0.12.0",
+  "tier": "bit-exact"
+}

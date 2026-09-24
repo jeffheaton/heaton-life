@@ -771,10 +771,11 @@ Hard-won; each has broken, or would break, bit-exact agreement between the ports
 - **The center's float64 projection** is one correct rounding of the decimal (see the
   Viewport contract) — never `double.Parse` on a runtime that does not guarantee it,
   and never a rounding of the orbit's fixed point.
-- **Newton's roots** `exp(2πik/d)` come from libm `cos`/`sin`, whose last ulp varies by
-  platform. They only classify converged pixels: `|zᵈ − 1| < 1e-9` puts `z` within
-  ~`1e-9/d` of a root, and roots are `2·sin(π/d)` apart, so a last-ulp difference cannot
-  change the `roots` output. Do not use them for anything finer.
+- **Newton's roots** `exp(2πik/d)` are `cis_turns(k, d)` ([turns.md](turns.md)), never
+  libm `cos`/`sin`, whose last ulp varies by platform. (Before 0.12.0 they were libm
+  values; that was safe for the `roots` output, since `|zᵈ − 1| < 1e-9` puts `z` within
+  ~`1e-9/d` of a root and roots are `2·sin(π/d)` apart, but it left the roots themselves
+  platform-dependent.)
 
 ## Future work (explicitly out of v1)
 

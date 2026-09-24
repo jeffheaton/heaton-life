@@ -194,7 +194,8 @@ Coloring with it: [fractal-color.md](fractal-color.md).
 - **Newton** (float64 only, zoom ≤ 1e12): `z ← z − (z^d − 1)/(d·z^(d−1))`;
   converged when `|z^d − 1| < 1e-9`; outputs `roots` (nearest-root index, −1 if
   unconverged) and `iterations` (1-based, −1 if unconverged). Roots are
-  `exp(2πik/d)`, k = 0..d−1.
+  `exp(2πik/d)`, k = 0..d−1, each `cis_turns(k, d)` ([turns.md](turns.md)): pinned, never
+  libm `cos`/`sin`, whose last ulp differs by platform.
 
 ## BLA (Mandelbrot, T1 and T2, opt-in)
 
