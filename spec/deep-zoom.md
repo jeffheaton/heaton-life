@@ -244,8 +244,11 @@ where every dropped `δ²` term is below float64 rounding. A table of `(A, B, r)
 power-of-two spans of the orbit lets a pixel skip whole spans (Zhuoran 2021; the radii
 and merge rule of Fraktaler-3 and Heaton Fractal). It changes counts, but only on
 float64-chaotic pixels — pixels whose true count moves when `δc` moves by a few ulps
-(measured at T1 against 1024-bit iteration: BLA-on and BLA-off are equally often right;
-T2's longer orbits are measured under [BLA at T2](#bla-at-t2)) — so
+(measured at T1 against a 2048-bit direct iteration on the `bla-*` vector frames: counts
+equal on every pixel of `bla-11dim-zoom30-32`, `bla-landing-rebase-12` and
+`bla-blocked-8`; on `bla-p1959-zoom30-16` 10 of 256 differ, BLA-off right on 2 and BLA
+on none, the other 8 wrong by up to hundreds either way; T2's longer orbits are measured
+under [BLA at T2](#bla-at-t2)) — so
 it is an **opt-in algorithm parameter** with its own bit-exact vectors:
 `Mandelbrot(bla=True)`, C# `new Mandelbrot(maxIter, escapeRadius, workers, bla: true)`.
 T0 ignores it; T2 runs it with floatexp radii and skips ([BLA at T2](#bla-at-t2)). Julia
@@ -259,8 +262,26 @@ is float32's, and at float64 it flips counts on up to 14% of pixels), at most 32
 arrays, never complex arrays or Python/NumPy complex scalars (whose multiply may be
 fma-contracted, depending on the compiler), C# plain doubles, never `ComplexMul`, and
 uncontracted on every runtime (a C++ backend such as IL2CPP must not fuse `a·b ± c`). A
-product `x·y` of pairs is `(x.re·y.re − x.im·y.im, x.re·y.im + x.im·y.re)`. Magnitudes
-are exponent-scaled:
+product `x·y` of pairs is `(x.re·y.re − x.im·y.im, x.re·y.im + x.im·y.re)`. The table's
+coefficients are carried in **double-double** (0.11.0; 0.8.0 computed them in float64), a
+value `hi + lo` of two doubles, by these operations alone:
+
+```
+split(a):        t = 134217729·a;  hi = t − (t − a);  lo = a − hi
+two_prod(a, b):  p = a·b; (ah, al) = split(a); (bh, bl) = split(b)
+                 → (p, (((ah·bh − p) + ah·bl) + al·bh) + al·bl)
+two_sum(a, b):   s = a + b; v = s − a  → (s, (a − (s − v)) + (b − v))
+quick(a, b):     s = a + b  → (s, b − (s − a))
+mul(x, y):       (p, e) = two_prod(x.hi, y.hi);  quick(p, e + (x.hi·y.lo + x.lo·y.hi))
+add(x, y):       (s, e) = two_sum(x.hi, y.hi);   quick(s, e + (x.lo + y.lo))
+x·y (complex):   (add(mul(x.re, y.re), −mul(x.im, y.im)), add(mul(x.re, y.im), mul(x.im, y.re)))
+```
+
+Chained float64 products drift about 100 ulps over a table's top levels (at 1e320 that
+cost counts on pixels whose truth holds under ±100 ulps of `δc`); the stored `hi` has
+measured equal to the exact coefficient rounded once on every live entry checked. An
+entry past `2^996`, or one whose product overflows, may store NaN; such an entry is dead.
+Magnitudes are exponent-scaled:
 
 ```
 mag(x, y):  a = max(|x|, |y|);  s = 2^600 if a < 2^−400,  2^−600 if a > 2^400,  else 1
@@ -276,19 +297,23 @@ bound:
   with `Zr_k² + Zi_k² > R²`, else `L − 1`. Steps `0 … k* − 1` are tabulated (step `j`
   uses `Z_j` and lands on `j + 1`). Capping at `max_iter + 1` makes a cached orbit longer
   than the frame needs build the same table, at the frame's cost.
-- Level 0: `⌊k*/S⌋` entries; entry `k` folds steps `kS … kS + 7` left to right:
+- Level 0: `⌊k*/S⌋` entries; entry `k` folds steps `kS … kS + 7` left to right, `A` and
+  `B` in double-double, `a` exact (`lo = 0`):
 
   ```
   A = (1, 0);  B = (0, 0);  r = +∞
   for j in 0 … S−1:   z = Z[kS + j];  a = (2·z.re, 2·z.im)
-      r = merge(r, ε·mag(z), A, B)                 A, B before this step
-      B = ((a·B).re + 1, (a·B).im)
+      r = merge(r, ε·mag(z), A.hi, B.hi)           A, B before this step
+      B = (add((a·B).re, 1), (a·B).im)
       A = a·A
   ```
 
 - Level `l ≥ 1`: `⌊n_{l−1}/2⌋` entries; entry `k` merges `x = (l−1, 2k)` then
-  `y = (l−1, 2k+1)`: `A = A_y·A_x`, `B = ((A_y·B_x).re + B_y.re, (A_y·B_x).im + B_y.im)`,
-  `r = merge(r_x, r_y, A_x, B_x)`. Entry `(l, k)` covers steps `k·S·2^l … (k+1)·S·2^l − 1`.
+  `y = (l−1, 2k+1)`, on the children's pairs: `A = A_y·A_x`,
+  `B = (add((A_y·B_x).re, B_y.re), add((A_y·B_x).im, B_y.im))`, and
+  `r = merge(r_x, r_y, A_x, B_x)` on their stored `hi`. Entry `(l, k)` covers steps
+  `k·S·2^l … (k+1)·S·2^l − 1`. Each entry stores each coefficient component's `hi`; the
+  merges, the dead rule and every skip read those.
 - `merge(r1, r2, A1, B1)`: `num = r2 − mag(B1)·dc_bound`; `cand = num / mag(A1)`;
   the result is `cand < r1 ? cand : r1` if `num > 0`, else `0` — spelled exactly so
   (a NaN `num` gives 0, a NaN `cand` keeps `r1`, `|A1| = 0` gives `+∞` and keeps `r1`).
@@ -508,35 +533,14 @@ run time so no compiler folds them. The Python suite runs the same canaries on N
 ### BLA at T2
 
 A Mandelbrot `bla=True` frame past zoom 290 skips spans too
-([BLA](#bla-bivariate-linear-approximation-mandelbrot-opt-in)). The table has T1's shape,
-with its coefficients carried in double-double; the radii, the radius test and every skip
-run in floatexp. Python `bla.build_table_t2` and `perturb_t2(table=…)`, C#
+([BLA](#bla-bivariate-linear-approximation-mandelbrot-opt-in)). The table's coefficients are
+T1's; the radii, the radius test and every skip run in floatexp. Python `bla.build_table_t2` and `perturb_t2(table=…)`, C#
 `BlaTable.BuildX` and `PerturbationT2.Perturb`.
 
-- **Coefficients.** `A` and `B` follow T1's recurrences over the orbit's float64 samples
-  (the first `min(len, max_iter + 1)`), with T1's extent `k*`, stride and levels, but in
-  **double-double**, a value `hi + lo` of two doubles, with plain IEEE operations only (no
-  fma):
-  ```
-  split(a):        t = 134217729·a;  hi = t − (t − a);  lo = a − hi
-  two_prod(a, b):  p = a·b; (ah, al) = split(a); (bh, bl) = split(b)
-                   → (p, (((ah·bh − p) + ah·bl) + al·bh) + al·bl)
-  two_sum(a, b):   s = a + b; v = s − a  → (s, (a − (s − v)) + (b − v))
-  quick(a, b):     s = a + b  → (s, b − (s − a))
-  mul(x, y):       (p, e) = two_prod(x.hi, y.hi);  quick(p, e + (x.hi·y.lo + x.lo·y.hi))
-  add(x, y):       (s, e) = two_sum(x.hi, y.hi);   quick(s, e + (x.lo + y.lo))
-  x·y (complex):   (add(mul(x.re, y.re), −mul(x.im, y.im)), add(mul(x.re, y.im), mul(x.im, y.re)))
-  ```
-  Level 0 starts from `A = 1`, `B = 0` and, per step with `a = 2Z` (exact, `lo = 0`),
-  takes `B ← (add((a·B).re, 1), (a·B).im)`, `A ← a·A`; level `l` takes `A = A_y·A_x` and
-  `B = (add((A_y·B_x).re, B_y.re), add((A_y·B_x).im, B_y.im))` from its children's pairs.
-  Each entry stores the `hi` of each component; the radii and the dead rule read those.
-  In float64, T1's products drift about 100 ulps over the top levels, which at T2 costs
-  counts on pixels whose truth holds under ±100 ulps of `δc`; the stored `hi` has
-  measured equal to the exact coefficient rounded once on every live entry checked.
-  (T1 keeps its float64 table, and its 0.8.0 vectors.) An entry past `2^996` or with an
-  overflowing product may store NaN; such an entry is dead. The dead rule's
-  `|A|, |B| < 2^960` is T1's.
+- **Coefficients** are T1's, bit for bit: the same double-double recurrences over the
+  orbit's float64 samples (the first `min(len, max_iter + 1)`), extent, stride and levels,
+  each entry storing each component's `hi`, and the same dead rule
+  `|A|, |B| < 2^960`. They do not depend on the frame.
 - **The frame's bound** is a power of two, `2^k`. Over the frame's floatexp pixel deltas
   (the off-center offset included), `mx = max |δc.re|` and `my = max |δc.im|`, each exact.
   With `E` the larger exponent of the nonzero ones, `m = mag(scaled(mx, E), scaled(my, E))`
@@ -588,7 +592,7 @@ different at 32×32. Against a direct fixed-point iteration those 52 are pixels 
 orbit cannot resolve: on 44 both loops are wrong (chaotic: the plain loop's own count moves
 on 32 of them when `δc.re` moves by 16 ulps), and on 8 (two orbits of the frame's symmetry)
 BLA gives what exact arithmetic on the float64 samples gives while the plain loop's
-rounding happens to land on the truth, as under "Against truth". With T1's float64
+rounding happens to land on the truth, as under "Against truth". With 0.8.0's float64
 coefficients, 12 more counts differed, 4 of them on pixels whose truth holds under ±100
 ulps of `δc`.
 

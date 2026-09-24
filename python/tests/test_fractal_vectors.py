@@ -49,7 +49,7 @@ ORBIT_KINDS = {"mandelbrot": "mandelbrot", "julia": "julia", "burning-ship": "bu
 # Everything this runner understands. A key outside these sets fails the case rather
 # than being skipped: a runner that ignored, say, "critical_orbit" would replay a deep
 # Julia case the old way and either fail confusingly or pass for the wrong reason.
-SPEC_VERSIONS = {"0.2.0", "0.3.0", "0.4.0", "0.6.0", "0.7.0", "0.8.0", "0.10.0"}
+SPEC_VERSIONS = {"0.2.0", "0.3.0", "0.4.0", "0.6.0", "0.7.0", "0.8.0", "0.10.0", "0.11.0"}
 TOP_KEYS = {
     "spec_version",
     "family",
@@ -116,10 +116,14 @@ def test_fractal_vector(case: Path) -> None:
     params = set(meta["params"])
     bla = bool(meta["params"].get("bla", False))
     if "bla" in params:
-        # spec/deep-zoom.md "BLA" (0.8.0): an algorithm parameter, Mandelbrot only.
+        # spec/deep-zoom.md "BLA": an algorithm parameter, Mandelbrot only. Its coefficients
+        # are double-double since 0.11.0 (0.8.0 computed them in float64); T2's always were
+        # (0.10.0), so a case written under the old rule is refused rather than misread.
         assert family in BLA_FAMILIES, f"{case}: {family} has no BLA"
         assert isinstance(meta["params"]["bla"], bool), f"{case}: bla must be a bool"
-        assert _version(meta["spec_version"]) >= (0, 8, 0), f"{case}: bla before 0.8.0"
+        version = _version(meta["spec_version"])
+        t2 = float(meta["viewport"]["zoom_log10"]) > 290.0
+        assert version >= ((0, 10, 0) if t2 else (0, 11, 0)), f"{case}: float64 BLA coefficients"
         params.discard("bla")
     assert params == PARAM_KEYS[family], f"{case}: unexpected params"
     assert "critical_orbit" not in meta or family == "julia"

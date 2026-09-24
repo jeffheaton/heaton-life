@@ -22,7 +22,7 @@ namespace HeatonLife.Tests
         // Everything this runner understands. A key outside these sets fails the case
         // rather than being skipped: a runner that ignored, say, "critical_orbit" would
         // replay a deep Julia case the old way and fail confusingly or pass wrongly.
-        private static readonly HashSet<string> SpecVersions = new HashSet<string> { "0.2.0", "0.3.0", "0.4.0", "0.6.0", "0.7.0", "0.8.0", "0.10.0" };
+        private static readonly HashSet<string> SpecVersions = new HashSet<string> { "0.2.0", "0.3.0", "0.4.0", "0.6.0", "0.7.0", "0.8.0", "0.10.0", "0.11.0" };
         private static readonly HashSet<string> TopKeys = new HashSet<string>
         {
             "spec_version", "family", "tier", "params", "viewport", "size", "outputs",
@@ -71,9 +71,13 @@ namespace HeatonLife.Tests
             bool bla = false;
             if (paramNames.Remove("bla"))
             {
-                // spec/deep-zoom.md "BLA" (0.8.0): an algorithm parameter, Mandelbrot only.
+                // spec/deep-zoom.md "BLA": an algorithm parameter, Mandelbrot only. Its coefficients
+                // are double-double since 0.11.0 (0.8.0 computed them in float64); T2's always were
+                // (0.10.0), so a case written under the old rule is refused rather than misread.
                 Assert.True(family == "mandelbrot", $"{family}/{caseName}: {family} has no BLA");
-                Assert.True(AtLeast(root.GetProperty("spec_version").GetString()!, 0, 8, 0), $"{family}/{caseName}: bla before 0.8.0");
+                string blaVersion = root.GetProperty("spec_version").GetString()!;
+                bool t2 = root.GetProperty("viewport").GetProperty("zoom_log10").GetDouble() > FractalEngine.T1MaxZoom;
+                Assert.True(t2 ? AtLeast(blaVersion, 0, 10, 0) : AtLeast(blaVersion, 0, 11, 0), $"{family}/{caseName}: float64 BLA coefficients");
                 bla = p.GetProperty("bla").GetBoolean();
             }
             Assert.True(ParamKeys[family].SetEquals(paramNames), $"{family}/{caseName}: unexpected params");

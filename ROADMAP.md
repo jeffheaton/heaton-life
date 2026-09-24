@@ -55,6 +55,7 @@ Per `spec/deep-zoom.md` (contract already in core since Phase 1):
 - Mandelbrot, Julia, Burning Ship (diffabs), Newton (T0 only) — T1 validated against T0 (exact for Julia/Ship; Mandelbrot agreement equals T0's own 1-ulp chaos bound).
 - Playground: click recenters, Ctrl-click recenters and zooms ×4, the wheel zooms anchored at the cursor — exact decimal arithmetic through the library's `fractal.navigation` since 2026-09-23 ([spec/navigation.md](spec/navigation.md)); zoom movies via `fractal.zoom_animation`.
 - Vectors: int32 iteration/root grids (bit-exact) incl. a deep-zoom case with its exported reference orbit.
+- Past zoom 1e290 (2026-09-24): the T2 tier to 1e9000, floatexp deltas with float64 steps between small reference samples ([spec/floatexp.md](spec/floatexp.md)), and BLA iteration skipping at T1 and T2 with double-double coefficients (spec/deep-zoom.md "BLA", "BLA at T2").
 - Deferred (see Future work): progressive refinement with cancellation (renders are single-pass), optional numba kernels.
 
 ## Phase 6 — Boids ✅
@@ -97,7 +98,7 @@ Consumer-facing READMEs on both package pages, the intro notebook installing fro
 ## Future work
 
 - Fractals: progressive refinement with cancellation in the playground; optional
-  numba kernels; floatexp tier beyond zoom 1e290; BLA iteration skipping.
+  numba kernels; BLA for Julia and the Burning Ship; the Burning Ship past 1e290.
 - Boids spatial hash if flocks ever need >2k; Lenia multi-channel; Orbium and
   friends as stampable Lenia creatures; MP4/GIF export buttons in the playground.
 - Python 3.13+ in the classifiers once the suite has run there; a project-scoped

@@ -662,6 +662,7 @@ def write_fractal_case(
             orbit, params["escape_radius"], frame_dc_bound(pixel_deltas(size, viewport))
         )
         words = table_words(table)
+        words = np.where(np.isnan(words), np.nan, words)  # one canonical NaN
         (case_dir / "bla_table.f64").write_bytes(np.ascontiguousarray(words, dtype="<f8").tobytes())
         outputs.append(
             {
@@ -935,7 +936,8 @@ def _shifted(center: tuple[str, str], zoom: float, fx: float, fy: float) -> tupl
 
 
 def write_bla_cases() -> None:
-    """BLA (spec/deep-zoom.md "BLA", 0.8.0): counts and per-pixel skips, bit-exact."""
+    """BLA (spec/deep-zoom.md "BLA"): counts and per-pixel skips, bit-exact. Written at
+    0.11.0, when the coefficients moved to double-double (0.8.0 computed them in float64)."""
 
     def case(
         name: str, max_iter: int, viewport: Viewport, size: tuple[int, int], **kw: Any
@@ -948,7 +950,7 @@ def write_bla_cases() -> None:
             viewport,
             size,
             orbit_kind="mandelbrot",
-            spec_version="0.8.0",
+            spec_version="0.11.0",
             bla=True,
             **kw,
         )

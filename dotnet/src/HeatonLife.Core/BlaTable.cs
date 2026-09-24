@@ -10,8 +10,9 @@ namespace HeatonLife
     /// follows dz_{m+l} ≈ A·dz_m + B·dc while |dz| &lt; r. Level 0 folds S = 8 single steps
     /// (A = 2Z, B = 1, r = eps·|Z|) left to right; each level above merges pairs. A pure
     /// function of the float64 orbit samples, the escape radius and the frame's dc bound,
-    /// computed with plain doubles only — the Python reference's heaton_life.fractal.bla,
-    /// expression for expression.
+    /// computed with plain doubles only (the coefficients in double-double, each entry
+    /// storing the hi) — the Python reference's heaton_life.fractal.bla, expression for
+    /// expression.
     /// </summary>
     internal sealed class BlaTable
     {
@@ -215,33 +216,35 @@ namespace HeatonLife
             var br = new double[levels][];
             var bi = new double[levels][];
             var r = new double[levels][];
+            // The coefficients' lo parts, level by level: a merge reads its children's pairs.
+            var arLo = new double[levels][];
+            var aiLo = new double[levels][];
+            var brLo = new double[levels][];
+            var biLo = new double[levels][];
             ar[0] = new double[n0];
             ai[0] = new double[n0];
             br[0] = new double[n0];
             bi[0] = new double[n0];
+            arLo[0] = new double[n0];
+            aiLo[0] = new double[n0];
+            brLo[0] = new double[n0];
+            biLo[0] = new double[n0];
             r[0] = new double[n0];
             for (int block = 0; block < n0; block++)
             {
-                double xar = 1.0, xai = 0.0, xbr = 0.0, xbi = 0.0, radius = double.PositiveInfinity;
+                Dd.FoldStart(out Dd xar, out Dd xai, out Dd xbr, out Dd xbi);
+                double radius = double.PositiveInfinity;
                 for (int j = 0; j < Stride; j++)
                 {
                     double zr = orbitRe[block * Stride + j], zi = orbitIm[block * Stride + j];
-                    double sr = 2.0 * zr, si = 2.0 * zi;
-                    radius = Merge(radius, Epsilon * Mag(zr, zi), xar, xai, xbr, xbi, dcBound);
-                    double nbr = (sr * xbr - si * xbi) + 1.0;
-                    double nbi = sr * xbi + si * xbr;
-                    double nar = sr * xar - si * xai;
-                    double nai = sr * xai + si * xar;
-                    xar = nar;
-                    xai = nai;
-                    xbr = nbr;
-                    xbi = nbi;
+                    radius = Merge(radius, Epsilon * Mag(zr, zi), xar.Hi, xai.Hi, xbr.Hi, xbi.Hi, dcBound);
+                    Dd.FoldStep(ref xar, ref xai, ref xbr, ref xbi, zr, zi);
                 }
-                ar[0][block] = xar;
-                ai[0][block] = xai;
-                br[0][block] = xbr;
-                bi[0][block] = xbi;
-                r[0][block] = Alive(radius, xar, xai, xbr, xbi);
+                Dd.Store(xar, ar[0], arLo[0], block);
+                Dd.Store(xai, ai[0], aiLo[0], block);
+                Dd.Store(xbr, br[0], brLo[0], block);
+                Dd.Store(xbi, bi[0], biLo[0], block);
+                r[0][block] = Alive(radius, xar.Hi, xai.Hi, xbr.Hi, xbi.Hi);
             }
             for (int level = 1; level < levels; level++)
             {
@@ -250,22 +253,28 @@ namespace HeatonLife
                 ai[level] = new double[count];
                 br[level] = new double[count];
                 bi[level] = new double[count];
+                arLo[level] = new double[count];
+                aiLo[level] = new double[count];
+                brLo[level] = new double[count];
+                biLo[level] = new double[count];
                 r[level] = new double[count];
+                int below = level - 1;
                 for (int k = 0; k < count; k++)
                 {
                     int x = 2 * k, y = 2 * k + 1;
-                    double xar = ar[level - 1][x], xai = ai[level - 1][x], xbr = br[level - 1][x], xbi = bi[level - 1][x];
-                    double yar = ar[level - 1][y], yai = ai[level - 1][y], ybr = br[level - 1][y], ybi = bi[level - 1][y];
-                    double nar = yar * xar - yai * xai;
-                    double nai = yar * xai + yai * xar;
-                    double nbr = (yar * xbr - yai * xbi) + ybr;
-                    double nbi = (yar * xbi + yai * xbr) + ybi;
-                    double radius = Merge(r[level - 1][x], r[level - 1][y], xar, xai, xbr, xbi, dcBound);
-                    ar[level][k] = nar;
-                    ai[level][k] = nai;
-                    br[level][k] = nbr;
-                    bi[level][k] = nbi;
-                    r[level][k] = Alive(radius, nar, nai, nbr, nbi);
+                    Dd.Merge(
+                        Dd.Load(ar[below], arLo[below], x), Dd.Load(ai[below], aiLo[below], x),
+                        Dd.Load(br[below], brLo[below], x), Dd.Load(bi[below], biLo[below], x),
+                        Dd.Load(ar[below], arLo[below], y), Dd.Load(ai[below], aiLo[below], y),
+                        Dd.Load(br[below], brLo[below], y), Dd.Load(bi[below], biLo[below], y),
+                        out Dd nar, out Dd nai, out Dd nbr, out Dd nbi);
+                    double radius = Merge(
+                        r[below][x], r[below][y], ar[below][x], ai[below][x], br[below][x], bi[below][x], dcBound);
+                    Dd.Store(nar, ar[level], arLo[level], k);
+                    Dd.Store(nai, ai[level], aiLo[level], k);
+                    Dd.Store(nbr, br[level], brLo[level], k);
+                    Dd.Store(nbi, bi[level], biLo[level], k);
+                    r[level][k] = Alive(radius, nar.Hi, nai.Hi, nbr.Hi, nbi.Hi);
                 }
             }
             return new BlaTable(ar, ai, br, bi, r, extent);
@@ -377,10 +386,9 @@ namespace HeatonLife
             => r.M > 0.0 && !infinite && Mag(ar, ai) < Cap && Mag(br, bi) < Cap ? r : FloatExp.Zero;
 
         /// <summary>
-        /// The T2 table (spec/deep-zoom.md "BLA at T2"): <see cref="Build"/>'s recurrences for A
-        /// and B carried in double-double (<see cref="Dd"/>), each entry storing the hi of each
-        /// component, and its radii in floatexp with the dc bound 2^dcExponent (null: zero),
-        /// from those stored values. A step at a small index (<paramref name="small"/>, the
+        /// The T2 table (spec/deep-zoom.md "BLA at T2"): <see cref="Build"/>'s coefficients (the
+        /// same double-double fold, each entry storing the hi of each component) with its radii
+        /// in floatexp, the dc bound 2^dcExponent (null: zero), from those stored values. A step at a small index (<paramref name="small"/>, the
         /// orbit's small table) has radius 0, so no span containing one is ever taken: its
         /// float64 sample may have lost bits.
         /// </summary>
@@ -426,33 +434,22 @@ namespace HeatonLife
             r[0] = new FloatExp[n0];
             for (int block = 0; block < n0; block++)
             {
-                Dd xar = new Dd(1.0, 0.0), xai = new Dd(0.0, 0.0), xbr = new Dd(0.0, 0.0), xbi = new Dd(0.0, 0.0);
+                Dd.FoldStart(out Dd xar, out Dd xai, out Dd xbr, out Dd xbi);
                 FloatExp radius = FloatExp.Zero;
                 bool infinite = true;
                 for (int j = 0; j < Stride; j++)
                 {
                     int index = block * Stride + j;
                     double zr = orbitRe[index], zi = orbitIm[index];
-                    var sr = new Dd(2.0 * zr, 0.0);
-                    var si = new Dd(2.0 * zi, 0.0);
                     // eps·|Z|, exact; 0 at a small index
                     FloatExp step = small[index] ? FloatExp.Zero : FloatExp.Normalize(Mag(zr, zi), -53);
                     radius = MergeX(radius, infinite, step, xar.Hi, xai.Hi, xbr.Hi, xbi.Hi, dcExponent, out infinite);
-                    Dd.CMul(sr, si, xbr, xbi, out Dd abr, out Dd abi);
-                    Dd.CMul(sr, si, xar, xai, out Dd nar, out Dd nai);
-                    xbr = Dd.Add(abr, new Dd(1.0, 0.0));
-                    xbi = abi;
-                    xar = nar;
-                    xai = nai;
+                    Dd.FoldStep(ref xar, ref xai, ref xbr, ref xbi, zr, zi);
                 }
-                ar[0][block] = xar.Hi;
-                ai[0][block] = xai.Hi;
-                br[0][block] = xbr.Hi;
-                bi[0][block] = xbi.Hi;
-                arLo[0][block] = xar.Lo;
-                aiLo[0][block] = xai.Lo;
-                brLo[0][block] = xbr.Lo;
-                biLo[0][block] = xbi.Lo;
+                Dd.Store(xar, ar[0], arLo[0], block);
+                Dd.Store(xai, ai[0], aiLo[0], block);
+                Dd.Store(xbr, br[0], brLo[0], block);
+                Dd.Store(xbi, bi[0], biLo[0], block);
                 r[0][block] = AliveX(radius, infinite, xar.Hi, xai.Hi, xbr.Hi, xbi.Hi);
             }
             for (int level = 1; level < levels; level++)
@@ -471,28 +468,19 @@ namespace HeatonLife
                 for (int k = 0; k < count; k++)
                 {
                     int x = 2 * k, y = 2 * k + 1;
-                    var xar = new Dd(ar[below][x], arLo[below][x]);
-                    var xai = new Dd(ai[below][x], aiLo[below][x]);
-                    var xbr = new Dd(br[below][x], brLo[below][x]);
-                    var xbi = new Dd(bi[below][x], biLo[below][x]);
-                    var yar = new Dd(ar[below][y], arLo[below][y]);
-                    var yai = new Dd(ai[below][y], aiLo[below][y]);
-                    var ybr = new Dd(br[below][y], brLo[below][y]);
-                    var ybi = new Dd(bi[below][y], biLo[below][y]);
-                    Dd.CMul(yar, yai, xar, xai, out Dd nar, out Dd nai);
-                    Dd.CMul(yar, yai, xbr, xbi, out Dd pr, out Dd pi);
-                    Dd nbr = Dd.Add(pr, ybr);
-                    Dd nbi = Dd.Add(pi, ybi);
+                    Dd.Merge(
+                        Dd.Load(ar[below], arLo[below], x), Dd.Load(ai[below], aiLo[below], x),
+                        Dd.Load(br[below], brLo[below], x), Dd.Load(bi[below], biLo[below], x),
+                        Dd.Load(ar[below], arLo[below], y), Dd.Load(ai[below], aiLo[below], y),
+                        Dd.Load(br[below], brLo[below], y), Dd.Load(bi[below], biLo[below], y),
+                        out Dd nar, out Dd nai, out Dd nbr, out Dd nbi);
                     FloatExp radius = MergeX(
-                        r[below][x], false, r[below][y], xar.Hi, xai.Hi, xbr.Hi, xbi.Hi, dcExponent, out bool infinite);
-                    ar[level][k] = nar.Hi;
-                    ai[level][k] = nai.Hi;
-                    br[level][k] = nbr.Hi;
-                    bi[level][k] = nbi.Hi;
-                    arLo[level][k] = nar.Lo;
-                    aiLo[level][k] = nai.Lo;
-                    brLo[level][k] = nbr.Lo;
-                    biLo[level][k] = nbi.Lo;
+                        r[below][x], false, r[below][y], ar[below][x], ai[below][x], br[below][x], bi[below][x],
+                        dcExponent, out bool infinite);
+                    Dd.Store(nar, ar[level], arLo[level], k);
+                    Dd.Store(nai, ai[level], aiLo[level], k);
+                    Dd.Store(nbr, br[level], brLo[level], k);
+                    Dd.Store(nbi, bi[level], biLo[level], k);
                     r[level][k] = AliveX(radius, infinite, nar.Hi, nai.Hi, nbr.Hi, nbi.Hi);
                 }
             }
@@ -500,7 +488,7 @@ namespace HeatonLife
         }
 
         /// <summary>
-        /// Double-double (spec/deep-zoom.md "BLA at T2", "Coefficients"): a value is Hi + Lo, two
+        /// Double-double (spec/deep-zoom.md "BLA", "Arithmetic"): a value is Hi + Lo, two
         /// doubles; every operation is plain IEEE float64 with no fused multiply-add, in the
         /// Python reference's order, so both ports agree bit for bit.
         /// </summary>
@@ -564,6 +552,45 @@ namespace HeatonLife
             {
                 pr = Add(Mul(xr, yr), Mul(xi, yi).Neg());
                 pi = Add(Mul(xr, yi), Mul(xi, yr));
+            }
+
+            /// <summary>A level-0 fold's start: A = 1, B = 0.</summary>
+            internal static void FoldStart(out Dd ar, out Dd ai, out Dd br, out Dd bi)
+            {
+                ar = new Dd(1.0, 0.0);
+                ai = new Dd(0.0, 0.0);
+                br = new Dd(0.0, 0.0);
+                bi = new Dd(0.0, 0.0);
+            }
+
+            /// <summary>One step of a level-0 fold, a = 2Z exact: B ← (a·B).re + 1, (a·B).im; A ← a·A.</summary>
+            internal static void FoldStep(ref Dd ar, ref Dd ai, ref Dd br, ref Dd bi, double zr, double zi)
+            {
+                var sr = new Dd(2.0 * zr, 0.0);
+                var si = new Dd(2.0 * zi, 0.0);
+                CMul(sr, si, br, bi, out Dd abr, out Dd abi);
+                CMul(sr, si, ar, ai, out ar, out ai);
+                br = Add(abr, new Dd(1.0, 0.0));
+                bi = abi;
+            }
+
+            /// <summary>x followed by y: A = A_y·A_x, B = A_y·B_x + B_y, on the children's pairs.</summary>
+            internal static void Merge(
+                Dd xar, Dd xai, Dd xbr, Dd xbi, Dd yar, Dd yai, Dd ybr, Dd ybi,
+                out Dd ar, out Dd ai, out Dd br, out Dd bi)
+            {
+                CMul(yar, yai, xar, xai, out ar, out ai);
+                CMul(yar, yai, xbr, xbi, out Dd pr, out Dd pi);
+                br = Add(pr, ybr);
+                bi = Add(pi, ybi);
+            }
+
+            internal static Dd Load(double[] hi, double[] lo, int index) => new Dd(hi[index], lo[index]);
+
+            internal static void Store(Dd value, double[] hi, double[] lo, int index)
+            {
+                hi[index] = value.Hi;
+                lo[index] = value.Lo;
             }
         }
     }

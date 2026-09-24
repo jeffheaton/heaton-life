@@ -8,7 +8,9 @@ opt-in (it changes counts on float64-chaotic pixels).
 
 Everything here is plain float64 on real arrays -- never complex arrays or Python/NumPy
 complex scalars, whose multiply may be fma-contracted -- so the C# port (BlaTable,
-Perturbation.PerturbZ2Bla) matches it with plain doubles, expression for expression.
+Perturbation.PerturbZ2Bla) matches it with plain doubles, expression for expression. The
+coefficients are carried in double-double (two doubles, Dekker's fma-free products), each
+entry storing the hi: chained float64 products drift about 100 ulps over the top levels.
 The BLA-off plain step inside the loop keeps the perturbation step's fma shape.
 """
 
@@ -121,10 +123,96 @@ def _level(
     return BlaLevel(ar, ai, br, bi, np.where(alive, r, 0.0))
 
 
+# Double-double (spec/deep-zoom.md "BLA", "Arithmetic"): a value is hi + lo, two doubles;
+# every operation below is plain IEEE float64 (no fma), so both ports agree.
+_SPLIT = 134217729.0  # 2^27 + 1, Dekker's splitter
+DD = tuple[FloatArray, FloatArray]  # (hi, lo)
+CDD = tuple[DD, DD]  # (re, im)
+
+
+def _two_sum(a: FloatArray, b: FloatArray) -> DD:
+    s = a + b
+    bb = s - a
+    return s, (a - (s - bb)) + (b - bb)
+
+
+def _quick_two_sum(a: FloatArray, b: FloatArray) -> DD:
+    s = a + b
+    return s, b - (s - a)
+
+
+def _split(a: FloatArray) -> DD:
+    t = _SPLIT * a
+    hi = t - (t - a)
+    return hi, a - hi
+
+
+def _two_prod(a: FloatArray, b: FloatArray) -> DD:
+    p = a * b
+    ah, al = _split(a)
+    bh, bl = _split(b)
+    return p, (((ah * bh - p) + ah * bl) + al * bh) + al * bl
+
+
+def _dd_mul(x: DD, y: DD) -> DD:
+    p, e = _two_prod(x[0], y[0])
+    return _quick_two_sum(p, e + (x[0] * y[1] + x[1] * y[0]))
+
+
+def _dd_add(x: DD, y: DD) -> DD:
+    s, e = _two_sum(x[0], y[0])
+    return _quick_two_sum(s, e + (x[1] + y[1]))
+
+
+def _dd_neg(x: DD) -> DD:
+    return -x[0], -x[1]
+
+
+def _cdd_mul(x: CDD, y: CDD) -> CDD:
+    """(x.re y.re - x.im y.im, x.re y.im + x.im y.re) in double-double."""
+    return (
+        _dd_add(_dd_mul(x[0], y[0]), _dd_neg(_dd_mul(x[1], y[1]))),
+        _dd_add(_dd_mul(x[0], y[1]), _dd_mul(x[1], y[0])),
+    )
+
+
+def _cdd_take(x: CDD, sel: slice) -> CDD:
+    return (x[0][0][sel], x[0][1][sel]), (x[1][0][sel], x[1][1][sel])
+
+
+def _fold_start(n: int) -> tuple[CDD, CDD]:
+    """A level-0 fold's start: A = 1, B = 0."""
+    zero = np.zeros(n)
+    return ((np.ones(n), zero.copy()), (zero.copy(), zero.copy())), (
+        (zero.copy(), zero.copy()),
+        (zero.copy(), zero.copy()),
+    )
+
+
+def _fold_step(coeff_a: CDD, coeff_b: CDD, zr: FloatArray, zi: FloatArray) -> tuple[CDD, CDD]:
+    """One step of a level-0 fold, a = 2Z exact: B <- (a B).re + 1, (a B).im; A <- a A."""
+    zero = np.zeros(zr.size)
+    step: CDD = ((2.0 * zr, zero), (2.0 * zi, zero.copy()))
+    ab = _cdd_mul(step, coeff_b)
+    return _cdd_mul(step, coeff_a), (_dd_add(ab[0], (np.ones(zr.size), zero.copy())), ab[1])
+
+
+def _merge_coefficients(xa: CDD, xb: CDD, ya: CDD, yb: CDD) -> tuple[CDD, CDD]:
+    """x followed by y: A = A_y A_x, B = A_y B_x + B_y, on the children's pairs."""
+    yxb = _cdd_mul(ya, xb)
+    return _cdd_mul(ya, xa), (_dd_add(yxb[0], yb[0]), _dd_add(yxb[1], yb[1]))
+
+
+def _hi(c: CDD) -> tuple[FloatArray, FloatArray]:
+    return c[0][0], c[1][0]
+
+
 def build_table(orbit: ComplexArray, escape_radius: float, dc_bound: float) -> BlaTable:
     """The table over the orbit's steps before it first escapes (spec/deep-zoom.md "BLA"):
     level 0 folds S single steps (A = 2Z, B = 1, r = eps |Z|) left to right, each level
-    above merges pairs; a pure function of the float64 samples, R and the dc bound."""
+    above merges pairs; the coefficients carried in double-double and stored as each
+    component's hi, the radii in float64 from those stored values. A pure function of the
+    float64 samples, R and the dc bound."""
     zr_all = np.ascontiguousarray(orbit.real)
     zi_all = np.ascontiguousarray(orbit.imag)
     r2 = escape_radius * escape_radius
@@ -134,35 +222,34 @@ def build_table(orbit: ComplexArray, escape_radius: float, dc_bound: float) -> B
     if n0 == 0:
         return BlaTable((), extent)
     base = np.arange(n0) * STRIDE
-    ar = np.ones(n0)
-    ai = np.zeros(n0)
-    br = np.zeros(n0)
-    bi = np.zeros(n0)
+    coeff_a, coeff_b = _fold_start(n0)
     r = np.full(n0, np.inf)
     with np.errstate(over="ignore", invalid="ignore"):
         for j in range(STRIDE):
             zr = zr_all[base + j]
             zi = zi_all[base + j]
-            sr = 2.0 * zr
-            si = 2.0 * zi
-            r = _merge(r, EPSILON * mag(zr, zi), ar, ai, br, bi, dc_bound)
-            br, bi = (sr * br - si * bi) + 1.0, sr * bi + si * br
-            ar, ai = sr * ar - si * ai, sr * ai + si * ar
-    levels = [_level(ar, ai, br, bi, r)]
+            r = _merge(r, EPSILON * mag(zr, zi), *_hi(coeff_a), *_hi(coeff_b), dc_bound)
+            coeff_a, coeff_b = _fold_step(coeff_a, coeff_b, zr, zi)
+    pairs = [(coeff_a, coeff_b)]
+    levels = [_level(*_hi(coeff_a), *_hi(coeff_b), r)]
     while len(levels) < LEVEL_CAP and levels[-1].r.size >= 2:
         below = levels[-1]
+        below_a, below_b = pairs[-1]
         count = below.r.size // 2
         x = slice(0, 2 * count, 2)
         y = slice(1, 2 * count, 2)
-        xar, xai, xbr, xbi = below.ar[x], below.ai[x], below.br[x], below.bi[x]
-        yar, yai, ybr, ybi = below.ar[y], below.ai[y], below.br[y], below.bi[y]
         with np.errstate(over="ignore", invalid="ignore"):
-            ar = yar * xar - yai * xai
-            ai = yar * xai + yai * xar
-            br = (yar * xbr - yai * xbi) + ybr
-            bi = (yar * xbi + yai * xbr) + ybi
-        r = _merge(below.r[x], below.r[y], xar, xai, xbr, xbi, dc_bound)
-        levels.append(_level(ar, ai, br, bi, r))
+            coeff_a, coeff_b = _merge_coefficients(
+                _cdd_take(below_a, x),
+                _cdd_take(below_b, x),
+                _cdd_take(below_a, y),
+                _cdd_take(below_b, y),
+            )
+        r = _merge(
+            below.r[x], below.r[y], below.ar[x], below.ai[x], below.br[x], below.bi[x], dc_bound
+        )
+        pairs.append((coeff_a, coeff_b))
+        levels.append(_level(*_hi(coeff_a), *_hi(coeff_b), r))
     return BlaTable(tuple(levels), extent)
 
 
@@ -299,8 +386,7 @@ def perturb_z2_bla(
 
 @dataclasses.dataclass(frozen=True)
 class BlaLevelX:
-    """One level of a T2 table: the double-double coefficients' hi parts, the radius in
-    floatexp (rm = 0: dead)."""
+    """One level of a T2 table: T1's coefficients, the radius in floatexp (rm = 0: dead)."""
 
     ar: FloatArray
     ai: FloatArray
@@ -406,69 +492,12 @@ def _level_x(
     )
 
 
-# Double-double (spec/deep-zoom.md "BLA at T2", "Coefficients"): a value is hi + lo, two
-# doubles; every operation below is plain IEEE float64 (no fma), so both ports agree.
-_SPLIT = 134217729.0  # 2^27 + 1, Dekker's splitter
-DD = tuple[FloatArray, FloatArray]  # (hi, lo)
-CDD = tuple[DD, DD]  # (re, im)
-
-
-def _two_sum(a: FloatArray, b: FloatArray) -> DD:
-    s = a + b
-    bb = s - a
-    return s, (a - (s - bb)) + (b - bb)
-
-
-def _quick_two_sum(a: FloatArray, b: FloatArray) -> DD:
-    s = a + b
-    return s, b - (s - a)
-
-
-def _split(a: FloatArray) -> DD:
-    t = _SPLIT * a
-    hi = t - (t - a)
-    return hi, a - hi
-
-
-def _two_prod(a: FloatArray, b: FloatArray) -> DD:
-    p = a * b
-    ah, al = _split(a)
-    bh, bl = _split(b)
-    return p, (((ah * bh - p) + ah * bl) + al * bh) + al * bl
-
-
-def _dd_mul(x: DD, y: DD) -> DD:
-    p, e = _two_prod(x[0], y[0])
-    return _quick_two_sum(p, e + (x[0] * y[1] + x[1] * y[0]))
-
-
-def _dd_add(x: DD, y: DD) -> DD:
-    s, e = _two_sum(x[0], y[0])
-    return _quick_two_sum(s, e + (x[1] + y[1]))
-
-
-def _dd_neg(x: DD) -> DD:
-    return -x[0], -x[1]
-
-
-def _cdd_mul(x: CDD, y: CDD) -> CDD:
-    """(x.re y.re - x.im y.im, x.re y.im + x.im y.re) in double-double."""
-    return (
-        _dd_add(_dd_mul(x[0], y[0]), _dd_neg(_dd_mul(x[1], y[1]))),
-        _dd_add(_dd_mul(x[0], y[1]), _dd_mul(x[1], y[0])),
-    )
-
-
-def _cdd_take(x: CDD, sel: slice) -> CDD:
-    return (x[0][0][sel], x[0][1][sel]), (x[1][0][sel], x[1][1][sel])
-
-
 def build_table_t2(
     samples: ComplexArray, small: NDArray[np.bool_], escape_radius: float, dc_exponent: int | None
 ) -> BlaTableX:
-    """The T2 table (spec/deep-zoom.md "BLA at T2"): T1's recurrences for A and B carried in
-    double-double, each entry storing the hi of each component, and T1's radii in floatexp
-    with the dc bound 2^dc_exponent (None: zero), from those stored values. A step at a
+    """The T2 table (spec/deep-zoom.md "BLA at T2"): T1's coefficients (double-double, each
+    entry storing the hi of each component) and T1's radii in floatexp with the dc bound
+    2^dc_exponent (None: zero), from those stored values. A step at a
     small index (``small``: the orbit's small table) has radius 0, so no span containing
     one is ever taken: its float64 sample may have lost bits."""
     from heaton_life.core import floatexp as fx
@@ -483,10 +512,7 @@ def build_table_t2(
     if n0 == 0:
         return BlaTableX((), extent)
     base = np.arange(n0) * STRIDE
-    zero = np.zeros(n0)
-    coeff_a: CDD = ((np.ones(n0), zero.copy()), (zero.copy(), zero.copy()))
-    coeff_b: CDD = ((zero.copy(), zero.copy()), (zero.copy(), zero.copy()))
-    one: DD = (np.ones(n0), zero.copy())
+    coeff_a, coeff_b = _fold_start(n0)
     rm = np.zeros(n0)
     re = np.zeros(n0, dtype=np.int64)
     r_inf = np.ones(n0, dtype=bool)
@@ -494,39 +520,28 @@ def build_table_t2(
         for j in range(STRIDE):
             zr = zr_all[base + j]
             zi = zi_all[base + j]
-            step: CDD = ((2.0 * zr, zero.copy()), (2.0 * zi, zero.copy()))  # 2Z, exact
             sm, se = fx.vnormalize(
                 np.where(small[base + j], 0.0, mag(zr, zi)), np.full(n0, -53, dtype=np.int64)
             )  # eps |Z|, exact
             rm, re, r_inf = _merge_x(
-                rm,
-                re,
-                r_inf,
-                sm,
-                se,
-                coeff_a[0][0],
-                coeff_a[1][0],
-                coeff_b[0][0],
-                coeff_b[1][0],
-                dc_exponent,
+                rm, re, r_inf, sm, se, *_hi(coeff_a), *_hi(coeff_b), dc_exponent
             )
-            ab = _cdd_mul(step, coeff_b)
-            coeff_b = (_dd_add(ab[0], one), ab[1])
-            coeff_a = _cdd_mul(step, coeff_a)
+            coeff_a, coeff_b = _fold_step(coeff_a, coeff_b, zr, zi)
     pairs = [(coeff_a, coeff_b)]
-    levels = [_level_x(coeff_a[0][0], coeff_a[1][0], coeff_b[0][0], coeff_b[1][0], rm, re, r_inf)]
+    levels = [_level_x(*_hi(coeff_a), *_hi(coeff_b), rm, re, r_inf)]
     while len(levels) < LEVEL_CAP and levels[-1].rm.size >= 2:
         below = levels[-1]
         below_a, below_b = pairs[-1]
         count = below.rm.size // 2
         x = slice(0, 2 * count, 2)
         y = slice(1, 2 * count, 2)
-        xa, xb = _cdd_take(below_a, x), _cdd_take(below_b, x)
-        ya, yb = _cdd_take(below_a, y), _cdd_take(below_b, y)
         with np.errstate(over="ignore", invalid="ignore"):
-            coeff_a = _cdd_mul(ya, xa)
-            yxb = _cdd_mul(ya, xb)
-            coeff_b = (_dd_add(yxb[0], yb[0]), _dd_add(yxb[1], yb[1]))
+            coeff_a, coeff_b = _merge_coefficients(
+                _cdd_take(below_a, x),
+                _cdd_take(below_b, x),
+                _cdd_take(below_a, y),
+                _cdd_take(below_b, y),
+            )
         rm, re, r_inf = _merge_x(
             below.rm[x],
             below.re[x],
@@ -540,9 +555,7 @@ def build_table_t2(
             dc_exponent,
         )
         pairs.append((coeff_a, coeff_b))
-        levels.append(
-            _level_x(coeff_a[0][0], coeff_a[1][0], coeff_b[0][0], coeff_b[1][0], rm, re, r_inf)
-        )
+        levels.append(_level_x(*_hi(coeff_a), *_hi(coeff_b), rm, re, r_inf))
     return BlaTableX(tuple(levels), extent)
 
 

@@ -306,10 +306,11 @@ def _t1_frame_tables(small_at: tuple[int, ...] = ()) -> tuple[BlaTable, BlaTable
     return t1, build_table_t2(orbit.samples, small, 1000.0, k)
 
 
-def test_the_t2_coefficients_are_correctly_rounded() -> None:
-    """spec/deep-zoom.md "BLA at T2": T1's recurrences carried in double-double, each entry
-    storing the hi -- measured equal to the exactly computed coefficient rounded once, on
-    every live entry of levels 0-3 of two complex stored orbits."""
+def test_the_coefficients_are_correctly_rounded() -> None:
+    """spec/deep-zoom.md "BLA", "Arithmetic": the recurrences carried in double-double, each
+    entry storing the hi -- measured equal to the exactly computed coefficient rounded once,
+    on every live entry of levels 0-3 of two complex stored orbits (the T2 table, whose
+    coefficients are T1's: test_the_t2_table_stops_where_t1_does)."""
     from fractions import Fraction
 
     root = Path(__file__).resolve().parents[2] / "vectors" / "mandelbrot"
@@ -389,7 +390,8 @@ def test_the_t2_table_never_spans_a_small_index() -> None:
 
 
 def test_the_t2_table_stops_where_t1_does() -> None:
-    """The T2 table's extent is T1's k*: the first sample past R, not the orbit's end."""
+    """The T2 table's extent is T1's k*, and its coefficients are T1's bit for bit (one
+    double-double build, spec/deep-zoom.md "BLA"); only the radii differ in kind."""
     root = Path(__file__).resolve().parents[2] / "vectors" / "mandelbrot"
     for name in ("bla-landing-escape-8", "bla-p1959-zoom30-16", "bla-11dim-zoom30-32"):
         case = root / name
@@ -399,3 +401,6 @@ def test_the_t2_table_stops_where_t1_does() -> None:
         t2 = build_table_t2(samples, np.zeros(samples.size, dtype=bool), 1000.0, None)
         assert t2.extent == t1.extent
         assert [level.rm.size for level in t2.levels] == [level.r.size for level in t1.levels]
+        for a, b in zip(t1.levels, t2.levels, strict=True):
+            for name in ("ar", "ai", "br", "bi"):
+                assert np.array_equal(getattr(a, name), getattr(b, name), equal_nan=True)

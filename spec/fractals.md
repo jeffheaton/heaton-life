@@ -301,9 +301,11 @@ or stops the work and **never changes a completed frame's output**:
 - A Mandelbrot case may set `"bla": true` in its params ([deep-zoom.md](deep-zoom.md#bla-bivariate-linear-approximation-mandelbrot-opt-in));
   it then carries a `bla_applications` output (`bla_applications.i32`, each pixel's
   number of skips), whose total must be positive — a BLA case that never engages pins
-  nothing — and `"spec_version": "0.8.0"` or later. It may add a `bla_table` output
+  nothing — and `"spec_version": "0.11.0"` or later at zoom 290 and below (T1), `"0.10.0"` or
+  later past it. It may add a `bla_table` output
   (`bla_table.f64`, `"entries"`: the entries per level): the table built from the stored
-  orbit and the frame's `dc_bound`, level by level `ar, ai, br, bi, r`, compared value for
+  orbit and the frame's `dc_bound`, level by level `ar, ai, br, bi, r` (each coefficient
+  the `hi` of its double-double), compared value for
   value with every NaN equal to every NaN — build differences flip table bits on every
   frame but counts only on rare pixels.
 - A T2 BLA case ([deep-zoom.md](deep-zoom.md#bla-at-t2)) carries
@@ -327,6 +329,7 @@ or stops the work and **never changes a completed frame's output**:
   tier are its orbits at twice the frame's zoom.
 - Cases written from 2026-09-23 carry `"spec_version": "0.3.0"`, those with a reference
   `"0.4.0"` or later, those with a status `"0.6.0"` or later, those with a distance
-  `"0.7.0"` or later, those with BLA `"0.8.0"`, those at T2 `"0.10.0"` (earlier ones keep `0.2.0`; [vectors/README.md](../vectors/README.md) lists
+  `"0.7.0"` or later, those with BLA `"0.11.0"` at T1 (0.8.0 cases used float64 coefficients and
+  were rewritten), those at T2 `"0.10.0"` (earlier ones keep `0.2.0`; [vectors/README.md](../vectors/README.md) lists
   what each adds). Versions compare numerically, component by component. Runners are
   strict: a key, output kind, codec or version they do not know fails the case.

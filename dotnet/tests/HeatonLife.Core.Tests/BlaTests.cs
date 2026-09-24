@@ -202,7 +202,7 @@ namespace HeatonLife.Tests
             }
         }
 
-        /// <summary>The T2 table's extent is T1's k*: the first sample past R, not the orbit's end.</summary>
+        /// <summary>The T2 table's extent is T1's k*, and its coefficients are T1's bit for bit.</summary>
         [Theory]
         [InlineData("bla-landing-escape-8")]
         [InlineData("bla-p1959-zoom30-16")]
@@ -214,6 +214,13 @@ namespace HeatonLife.Tests
             var t2 = BlaTable.BuildX(re, im, new bool[re.Length], re.Length, 1000.0, null);
             Assert.Equal(t1.Extent, t2.Extent);
             Assert.Equal(t1.Levels, t2.Levels);
+            for (int level = 0; level < t1.Levels; level++)
+            {
+                Assert.Equal(t1.Ar[level], t2.Ar[level]);   // one double-double build: T1's coefficients
+                Assert.Equal(t1.Ai[level], t2.Ai[level]);
+                Assert.Equal(t1.Br[level], t2.Br[level]);
+                Assert.Equal(t1.Bi[level], t2.Bi[level]);
+            }
         }
 
         private static (double[] Re, double[] Im) ReadC128(string path)
