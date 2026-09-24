@@ -7,9 +7,11 @@ using Xunit;
 namespace HeatonLife.Tests
 {
     /// <summary>
-    /// Render conformance: rebuild every colormap LUT and replay frame indexing
-    /// against vectors/render/ — the same files the Python suite replays.
-    /// Bit-exact tier: RGB bytes must match exactly (spec/render.md).
+    /// Render conformance: rebuild every colormap LUT and replay frame indexing, and
+    /// (0.7.0) fractal color and the phase lookup, against vectors/render/ — the same
+    /// files the Python suite replays. Bit-exact tier: RGB bytes must match exactly
+    /// (spec/render.md, spec/fractal-color.md); float64 outputs compare by value, every
+    /// NaN equal to every NaN. 0.7.0 cases are strict: an unknown key fails the case.
     /// </summary>
     public class RenderConformanceTests
     {
@@ -26,6 +28,11 @@ namespace HeatonLife.Tests
             string caseDir = Path.Combine(TestPaths.VectorRoot(), "render", caseName);
             using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(caseDir, "params.json")));
             var root = doc.RootElement;
+            if (root.GetProperty("spec_version").GetString() == "0.7.0")
+            {
+                RunColorCase(caseName, caseDir, root);
+                return;
+            }
             switch (root.GetProperty("kind").GetString())
             {
                 case "lut":
@@ -189,6 +196,179 @@ namespace HeatonLife.Tests
             for (int i = 0; i < expected.Length; i++)
                 maxDiff = Math.Max(maxDiff, Math.Abs(produced[i] - expected[i]));
             Assert.True(maxDiff <= epsilon, $"render/{caseName}: max |Δ| = {maxDiff:g3} (ε = {epsilon:g1})");
+        }
+
+        private static readonly Dictionary<string, string[]> StrictKeys = new Dictionary<string, string[]>
+        {
+            ["lut"] = new[] { "cmap", "output" },
+            ["stretch"] = new[] { "input", "output" },          // plus one of "measured" / "stretch"
+            ["phase"] = new[] { "input", "zoom_log10", "phase", "output" },
+            ["frequency"] = new[] { "counts", "input", "target_cycles_per_step", "max_cycles_per_iteration", "expected" },
+            ["phase-apply"] = new[] { "cmap", "wrap", "interior", "antialias", "dither", "frame_index", "input", "output" },
+            ["shade"] = new[] { "rgb", "input", "shade", "output" },
+        };
+
+        private static void RunColorCase(string caseName, string caseDir, JsonElement root)
+        {
+            string kind = root.GetProperty("kind").GetString()!;
+            Assert.True(StrictKeys.ContainsKey(kind), $"render/{caseName}: unknown kind {kind}");
+            var allowed = new HashSet<string> { "spec_version", "family", "tier", "kind" };
+            allowed.UnionWith(StrictKeys[kind]);
+            if (kind == "stretch")
+                allowed.Add(root.TryGetProperty("measured", out _) ? "measured" : "stretch");
+            var names = new HashSet<string>();
+            foreach (var property in root.EnumerateObject())
+                names.Add(property.Name);
+            Assert.True(names.SetEquals(allowed), $"render/{caseName}: unexpected keys {string.Join(", ", names)}");
+            Assert.Equal("bit-exact", root.GetProperty("tier").GetString());
+            Assert.Equal("render", root.GetProperty("family").GetString());
+            string File(string key) => Path.Combine(caseDir, root.GetProperty(key).GetProperty("file").GetString()!);
+            switch (kind)
+            {
+                case "lut":
+                    RunLut(caseName, caseDir, root);
+                    break;
+                case "stretch":
+                    {
+                        double[] mu = ReadF64(File("input"));
+                        var render = new double[mu.Length];
+                        if (root.TryGetProperty("measured", out var measured))
+                        {
+                            bool got = FractalColor.TryMeasureStretch(mu, new double[mu.Length], out var stretch);
+                            if (measured.ValueKind == JsonValueKind.Null)
+                            {
+                                Assert.False(got);
+                            }
+                            else
+                            {
+                                Assert.True(got);
+                                Assert.Equal(Bits(measured, "lo"), stretch.Lo);
+                                Assert.Equal(Bits(measured, "hi"), stretch.Hi);
+                                FractalColor.ApplyStretch(mu, stretch, render);
+                            }
+                        }
+                        else
+                        {
+                            var given = root.GetProperty("stretch");
+                            FractalColor.ApplyStretch(mu, new Stretch(Bits(given, "lo"), Bits(given, "hi")), render);
+                        }
+                        AssertFloatFrame(caseName, caseDir, root.GetProperty("output").GetProperty("file").GetString()!, render);
+                        break;
+                    }
+                case "phase":
+                    {
+                        double[] mu = ReadF64(File("input"));
+                        var ph = root.GetProperty("phase");
+                        AssertKeySet(ph, caseName, "cycles_per_iteration", "cycles_per_octave", "phase_offset", "anchor");
+                        var parameters = new PhaseParams(
+                            Bits(ph, "cycles_per_iteration"), Bits(ph, "cycles_per_octave"), Bits(ph, "phase_offset"), Bits(ph, "anchor"));
+                        var t = new double[mu.Length];
+                        FractalColor.DepthPhase(mu, Bits(root, "zoom_log10"), parameters, t);
+                        AssertFloatFrame(caseName, caseDir, root.GetProperty("output").GetProperty("file").GetString()!, t);
+                        break;
+                    }
+                case "frequency":
+                    {
+                        double[] mu = ReadF64(File("input"));
+                        byte[] raw = System.IO.File.ReadAllBytes(File("counts"));
+                        var counts = new int[raw.Length / 4];
+                        Buffer.BlockCopy(raw, 0, counts, 0, raw.Length);
+                        int width = root.GetProperty("input").GetProperty("shape")[1].GetInt32();
+                        bool got = FractalColor.TryMeasureFrequency(
+                            counts, mu, width, Bits(root, "target_cycles_per_step"), Bits(root, "max_cycles_per_iteration"),
+                            new double[2 * mu.Length], out var frequency);
+                        var expected = root.GetProperty("expected");
+                        if (expected.ValueKind == JsonValueKind.Null)
+                        {
+                            Assert.False(got);
+                        }
+                        else
+                        {
+                            AssertKeySet(expected, caseName, "cycles_per_iteration", "anchor");
+                            Assert.True(got);
+                            Assert.Equal(Bits(expected, "cycles_per_iteration"), frequency.CyclesPerIteration);
+                            Assert.Equal(Bits(expected, "anchor"), frequency.Anchor);
+                        }
+                        break;
+                    }
+                case "phase-apply":
+                    {
+                        double[] t = ReadF64(File("input"));
+                        int width = root.GetProperty("input").GetProperty("shape")[1].GetInt32();
+                        var interior = root.GetProperty("interior");
+                        var wrap = root.GetProperty("wrap").GetString() switch
+                        {
+                            "cyclic" => PhaseWrap.Cyclic,
+                            "mirror" => PhaseWrap.Mirror,
+                            var other => throw new InvalidDataException($"unknown wrap '{other}'"),
+                        };
+                        var rgb = new byte[t.Length * 3];
+                        Colormaps.ApplyPhase(
+                            t, width, Colormaps.Get(root.GetProperty("cmap").GetString()!), rgb, wrap,
+                            root.GetProperty("antialias").GetBoolean(), Bits(root, "dither"),
+                            root.GetProperty("frame_index").GetUInt32(),
+                            (byte)interior[0].GetInt32(), (byte)interior[1].GetInt32(), (byte)interior[2].GetInt32());
+                        var (_, _, channels, expected) = Png.Read(File("output"));
+                        Assert.Equal(3, channels);
+                        Assert.True(rgb.AsSpan().SequenceEqual(expected), $"render/{caseName}: RGB mismatch");
+                        // The RGBA path writes the same colors.
+                        var rgba = new byte[t.Length * 4];
+                        Colormaps.ApplyPhaseRgba(
+                            t, width, Colormaps.Get(root.GetProperty("cmap").GetString()!), rgba, wrap,
+                            root.GetProperty("antialias").GetBoolean(), Bits(root, "dither"),
+                            root.GetProperty("frame_index").GetUInt32(),
+                            (byte)interior[0].GetInt32(), (byte)interior[1].GetInt32(), (byte)interior[2].GetInt32());
+                        for (int i = 0; i < t.Length; i++)
+                            Assert.True(rgba[4 * i] == rgb[3 * i] && rgba[4 * i + 1] == rgb[3 * i + 1]
+                                && rgba[4 * i + 2] == rgb[3 * i + 2] && rgba[4 * i + 3] == 255, $"render/{caseName}: RGBA");
+                        break;
+                    }
+                case "shade":
+                    {
+                        double[] distance = ReadF64(File("input"));
+                        int width = root.GetProperty("input").GetProperty("shape")[1].GetInt32();
+                        var sh = root.GetProperty("shade");
+                        AssertKeySet(sh, caseName, "width", "strength", "dense_release");
+                        var parameters = new ShadeParams(Bits(sh, "width"), Bits(sh, "strength"), Bits(sh, "dense_release"));
+                        var (_, _, inChannels, input) = Png.Read(File("rgb"));
+                        Assert.Equal(3, inChannels);
+                        byte[] rgb = (byte[])input.Clone();
+                        FractalColor.ShadeRgb(rgb, distance, width, parameters, new double[2 * distance.Length]);
+                        var (_, _, channels, expected) = Png.Read(File("output"));
+                        Assert.Equal(3, channels);
+                        Assert.True(rgb.AsSpan().SequenceEqual(expected), $"render/{caseName}: RGB mismatch");
+                        var rgba = new byte[distance.Length * 4];
+                        for (int i = 0; i < distance.Length; i++)
+                        {
+                            rgba[4 * i] = input[3 * i];
+                            rgba[4 * i + 1] = input[3 * i + 1];
+                            rgba[4 * i + 2] = input[3 * i + 2];
+                            rgba[4 * i + 3] = 7;
+                        }
+                        FractalColor.ShadeRgba(rgba, distance, width, parameters, new double[2 * distance.Length]);
+                        for (int i = 0; i < distance.Length; i++)
+                            Assert.True(rgba[4 * i] == rgb[3 * i] && rgba[4 * i + 1] == rgb[3 * i + 1]
+                                && rgba[4 * i + 2] == rgb[3 * i + 2] && rgba[4 * i + 3] == 7, $"render/{caseName}: RGBA");
+                        break;
+                    }
+            }
+        }
+
+        /// <summary>A double from its IEEE-754 bit pattern ("0x" + 16 hex digits).</summary>
+        private static double Bits(JsonElement parent, string key)
+        {
+            string text = parent.GetProperty(key).GetString()!;
+            Assert.True(text.StartsWith("0x", StringComparison.Ordinal) && text.Length == 18, text);
+            return BitConverter.Int64BitsToDouble(
+                long.Parse(text.Substring(2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        private static void AssertKeySet(JsonElement element, string caseName, params string[] expected)
+        {
+            var names = new HashSet<string>();
+            foreach (var property in element.EnumerateObject())
+                names.Add(property.Name);
+            Assert.True(names.SetEquals(expected), $"render/{caseName}: unexpected keys {string.Join(", ", names)}");
         }
 
         private static void AssertByteFrame(string caseName, string caseDir, string outputFile, byte[] frame)

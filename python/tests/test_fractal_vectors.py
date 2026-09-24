@@ -36,7 +36,7 @@ ORBIT_KINDS = {"mandelbrot": "mandelbrot", "julia": "julia", "burning-ship": "bu
 # Everything this runner understands. A key outside these sets fails the case rather
 # than being skipped: a runner that ignored, say, "critical_orbit" would replay a deep
 # Julia case the old way and either fail confusingly or pass for the wrong reason.
-SPEC_VERSIONS = {"0.2.0", "0.3.0", "0.4.0", "0.6.0"}
+SPEC_VERSIONS = {"0.2.0", "0.3.0", "0.4.0", "0.6.0", "0.7.0"}
 TOP_KEYS = {
     "spec_version",
     "family",
@@ -55,7 +55,25 @@ PARAM_KEYS = {
     "burning-ship": {"max_iter", "escape_radius"},
     "newton": {"degree", "max_iter"},
 }
-OUTPUT_KINDS = {"iterations", "roots", "status"}
+OUTPUT_KINDS = {"iterations", "roots", "status", "distance"}
+DISTANCE_FAMILIES = {"mandelbrot", "julia"}
+
+
+def _version(text: str) -> tuple[int, ...]:
+    """spec_version as integers, so "0.10.0" sorts after "0.4.0"."""
+    return tuple(int(part) for part in text.split("."))
+
+
+def assert_relative(got: np.ndarray, want: np.ndarray, epsilon: float, what: str) -> None:
+    """spec/fractals.md "Distance estimate": NaN, 0 and +-inf positions match exactly;
+    elsewhere |got - want| <= epsilon * |want|."""
+    special_want = ~np.isfinite(want) | (want == 0)
+    special_got = ~np.isfinite(got) | (got == 0)
+    assert np.array_equal(special_want, special_got), f"{what}: NaN/0/inf positions differ"
+    assert np.array_equal(got[special_want], want[special_want], equal_nan=True), what
+    finite = ~special_want
+    assert np.all(np.abs(got[finite] - want[finite]) <= epsilon * np.abs(want[finite])), what
+
 
 CASES = sorted(p for p in VECTOR_ROOT.glob("*/*/params.json") if p.parent.parent.name in FIELDS)
 
@@ -80,33 +98,55 @@ def test_fractal_vector(case: Path) -> None:
     if "reference_re" in meta["viewport"] or "reference_im" in meta["viewport"]:
         # An off-center reference (spec/deep-zoom.md) arrived in 0.4.0; an older runner
         # would iterate the center instead and replay the case wrongly.
-        assert meta["spec_version"] == "0.4.0", f"{case}: reference in a pre-0.4.0 case"
+        assert _version(meta["spec_version"]) >= (0, 4, 0), f"{case}: reference before 0.4.0"
         viewport_keys |= {"reference_re", "reference_im"}
     assert set(meta["viewport"]) == viewport_keys, f"{case}: unexpected viewport keys"
     for key in ("reference_orbit", "critical_orbit"):
         if key in meta:
             assert set(meta[key]) == {"file", "length"} and meta[key]["file"].endswith(".c128")
     for output in meta["outputs"]:
-        assert set(output) == {"kind", "file", "shape"}, f"{case}: unexpected output keys"
-        assert output["kind"] in OUTPUT_KINDS and output["file"].endswith(".i32"), (
-            f"{case}: runner does not understand output {output}"
-        )
+        if output["kind"] == "distance":
+            # spec/fractals.md "Distance estimate" (0.7.0): float64, relative epsilon.
+            assert set(output) == {"kind", "file", "shape", "relative_epsilon"}, case
+            assert output["file"].endswith(".f64"), case
+            assert _version(meta["spec_version"]) >= (0, 7, 0), f"{case}: distance before 0.7.0"
+            assert family in DISTANCE_FAMILIES, f"{case}: {family} has no distance estimate"
+        else:
+            assert set(output) == {"kind", "file", "shape"}, f"{case}: unexpected output keys"
+            assert output["kind"] in OUTPUT_KINDS and output["file"].endswith(".i32"), (
+                f"{case}: runner does not understand output {output}"
+            )
         assert output["shape"] == [meta["size"][1], meta["size"][0]], "size is [w, h]"
     field = FIELDS[family](meta["params"])
     viewport = Viewport.from_dict(meta["viewport"])
     size = (meta["size"][0], meta["size"][1])
 
     produced = dict(field.outputs(size, viewport))
-    if any(output["kind"] == "status" for output in meta["outputs"]):
+    kinds = {output["kind"] for output in meta["outputs"]}
+    if "status" in kinds:
         # spec/fractals.md "Status" (0.6.0): how each count was decided.
-        assert meta["spec_version"] == "0.6.0", f"{case}: status in a pre-0.6.0 case"
+        assert _version(meta["spec_version"]) >= (0, 6, 0), f"{case}: status before 0.6.0"
         produced["status"] = field.counts_and_status(size, viewport)[1]  # type: ignore[attr-defined]
+    if "distance" in kinds:
+        # The distance loop is its own code path: its counts and statuses must be the
+        # other paths' exactly, so they are checked against the same files.
+        fields = field.fields(size, viewport, status="status" in kinds, distance=True)  # type: ignore[attr-defined]
+        assert np.array_equal(fields.counts, produced["iterations"]), f"{case}: distance counts"
+        if fields.status is not None:
+            assert np.array_equal(fields.status, produced["status"]), f"{case}: distance status"
+        produced["distance"] = fields.distance
     for output in meta["outputs"]:
+        what = f"{family}/{case_dir.name}: {output['kind']}"
+        if output["kind"] == "distance":
+            expected_de = np.frombuffer((case_dir / output["file"]).read_bytes(), dtype="<f8")
+            got_de = produced["distance"]
+            assert_relative(got_de.ravel(), expected_de, output["relative_epsilon"], what)
+            continue
         expected = np.frombuffer((case_dir / output["file"]).read_bytes(), dtype="<i4").reshape(
             tuple(output["shape"])
         )
         got = produced[output["kind"]]
-        assert np.array_equal(got, expected), f"{family}/{case_dir.name}: {output['kind']} mismatch"
+        assert np.array_equal(got, expected), f"{what} mismatch"
 
     if "reference_orbit" in meta:
         stored = np.frombuffer(

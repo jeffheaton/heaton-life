@@ -1,0 +1,27 @@
+{
+  "family": "render",
+  "input": {
+    "file": "mu.f64",
+    "shape": [
+      64,
+      96
+    ]
+  },
+  "kind": "phase",
+  "output": {
+    "file": "t.f64",
+    "shape": [
+      64,
+      96
+    ]
+  },
+  "phase": {
+    "anchor": "0x4042800000000000",
+    "cycles_per_iteration": "0x3F947AE147AE147B",
+    "cycles_per_octave": "0x3FD0000000000000",
+    "phase_offset": "0x3FD3333333333333"
+  },
+  "spec_version": "0.7.0",
+  "tier": "bit-exact",
+  "zoom_log10": "0x4010000000000000"
+}

@@ -1,0 +1,31 @@
+{
+  "antialias": true,
+  "cmap": "classic",
+  "dither": "0x3FE0000000000000",
+  "family": "render",
+  "frame_index": 7,
+  "input": {
+    "file": "t.f64",
+    "shape": [
+      64,
+      64
+    ]
+  },
+  "interior": [
+    20,
+    30,
+    40
+  ],
+  "kind": "phase-apply",
+  "output": {
+    "file": "rgb.png",
+    "shape": [
+      64,
+      64,
+      3
+    ]
+  },
+  "spec_version": "0.7.0",
+  "tier": "bit-exact",
+  "wrap": "cyclic"
+}

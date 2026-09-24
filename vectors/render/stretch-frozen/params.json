@@ -1,0 +1,24 @@
+{
+  "family": "render",
+  "input": {
+    "file": "mu.f64",
+    "shape": [
+      64,
+      96
+    ]
+  },
+  "kind": "stretch",
+  "output": {
+    "file": "render.f64",
+    "shape": [
+      64,
+      96
+    ]
+  },
+  "spec_version": "0.7.0",
+  "stretch": {
+    "hi": "0x4042CF04F0ACEB55",
+    "lo": "0x401351CC539BD640"
+  },
+  "tier": "bit-exact"
+}

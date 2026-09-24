@@ -117,7 +117,10 @@ returns a new field of doubles in `[0, 1]`, which you colormap exactly like an
 `IFloatFrameSource` frame, as the deep-zoom sample above does.
 
 The built-in colormaps are `gray`, `phosphor`, `fire`, `ice`, `violet`, `wireworld`, and
-`rainbow` (`Colormaps.Names` lists them).
+`rainbow` (`Colormaps.Names` lists them). For fractals there are also four cyclic
+palettes, `deep`, `classic`, `embers` and `glacier` (`Colormaps.CyclicNames`), which
+`Colormaps.ApplyPhase` wraps around: with `FractalColor.DepthPhase` a point keeps its
+color at every zoom, so a dive does not flicker the way a per-frame stretch does.
 
 # Helpful Links
 

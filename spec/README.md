@@ -22,8 +22,8 @@ Each family gets one page structured as:
 
 | Tier | Families | Test |
 |---|---|---|
-| Bit-exact | Life-like, Elementary, Cyclic, Wireworld, MergeLife (and its decoded rule table), fractal iteration counts, their status, and Newton root indices, colormap LUTs and per-family frame indexing, patterns (RLE, transforms, stamp/extract), PNG grid I/O (decoded grids), evolve (objective statistics, operators, whole runs); pow10 via the known-answer bit patterns on its page; navigation (moved centers, pixel deltas); the iteration policy | byte-for-byte equality with the vector: states at each checkpoint step, or the one-shot output |
-| ε-tolerance | Lenia ×3, Gray-Scott, Boids, smooth fractal coloring (the fractal render), location framing (the zoom an imported location converts to, compared relatively: ε·max(1, |value|); its centers are exact) | max abs deviation ≤ the `epsilon` in the case's `params.json` (1e-6 for Lenia and boids, 1e-9 for Gray-Scott and the fractal render) |
+| Bit-exact | Life-like, Elementary, Cyclic, Wireworld, MergeLife (and its decoded rule table), fractal iteration counts, their status, and Newton root indices, colormap LUTs and per-family frame indexing, patterns (RLE, transforms, stamp/extract), PNG grid I/O (decoded grids), evolve (objective statistics, operators, whole runs); pow10 via the known-answer bit patterns on its page; navigation (moved centers, pixel deltas); the iteration policy; fractal color given its inputs (stretch, depth phase, frequency, distance shading) and the phase lookup with its dither and cyclic palettes | byte-for-byte equality with the vector: states at each checkpoint step, or the one-shot output (float64 outputs by value, every NaN equal to every NaN) |
+| ε-tolerance | Lenia ×3, Gray-Scott, Boids, smooth fractal coloring (the fractal render), the fractal distance estimate (relative: ε·|value|, its NaN, 0 and ±∞ exact), location framing (the zoom an imported location converts to, compared relatively: ε·max(1, |value|); its centers are exact) | max abs deviation ≤ the `epsilon` in the case's `params.json` (1e-6 for Lenia and boids, 1e-9 for Gray-Scott and the fractal render), or the output's `relative_epsilon` (1e-12 for the distance estimate) |
 
 ## Conventions
 
@@ -49,7 +49,8 @@ Each family gets one page structured as:
 - [deep-zoom.md](deep-zoom.md) — fractal precision architecture (perturbation + rebasing)
 - [locations.md](locations.md) — the framing conventions of heaton-life, Heaton Fractal, Kalles Fraktaler and Fraktaler-3, the conversions between them, and the importers for their files
 - [navigation.md](navigation.md) — exact viewport arithmetic: pan, anchored zoom and pixel offsets on decimal centers, printed at the frame's places so the orbit's precision never ratchets (bit-exact tier)
-- [render.md](render.md) — colormap LUT construction and frame indexing (bit-exact tier)
+- [render.md](render.md) — colormap LUT construction and frame indexing, the cyclic palettes and the phase lookup (bit-exact tier)
+- [fractal-color.md](fractal-color.md) — fractal color that holds still: stretch (and a frozen stretch), depth phase, frequency, distance shading (bit-exact given its inputs)
 - [patterns.md](patterns.md) — pattern model, RLE dialects, transforms, extract/stamp, family-bound compatibility
 - [png-io.md](png-io.md) — MergeLife PNG import/export at integer scale; grid-level bit-exact contract (PNG bytes are per-encoder)
 - Every family in the library has a page above. A new family adds its page here (the index and the tier table) before it merges; see [python/DEVELOPMENT.md, "Adding or changing a family"](../python/DEVELOPMENT.md#adding-or-changing-a-family).

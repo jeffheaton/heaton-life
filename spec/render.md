@@ -52,6 +52,80 @@ CA states.
 Anything else is an error. The float path's half-even rounding is part of the
 contract: `0.5 * 255 = 127.5` must index entry 128 in every language.
 
+## Cyclic palettes
+
+Four more 256-entry tables that wrap — entry 255 is followed by entry 0 — for the
+[phase lookup](#phase-lookup):
+
+| Name | Heaton Fractal's name |
+|---|---|
+| `deep` | Ultra Fractal Deep (its default) |
+| `classic` | Ultra Fractal |
+| `embers` | Embers |
+| `glacier` | Glacier |
+
+They are **data**: the bytes in both ports (C# `PaletteTables`, Python
+`render/_palette_tables.py`), pinned by `lut-<name>/lut.png`. How they were made is
+recorded, not re-run: `python/tools/gen_palettes.py` takes Heaton Fractal's gradient
+stops, linearizes them with the sRGB curve, converts to Oklab (Ottosson's matrices, the
+reverse ones by cofactor inversion), interpolates linearly in Oklab around the cycle,
+and samples entry `i` at position `i/256`, clamped to `[0, 1]` in linear light,
+sRGB-encoded and rounded half to even from `×255` (an entry exactly on a stop takes the
+stop's own bytes). They are sRGB for sRGB displays; Heaton Fractal encodes its frames
+with Rec.709, so its screenshots differ by up to ~16 codes and are not a reference.
+
+The registries stay separate: `list_colormaps()` / `Colormaps.Names` are the anchor
+colormaps above, `list_cyclic_colormaps()` / `Colormaps.CyclicNames` these four;
+`get_colormap` / `Colormaps.Get` resolve either; `is_cyclic` / `Colormaps.IsCyclic`
+tell them apart. A cyclic table used by the clipping lookup above maps 0 and 1 to
+nearly the same color — hosts offer them for the phase lookup. (`rainbow` is closed but
+not cyclic in this sense: its entry 255 repeats entry 0.)
+
+## Phase lookup
+
+`apply_phase(t, lut, wrap, interior, antialias, dither, frame_index) → RGB (H, W, 3)
+uint8` colors an unwrapped phase `t` in cycles ([fractal-color.md](fractal-color.md)
+"Depth phase"), `NaN` where a pixel did not escape.
+
+`wrap` picks how many positions a cycle has and which entry each one reads:
+
+- `cyclic`: `P = 256`, `entry(k) = k` — for the cyclic palettes;
+- `mirror`: `P = 510`, `entry(k) = k` for `k ≤ 255`, `510 − k` above — any colormap runs
+  up and back down each cycle, so `fire` or `gray` work with phase coloring without a
+  seam.
+
+For the pixel in column `x`, row `y`, in this order:
+
+```
+if t is not finite, or X = t·P is not finite:   the interior color, exactly (default (0, 0, 0))
+F  = floor(X);  f = X − F
+k0 = F − P·floor(F / P);  then k0 += P if k0 < 0,  k0 −= P if k0 ≥ P
+k1 = k0 + 1, or 0 when k0 + 1 = P
+per channel ch:
+    a, b = lut[entry(k0)][ch], lut[entry(k1)][ch]            as doubles
+    v    = a + (b − a)·f
+    antialias:  v = v + (mean_ch − v)·alias
+    dither:     v = v + amplitude·(D_ch·2⁻³²)
+    out  = clip(round_half_even(v), 0, 255)
+```
+
+- **Interpolation** between neighboring entries, with `floor`, so entry `k` sits exactly
+  at `t = k/P`.
+- **Antialias** (on by default): `need` = the largest `|t − t_n|` over the pixel's four
+  neighbors in the frame whose `t` is finite (0 if none), `alias = smoothstep(0.35, 1.0,
+  need)` (`smoothstep` as in [fractal-color.md](fractal-color.md)), and
+  `mean_ch = S_ch / P` with `S_ch = Σ_{k<P} lut[entry(k)][ch]`, an integer. Where the
+  phase moves more than about a third of a cycle per pixel the color is noise — it would
+  flicker as the view moves — so it fades to the palette's mean (Heaton Fractal's
+  threshold, measured on neighbors instead of predicted from the distance estimate).
+- **Dither** (amplitude `1` by default; `0` turns it off; finite and `≥ 0`): per channel,
+  a triangular ±1-code noise at amplitude 1, `D_ch` from [rng.md](rng.md) "Presentation
+  noise" at `(x, y, frame_index, ch)` — Heaton Fractal's dither, which it applies after
+  encoding exactly so. `frame_index` is `0` for stills and interactive views, the frame
+  number in an animation; `0 ≤ frame_index < 2³²`.
+
+Python `apply_phase`, C# `Colormaps.ApplyPhase` / `ApplyPhaseRgba` (alpha 255).
+
 ## Frames
 
 Simulations expose their renderable view as a *frame* — always Height×Width,
@@ -100,3 +174,11 @@ Vectors in [`../vectors/render/`](../vectors/render/):
   decoupled from the ε of evolved states.
 - `fractal-render-<case>/` — params + viewport and the expected float frame
   (`render.f64`, ε = 1e-9).
+- `lut-deep/`, `lut-classic/`, `lut-embers/`, `lut-glacier/` — the cyclic tables.
+- `phase-apply-<case>/` — `t.f64` in (with `NaN`s), the lookup's options in
+  `params.json`, `rgb.png` out (bit-exact).
+- The fractal coloring cases (`stretch-*`, `phase-*`, `frequency-*`, `shade-*`):
+  [fractal-color.md](fractal-color.md).
+
+A float64 output compares by value: every NaN equals every NaN, and the sign of a zero is
+not compared. Cases from 0.7.0 on are checked strictly (every key known).

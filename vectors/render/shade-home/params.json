@@ -1,0 +1,34 @@
+{
+  "family": "render",
+  "input": {
+    "file": "distance.f64",
+    "shape": [
+      64,
+      64
+    ]
+  },
+  "kind": "shade",
+  "output": {
+    "file": "rgb.png",
+    "shape": [
+      64,
+      64,
+      3
+    ]
+  },
+  "rgb": {
+    "file": "input.png",
+    "shape": [
+      64,
+      64,
+      3
+    ]
+  },
+  "shade": {
+    "dense_release": "0x3FF0000000000000",
+    "strength": "0x3FEB333333333333",
+    "width": "0x3FF999999999999A"
+  },
+  "spec_version": "0.7.0",
+  "tier": "bit-exact"
+}

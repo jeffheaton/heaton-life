@@ -36,7 +36,8 @@ Deep-zoom architecture (tiers, perturbation, rebasing): [deep-zoom.md](deep-zoom
 1st/99th escaped percentiles for display — deep frames cluster counts near
 `max_iter`, and an absolute mapping would render monochrome. `counts` is the
 conformance output, and, for escape-time families, the `status` of each count
-(below).
+(below). Per-frame stretching is one way to color; [fractal-color.md](fractal-color.md)
+has the others, which hold still while a view moves.
 
 ## Interior shortcuts (T0)
 
@@ -110,6 +111,72 @@ libm `pow`:
 - `suggest_max_iter(z, counts) = min(max(auto_max_iter(z), 2 · need), 2³¹ − 1)`.
 
 Python `heaton_life.fractal.policy`; C# `IterationPolicy`.
+
+## Distance estimate
+
+Mandelbrot and Julia can also report, for each escaped pixel, an estimate of its
+distance to the set's boundary **in pixels of the frame** (Heaton Fractal's `DE_px`):
+
+```
+DE = |z|·ln|z| / |d|,    d = ps·dz/dc (Mandelbrot),  d = ps·dz/dz₀ (Julia)
+```
+
+where `ps` is the frame's pixel scale (Pixel mapping). There is no factor of 2: the true
+distance lies between `DE/2` and `2·DE`. Carrying `ps` inside the derivative keeps it in
+range at depth, where `dz/dc` itself would overflow.
+
+**Derivative.** Each iteration updates `d` from the **pre-square** `z`, before `z` is
+updated, in real component form — plain float64 operations in this order, no fma
+(NumPy runs it on real arrays, which never contract):
+
+```
+t_r = 2.0·(zr·dr − zi·di) + ps        Mandelbrot;  Julia: 2.0·(zr·dr − zi·di), no addition
+t_i = 2.0·(zr·di + zi·dr)
+(dr, di) ← (t_r, t_i)
+```
+
+It starts at `(0, 0)` for Mandelbrot and `(ps, 0)` for Julia. At T0 the pre-square `z` is
+the loop's own (`0` for Mandelbrot, the pixel for Julia). At T1 it is the
+`z = fl(Z[m] + δ)` the previous iteration reconstructed — `fl(Z₀ + δ₀)` before the
+first — and a rebase, which changes `δ`, `m` and the orbit followed, changes neither `z`
+nor `d` (an [off-center reference](deep-zoom.md#off-center-reference) likewise).
+
+**Estimate.** At escape (count `n > 0`, `z = zₙ`, `d = dₙ`):
+
+```
+m2 = zr·zr + zi·zi
+a  = max(|dr|, |di|)
+a = 0            → DE = +∞       a critical point: the estimate diverges
+a not finite     → DE = 0        the derivative overflowed: on the boundary
+otherwise:
+    s  = 2^600 if a < 2^−400,  2^−600 if a > 2^400,  else 1
+    sr = dr·s;  si = di·s
+    DE = ((sqrt(m2) · (0.5·log(m2))) / sqrt(sr·sr + si·si)) · s
+```
+
+The scaling is exact (a power of two) and keeps the squares out of the subnormal range:
+at T1 `|d|` falls below `1e-154` for pixels far from the set in pixel units (zooms past
+about 155). There plain squares lose precision, and below about `1.6e-162` they read 0
+and give `DE = +∞`, a false critical point. `DE` itself may round to `+∞`. A pixel that did not escape (exhausted, cardioid or bulb, cycle) has
+`DE = NaN` — no value.
+
+**Domain.** Only with `2 ≤ escape_radius ≤ 1e64` — `ln|z|` must be positive and `m2`
+finite; asking outside it is an error. The estimate is asymptotic in `|z|` (a small
+radius distorts it: at `R = 10` the tip below is off by about 1%). At the default
+`R = 1000`, `c = −2 − δ` with `δ ≤ 1e-3` reads `DE·ps = 2δ` within 0.1%; `2δ` is itself
+the tip's small-`δ` limit, so `δ = 0.01` reads 0.6% low.
+
+**Tier.** ε, relative: `|got − want| ≤ ε·|want|` with ε = `1e-12`, and a `NaN`, `0` or
+`±∞` must match exactly. The derivative and the scaling are plain IEEE operations in a
+fixed order, so the ports agree on `d` bit for bit; only `log` may differ in its last
+ulps. (Accuracy against the *true* distance is another matter: float64 error grows near
+the boundary roughly as `1/DE`.)
+
+Burning Ship (not analytic) and Newton (not escape time) have none; asking is an error.
+Python `fields(size, viewport, distance=True)`; C# `Fields(…, distance: buffer)` and
+`SupportsDistance`. The distance loop is a separate code path, taken only when a distance
+buffer is asked for; its counts, statuses and smooth values are exactly the other paths'.
+Coloring with it: [fractal-color.md](fractal-color.md).
 
 ## Family updates
 
@@ -206,8 +273,14 @@ or stops the work and **never changes a completed frame's output**:
   [off-center reference](deep-zoom.md#off-center-reference); the stored reference orbit
   is then the reference's, and a replay must offset every pixel by `round64(C − R)`.
 - An escape-time case may add a `status` output (`status.i32`, values 0–3, see
-  [Status](#status)); such cases carry `"spec_version": "0.6.0"`.
+  [Status](#status)); such cases carry `"spec_version": "0.6.0"` or later.
+- A Mandelbrot or Julia case may add a `distance` output (`distance.f64`, raw
+  little-endian float64, see [Distance estimate](#distance-estimate)) carrying
+  `"relative_epsilon": 1e-12`; such cases carry `"spec_version": "0.7.0"`. The case's
+  `tier` describes its integer outputs; an output with `relative_epsilon` is compared as
+  that section says. A runner computes the case's counts through the distance path too.
 - Cases written from 2026-09-23 carry `"spec_version": "0.3.0"`, those with a reference
-  `"0.4.0"`, those with a status `"0.6.0"` (earlier ones keep `0.2.0`;
-  [vectors/README.md](../vectors/README.md) lists what each adds). Runners are strict: a
-  key, output kind, codec or version they do not know fails the case.
+  `"0.4.0"` or later, those with a status `"0.6.0"` or later, those with a distance
+  `"0.7.0"` (earlier ones keep `0.2.0`; [vectors/README.md](../vectors/README.md) lists
+  what each adds). Versions compare numerically, component by component. Runners are
+  strict: a key, output kind, codec or version they do not know fails the case.

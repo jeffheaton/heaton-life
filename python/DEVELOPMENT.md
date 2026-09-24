@@ -59,7 +59,7 @@ python/
 │   ├── playground/     # PyQt6 app (optional extra)
 │   └── version.py      # build stamp (see Releasing)
 ├── tests/              # pytest suite; replays ../vectors and drives the playground offscreen
-├── tools/              # gen_vectors.py, gen_gallery.py, score_rules.py
+├── tools/              # gen_vectors.py, gen_gallery.py, gen_palettes.py, score_rules.py
 └── examples/           # the intro notebook (runs in Colab)
 ```
 
@@ -100,10 +100,11 @@ heaton-life is spec first and multi-language, and that shapes every change.
 - **The vectors decide disputes.** `../vectors/` holds golden outputs
   (`params.json` plus expected states) shared by every implementation. Families
   in the bit-exact tier (the discrete automata, fractal iteration counts, colormaps
-  and frame indexing, patterns and RLE, PNG grid I/O, the evolver) must match byte
-  for byte; the epsilon tier (Lenia, boids, Gray-Scott, and the smooth-colored fractal render
-  cases under `render/`) must match within the tolerance recorded in each
-  `params.json`.
+  and frame indexing, fractal color and the phase lookup, patterns and RLE, PNG grid
+  I/O, the evolver) must match byte for byte; the epsilon tier (Lenia, boids,
+  Gray-Scott, and the `fractal-render-*` cases under `render/`) must match within the
+  tolerance recorded in each `params.json`, and the fractal `distance` output within
+  its own `relative_epsilon`.
 - **All randomness flows through PCG32** (`heaton_life.core.rng.Pcg32`). Never use
   NumPy's random module or Python's `random`; seeding and draw order are part of
   each family's spec, and the .NET port reproduces them exactly.
@@ -163,6 +164,11 @@ Some floating-point rules are not obvious and are easy to "clean up" by mistake:
   the image at the top of both READMEs.
 - `tools/gen_vectors.py` generates conformance vectors. Read the regeneration
   policy above before running any of it.
+- `tools/gen_palettes.py` records how the cyclic palettes (`../spec/render.md`,
+  "Cyclic palettes") were baked into `src/heaton_life/render/_palette_tables.py` and
+  `../dotnet/src/HeatonLife.Core/PaletteTables.cs`. Those bytes are normative data,
+  pinned by `../vectors/render/lut-<name>/`; the script is not re-run casually, and if
+  it is, both table files and the LUT vectors must come back unchanged.
 - `tools/score_rules.py` scores MergeLife rule strings with the paper objective
   (`../spec/evolve.md`).
 

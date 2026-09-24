@@ -7,6 +7,7 @@ Smooth value for escaped pixels: mu = n + 1 - log2(log|z| / log R).
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 
 import numpy as np
@@ -138,6 +139,48 @@ def escape_time(
     so a repeated state repeats forever and never escapes. Then z_n is saved when n is
     a power of two (Brent's schedule). Counts are unchanged: -1 either way.
     """
+    counts, final, status, _ = _escape_loop(z0, c, update, max_iter, escape_radius, None)
+    return counts, final, status
+
+
+Derivative = tuple[FloatArray, FloatArray]
+
+
+def escape_time_distance(
+    z0: ComplexArray,
+    c: ComplexArray,
+    max_iter: int,
+    escape_radius: float,
+    d0: tuple[float, float],
+    add: float | None,
+) -> tuple[IntArray, ComplexArray, StatusArray, Derivative]:
+    """escape_time for z^2 + c that also carries the derivative a distance estimate
+    needs (spec/fractals.md "Distance estimate"): d starts at ``d0`` and each iteration,
+    before z is updated, becomes (2(zr dr - zi di) + add, 2(zr di + zi dr)) from the
+    pre-square z -- real arrays, so nothing is fma-contracted. ``add`` is the pixel
+    scale for Mandelbrot and None for Julia (no addition at all). Counts, final z and
+    statuses are exactly escape_time's; the derivative at escape comes back as
+    (final_dr, final_di), meaningful where counts > 0."""
+    counts, final, status, derivative = _escape_loop(
+        z0, c, _z2_update, max_iter, escape_radius, (d0, add)
+    )
+    assert derivative is not None
+    return counts, final, status, derivative
+
+
+def _z2_update(z: ComplexArray, c: ComplexArray) -> ComplexArray:
+    result: ComplexArray = z * z + c
+    return result
+
+
+def _escape_loop(
+    z0: ComplexArray,
+    c: ComplexArray,
+    update: Callable[[ComplexArray, ComplexArray], ComplexArray],
+    max_iter: int,
+    escape_radius: float,
+    derivative: tuple[tuple[float, float], float | None] | None,
+) -> tuple[IntArray, ComplexArray, StatusArray, Derivative | None]:
     n = z0.size
     counts = np.full(n, -1, dtype=np.int32)
     final = np.zeros(n, dtype=np.complex128)
@@ -147,7 +190,25 @@ def escape_time(
     idx = np.arange(n)
     saved: ComplexArray | None = None
     r2 = escape_radius * escape_radius
+    dr: FloatArray | None = None
+    di: FloatArray | None = None
+    final_dr = final_di = np.zeros(0)
+    add: float | None = None
+    if derivative is not None:
+        (d0r, d0i), add = derivative
+        dr = np.full(n, d0r, dtype=np.float64)
+        di = np.full(n, d0i, dtype=np.float64)
+        final_dr = np.zeros(n, dtype=np.float64)
+        final_di = np.zeros(n, dtype=np.float64)
     for it in range(1, max_iter + 1):
+        if dr is not None and di is not None:
+            zr = z.real
+            zi = z.imag
+            tr = 2.0 * (zr * dr - zi * di)
+            if add is not None:
+                tr = tr + add
+            ti = 2.0 * (zr * di + zi * dr)
+            dr, di = tr, ti
         z = update(z, cc)
         escaped = (z.real * z.real + z.imag * z.imag) > r2
         cycled = (z == saved) & ~escaped if saved is not None else None
@@ -163,11 +224,48 @@ def escape_time(
             z, cc, idx = z[keep], cc[keep], idx[keep]
             if saved is not None:
                 saved = saved[keep]
+            if dr is not None and di is not None:
+                final_dr[hits] = dr[escaped]
+                final_di[hits] = di[escaped]
+                dr, di = dr[keep], di[keep]
             if idx.size == 0:
                 break
         if (it & (it - 1)) == 0:  # a power of two (C-family ports: == binds tighter than &)
             saved = z.copy()
-    return counts, final, status
+    return counts, final, status, (final_dr, final_di) if derivative is not None else None
+
+
+# Exact powers of two for the distance estimate's magnitude scaling (spec/fractals.md).
+_TWO_400, _TWO_M400 = math.ldexp(1.0, 400), math.ldexp(1.0, -400)
+_TWO_600, _TWO_M600 = math.ldexp(1.0, 600), math.ldexp(1.0, -600)
+
+
+def distance_estimate(
+    counts: IntArray, final: ComplexArray, final_dr: FloatArray, final_di: FloatArray
+) -> FloatArray:
+    """DE in pixels from the escaping z and derivative (spec/fractals.md "Distance
+    estimate"): ((sqrt(m2) * (0.5 log m2)) / |d|) with |d| exponent-scaled by an exact
+    power of two so its squares never go subnormal; +inf where d is exactly 0 (a
+    critical point), 0 where d is not finite (overflowed: on the boundary), NaN where
+    the pixel did not escape."""
+    de = np.full(counts.shape, np.nan, dtype=np.float64)
+    escaped = counts > 0
+    if not escaped.any():
+        return de
+    zr = final.real[escaped]
+    zi = final.imag[escaped]
+    dr = final_dr[escaped]
+    di = final_di[escaped]
+    m2 = zr * zr + zi * zi
+    a = np.maximum(np.abs(dr), np.abs(di))  # NaN if either part is NaN
+    finite = np.isfinite(a)
+    s = np.where(a < _TWO_M400, _TWO_600, np.where(a > _TWO_400, _TWO_M600, 1.0))
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        sr = dr * s
+        si = di * s
+        value = ((np.sqrt(m2) * (0.5 * np.log(m2))) / np.sqrt(sr * sr + si * si)) * s
+    de[escaped] = np.where(a == 0.0, np.inf, np.where(finite, value, 0.0))
+    return de
 
 
 def cardioid_or_bulb(c: ComplexArray) -> NDArray[np.bool_]:
@@ -203,16 +301,12 @@ def normalize_render(mu: FloatArray) -> FloatArray:
     a narrow band near max_iter, so an absolute mu/max_iter mapping goes monochrome.
     Stretching between the frame's 1st and 99th escaped percentiles keeps the full
     palette in play at any depth (presentation only — counts are the conformance
-    output and are untouched).
+    output and are untouched). Exactly apply_stretch(mu, measure_stretch(mu))
+    (spec/fractal-color.md "Stretch"); all zeros when nothing escaped.
     """
-    values = np.zeros(mu.shape, dtype=np.float64)
-    escaped = mu > 0
-    if escaped.any():
-        lo, hi = np.percentile(mu[escaped], [1.0, 99.0])
-        if hi <= lo:
-            values[escaped] = 0.6  # featureless frame: one mid tone
-        else:
-            # floor keeps escaped pixels distinguishable from the black interior
-            values[escaped] = np.clip((mu[escaped] - lo) / (hi - lo), 0.02, 1.0)
-    result: FloatArray = np.sqrt(values)
-    return result
+    from heaton_life.fractal.coloring import apply_stretch, measure_stretch
+
+    stretch = measure_stretch(mu)
+    if stretch is None:
+        return np.zeros(mu.shape, dtype=np.float64)
+    return apply_stretch(mu, stretch)

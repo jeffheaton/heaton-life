@@ -94,6 +94,83 @@ namespace HeatonLife
             return -1;
         }
 
+        /// <summary>
+        /// <see cref="PerturbZ2(double[],double[],double[],double[],double,double,double,double,int,double,out double,out double)"/>
+        /// that also carries the derivative of the full z for a distance estimate
+        /// (spec/fractals.md "Distance estimate"): updated from the z the previous iteration
+        /// reconstructed — fl(Z_0 + delta_0) before the first — and left alone by a rebase,
+        /// which changes delta, m and the orbit followed but not z. Mandelbrot: d0 = (0, 0),
+        /// <paramref name="addScale"/>; Julia: d0 = (ps, 0), no addition. Counts and the final
+        /// z are exactly PerturbZ2's.
+        /// </summary>
+        internal static int PerturbZ2De(
+            double[] orbitRe,
+            double[] orbitIm,
+            double[] rebaseRe,
+            double[] rebaseIm,
+            double dz0Re,
+            double dz0Im,
+            double dcRe,
+            double dcIm,
+            int maxIter,
+            double escapeRadius,
+            double d0Re,
+            double d0Im,
+            bool addScale,
+            double ps,
+            out double finalRe,
+            out double finalIm,
+            out double finalDr,
+            out double finalDi)
+        {
+            double dzr = dz0Re, dzi = dz0Im;
+            double[] refRe = orbitRe, refIm = orbitIm;
+            int m = 0;
+            int last = refRe.Length - 1;
+            double r2 = escapeRadius * escapeRadius;
+            double dr = d0Re, di = d0Im;
+            double zr = refRe[0] + dzr;                   // the pre-square z of iteration 1
+            double zi = refIm[0] + dzi;
+            for (int it = 1; it <= maxIter; it++)
+            {
+                double tdr = 2.0 * (zr * dr - zi * di);
+                if (addScale)
+                    tdr = tdr + ps;
+                double tdi = 2.0 * (zr * di + zi * dr);
+                dr = tdr;
+                di = tdi;
+                double tr = 2.0 * refRe[m] + dzr;
+                double ti = 2.0 * refIm[m] + dzi;
+                var (mr, mi) = FractalEngine.ComplexMul(tr, ti, dzr, dzi);
+                dzr = mr + dcRe;
+                dzi = mi + dcIm;
+                m = Math.Min(m + 1, last);
+                zr = refRe[m] + dzr;
+                zi = refIm[m] + dzi;
+                double zabs2 = zr * zr + zi * zi;
+                if (zabs2 > r2)
+                {
+                    finalRe = zr;
+                    finalIm = zi;
+                    finalDr = dr;
+                    finalDi = di;
+                    return it;
+                }
+                if (zabs2 < dzr * dzr + dzi * dzi)
+                {
+                    // z, and so the derivative, are unchanged: only delta, m and the orbit move
+                    dzr = zr;
+                    dzi = zi;
+                    refRe = rebaseRe;
+                    refIm = rebaseIm;
+                    last = refRe.Length - 1;
+                    m = 0;
+                }
+            }
+            finalRe = finalIm = finalDr = finalDi = 0.0;
+            return -1;
+        }
+
         /// <summary>Component-form perturbation for the Burning Ship, using stable diffabs.</summary>
         public static int PerturbBurningShip(
             double[] orbitRe,

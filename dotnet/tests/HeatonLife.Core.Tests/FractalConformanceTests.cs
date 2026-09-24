@@ -22,7 +22,7 @@ namespace HeatonLife.Tests
         // Everything this runner understands. A key outside these sets fails the case
         // rather than being skipped: a runner that ignored, say, "critical_orbit" would
         // replay a deep Julia case the old way and fail confusingly or pass wrongly.
-        private static readonly HashSet<string> SpecVersions = new HashSet<string> { "0.2.0", "0.3.0", "0.4.0", "0.6.0" };
+        private static readonly HashSet<string> SpecVersions = new HashSet<string> { "0.2.0", "0.3.0", "0.4.0", "0.6.0", "0.7.0" };
         private static readonly HashSet<string> TopKeys = new HashSet<string>
         {
             "spec_version", "family", "tier", "params", "viewport", "size", "outputs",
@@ -36,6 +36,14 @@ namespace HeatonLife.Tests
             ["newton"] = new HashSet<string> { "degree", "max_iter" },
         };
         private static readonly HashSet<string> OutputKinds = new HashSet<string> { "iterations", "roots", "status" };
+
+        /// <summary>spec_version as integers, compared component by component ("0.10.0" &gt; "0.4.0").</summary>
+        private static bool AtLeast(string version, int major, int minor, int patch)
+        {
+            string[] parts = version.Split('.');
+            var got = (int.Parse(parts[0]), int.Parse(parts[1]), int.Parse(parts[2]));
+            return got.CompareTo((major, minor, patch)) >= 0;
+        }
 
         public static IEnumerable<object[]> Cases()
         {
@@ -68,7 +76,7 @@ namespace HeatonLife.Tests
             {
                 // An off-center reference (spec/deep-zoom.md) arrived in 0.4.0; an older
                 // runner would iterate the center instead and replay the case wrongly.
-                Assert.Equal("0.4.0", root.GetProperty("spec_version").GetString());
+                Assert.True(AtLeast(root.GetProperty("spec_version").GetString()!, 0, 4, 0), $"{family}/{caseName}: reference before 0.4.0");
                 AssertKeys(vp, $"{family}/{caseName} viewport", "center_re", "center_im", "zoom_log10", "reference_re", "reference_im");
             }
             else
@@ -82,21 +90,34 @@ namespace HeatonLife.Tests
                 AssertKeys(orbit, $"{family}/{caseName} {key}", "file", "length");
                 Assert.EndsWith(".c128", orbit.GetProperty("file").GetString()!);
             }
-            bool withStatus = false;
+            bool withStatus = false, withDistance = false;
+            string version = root.GetProperty("spec_version").GetString()!;
             foreach (var output in root.GetProperty("outputs").EnumerateArray())
             {
-                AssertKeys(output, $"{family}/{caseName} output", "kind", "file", "shape");
-                withStatus |= output.GetProperty("kind").GetString() == "status";
-                Assert.True(
-                    OutputKinds.Contains(output.GetProperty("kind").GetString()!)
-                    && output.GetProperty("file").GetString()!.EndsWith(".i32", StringComparison.Ordinal),
-                    $"{family}/{caseName}: runner does not understand output {output}");
+                if (output.GetProperty("kind").GetString() == "distance")
+                {
+                    // spec/fractals.md "Distance estimate" (0.7.0): float64, relative epsilon.
+                    withDistance = true;
+                    AssertKeys(output, $"{family}/{caseName} output", "kind", "file", "shape", "relative_epsilon");
+                    Assert.EndsWith(".f64", output.GetProperty("file").GetString()!);
+                    Assert.True(AtLeast(version, 0, 7, 0), $"{family}/{caseName}: distance before 0.7.0");
+                    Assert.True(family == "mandelbrot" || family == "julia", $"{family}/{caseName}: no distance estimate");
+                }
+                else
+                {
+                    AssertKeys(output, $"{family}/{caseName} output", "kind", "file", "shape");
+                    withStatus |= output.GetProperty("kind").GetString() == "status";
+                    Assert.True(
+                        OutputKinds.Contains(output.GetProperty("kind").GetString()!)
+                        && output.GetProperty("file").GetString()!.EndsWith(".i32", StringComparison.Ordinal),
+                        $"{family}/{caseName}: runner does not understand output {output}");
+                }
                 // size is [width, height]; shape is [rows, cols].
                 Assert.Equal(root.GetProperty("size")[1].GetInt32(), output.GetProperty("shape")[0].GetInt32());
                 Assert.Equal(root.GetProperty("size")[0].GetInt32(), output.GetProperty("shape")[1].GetInt32());
             }
             // spec/fractals.md "Status" (0.6.0): how each count was decided.
-            Assert.True(!withStatus || root.GetProperty("spec_version").GetString() == "0.6.0", $"{family}/{caseName}: status in a pre-0.6.0 case");
+            Assert.True(!withStatus || AtLeast(version, 0, 6, 0), $"{family}/{caseName}: status before 0.6.0");
             var viewport = new Viewport(
                 vp.GetProperty("center_re").GetString()!,
                 vp.GetProperty("center_im").GetString()!,
@@ -126,11 +147,23 @@ namespace HeatonLife.Tests
             // not divide the vector heights evenly.
             foreach (int workers in new[] { 1, 5 })
             {
-                var produced = ComputeOutputs(
-                    family, p, viewport, width, height, orbitRe, orbitIm, criticalRe, criticalIm, workers, withStatus);
+                double[]? distance = null;
+                var produced = withDistance
+                    ? ComputeFields(
+                        family, p, viewport, width, height, orbitRe, orbitIm, criticalRe, criticalIm, workers, withStatus,
+                        out distance)
+                    : ComputeOutputs(
+                        family, p, viewport, width, height, orbitRe, orbitIm, criticalRe, criticalIm, workers, withStatus);
                 foreach (var output in root.GetProperty("outputs").EnumerateArray())
                 {
                     string kind = output.GetProperty("kind").GetString()!;
+                    if (kind == "distance")
+                    {
+                        double[] want = ReadF64(Path.Combine(caseDir, output.GetProperty("file").GetString()!));
+                        AssertRelative(distance!, want, output.GetProperty("relative_epsilon").GetDouble(),
+                            $"{family}/{caseName}: distance (workers={workers})");
+                        continue;
+                    }
                     int[] expected = ReadI32(
                         Path.Combine(caseDir, output.GetProperty("file").GetString()!));
                     long shapeLen = 1;
@@ -241,6 +274,83 @@ namespace HeatonLife.Tests
                 default:
                     throw new InvalidDataException($"no fractal builder for family '{family}'");
             }
+        }
+
+        /// <summary>
+        /// A distance case: counts, statuses and the distance estimate from one
+        /// <c>Fields</c> call — the distance loop's own path, checked against the same
+        /// count files — replaying the stored orbits at T1.
+        /// </summary>
+        private static Dictionary<string, int[]> ComputeFields(
+            string family,
+            JsonElement p,
+            Viewport viewport,
+            int width,
+            int height,
+            double[]? orbitRe,
+            double[]? orbitIm,
+            double[]? criticalRe,
+            double[]? criticalIm,
+            int workers,
+            bool withStatus,
+            out double[] distance)
+        {
+            var counts = new int[width * height];
+            byte[]? status = withStatus ? new byte[width * height] : null;
+            distance = new double[width * height];
+            if (family == "mandelbrot")
+            {
+                var field = new Mandelbrot(p.GetProperty("max_iter").GetInt32(), p.GetProperty("escape_radius").GetDouble(), workers);
+                if (orbitRe != null)
+                    field.Fields(width, height, viewport, orbitRe, orbitIm!, counts, status, distance);
+                else
+                    field.Fields(width, height, viewport, counts, status: status, distance: distance);
+            }
+            else
+            {
+                var field = new Julia(p.GetProperty("c_re").GetDouble(), p.GetProperty("c_im").GetDouble(),
+                    p.GetProperty("max_iter").GetInt32(), p.GetProperty("escape_radius").GetDouble(), workers);
+                if (orbitRe != null)
+                    field.Fields(width, height, viewport, orbitRe, orbitIm!, criticalRe!, criticalIm!, counts, status, distance);
+                else
+                    field.Fields(width, height, viewport, counts, status: status, distance: distance);
+            }
+            var produced = new Dictionary<string, int[]> { ["iterations"] = counts };
+            if (status != null)
+            {
+                var statusInts = new int[status.Length];
+                for (int i = 0; i < status.Length; i++)
+                    statusInts[i] = status[i];
+                produced["status"] = statusInts;
+            }
+            return produced;
+        }
+
+        /// <summary>
+        /// spec/fractals.md "Distance estimate": NaN, 0 and ±∞ positions match exactly;
+        /// elsewhere |got - want| &lt;= epsilon * |want|.
+        /// </summary>
+        private static void AssertRelative(double[] got, double[] want, double epsilon, string what)
+        {
+            Assert.Equal(want.Length, got.Length);
+            for (int i = 0; i < want.Length; i++)
+            {
+                bool special = double.IsNaN(want[i]) || double.IsInfinity(want[i]) || want[i] == 0.0;
+                if (special)
+                    Assert.True(want[i].Equals(got[i]), $"{what}: pixel {i} is {got[i]:R}, want {want[i]:R}");
+                else
+                    Assert.True(Math.Abs(got[i] - want[i]) <= epsilon * Math.Abs(want[i]),
+                        $"{what}: pixel {i} is {got[i]:R}, want {want[i]:R}");
+            }
+        }
+
+        /// <summary>Raw little-endian float64.</summary>
+        private static double[] ReadF64(string path)
+        {
+            byte[] bytes = File.ReadAllBytes(path);
+            var values = new double[bytes.Length / 8];
+            Buffer.BlockCopy(bytes, 0, values, 0, bytes.Length);
+            return values;
         }
 
         /// <summary>The object must carry exactly these keys (strict: unknown keys fail the case).</summary>

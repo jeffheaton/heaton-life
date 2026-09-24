@@ -1,0 +1,26 @@
+{
+  "counts": {
+    "file": "counts.i32",
+    "shape": [
+      48,
+      64
+    ]
+  },
+  "expected": {
+    "anchor": "0x408D780000000000",
+    "cycles_per_iteration": "0x3F89C0C4CF0097F6"
+  },
+  "family": "render",
+  "input": {
+    "file": "mu.f64",
+    "shape": [
+      48,
+      64
+    ]
+  },
+  "kind": "frequency",
+  "max_cycles_per_iteration": "0x3FF0000000000000",
+  "spec_version": "0.7.0",
+  "target_cycles_per_step": "0x3F9EB851EB851EB8",
+  "tier": "bit-exact"
+}

@@ -1,0 +1,31 @@
+{
+  "antialias": true,
+  "cmap": "embers",
+  "dither": "0x4000000000000000",
+  "family": "render",
+  "frame_index": 0,
+  "input": {
+    "file": "t.f64",
+    "shape": [
+      8,
+      12
+    ]
+  },
+  "interior": [
+    0,
+    0,
+    0
+  ],
+  "kind": "phase-apply",
+  "output": {
+    "file": "rgb.png",
+    "shape": [
+      8,
+      12,
+      3
+    ]
+  },
+  "spec_version": "0.7.0",
+  "tier": "bit-exact",
+  "wrap": "mirror"
+}

@@ -107,6 +107,12 @@ does; the C# port mirrors it with `FractalEngine.ComplexMul` (see
 Escape test and smooth coloring use the reconstructed `z = Z[m] + δ`:
 `|z| > R` escapes; `μ = n + 1 − log₂(log|z| / log R)`.
 
+A [distance estimate](fractals.md#distance-estimate) (Mandelbrot, Julia) carries the
+derivative of the *full* `z` alongside: each iteration updates it from the `z` the
+previous iteration reconstructed (`fl(Z₀ + δ₀)` before the first), in plain float64.
+The reference contributes nothing to it (`dZ/dc = 0` for a fixed reference), so it is
+the same derivative T0 would carry, and a rebase leaves it alone.
+
 ### Rebasing (single reference, no glitches)
 
 Classic perturbation suffers "glitches" where `|δ|` grows comparable to `|Zₙ|` and cancellation corrupts pixels; the old fix was glitch detection plus re-rendering with extra references. We use rebasing instead: each pixel tracks its reference index `m`, and
@@ -336,10 +342,14 @@ Hard-won; each has broken, or would break, bit-exact agreement between the ports
   away.) Its price: an all-interior deep Julia frame runs about 3× slower in C# than an
   escaping one.
 - **Squared magnitudes** are exact enough at T1 and only at T1 (see
-  [Rebasing](#rebasing-single-reference-no-glitches)).
+  [Rebasing](#rebasing-single-reference-no-glitches)) — for `z` and `δ`. The distance
+  estimate's derivative is not bounded below the same way (a pixel far from the set in
+  pixel units ends with `|d|` near `1.4e-163` at zoom 170), so its magnitude is
+  exponent-scaled ([fractals.md](fractals.md#distance-estimate)).
 - **Magnitude forms.** Smooth coloring's `|z|` is `np.abs` (hypot) in Python and
   `sqrt(re·re + im·im)` in C#. That is fine for `μ`, an ε-tier output; any new
-  bit-exact output that needs a magnitude must pin one form (`sqrt(re·re + im·im)`).
+  output that needs a magnitude pins one form (`sqrt(re·re + im·im)`, as the distance
+  estimate does).
 - **Powers of ten** in the pixel scale go through [pow10.md](pow10.md), never libm.
 - **The center's float64 projection** is one correct rounding of the decimal (see the
   Viewport contract) — never `double.Parse` on a runtime that does not guarantee it,
@@ -353,4 +363,5 @@ Hard-won; each has broken, or would break, bit-exact agreement between the ports
 
 - **BLA** (bivariate linear approximation) for iteration skipping at extreme depth.
 - T2 floatexp arithmetic.
-- Interior detection, distance-estimation anti-aliasing.
+- Distance-estimation anti-aliasing (the [distance estimate](fractals.md#distance-estimate)
+  itself, interior shortcuts and palette antialiasing landed in 0.6.0 and 0.7.0).

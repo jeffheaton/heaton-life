@@ -1,0 +1,14 @@
+{
+  "cmap": "glacier",
+  "family": "render",
+  "kind": "lut",
+  "output": {
+    "file": "lut.png",
+    "shape": [
+      256,
+      3
+    ]
+  },
+  "spec_version": "0.7.0",
+  "tier": "bit-exact"
+}

@@ -138,6 +138,25 @@ namespace HeatonLife
             return (counts, status);
         }
 
+        /// <summary>
+        /// One computation, every output a host asks for, into caller buffers: counts, and
+        /// optionally smooth values and statuses — the same signature as Mandelbrot's and
+        /// Julia's. The Burning Ship has no distance estimate (its folds make the map
+        /// non-analytic, spec/fractals.md "Distance estimate"): a distance buffer throws
+        /// NotSupportedException.
+        /// </summary>
+        public void Fields(
+            int width, int height, Viewport viewport, int[] counts, double[]? smooth = null, byte[]? status = null,
+            double[]? distance = null, RenderProgress? progress = null, CancellationToken cancellationToken = default)
+        {
+            if (distance != null)
+                throw new NotSupportedException("the Burning Ship has no distance estimate");
+            Compute(width, height, viewport, null, null, counts, smooth, progress, cancellationToken, status);
+        }
+
+        /// <summary>Whether this family has a distance estimate: no.</summary>
+        public bool SupportsDistance => false;
+
         /// <summary>The deepest zoom this family renders: the T1 ceiling (spec/fractals.md "Tiering").</summary>
         public double MaxZoomLog10 => FractalEngine.T1MaxZoom;
 

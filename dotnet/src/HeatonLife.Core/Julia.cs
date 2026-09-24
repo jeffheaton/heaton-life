@@ -170,6 +170,41 @@ namespace HeatonLife
             return (counts, status);
         }
 
+        /// <summary>
+        /// One computation, every output a host asks for, into caller buffers
+        /// (spec/fractals.md): counts, and — each may be null — raw smooth values (mu, 0 where
+        /// interior), statuses (<see cref="PixelStatus"/> as bytes), and the distance estimate
+        /// ("Distance estimate": pixels of this frame, NaN where a pixel did not escape).
+        /// Counts, smooth values and statuses are exactly what the other overloads give; the
+        /// distance estimate runs a separate loop that also carries the derivative, and needs
+        /// 2 &lt;= <see cref="EscapeRadius"/> &lt;= 1e64. Progress and cancellation as in
+        /// <see cref="Iterations(int,int,Viewport,int[],double[],RenderProgress,CancellationToken)"/>.
+        /// </summary>
+        public void Fields(
+            int width, int height, Viewport viewport, int[] counts, double[]? smooth = null, byte[]? status = null,
+            double[]? distance = null, RenderProgress? progress = null, CancellationToken cancellationToken = default)
+        {
+            if (distance != null)
+                FractalEngine.RequireDistanceRadius(EscapeRadius);
+            Compute(width, height, viewport, null, null, null, null, counts, smooth, progress, cancellationToken, status, distance);
+        }
+
+        /// <summary>
+        /// <see cref="Fields(int,int,Viewport,int[],double[],byte[],double[],RenderProgress,CancellationToken)"/>
+        /// against stored reference and critical orbits — the conformance runners' replay path.
+        /// </summary>
+        internal void Fields(
+            int width, int height, Viewport viewport, double[] orbitRe, double[] orbitIm,
+            double[] criticalRe, double[] criticalIm, int[] counts, byte[]? status, double[]? distance)
+        {
+            if (distance != null)
+                FractalEngine.RequireDistanceRadius(EscapeRadius);
+            Compute(width, height, viewport, orbitRe, orbitIm, criticalRe, criticalIm, counts, null, null, default, status, distance);
+        }
+
+        /// <summary>Whether this family has a distance estimate: yes (spec/fractals.md "Distance estimate").</summary>
+        public bool SupportsDistance => true;
+
         /// <summary>The deepest zoom this family renders: the T1 ceiling (spec/fractals.md "Tiering").</summary>
         public double MaxZoomLog10 => FractalEngine.T1MaxZoom;
 
@@ -194,10 +229,13 @@ namespace HeatonLife
             double[]? mu,
             RenderProgress? progress = null,
             CancellationToken cancellationToken = default,
-            byte[]? status = null)
+            byte[]? status = null,
+            double[]? distance = null)
         {
             if (status != null && status.Length != width * height)
                 throw new ArgumentException($"expected {width * height} statuses, got {status.Length}");
+            if (distance != null && distance.Length != width * height)
+                throw new ArgumentException($"expected {width * height} distances, got {distance.Length}");
             if (counts.Length != width * height)
                 throw new ArgumentException($"expected {width * height} counts, got {counts.Length}");
             if (mu != null && mu.Length != width * height)
@@ -245,25 +283,37 @@ namespace HeatonLife
                 {
                     double ox = offCenter ? FractalEngine.DeltaRe(x, width, ps, dRe) : FractalEngine.OffsetRe(x, width, ps);
                     int count;
-                    double fr, fi;
+                    double fr, fi, fdr = 0.0, fdi = 0.0;
                     PixelStatus pixel;
                     if (t1)
                     {
-                        count = Perturbation.PerturbZ2(
-                            orbitRe!, orbitIm!, criticalRe!, criticalIm!, ox, oy, 0.0, 0.0,
-                            MaxIter, EscapeRadius, out fr, out fi);
+                        count = distance == null
+                            ? Perturbation.PerturbZ2(
+                                orbitRe!, orbitIm!, criticalRe!, criticalIm!, ox, oy, 0.0, 0.0,
+                                MaxIter, EscapeRadius, out fr, out fi)
+                            : Perturbation.PerturbZ2De(
+                                orbitRe!, orbitIm!, criticalRe!, criticalIm!, ox, oy, 0.0, 0.0,
+                                MaxIter, EscapeRadius, ps, 0.0, false, ps, out fr, out fi, out fdr, out fdi);
                         pixel = count > 0 ? PixelStatus.Escaped : PixelStatus.Exhausted;
                     }
-                    else
+                    else if (distance == null)
                     {
                         count = FractalEngine.EscapeZ2(
                             ox + centerRe, oy + centerIm, CRe, CIm, MaxIter, r2, out fr, out fi, out pixel);
+                    }
+                    else
+                    {
+                        count = FractalEngine.EscapeZ2De(
+                            ox + centerRe, oy + centerIm, CRe, CIm, MaxIter, r2, ps, 0.0, false, ps,
+                            out fr, out fi, out fdr, out fdi, out pixel);
                     }
                     counts[y * width + x] = count;
                     if (status != null)
                         status[y * width + x] = (byte)pixel;
                     if (mu != null)
                         mu[y * width + x] = FractalEngine.SmoothMu(count, fr, fi, logR);
+                    if (distance != null)
+                        distance[y * width + x] = FractalEngine.DistanceEstimate(count, fr, fi, fdr, fdi);
                 }
             }
 

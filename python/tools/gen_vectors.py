@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import struct
 import sys
 from pathlib import Path
 from typing import Any
@@ -546,6 +547,7 @@ def main() -> None:
         spec_version="0.6.0",
         status=True,
     )
+    write_distance_cases()
 
     # -- iteration policy (spec/fractals.md "Iteration policy") -----------------------
     write_policy_cases()
@@ -553,6 +555,7 @@ def main() -> None:
     # -- render (colormap LUTs + frame indexing, spec/render.md) ---------------------
     write_render_cases()
     write_frame_cases()
+    write_color_cases()
 
     # -- evolve (objective stats, GA operators, seeded mini-run, spec/evolve.md) -----
     write_evolve_cases()
@@ -580,10 +583,11 @@ def write_fractal_case(
     source: str | None = None,
     spec_version: str = SPEC_VERSION,
     status: bool = False,
+    distance: bool = False,
 ) -> None:
     case_dir = VECTOR_ROOT / family / name
     case_dir.mkdir(parents=True, exist_ok=True)
-    outputs = []
+    outputs: list[dict[str, Any]] = []
     grids = dict(field.outputs(size, viewport))
     if status:  # spec/fractals.md "Status": how each count was decided
         grids["status"] = field.counts_and_status(size, viewport)[1]
@@ -591,6 +595,19 @@ def write_fractal_case(
         file = f"{kind}.i32"
         (case_dir / file).write_bytes(np.ascontiguousarray(grid, dtype="<i4").tobytes())
         outputs.append({"kind": kind, "file": file, "shape": list(grid.shape)})
+    if distance:  # spec/fractals.md "Distance estimate": relative epsilon
+        fields = field.fields(size, viewport, distance=True)
+        assert np.array_equal(fields.counts, grids["iterations"]), "the distance loop's counts"
+        de = fields.distance
+        (case_dir / "distance.f64").write_bytes(np.ascontiguousarray(de, dtype="<f8").tobytes())
+        outputs.append(
+            {
+                "kind": "distance",
+                "file": "distance.f64",
+                "shape": list(de.shape),
+                "relative_epsilon": 1e-12,
+            }
+        )
     meta: dict[str, Any] = {
         "spec_version": spec_version,
         "family": family,
@@ -636,6 +653,433 @@ def write_fractal_case(
         json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n"
     )
     print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
+
+
+def write_distance_cases() -> None:
+    """Distance estimate (spec/fractals.md, 0.7.0): counts bit-exact, DE relative 1e-12."""
+    seahorse = (
+        "-0.743643887037158704752191506114774",
+        "0.131825904205311970493132056385139",
+    )
+    rabbit = {"c_re": -0.123, "c_im": 0.745}
+    write_fractal_case(
+        "mandelbrot",
+        "distance-home-64",
+        Mandelbrot(max_iter=500),
+        {"max_iter": 500, "escape_radius": 1000.0},
+        Viewport("-0.5", "0.0", 0.0),
+        (64, 64),
+        spec_version="0.7.0",
+        status=True,
+        distance=True,
+    )
+    write_fractal_case(
+        "mandelbrot",
+        "distance-seahorse-zoom6-48x32",
+        Mandelbrot(max_iter=2000),
+        {"max_iter": 2000, "escape_radius": 1000.0},
+        Viewport(*seahorse, 6.0),
+        (48, 32),
+        spec_version="0.7.0",
+        distance=True,
+    )
+    write_fractal_case(
+        "julia",
+        "distance-rabbit-64",
+        Julia(c=complex(-0.123, 0.745), max_iter=1000),
+        {**rabbit, "max_iter": 1000, "escape_radius": 1000.0},
+        Viewport("0.0", "0.0", 0.0),
+        (64, 64),
+        spec_version="0.7.0",
+        distance=True,
+    )
+    # c outside the Mandelbrot set: every pixel escapes, and on an odd frame the center
+    # pixel is z0 = 0 exactly, a critical point whose derivative stays 0 -- DE = +inf.
+    write_fractal_case(
+        "julia",
+        "distance-dust-65",
+        Julia(c=complex(0.3, 0.0), max_iter=200),
+        {"c_re": 0.3, "c_im": 0.0, "max_iter": 200, "escape_radius": 1000.0},
+        Viewport("0.0", "0.0", 0.0),
+        (65, 65),
+        spec_version="0.7.0",
+        distance=True,
+    )
+    write_fractal_case(
+        "mandelbrot",
+        "distance-deep-zoom14-48",
+        Mandelbrot(max_iter=5000),
+        {"max_iter": 5000, "escape_radius": 1000.0},
+        Viewport(*seahorse, 14.0),
+        (48, 48),
+        orbit_kind="mandelbrot",
+        spec_version="0.7.0",
+        distance=True,
+    )
+    write_fractal_case(
+        "mandelbrot",
+        "distance-offref-48",
+        Mandelbrot(max_iter=5000),
+        {"max_iter": 5000, "escape_radius": 1000.0},
+        Viewport(
+            *seahorse,
+            14.0,
+            reference_re="-0.743643887037146704752191506114774",
+            reference_im="0.131825904205303970493132056385139",
+        ),
+        (48, 48),
+        orbit_kind="mandelbrot",
+        spec_version="0.7.0",
+        distance=True,
+    )
+    # Rebased pixels: the derivative rides through every rebase onto the critical orbit.
+    write_fractal_case(
+        "julia",
+        "distance-deep-zoom13-32",
+        Julia(c=complex(-0.123, 0.745), max_iter=600),
+        {**rabbit, "max_iter": 600, "escape_radius": 1000.0},
+        Viewport(
+            "1.27658194945592591790467276337476",
+            "-0.47966605489732779175475867397901",
+            13.0,
+        ),
+        (32, 32),
+        orbit_kind="julia",
+        spec_version="0.7.0",
+        distance=True,
+    )
+    # The reference on Julia's critical point (Z0 = 0): the first pre-square z is
+    # fl(Z0 + delta0) = delta0 itself -- dropping delta0 would leave d = 0 for good.
+    write_fractal_case(
+        "julia",
+        "distance-critical-zoom13-32",
+        Julia(c=complex(0.0, 1.0), max_iter=600),
+        {"c_re": 0.0, "c_im": 1.0, "max_iter": 600, "escape_radius": 1000.0},
+        Viewport("0.0", "0.0", 13.0),
+        (32, 32),
+        orbit_kind="julia",
+        spec_version="0.7.0",
+        distance=True,
+    )
+    # Far from the set at depth: |d| ends near 1.4e-163, where plain squares flush to 0
+    # and would read DE = +inf (a false critical point); the scaled magnitude reads 2.25e167.
+    write_fractal_case(
+        "mandelbrot",
+        "distance-far-zoom170-16",
+        Mandelbrot(max_iter=2000),
+        {"max_iter": 2000, "escape_radius": 1000.0},
+        Viewport("-0.75", "0.1", 170.0),
+        (16, 16),
+        orbit_kind="mandelbrot",
+        spec_version="0.7.0",
+        distance=True,
+    )
+    write_fractal_case(
+        "julia",
+        "distance-far-zoom200-16",
+        Julia(c=complex(0.3, 0.0), max_iter=2000),
+        {"c_re": 0.3, "c_im": 0.0, "max_iter": 2000, "escape_radius": 1000.0},
+        Viewport("0.001", "0.0", 200.0),
+        (16, 16),
+        orbit_kind="julia",
+        spec_version="0.7.0",
+        distance=True,
+    )
+
+
+def _bits(value: float) -> str:
+    """A double as its IEEE-754 bit pattern, "0x" and 16 hex digits."""
+    return f"0x{struct.unpack('<Q', struct.pack('<d', value))[0]:016X}"
+
+
+def write_color_cases() -> None:
+    """Fractal color (spec/fractal-color.md) and the phase lookup (spec/render.md), 0.7.0:
+    explicit inputs -- real fields computed here -- and bit-exact outputs."""
+    import io
+
+    from PIL import Image
+
+    from heaton_life.fractal.coloring import (
+        PhaseParams,
+        ShadeParams,
+        apply_stretch,
+        color_scale,
+        depth_phase,
+        measure_frequency,
+        measure_stretch,
+        shade_distance,
+    )
+    from heaton_life.render import apply_phase, get_colormap, list_cyclic_colormaps
+
+    version = "0.7.0"
+
+    def png_bytes(rgb: np.ndarray) -> bytes:
+        buf = io.BytesIO()
+        Image.fromarray(np.ascontiguousarray(rgb), mode="RGB").save(buf, format="PNG")
+        return buf.getvalue()
+
+    def f64(case_dir: Path, name: str, array: np.ndarray) -> dict[str, Any]:
+        (case_dir / name).write_bytes(np.ascontiguousarray(array, dtype="<f8").tobytes())
+        return {"file": name, "shape": list(array.shape)}
+
+    def i32(case_dir: Path, name: str, array: np.ndarray) -> dict[str, Any]:
+        (case_dir / name).write_bytes(np.ascontiguousarray(array, dtype="<i4").tobytes())
+        return {"file": name, "shape": list(array.shape)}
+
+    def png(case_dir: Path, name: str, rgb: np.ndarray) -> dict[str, Any]:
+        (case_dir / name).write_bytes(png_bytes(rgb))
+        return {"file": name, "shape": list(rgb.shape)}
+
+    def start(name: str) -> Path:
+        case_dir = VECTOR_ROOT / "render" / name
+        case_dir.mkdir(parents=True, exist_ok=True)
+        return case_dir
+
+    def finish(case_dir: Path, meta: dict[str, Any]) -> None:
+        meta = {"spec_version": version, "family": "render", "tier": "bit-exact", **meta}
+        (case_dir / "params.json").write_text(
+            json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n"
+        )
+        print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
+
+    for name in list_cyclic_colormaps():
+        case_dir = start(f"lut-{name}")
+        (case_dir / "lut.png").write_bytes(png_bytes(get_colormap(name).reshape(1, 256, 3)))
+        finish(
+            case_dir,
+            {"kind": "lut", "cmap": name, "output": {"file": "lut.png", "shape": [256, 3]}},
+        )
+
+    seahorse = ("-0.743643887037158704752191506114774", "0.131825904205311970493132056385139")
+    home = Mandelbrot(max_iter=500).fields(
+        (64, 64), Viewport("-0.5", "0.0", 0.0), smooth=True, distance=True
+    )
+    sea = Mandelbrot(max_iter=1600).fields(
+        (96, 64), Viewport(*seahorse, 4.0), smooth=True, distance=True
+    )
+    deep = Mandelbrot(max_iter=3000).fields(
+        (64, 48), Viewport(*seahorse, 7.0), smooth=True, distance=True
+    )
+    rabbit = Julia(c=complex(-0.123, 0.745), max_iter=1000).fields(
+        (64, 64), Viewport("0.0", "0.0", 0.0), smooth=True, distance=True
+    )
+    assert home.smooth is not None and sea.smooth is not None and deep.smooth is not None
+    assert rabbit.smooth is not None and home.distance is not None and sea.distance is not None
+
+    # -- stretch: measured, applied from another frame (frozen), nothing escaped ------
+    measured = measure_stretch(home.smooth)
+    assert measured is not None
+    for name, mu, given in [
+        ("stretch-home", home.smooth, None),
+        ("stretch-frozen", sea.smooth, measured),
+        ("stretch-interior", np.zeros((8, 8)), None),
+    ]:
+        case_dir = start(name)
+        meta: dict[str, Any] = {"kind": "stretch", "input": f64(case_dir, "mu.f64", mu)}
+        if given is None:
+            got = measure_stretch(mu)
+            meta["measured"] = None if got is None else {"lo": _bits(got.lo), "hi": _bits(got.hi)}
+            render = np.zeros(mu.shape) if got is None else apply_stretch(mu, got)
+        else:
+            meta["stretch"] = {"lo": _bits(given.lo), "hi": _bits(given.hi)}
+            render = apply_stretch(mu, given)
+        meta["output"] = f64(case_dir, "render.f64", render)
+        finish(case_dir, meta)
+
+    # -- depth phase -------------------------------------------------------------------
+    flow = PhaseParams(
+        cycles_per_iteration=0.02, cycles_per_octave=0.25, phase_offset=0.3, anchor=37.0
+    )
+    phases = {
+        "phase-home": (home.smooth, 0.0, PhaseParams()),
+        "phase-flow": (sea.smooth, 4.0, flow),
+    }
+    for name, (mu, zoom, params) in phases.items():
+        case_dir = start(name)
+        finish(
+            case_dir,
+            {
+                "kind": "phase",
+                "input": f64(case_dir, "mu.f64", mu),
+                "zoom_log10": _bits(zoom),
+                "phase": {k: _bits(v) for k, v in dataclasses.asdict(params).items()},
+                "output": f64(case_dir, "t.f64", depth_phase(mu, zoom, params)),
+            },
+        )
+
+    # -- frequency: capped, uncapped (a large maximum), too few steps ------------------
+    sparse_counts = np.full((6, 6), -1, dtype=np.int32)
+    sparse_counts[:, 0] = 5
+    sparse_mu = np.where(sparse_counts > 0, 5.5, 0.0)
+
+    def ramp(height: int, width: int) -> tuple[np.ndarray, np.ndarray]:
+        counts = np.arange(1, height * width + 1, dtype=np.int32).reshape(height, width)
+        return counts, 5.0 + 0.01 * np.arange(height * width, dtype=np.float64).reshape(
+            height, width
+        )
+
+    # Exactly 64 steps, a median step under 1 (the clamp), an even count of positive
+    # counts whose middle two differ (the upper median); and 63 steps (none).
+    ramp64, ramp63 = ramp(2, 22), ramp(1, 64)
+    frequencies = [
+        ("frequency-home", home.counts, home.smooth, 0.03, 0.01),
+        ("frequency-deep", deep.counts, deep.smooth, 0.03, 1.0),
+        ("frequency-sparse", sparse_counts, sparse_mu, 0.03, 0.01),
+        ("frequency-ramp-64", *ramp64, 0.03, 100.0),
+        ("frequency-ramp-63", *ramp63, 0.03, 100.0),
+    ]
+    for name, counts, mu, target, cap in frequencies:
+        case_dir = start(name)
+        fit = measure_frequency(
+            counts, mu, target_cycles_per_step=target, max_cycles_per_iteration=cap
+        )
+        finish(
+            case_dir,
+            {
+                "kind": "frequency",
+                "counts": i32(case_dir, "counts.i32", counts),
+                "input": f64(case_dir, "mu.f64", mu),
+                "target_cycles_per_step": _bits(target),
+                "max_cycles_per_iteration": _bits(cap),
+                "expected": None
+                if fit is None
+                else {
+                    "cycles_per_iteration": _bits(fit.cycles_per_iteration),
+                    "anchor": _bits(fit.anchor),
+                },
+            },
+        )
+
+    # -- the phase lookup: palettes, wraps, antialias, dither, interior, edge values ---
+    edge = np.array(
+        [
+            np.nan,
+            np.inf,
+            -np.inf,
+            1e300,
+            -1e300,
+            2.0**45,
+            -(2.0**45),
+            0.0,
+            -0.0,
+            1.0,
+            -1.0,
+            0.5 / 256,
+            1.5 / 256,
+            255.5 / 256,
+            -0.3,
+            1e-300,
+            -1e-300,
+            0.999999999999,
+            3.25,
+            -7.75,
+            511.5 / 510,
+            254.5 / 510,
+            255.5 / 510,
+            12345.678,
+        ]
+    ).reshape(4, 6)
+    plain = np.concatenate([edge, (-4.0 + (np.arange(48) + 0.5) / 48.0).reshape(8, 6)])
+    edge = np.tile(edge, (2, 2))
+    t_home = depth_phase(home.smooth, 0.0, PhaseParams(cycles_per_iteration=0.05))
+    t_sea = depth_phase(sea.smooth, 4.0, flow)
+    t_rabbit = depth_phase(rabbit.smooth, 0.0, PhaseParams(cycles_per_iteration=0.03))
+    lookups: list[tuple[str, np.ndarray, str, dict[str, Any]]] = [
+        ("phase-apply-deep", t_home, "deep", {}),
+        (
+            "phase-apply-mirror-fire",
+            t_sea,
+            "fire",
+            {"wrap": "mirror", "antialias": False, "dither": 0.0},
+        ),
+        (
+            "phase-apply-classic-frame7",
+            t_rabbit,
+            "classic",
+            {"interior": (20, 30, 40), "dither": 0.5, "frame_index": 7},
+        ),
+        ("phase-apply-edges-cyclic", edge, "glacier", {"frame_index": 4294967295}),
+        ("phase-apply-edges-mirror", edge, "embers", {"wrap": "mirror", "dither": 2.0}),
+        # The edge values straight through the lookup (no antialias to blend them to the
+        # mean), with a fractional negative ramp: floor, not truncation, and the mod.
+        ("phase-apply-plain-cyclic", plain, "glacier", {"antialias": False, "dither": 0.0}),
+        (
+            "phase-apply-plain-mirror",
+            plain,
+            "embers",
+            {"wrap": "mirror", "antialias": False, "dither": 0.0},
+        ),
+        # A ramp whose rows each span 7/12 cycle: only a lookup that wraps its
+        # neighbors across rows would antialias it.
+        ("phase-apply-row-seam", np.tile(np.arange(8) / 12.0, (4, 1)), "deep", {}),
+        # Every pixel halfway between two entries: the half-even rounding.
+        (
+            "phase-apply-halfway",
+            ((np.arange(256) + 0.5) / 256.0).reshape(16, 16),
+            "deep",
+            {"antialias": False, "dither": 0.0},
+        ),
+    ]
+    for name, t, cmap, options in lookups:
+        case_dir = start(name)
+        style = {
+            "wrap": "cyclic",
+            "interior": (0, 0, 0),
+            "antialias": True,
+            "dither": 1.0,
+            "frame_index": 0,
+            **options,
+        }
+        rgb = apply_phase(t, cmap, **style)
+        finish(
+            case_dir,
+            {
+                "kind": "phase-apply",
+                "cmap": cmap,
+                "wrap": style["wrap"],
+                "interior": list(style["interior"]),
+                "antialias": style["antialias"],
+                "dither": _bits(style["dither"]),
+                "frame_index": style["frame_index"],
+                "input": f64(case_dir, "t.f64", t),
+                "output": png(case_dir, "rgb.png", rgb),
+            },
+        )
+
+    # -- distance shading ----------------------------------------------------------------
+    edge_de = np.array([np.nan, 0.0, np.inf, 1e-300, 0.1, 0.25, 0.5, 1.0, 2.0, 1e300, 0.37, 0.0])
+    edge_de = np.tile(edge_de, 20).reshape(12, 20)
+    edge_de[5:8, 6:14] = 0.05  # a dense patch: nothing in reach clears a stroke width
+    edge_rgb = (np.arange(12 * 20 * 3, dtype=np.int64) * 37 % 256).astype(np.uint8)
+    halfway_de = np.full((8, 10), 1000.0)
+    halfway_de[3:6, 3:7] = 0.0
+    halfway_de[0, :3] = np.nan
+    halfway_rgb = (np.arange(8 * 10 * 3, dtype=np.int64) * 2 + 1).astype(np.uint8).reshape(8, 10, 3)
+    halfway_width = 1.6 / color_scale(10, 8)  # 1.6 pixels on this small frame
+    shades = [
+        ("shade-home", apply_phase(t_home, "deep"), home.distance, ShadeParams()),
+        (
+            "shade-seahorse-params",
+            apply_phase(t_sea, "fire", wrap="mirror"),
+            sea.distance,
+            ShadeParams(width=3.0, strength=0.5, dense_release=0.25),
+        ),
+        ("shade-edges", edge_rgb.reshape(12, 20, 3), edge_de, ShadeParams()),
+        # strength 0.75: g = sqrt(0.25) = 0.5 exactly, so odd bytes land on ties.
+        ("shade-halfway", halfway_rgb, halfway_de, ShadeParams(width=halfway_width, strength=0.75)),
+    ]
+    for name, rgb, de, params in shades:
+        case_dir = start(name)
+        finish(
+            case_dir,
+            {
+                "kind": "shade",
+                "rgb": png(case_dir, "input.png", rgb),
+                "input": f64(case_dir, "distance.f64", de),
+                "shade": {k: _bits(v) for k, v in dataclasses.asdict(params).items()},
+                "output": png(case_dir, "rgb.png", shade_distance(rgb, de, params)),
+            },
+        )
 
 
 def write_render_cases() -> None:

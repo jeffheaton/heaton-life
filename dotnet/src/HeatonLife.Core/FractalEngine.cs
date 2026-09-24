@@ -300,6 +300,98 @@ namespace HeatonLife
             return -1;
         }
 
+        /// <summary>
+        /// <see cref="EscapeZ2"/> that also carries the derivative a distance estimate needs
+        /// (spec/fractals.md "Distance estimate"). Each iteration, before z is updated, the
+        /// derivative becomes (2(zr dr - zi di) [+ ps], 2(zr di + zi dr)) from the pre-square
+        /// z — plain operations, never <see cref="Fma"/>: the reference computes it on real
+        /// NumPy arrays, which never contract. Mandelbrot starts at d = 0 and adds the pixel
+        /// scale (<paramref name="addScale"/>); Julia starts at d = (ps, 0) and adds nothing.
+        /// Counts, final z and status are exactly EscapeZ2's.
+        /// </summary>
+        internal static int EscapeZ2De(
+            double zr, double zi, double cr, double ci, int maxIter, double r2,
+            double dr, double di, bool addScale, double ps,
+            out double finalRe, out double finalIm, out double finalDr, out double finalDi, out PixelStatus status)
+        {
+            double savedRe = 0.0, savedIm = 0.0;
+            bool haveSaved = false;
+            for (int it = 1; it <= maxIter; it++)
+            {
+                double tr = 2.0 * (zr * dr - zi * di);
+                if (addScale)
+                    tr = tr + ps;
+                double ti = 2.0 * (zr * di + zi * dr);
+                dr = tr;
+                di = ti;
+                var (sr, si) = ComplexMul(zr, zi, zr, zi);
+                zr = sr + cr;
+                zi = si + ci;
+                if (zr * zr + zi * zi > r2)
+                {
+                    finalRe = zr;
+                    finalIm = zi;
+                    finalDr = dr;
+                    finalDi = di;
+                    status = PixelStatus.Escaped;
+                    return it;
+                }
+                if (haveSaved && zr == savedRe && zi == savedIm)
+                {
+                    finalRe = finalIm = finalDr = finalDi = 0.0;
+                    status = PixelStatus.Cycle;
+                    return -1;
+                }
+                if ((it & (it - 1)) == 0)
+                {
+                    savedRe = zr;
+                    savedIm = zi;
+                    haveSaved = true;
+                }
+            }
+            finalRe = finalIm = finalDr = finalDi = 0.0;
+            status = PixelStatus.Exhausted;
+            return -1;
+        }
+
+        /// <summary>A distance estimate needs 2 &lt;= R &lt;= 1e64: ln|z| positive, |z|² finite.</summary>
+        internal static void RequireDistanceRadius(double escapeRadius)
+        {
+            if (!(escapeRadius >= 2.0 && escapeRadius <= 1e64))
+                throw new ArgumentException("a distance estimate needs 2 <= escape_radius <= 1e64");
+        }
+
+        private static readonly double TwoTo400 = BitConverter.Int64BitsToDouble((1023L + 400) << 52);
+        private static readonly double TwoToMinus400 = BitConverter.Int64BitsToDouble((1023L - 400) << 52);
+        private static readonly double TwoTo600 = BitConverter.Int64BitsToDouble((1023L + 600) << 52);
+        private static readonly double TwoToMinus600 = BitConverter.Int64BitsToDouble((1023L - 600) << 52);
+
+        /// <summary>
+        /// A pixel's distance to the set's boundary, in pixels of its frame
+        /// (spec/fractals.md "Distance estimate"): ((sqrt(m2) * (0.5 log m2)) / |d|), with |d|
+        /// scaled by an exact power of two so its squares never go subnormal (at T1 |d|
+        /// falls below 1e-154 for pixels far from the set in pixel units). +∞ where d is
+        /// exactly 0 (a critical point), 0 where d is not finite (overflowed: on the
+        /// boundary), NaN where the pixel did not escape. ε tier: only Math.Log may differ.
+        /// </summary>
+        public static double DistanceEstimate(int count, double finalRe, double finalIm, double finalDr, double finalDi)
+        {
+            if (count <= 0)
+                return double.NaN;
+            if (double.IsNaN(finalDr) || double.IsNaN(finalDi))
+                return 0.0;
+            double a = Math.Max(Math.Abs(finalDr), Math.Abs(finalDi));
+            if (a == 0.0)
+                return double.PositiveInfinity;
+            if (double.IsInfinity(a))
+                return 0.0;
+            double s = a < TwoToMinus400 ? TwoTo600 : (a > TwoTo400 ? TwoToMinus600 : 1.0);
+            double sr = finalDr * s;
+            double si = finalDi * s;
+            double m2 = finalRe * finalRe + finalIm * finalIm;
+            return ((Math.Sqrt(m2) * (0.5 * Math.Log(m2))) / Math.Sqrt(sr * sr + si * si)) * s;
+        }
+
         /// <summary>One Burning Ship pixel: z = (|Re z| + i |Im z|)^2 + c, with EscapeZ2's cycle detection.</summary>
         internal static int EscapeShip(
             double zr, double zi, double cr, double ci, int maxIter, double r2,
@@ -424,29 +516,13 @@ namespace HeatonLife
                 throw new ArgumentException($"expected a scratch buffer of at least {mu.Length} values", nameof(scratch));
             if (ReferenceEquals(scratch, mu))
                 throw new ArgumentException("scratch is overwritten, so it cannot be the mu array", nameof(scratch));
-            int escaped = 0;
-            foreach (double value in mu)
-                if (value > 0.0)
-                    scratch[escaped++] = value;
-            if (escaped == 0)
+            // Exactly the measured stretch applied (spec/fractal-color.md "Stretch").
+            if (!FractalColor.TryMeasureStretch(mu, scratch, out var stretch))
             {
                 Array.Clear(render, 0, render.Length);          // sqrt(0) everywhere
                 return;
             }
-            Array.Sort(scratch, 0, escaped);
-            double lo = Percentile(scratch, escaped, 1.0);
-            double hi = Percentile(scratch, escaped, 99.0);
-            for (int i = 0; i < mu.Length; i++)
-            {
-                double value = 0.0;
-                if (mu[i] > 0.0)
-                {
-                    value = hi <= lo
-                        ? 0.6 // featureless frame: one mid tone
-                        : Math.Clamp((mu[i] - lo) / (hi - lo), 0.02, 1.0);
-                }
-                render[i] = Math.Sqrt(value);
-            }
+            FractalColor.ApplyStretch(mu, stretch, render);
         }
 
         /// <summary>np.percentile's linear method over the first <paramref name="n"/> sorted values.</summary>

@@ -1,0 +1,41 @@
+{
+  "family": "mandelbrot",
+  "outputs": [
+    {
+      "file": "iterations.i32",
+      "kind": "iterations",
+      "shape": [
+        16,
+        16
+      ]
+    },
+    {
+      "file": "distance.f64",
+      "kind": "distance",
+      "relative_epsilon": 1e-12,
+      "shape": [
+        16,
+        16
+      ]
+    }
+  ],
+  "params": {
+    "escape_radius": 1000.0,
+    "max_iter": 2000
+  },
+  "reference_orbit": {
+    "file": "orbit.c128",
+    "length": 41
+  },
+  "size": [
+    16,
+    16
+  ],
+  "spec_version": "0.7.0",
+  "tier": "bit-exact",
+  "viewport": {
+    "center_im": "0.1",
+    "center_re": "-0.75",
+    "zoom_log10": 170.0
+  }
+}
