@@ -71,7 +71,28 @@ namespace HeatonLife
             bool track, FloatExp d0r, FloatExp d0i, FloatExp add, bool hasAdd,
             out double finalRe, out double finalIm, out double dr, out double di, out long dExponent,
             CancellationToken cancellationToken = default)
+            => Perturb(
+                orbit, rebase, delta0r, delta0i, dcr, dci, maxIter, escapeRadius, track, d0r, d0i, add, hasAdd,
+                null, out finalRe, out finalIm, out dr, out di, out dExponent, out _, cancellationToken);
+
+        /// <summary>
+        /// The same loop with BLA skips from <paramref name="table"/> (spec/deep-zoom.md "BLA at
+        /// T2"; Mandelbrot, so <paramref name="rebase"/> is <paramref name="orbit"/>): at a
+        /// stride-aligned index the longest live span whose floatexp radius exceeds |delta|,
+        /// the skip itself in floatexp. <paramref name="applied"/> counts the skips.
+        /// </summary>
+        internal static int Perturb(
+            Orbit orbit, Orbit rebase, FloatExp delta0r, FloatExp delta0i, FloatExp dcr, FloatExp dci,
+            int maxIter, double escapeRadius,
+            bool track, FloatExp d0r, FloatExp d0i, FloatExp add, bool hasAdd, BlaTableX? table,
+            out double finalRe, out double finalIm, out double dr, out double di, out long dExponent, out int applied,
+            CancellationToken cancellationToken = default)
         {
+            if (table != null && !ReferenceEquals(orbit, rebase))
+                throw new ArgumentException("BLA at T2 is Mandelbrot's: one orbit");
+            if (table != null && !table.Live)
+                table = null;   // nothing can be taken: the plain loop, as in the reference
+            applied = 0;
             Orbit cur = orbit;
             int m = 0;
             int last = orbit.Re.Length - 1;
@@ -108,57 +129,106 @@ namespace HeatonLife
                 AddScaled(add, hasAdd, dE, out adds, out addBad);
             }
 
-            for (long it = 1; it <= maxIter; it++)
+            long n = 0, passes = 0;   // n: iterations done, the count at escape
+            while (n < maxIter)
             {
                 // A T2 pixel can run for millions of iterations: poll here, not only per row.
-                if ((it & ((1 << 16) - 1)) == 0)
+                if ((++passes & ((1 << 16) - 1)) == 0)
                     cancellationToken.ThrowIfCancellationRequested();
-                if (track)
-                {
-                    // d' = 2 z d + add, from the pre-step z (fractals.md "Distance estimate").
-                    if (zSmall || addBad)
-                    {
-                        FloatExp dxr = FloatExp.Normalize(dwr, dE), dxi = FloatExp.Normalize(dwi, dE);
-                        FloatExp zr = zSmall ? zxr : FloatExp.FromDouble(zdr);
-                        FloatExp zi = zSmall ? zxi : FloatExp.FromDouble(zdi);
-                        CMul(zr, zi, dxr, dxi, out FloatExp pr, out FloatExp pi);
-                        pr = pr.Twice();
-                        pi = pi.Twice();
-                        if (hasAdd)
-                            pr = FloatExp.Add(pr, add);
-                        SplitPair(pr, pi, dE, out dwr, out dwi, out dE);
-                    }
-                    else
-                    {
-                        double tr = 2.0 * (zdr * dwr - zdi * dwi) + adds;
-                        double ti = 2.0 * (zdr * dwi + zdi * dwr);
-                        dwr = tr;
-                        dwi = ti;
-                    }
-                    Renormalize(ref dwr, ref dwi, ref dE);
-                    AddScaled(add, hasAdd, dE, out adds, out addBad);
-                }
 
-                // --- the step ---------------------------------------------------------
-                if (cur.Small[m] || dcBad)
+                // --- BLA: the longest live span from here whose radius exceeds |delta| -------
+                int level = -1;
+                if (table != null && m % BlaTable.Stride == 0 && m / BlaTable.Stride < table.R[0].Length)
                 {
-                    cur.Z(m, out FloatExp zr, out FloatExp zi);
-                    FloatExp xr = FloatExp.Normalize(wr, e), xi = FloatExp.Normalize(wi, e);
-                    FloatExp tr = FloatExp.Add(zr.Twice(), xr), ti = FloatExp.Add(zi.Twice(), xi);
-                    CMul(tr, ti, xr, xi, out FloatExp pr, out FloatExp pi);
-                    SplitPair(FloatExp.Add(pr, dcr), FloatExp.Add(pi, dci), e, out wr, out wi, out e);
+                    FloatExp magnitude = FloatExp.Normalize(BlaTable.Mag(wr, wi), e);
+                    for (int l = 0; l < table.Levels; l++)
+                    {
+                        long span = (long)BlaTable.Stride << l;
+                        if (m % span != 0 || m / span >= table.R[l].Length || n + span > maxIter)
+                            break;
+                        FloatExp r = table.R[l][m / span];
+                        if (!(r.M > 0.0) || FloatExp.Compare(magnitude, r) >= 0)
+                            break;
+                        level = l;
+                    }
+                }
+                if (level >= 0)
+                {
+                    // A skip in floatexp per component: delta' = A delta + B deltaC, and the
+                    // derivative d' = A d + B ps (fractals.md "Distance estimate").
+                    int span = BlaTable.Stride << level;
+                    int k = m / span;
+                    FloatExp ar = FloatExp.FromDouble(table!.Ar[level][k]), ai = FloatExp.FromDouble(table.Ai[level][k]);
+                    FloatExp br = FloatExp.FromDouble(table.Br[level][k]), bi = FloatExp.FromDouble(table.Bi[level][k]);
+                    if (track)
+                    {
+                        CMul(ar, ai, FloatExp.Normalize(dwr, dE), FloatExp.Normalize(dwi, dE), out FloatExp pr, out FloatExp pi);
+                        if (hasAdd)
+                        {
+                            pr = FloatExp.Add(pr, FloatExp.Mul(br, add));
+                            pi = FloatExp.Add(pi, FloatExp.Mul(bi, add));
+                        }
+                        SplitPair(pr, pi, dE, out dwr, out dwi, out dE);
+                        Renormalize(ref dwr, ref dwi, ref dE);
+                        AddScaled(add, hasAdd, dE, out adds, out addBad);
+                    }
+                    CMul(ar, ai, FloatExp.Normalize(wr, e), FloatExp.Normalize(wi, e), out FloatExp sr, out FloatExp si);
+                    CMul(br, bi, dcr, dci, out FloatExp qr, out FloatExp qi);
+                    SplitPair(FloatExp.Add(sr, qr), FloatExp.Add(si, qi), e, out wr, out wi, out e);
+                    m += span;
+                    n += span;
+                    applied++;
                 }
                 else
                 {
-                    DeltaDouble(wr, wi, e, out double ddr, out double ddi);
-                    double tr = 2.0 * cur.Re[m] + ddr;
-                    double ti = 2.0 * cur.Im[m] + ddi;
-                    double nwr = (tr * wr - ti * wi) + dcsR;
-                    double nwi = (tr * wi + ti * wr) + dcsI;
-                    wr = nwr;
-                    wi = nwi;
+                    if (track)
+                    {
+                        // d' = 2 z d + add, from the pre-step z (fractals.md "Distance estimate").
+                        if (zSmall || addBad)
+                        {
+                            FloatExp dxr = FloatExp.Normalize(dwr, dE), dxi = FloatExp.Normalize(dwi, dE);
+                            FloatExp zr = zSmall ? zxr : FloatExp.FromDouble(zdr);
+                            FloatExp zi = zSmall ? zxi : FloatExp.FromDouble(zdi);
+                            CMul(zr, zi, dxr, dxi, out FloatExp pr, out FloatExp pi);
+                            pr = pr.Twice();
+                            pi = pi.Twice();
+                            if (hasAdd)
+                                pr = FloatExp.Add(pr, add);
+                            SplitPair(pr, pi, dE, out dwr, out dwi, out dE);
+                        }
+                        else
+                        {
+                            double tr = 2.0 * (zdr * dwr - zdi * dwi) + adds;
+                            double ti = 2.0 * (zdr * dwi + zdi * dwr);
+                            dwr = tr;
+                            dwi = ti;
+                        }
+                        Renormalize(ref dwr, ref dwi, ref dE);
+                        AddScaled(add, hasAdd, dE, out adds, out addBad);
+                    }
+
+                    // --- the step ---------------------------------------------------------
+                    if (cur.Small[m] || dcBad)
+                    {
+                        cur.Z(m, out FloatExp zr, out FloatExp zi);
+                        FloatExp xr = FloatExp.Normalize(wr, e), xi = FloatExp.Normalize(wi, e);
+                        FloatExp tr = FloatExp.Add(zr.Twice(), xr), ti = FloatExp.Add(zi.Twice(), xi);
+                        CMul(tr, ti, xr, xi, out FloatExp pr, out FloatExp pi);
+                        SplitPair(FloatExp.Add(pr, dcr), FloatExp.Add(pi, dci), e, out wr, out wi, out e);
+                    }
+                    else
+                    {
+                        DeltaDouble(wr, wi, e, out double ddr, out double ddi);
+                        double tr = 2.0 * cur.Re[m] + ddr;
+                        double ti = 2.0 * cur.Im[m] + ddi;
+                        double nwr = (tr * wr - ti * wi) + dcsR;
+                        double nwi = (tr * wi + ti * wr) + dcsI;
+                        wr = nwr;
+                        wi = nwi;
+                    }
+                    m = Math.Min(m + 1, last);
+                    n++;
                 }
-                m = Math.Min(m + 1, last);
                 Renormalize(ref wr, ref wi, ref e);
                 DcScaled(dcr, dci, hasDc, e, out dcsR, out dcsI, out dcBad);
 
@@ -186,7 +256,7 @@ namespace HeatonLife
                     dr = dwr;
                     di = dwi;
                     dExponent = dE;
-                    return (int)it;
+                    return (int)n;
                 }
                 if (rebased)
                 {

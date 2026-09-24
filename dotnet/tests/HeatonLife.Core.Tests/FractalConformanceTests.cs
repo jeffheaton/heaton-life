@@ -26,7 +26,7 @@ namespace HeatonLife.Tests
         private static readonly HashSet<string> TopKeys = new HashSet<string>
         {
             "spec_version", "family", "tier", "params", "viewport", "size", "outputs",
-            "reference_orbit", "critical_orbit", "source", "reference_small", "critical_small",
+            "reference_orbit", "critical_orbit", "source", "reference_small", "critical_small", "dc_bound_exponent",
         };
         private static readonly Dictionary<string, HashSet<string>> ParamKeys = new Dictionary<string, HashSet<string>>
         {
@@ -110,6 +110,15 @@ namespace HeatonLife.Tests
                     Assert.True(p.TryGetProperty("bla", out _), $"{family}/{caseName}: a table without bla");
                     continue;
                 }
+                if (output.GetProperty("kind").GetString() == "bla_table_x")
+                {
+                    // spec/deep-zoom.md "BLA at T2" (0.10.0): double-double coefficients, floatexp radii.
+                    AssertKeys(output, $"{family}/{caseName} output", "kind", "file", "shape", "entries");
+                    Assert.EndsWith(".f64", output.GetProperty("file").GetString()!);
+                    Assert.True(p.TryGetProperty("bla", out _), $"{family}/{caseName}: a table without bla");
+                    Assert.True(AtLeast(version, 0, 10, 0), $"{family}/{caseName}: T2 table before 0.10.0");
+                    continue;
+                }
                 if (output.GetProperty("kind").GetString() == "distance")
                 {
                     // spec/fractals.md "Distance estimate" (0.7.0): float64, relative epsilon.
@@ -145,6 +154,18 @@ namespace HeatonLife.Tests
                 offCenter ? vp.GetProperty("reference_im").GetString() : null);
             int width = root.GetProperty("size")[0].GetInt32();
             int height = root.GetProperty("size")[1].GetInt32();
+            if (bla && viewport.ZoomLog10 > FractalEngine.T1MaxZoom)
+            {
+                // spec/deep-zoom.md "BLA at T2" (0.10.0): the frame's dc bound exponent, which no
+                // output can show past zoom ~300, is pinned by value (null: every delta zero).
+                Assert.True(root.TryGetProperty("dc_bound_exponent", out var kElement), $"{family}/{caseName}: a T2 BLA case records its bound");
+                long? k = BlaTable.FrameDcBoundExponent(width, height, viewport);
+                Assert.Equal(kElement.ValueKind == JsonValueKind.Null ? (long?)null : kElement.GetInt64(), k);
+            }
+            else
+            {
+                Assert.False(root.TryGetProperty("dc_bound_exponent", out _), $"{family}/{caseName}: a bound without BLA at T2");
+            }
 
             double[]? orbitRe = null, orbitIm = null;
             if (root.TryGetProperty("reference_orbit", out var orbitMeta))
@@ -222,6 +243,12 @@ namespace HeatonLife.Tests
                     if (kind == "bla_table")
                     {
                         AssertTable(caseDir, output, viewport, width, height, orbitRe!, orbitIm!,
+                            p.GetProperty("max_iter").GetInt32(), p.GetProperty("escape_radius").GetDouble());
+                        continue;
+                    }
+                    if (kind == "bla_table_x")
+                    {
+                        AssertTableX(caseDir, output, viewport, width, height,
                             p.GetProperty("max_iter").GetInt32(), p.GetProperty("escape_radius").GetDouble());
                         continue;
                     }
@@ -433,6 +460,40 @@ namespace HeatonLife.Tests
             Assert.Equal(want.Length, words.Count);
             for (int i = 0; i < want.Length; i++)
                 Assert.True(want[i].Equals(words[i]), $"bla_table word {i}: {words[i]:R}, want {want[i]:R}");
+        }
+
+        /// <summary>
+        /// The T2 table (spec/deep-zoom.md "BLA at T2") built from the frame's own orbit, small
+        /// samples and floatexp dc bound, level by level (ar, ai, br, bi, the radii's mantissas
+        /// and exponents), must equal the stored words value for value.
+        /// </summary>
+        private static void AssertTableX(
+            string caseDir, JsonElement output, Viewport viewport, int width, int height, int maxIter, double escapeRadius)
+        {
+            var (re, im, small) = ReferenceOrbit.ComputeX(
+                ReferenceOrbit.Kind.Mandelbrot, viewport.OrbitCenterRe, viewport.OrbitCenterIm, viewport.ZoomLog10, maxIter, 0.0, 0.0);
+            var orbit = new PerturbationT2.Orbit(re, im, small);
+            int samples = (int)Math.Min(re.Length, (long)maxIter + 1);
+            var table = BlaTable.BuildX(re, im, orbit.Small, samples, escapeRadius, BlaTable.FrameDcBoundExponent(width, height, viewport));
+            var entries = output.GetProperty("entries");
+            Assert.Equal(entries.GetArrayLength(), table.Levels);
+            var words = new List<double>();
+            for (int level = 0; level < table.Levels; level++)
+            {
+                Assert.Equal(entries[level].GetInt32(), table.R[level].Length);
+                words.AddRange(table.Ar[level]);
+                words.AddRange(table.Ai[level]);
+                words.AddRange(table.Br[level]);
+                words.AddRange(table.Bi[level]);
+                foreach (FloatExp r in table.R[level])
+                    words.Add(r.M);
+                foreach (FloatExp r in table.R[level])
+                    words.Add(r.E);
+            }
+            double[] want = ReadF64(Path.Combine(caseDir, output.GetProperty("file").GetString()!));
+            Assert.Equal(want.Length, words.Count);
+            for (int i = 0; i < want.Length; i++)
+                Assert.True(want[i].Equals(words[i]), $"bla_table_x word {i}: {words[i]:R}, want {want[i]:R}");
         }
 
         /// <summary>

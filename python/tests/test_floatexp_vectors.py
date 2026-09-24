@@ -8,15 +8,18 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pytest
 
 from heaton_life.core import floatexp as fx
 from heaton_life.core.pow10 import pow10x
 
-CASE = Path(__file__).resolve().parents[2] / "vectors" / "floatexp" / "operations" / "params.json"
+ROOT = Path(__file__).resolve().parents[2] / "vectors" / "floatexp"
+CASES = sorted(p.name for p in ROOT.iterdir() if p.is_dir())
 KEYS = {
     "add": {"a", "b"},
     "mul": {"a", "b"},
     "compare": {"a", "b"},
+    "div": {"a", "b"},
     "to_double": {"a"},
     "from_fixed": {"value", "bits"},
     "normalize": {"value", "exponent"},
@@ -35,22 +38,35 @@ def _x(pair: list[Any]) -> fx.X:
     return _double(pair[0]), int(pair[1])
 
 
-def test_floatexp_operations() -> None:
-    meta = json.loads(CASE.read_text())
+def test_every_operation_is_pinned() -> None:
+    assert CASES == ["division", "operations"]
+    ops = {case["op"] for name in CASES for case in _meta(name)["cases"]}
+    assert ops == set(KEYS)
+
+
+def _meta(name: str) -> dict[str, Any]:
+    meta: dict[str, Any] = json.loads((ROOT / name / "params.json").read_text())
     assert set(meta) == {"spec_version", "family", "tier", "cases"}
     assert (meta["spec_version"], meta["family"], meta["tier"]) == (
         "0.10.0",
         "floatexp",
         "bit-exact",
     )
-    assert {case["op"] for case in meta["cases"]} == set(KEYS)
-    for case in meta["cases"]:
+    return meta
+
+
+@pytest.mark.parametrize("name", CASES)
+def test_floatexp_operations(name: str) -> None:
+    for case in _meta(name)["cases"]:
         op = case["op"]
+        assert op in KEYS, f"unknown operation {op}"
         assert set(case) == KEYS[op] | {"op", "expected", "note"}, case
         if op == "add":
             got: Any = fx.add(_x(case["a"]), _x(case["b"]))
         elif op == "mul":
             got = fx.mul(_x(case["a"]), _x(case["b"]))
+        elif op == "div":
+            got = fx.div(_x(case["a"]), _x(case["b"]))
         elif op == "compare":
             got = fx.compare(_x(case["a"]), _x(case["b"]))
         elif op == "to_double":

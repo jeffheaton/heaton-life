@@ -579,6 +579,7 @@ def main() -> None:
     write_floatexp_cases()
     write_t2_step_cases()
     write_t2_cases()
+    write_t2_bla_cases()
 
     print("done")
 
@@ -598,6 +599,7 @@ def write_fractal_case(
     bla: bool = False,
     bla_table: bool = False,
     small_orbits: bool = False,
+    bla_table_x: bool = False,
 ) -> None:
     case_dir = VECTOR_ROOT / family / name
     case_dir.mkdir(parents=True, exist_ok=True)
@@ -620,6 +622,33 @@ def write_fractal_case(
                 "kind": "bla_applications",
                 "file": "bla_applications.i32",
                 "shape": list(applied.shape),
+            }
+        )
+    if bla_table_x:  # the T2 table, bit for bit: coefficients and floatexp radii
+        from heaton_life.fractal.bla import build_table_t2, frame_dc_bound_exponent, table_words_x
+        from heaton_life.fractal.engine import pixel_deltas_x
+
+        orbit_x = reference_orbit_x(
+            "mandelbrot", *viewport.orbit_center, viewport.zoom_log10, params["max_iter"]
+        )
+        samples = orbit_x.samples[: params["max_iter"] + 1]
+        small = np.zeros(samples.size, dtype=bool)
+        small[orbit_x.small.index[orbit_x.small.index < samples.size]] = True
+        deltas = pixel_deltas_x(size, viewport)
+        k = frame_dc_bound_exponent(deltas.rm, deltas.re, deltas.im, deltas.ie)
+        table_x = build_table_t2(samples, small, params["escape_radius"], k)
+        words = np.where(
+            np.isnan(table_words_x(table_x)), np.nan, table_words_x(table_x)
+        )  # one NaN
+        (case_dir / "bla_table_x.f64").write_bytes(
+            np.ascontiguousarray(words, dtype="<f8").tobytes()
+        )
+        outputs.append(
+            {
+                "kind": "bla_table_x",
+                "file": "bla_table_x.f64",
+                "shape": [int(words.size)],
+                "entries": [int(level.rm.size) for level in table_x.levels],
             }
         )
     if bla_table:  # the table itself, bit for bit, from this case's orbit and frame
@@ -666,6 +695,16 @@ def write_fractal_case(
     }
     if source is not None:
         meta["source"] = source  # attribution for a third-party location
+    if params.get("bla") and viewport.zoom_log10 > 290.0:
+        # BLA at T2: the frame's dc bound 2^k (null: every delta zero), which no output can
+        # show past zoom ~300 (spec/deep-zoom.md "BLA at T2").
+        from heaton_life.fractal.bla import frame_dc_bound_exponent
+        from heaton_life.fractal.engine import pixel_deltas_x
+
+        deltas = pixel_deltas_x(size, viewport)
+        meta["dc_bound_exponent"] = frame_dc_bound_exponent(
+            deltas.rm, deltas.re, deltas.im, deltas.ie
+        )
     if small_orbits:  # T2 (spec/deep-zoom.md "T2"): the orbits' length and small samples
         c_re = params.get("c_re", 0.0)
         c_im = params.get("c_im", 0.0)
@@ -2492,6 +2531,13 @@ def write_floatexp_cases() -> None:
             }
         )
 
+    division: list[dict[str, Any]] = []  # its own case: operations was shipped without it
+
+    def div(a: tuple[float, int], b: tuple[float, int], note: str) -> None:
+        division.append(
+            {"op": "div", "a": x(a), "b": x(b), "expected": x(fx.div(a, b)), "note": note}
+        )
+
     def compare(a: tuple[float, int], b: tuple[float, int], note: str) -> None:
         cases.append(
             {"op": "compare", "a": x(a), "b": x(b), "expected": fx.compare(a, b), "note": note}
@@ -2541,12 +2587,105 @@ def write_floatexp_cases() -> None:
     compare((-1.0, 5000), fx.ZERO, "negative under zero")
     compare(fx.ZERO, fx.ZERO, "zero equals zero")
     compare((-1.75, 10), (-1.75, 10), "equal values")
+    div(one, (1.5, 0), "2/3: one rounding, renormalized up a binade")
+    div((1.5, 3000), (1.25, -3000), "exponents subtract: no range limit")
+    div((-1.9999999999999998, -5), (1.0000000000000002, 7), "mixed signs")
+    div((1.25, 0), (1.25, 9), "an exact quotient")
+    div(fx.ZERO, (1.5, -9000), "zero over b is zero")
 
-    case_dir = VECTOR_ROOT / "floatexp" / "operations"
-    case_dir.mkdir(parents=True, exist_ok=True)
-    meta = {"spec_version": "0.10.0", "family": "floatexp", "tier": "bit-exact", "cases": cases}
-    (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
-    print("wrote vectors/floatexp/operations")
+    for name, ops in (("operations", cases), ("division", division)):
+        case_dir = VECTOR_ROOT / "floatexp" / name
+        case_dir.mkdir(parents=True, exist_ok=True)
+        meta = {"spec_version": "0.10.0", "family": "floatexp", "tier": "bit-exact", "cases": ops}
+        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+        print(f"wrote vectors/floatexp/{name}")
+
+
+def write_t2_bla_cases() -> None:
+    """BLA at T2 (spec/deep-zoom.md "BLA at T2", 0.10.0): Mandelbrot(bla=True) past zoom
+    290. Each frame was added for a rule a port could get wrong and was checked to fail
+    under a one-rule change of the reference; the table itself on four frames, every
+    frame's dc bound exponent. The table rules no natural frame reaches (the dc term, each
+    dead-rule cap, radii below the double range, the merge's branch order) are pinned by
+    the crafted t2-steps/bla-* cases."""
+
+    def bla(name: str, viewport: Viewport, size: tuple[int, int], max_iter: int, **kw: Any) -> None:
+        write_fractal_case(
+            "mandelbrot",
+            name,
+            Mandelbrot(max_iter=max_iter, escape_radius=1000.0, bla=True),
+            {"max_iter": max_iter, "escape_radius": 1000.0, "bla": True},
+            viewport,
+            size,
+            spec_version="0.10.0",
+            small_orbits=True,
+            bla=True,
+            **kw,
+        )
+
+    offaxis = Viewport(P830_CENTER, "3e-997", 996.5)
+    # The p830 minibrot at 1e996.5, off its axis: skips of hundreds of steps between the small
+    # returns every 830 (one small sample is normal as a float64: its spans are dead), and
+    # the distance estimate carried through each skip.
+    bla("t2-bla-p830-offaxis-zoom996-16", offaxis, (16, 16), 11620, distance=True, bla_table_x=True)
+    # One column (every dc.re is 0) stopped at 1000 iterations: skips near the end must fit;
+    # at 997 a cap one too loose takes a skip too many.
+    bla("t2-bla-p830-cap1000-1x16", offaxis, (1, 16), 1000)
+    bla("t2-bla-p830-cap997-1x16", offaxis, (1, 16), 997)
+    # Just past T1, 9x9: the reference escapes at 504 = 63 * 8, so the center pixel (delta
+    # and dc both 0) skips onto the escape; the zero column and row skip with a zero part.
+    bla(
+        "t2-bla-p830-escape-zoom300-9",
+        Viewport(P830_CENTER, "3e-301", 300.0),
+        (9, 9),
+        11620,
+        bla_table_x=True,
+    )
+    # The same place with a reference that escapes at 503 = 7 mod 8: the table stops at k*,
+    # not at the orbit's end (507), or the center pixel skips over the escape.
+    bla(
+        "t2-bla-p830-escape7-zoom300-9",
+        Viewport(P830_CENTER, "1e-300", 300.0),
+        (9, 9),
+        11620,
+        bla_table_x=True,
+    )
+    # A reference that shrinks toward 0: A underflows to 0 on the spans that start there.
+    bla("t2-bla-a0-zoom300-4", Viewport("1e-90", "0", 300.5), (4, 4), 250, bla_table_x=True)
+    # A center 1e-812 from the p830 nucleus: Z_830 is small and subnormal as a float64.
+    bla(
+        "t2-bla-p830-subnormal-zoom835-8",
+        Viewport(_decimal_sum(P830_CENTER, "1e-812"), "0", 835.0),
+        (8, 8),
+        6000,
+    )
+    # The needle's tip at 1e1000: spans whose |A|, |B| pass 2^960 are dead.
+    bla("t2-bla-tip-zoom1000-8", Viewport(_decimal_sum("-2", "1e-600"), "0", 1000.0), (8, 8), 6000)
+    # A 1x1 frame on the nucleus: every delta is 0, so there is no dc bound at all.
+    bla("t2-bla-p830-1x1", Viewport(P830_CENTER, "0", 996.5), (1, 1), 11620)
+    # An off-center reference whose offset lifts the bound an octave (2^-3307, not 2^-3308).
+    bla(
+        "t2-bla-offref-p830-zoom996-8",
+        Viewport(
+            _decimal_sum(P830_CENTER, "6e-997"),
+            "-6e-997",
+            996.5,
+            reference_re=P830_CENTER,
+            reference_im="0",
+        ),
+        (8, 8),
+        11620,
+    )
+    # Heaton Fractal's p135310 nucleus at 1e320: 200,000 iterations, fifteen levels; and the
+    # same frame about a truncated center, whose complex reference pins each skip's order of
+    # operations (the frames above are near the real axis).
+    bla("t2-bla-hf-p135310-zoom320-8", Viewport(*P135310_HF, 320.0), (8, 8), 200000)
+    bla(
+        "t2-bla-hf-p135310-complex-zoom320-8",
+        Viewport(P135310_HF[0][:333], P135310_HF[1][:332], 320.0),
+        (8, 8),
+        200000,
+    )
 
 
 def write_t2_step_cases() -> None:
@@ -2556,6 +2695,7 @@ def write_t2_step_cases() -> None:
     reaches (the 960-binade gap guards, a sample past 2^900)."""
     from heaton_life.core import floatexp as fx
     from heaton_life.core.bignum import OrbitX, SmallSamples
+    from heaton_life.fractal.bla import build_table_t2, table_words_x
     from heaton_life.fractal.perturbation_t2 import XPair, perturb_t2
 
     def x(value: tuple[float, int]) -> list[Any]:
@@ -2612,9 +2752,16 @@ def write_t2_step_cases() -> None:
         derivative: tuple[tuple[tuple[float, int], tuple[float, int]], tuple[float, int] | None]
         | None = None,
         expect_paths: tuple[str, ...] = (),
+        bla_dc: int | None | bool = False,  # False: no table; else the dc bound exponent
     ) -> None:
         stats: dict[str, int] = {}
         der = None if derivative is None else (pair(derivative[0]), derivative[1])
+        table = None
+        if bla_dc is not False:
+            samples = ref.samples[: max_iter + 1]
+            small = np.zeros(samples.size, dtype=bool)
+            small[ref.small.index[ref.small.index < samples.size]] = True
+            table = build_table_t2(samples, small, radius, None if bla_dc is None else int(bla_dc))
         result = perturb_t2(
             ref,
             pair(delta0),
@@ -2624,6 +2771,7 @@ def write_t2_step_cases() -> None:
             rebase_orbit=rebase,
             derivative=der,
             stats=stats,  # type: ignore[arg-type]
+            table=table,
         )
         for path in expect_paths:
             assert stats.get(path, 0) > 0, f"t2-steps/{name}: {path} never ran"
@@ -2654,6 +2802,14 @@ def write_t2_step_cases() -> None:
                 ],
             },
         }
+        if table is not None:
+            # BLA at T2: the table (T1's layout plus the radii's exponents) and the skips.
+            meta["bla"] = {"dc_exponent": None if bla_dc is None else int(bla_dc)}
+            meta["expected"]["applications"] = int(result.applications[0])
+            words = table_words_x(table)  # every NaN written as the one canonical quiet NaN
+            meta["expected"]["table"] = [
+                _bits(float(w)) for w in np.where(np.isnan(words), np.nan, words)
+            ]
         case_dir = VECTOR_ROOT / "t2-steps" / name
         case_dir.mkdir(parents=True, exist_ok=True)
         (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
@@ -2741,6 +2897,141 @@ def write_t2_step_cases() -> None:
             derivative=(((1.0, -1000), zero), None),
             expect_paths=("escape_small",),
         )
+
+    # BLA at T2 on crafted tables (spec/deep-zoom.md "BLA at T2"). Samples of 0.5 make every
+    # A = 1 and B = the step count, so with dc bound 2^-60 the level radii are exactly 57,
+    # 49, 33 and 1 (x 2^-60), then 0. A pixel starting at |delta| = 57 x 2^-60, level 0's
+    # radius itself, must take no skip: the radius test is strict.
+    tie = orbit([complex(0.5, 0.0)] * 128 + [complex(1e10, 0.0)], [])
+    case(
+        "bla-radius-tie",
+        tie,
+        None,
+        ((1.78125, -55), zero),  # 57 x 2^-60
+        ((1.0, -2000), zero),
+        200,
+        1000.0,
+        bla_dc=-60,
+    )
+    # A complex orbit turning at |Z| = 0.6: skips with complex A and B, the distance
+    # derivative through each (started at a nonzero d), then the 2^40 samples to an escape.
+    # Every regrouping of a skip's delta' or d' sums changes the final z or (dw, dE) here.
+    turning = [  # |Z| = 0.6 as decimal literals (no libm), around the circle
+        complex(0.36, 0.48),
+        complex(-0.48, 0.36),
+        complex(0.6, 0.0),
+        complex(-0.36, -0.48),
+        complex(0.0, 0.6),
+        complex(0.48, -0.36),
+        complex(-0.6, 0.0),
+        complex(0.0, -0.6),
+    ] * 12
+    case(
+        "bla-complex-skip",
+        orbit(turning + grow, []),
+        None,
+        None,
+        ((1.25, -3000), (-1.5, -3001)),
+        400,
+        radius,
+        derivative=(((1.5, -3000), (-1.25, -3001)), (1.5, -3000)),
+        expect_paths=("bla_skip",),
+        bla_dc=-2999,
+    )
+    # Each case below was checked to fail under a one-rule change of the reference.
+    tiny = (1.0, -3000)
+    # Radii below the double range: a span after 64 steps of |2Z| = 2^14 has radius near
+    # eps 2^-399 / 2^927; float64 radii, or |delta| rounded to a double, take other skips.
+    case(
+        "bla-deep-radius",
+        orbit(
+            [2.0**13 + 0j] * 64
+            + [1.0 + 0j] * 31
+            + [2.0**-399 + 0j]
+            + [1.0 + 0j] * 32
+            + [1e30 + 0j],
+            [],
+        ),
+        None,
+        ((1.0, -1200), zero),
+        (tiny, zero),
+        200,
+        radius,
+        bla_dc=-3000,
+    )
+    # A small index (an exact 0) where |A_x| = 0 meets num <= 0: the merge tests num > 0
+    # before |A_x| = 0, so no span crosses the small index.
+    case(
+        "bla-branch-order",
+        orbit(
+            [2.0**-300 + 0j] * 8 + [0j] + [2.0**-300 + 0j] * 7 + [1.0 + 0j] * 16 + [1e30 + 0j],
+            [(8, zero, zero)],
+        ),
+        None,
+        (tiny, zero),
+        (tiny, zero),
+        200,
+        1000.0,
+        bla_dc=None,
+    )
+    # The dead rule entry by entry: |A| exactly 2^960 (dead), |A| = 2^968 alone past the cap,
+    # |A| = 2^952 (live), and |B| near 2^987 alone past it.
+    case(
+        "bla-dead-rules",
+        orbit(
+            [2.0**119 + 0j] * 8
+            + [2.0**120 + 0j] * 8
+            + [2.0**118 + 0j] * 8
+            + [2.0**-399 + 0j]
+            + [2.0**140 + 0j] * 7
+            + [2.0**300 + 0j],
+            [],
+        ),
+        None,
+        (tiny, zero),
+        (tiny, zero),
+        100,
+        2.0**200,
+        bla_dc=None,
+    )
+    # A parent reads its children's radii after the dead rule.
+    case(
+        "bla-dead-before-merge",
+        orbit([1.1 * 2.0**14 + 0j] * 64 + [2.0**-10 + 0j] * 64 + [1e30 + 0j], []),
+        None,
+        (tiny, zero),
+        (tiny, zero),
+        200,
+        radius,
+        bla_dc=-3000,
+    )
+    # The dc term is |B_x| 2^k with B_x the left child's: siblings here differ.
+    case(
+        "bla-dc-left-child",
+        orbit(([0.5 + 0j] * 8 + [0.25 + 0j] * 8) * 8 + [1e10 + 0j], []),
+        None,
+        (tiny, zero),
+        ((1.0, -2000), zero),
+        200,
+        1000.0,
+        bla_dc=-60,
+    )
+    # A pixel that would escape at max_iter + 1 counts -1, with and without a table.
+    ends = orbit([0.5 + 0j] * 128 + [1e30 + 0j], [])
+    case("loop-end", ends, None, (tiny, zero), (tiny, zero), 127, 1000.0)
+    case("bla-loop-end", ends, None, (tiny, zero), (tiny, zero), 127, 1000.0, bla_dc=-3000)
+    # A skip from a gap-guard state (delta 2000 binades below delta_c, parts 2000 apart):
+    # in floatexp, then (w, E) split afresh from delta'.
+    case(
+        "bla-dc-bad",
+        orbit([4.0 + 0j] * 1100, []),
+        None,
+        ((1.0, -5000), zero),
+        ((1.0, -5000), tiny),
+        1060,
+        1000.0,
+        bla_dc=-3000,
+    )
 
 
 def write_t2_cases() -> None:

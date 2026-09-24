@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using Xunit;
 
 namespace HeatonLife.Tests
@@ -145,7 +146,7 @@ namespace HeatonLife.Tests
         }
 
         [Fact]
-        public void BlaIsOptInAndT1Only()
+        public void BlaIsOptInAndOffAtT0()
         {
             var home = new Viewport("-0.5", "0.0", 0.0);
             var a = new int[256];
@@ -155,6 +156,77 @@ namespace HeatonLife.Tests
             Assert.All(applied, x => Assert.Equal(0, x));
             Assert.False(new Mandelbrot().Bla);
             Assert.True(new Mandelbrot(10, 1000.0, 1, true).Bla);
+        }
+
+        /// <summary>
+        /// spec/deep-zoom.md "BLA at T2", the frame's bound: E the larger exponent of the nonzero
+        /// maxima, m = Mag of the pair scaled by 2^-E, k = E + the least j with 2^j ≥ m.
+        /// </summary>
+        [Theory]
+        [InlineData(1.0, -100, 0.0, 0, -100L)]
+        [InlineData(1.5, -100, 1.0, -100, -99L)]
+        [InlineData(0.0, 0, 1.0, -5, -5L)]
+        [InlineData(1.0, -100, 1.0, -200, -100L)]
+        [InlineData(1.25, -3000, 1.75, -3000, -2998L)]
+        [InlineData(0.0, 0, 0.0, 0, null)]
+        [InlineData(1.0, -100, 1.0, -1500, -100L)]
+        public void FrameDcBoundExponent(double mr, long er, double mi, long ei, long? k)
+        {
+            Assert.Equal(k, BlaTable.FrameDcBoundExponent(FloatExp.Normalize(mr, er), FloatExp.Normalize(mi, ei)));
+        }
+
+        /// <summary>
+        /// A step at a small index has radius 0 at T2: every entry whose span contains it is
+        /// dead, and no other entry changes (spec/deep-zoom.md "BLA at T2").
+        /// </summary>
+        [Fact]
+        public void TheT2TableNeverSpansASmallIndex()
+        {
+            var (re, im) = ReadC128(Path.Combine(TestPaths.VectorRoot(), "mandelbrot", "bla-p1959-zoom30-16", "orbit.c128"));
+            var clean = new bool[re.Length];
+            var marked = new bool[re.Length];
+            marked[44] = true;
+            var a = BlaTable.BuildX(re, im, clean, re.Length, 1000.0, -100);
+            var b = BlaTable.BuildX(re, im, marked, re.Length, 1000.0, -100);
+            Assert.True(a.R[0][44 / BlaTable.Stride].M > 0.0);
+            for (int level = 0; level < a.Levels; level++)
+            {
+                int span = BlaTable.Stride << level;
+                for (int k = 0; k < a.R[level].Length; k++)
+                {
+                    if (k == 44 / span)
+                        Assert.True(b.R[level][k].IsZero);
+                    else
+                        Assert.Equal(a.R[level][k], b.R[level][k]);
+                }
+            }
+        }
+
+        /// <summary>The T2 table's extent is T1's k*: the first sample past R, not the orbit's end.</summary>
+        [Theory]
+        [InlineData("bla-landing-escape-8")]
+        [InlineData("bla-p1959-zoom30-16")]
+        [InlineData("bla-11dim-zoom30-32")]
+        public void TheT2TableStopsWhereT1Does(string caseName)
+        {
+            var (re, im) = ReadC128(Path.Combine(TestPaths.VectorRoot(), "mandelbrot", caseName, "orbit.c128"));
+            var t1 = BlaTable.Build(re, im, re.Length, 1000.0, 0.0);
+            var t2 = BlaTable.BuildX(re, im, new bool[re.Length], re.Length, 1000.0, null);
+            Assert.Equal(t1.Extent, t2.Extent);
+            Assert.Equal(t1.Levels, t2.Levels);
+        }
+
+        private static (double[] Re, double[] Im) ReadC128(string path)
+        {
+            byte[] bytes = File.ReadAllBytes(path);
+            var re = new double[bytes.Length / 16];
+            var im = new double[re.Length];
+            for (int i = 0; i < re.Length; i++)
+            {
+                re[i] = BitConverter.ToDouble(bytes, 16 * i);
+                im[i] = BitConverter.ToDouble(bytes, 16 * i + 8);
+            }
+            return (re, im);
         }
     }
 }

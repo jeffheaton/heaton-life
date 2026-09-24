@@ -292,3 +292,268 @@ def perturb_z2_bla(
             dz[rebase] = z[rebase]
             m[rebase] = 0
     return counts, final, ((final_dr, final_di) if distance else None), applications
+
+
+# --- T2 (spec/deep-zoom.md "BLA at T2") ------------------------------------------------
+
+
+@dataclasses.dataclass(frozen=True)
+class BlaLevelX:
+    """One level of a T2 table: the double-double coefficients' hi parts, the radius in
+    floatexp (rm = 0: dead)."""
+
+    ar: FloatArray
+    ai: FloatArray
+    br: FloatArray
+    bi: FloatArray
+    rm: FloatArray
+    re: NDArray[np.int64]
+
+
+@dataclasses.dataclass(frozen=True)
+class BlaTableX:
+    """The T2 BLA table of one reference orbit, escape radius and frame (dc bound 2^k)."""
+
+    levels: tuple[BlaLevelX, ...]
+    extent: int
+
+    @property
+    def live(self) -> bool:
+        return bool(self.levels) and bool((self.levels[0].rm > 0.0).any())
+
+
+def frame_dc_bound_exponent(
+    dc_rm: FloatArray, dc_re: NDArray[np.int64], dc_im: FloatArray, dc_ie: NDArray[np.int64]
+) -> int | None:
+    """The T2 frame's bound on |dc| as 2^k: mag(max |dc.re|, max |dc.im|) over the frame's
+    floatexp pixel deltas, rounded up to a power of two; None when every delta is zero.
+    The magnitude is T1's mag of the pair scaled by 2^-E (E the larger exponent of the
+    nonzero maxima), times 2^E."""
+    from heaton_life.core import floatexp as fx
+
+    def largest(m: FloatArray, e: NDArray[np.int64]) -> fx.X:
+        nonzero = m != 0.0
+        if not nonzero.any():
+            return fx.ZERO
+        top = int(e[nonzero].max())
+        at = nonzero & (e == top)
+        return float(np.abs(m[at]).max()), top
+
+    mr = largest(dc_rm, dc_re)
+    mi = largest(dc_im, dc_ie)
+    if mr[0] == 0.0 and mi[0] == 0.0:
+        return None
+    exponent = mr[1] if mi[0] == 0.0 else mi[1] if mr[0] == 0.0 else max(mr[1], mi[1])
+    s = fx.scaled(mr, exponent)
+    t = fx.scaled(mi, exponent)
+    value = float(mag(np.array([s]), np.array([t]))[0])  # in [1, 2 sqrt 2]
+    mantissa, k = math.frexp(value)
+    return exponent + (k - 1 if mantissa == 0.5 else k)
+
+
+def _merge_x(
+    r1m: FloatArray,
+    r1e: NDArray[np.int64],
+    r1_inf: NDArray[np.bool_],
+    r2m: FloatArray,
+    r2e: NDArray[np.int64],
+    ar: FloatArray,
+    ai: FloatArray,
+    br: FloatArray,
+    bi: FloatArray,
+    dc_exponent: int | None,
+) -> tuple[FloatArray, NDArray[np.int64], NDArray[np.bool_]]:
+    """T1's merge in floatexp: num = r2 - |B_x| 2^k; num > 0 ? min(r1, num / |A_x|) : 0,
+    |A_x| = 0 keeping r1; a magnitude that is not finite gives 0 (such an entry is dead
+    anyway: its own coefficients cannot be finite)."""
+    from heaton_life.core import floatexp as fx
+
+    mag_a = mag(ar, ai)
+    mag_b = mag(br, bi)
+    finite = np.isfinite(mag_a) & np.isfinite(mag_b)
+    n = r2m.size
+    if dc_exponent is None:
+        tm, te = np.zeros(n), np.zeros(n, dtype=np.int64)
+    else:
+        tm, te = fx.vnormalize(np.where(finite, mag_b, 0.0), np.full(n, dc_exponent, np.int64))
+    nm, ne = fx.vadd(r2m, r2e, -tm, te)
+    positive = finite & (nm > 0.0)
+    a_zero = mag_a == 0.0
+    usable = positive & ~a_zero
+    am, ae = fx.vnormalize(np.where(usable, mag_a, 1.0), np.zeros(n, dtype=np.int64))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        qm, qe = fx.vdiv(np.where(usable, nm, 0.0), np.where(usable, ne, 0), am, ae)
+    less = r1_inf | (fx.vcompare_magnitude2(qm, qe, r1m, r1e) < 0)
+    take = usable & less
+    out_m = np.where(positive, np.where(take, qm, r1m), 0.0)
+    out_e = np.where(positive, np.where(take, qe, r1e), 0).astype(np.int64)
+    out_inf = positive & ~take & r1_inf
+    return out_m, out_e, out_inf
+
+
+def _level_x(
+    ar: FloatArray,
+    ai: FloatArray,
+    br: FloatArray,
+    bi: FloatArray,
+    rm: FloatArray,
+    re: NDArray[np.int64],
+    r_inf: NDArray[np.bool_],
+) -> BlaLevelX:
+    alive = (rm > 0.0) & ~r_inf & (mag(ar, ai) < _CAP) & (mag(br, bi) < _CAP)
+    return BlaLevelX(
+        ar, ai, br, bi, np.where(alive, rm, 0.0), np.where(alive, re, 0).astype(np.int64)
+    )
+
+
+# Double-double (spec/deep-zoom.md "BLA at T2", "Coefficients"): a value is hi + lo, two
+# doubles; every operation below is plain IEEE float64 (no fma), so both ports agree.
+_SPLIT = 134217729.0  # 2^27 + 1, Dekker's splitter
+DD = tuple[FloatArray, FloatArray]  # (hi, lo)
+CDD = tuple[DD, DD]  # (re, im)
+
+
+def _two_sum(a: FloatArray, b: FloatArray) -> DD:
+    s = a + b
+    bb = s - a
+    return s, (a - (s - bb)) + (b - bb)
+
+
+def _quick_two_sum(a: FloatArray, b: FloatArray) -> DD:
+    s = a + b
+    return s, b - (s - a)
+
+
+def _split(a: FloatArray) -> DD:
+    t = _SPLIT * a
+    hi = t - (t - a)
+    return hi, a - hi
+
+
+def _two_prod(a: FloatArray, b: FloatArray) -> DD:
+    p = a * b
+    ah, al = _split(a)
+    bh, bl = _split(b)
+    return p, (((ah * bh - p) + ah * bl) + al * bh) + al * bl
+
+
+def _dd_mul(x: DD, y: DD) -> DD:
+    p, e = _two_prod(x[0], y[0])
+    return _quick_two_sum(p, e + (x[0] * y[1] + x[1] * y[0]))
+
+
+def _dd_add(x: DD, y: DD) -> DD:
+    s, e = _two_sum(x[0], y[0])
+    return _quick_two_sum(s, e + (x[1] + y[1]))
+
+
+def _dd_neg(x: DD) -> DD:
+    return -x[0], -x[1]
+
+
+def _cdd_mul(x: CDD, y: CDD) -> CDD:
+    """(x.re y.re - x.im y.im, x.re y.im + x.im y.re) in double-double."""
+    return (
+        _dd_add(_dd_mul(x[0], y[0]), _dd_neg(_dd_mul(x[1], y[1]))),
+        _dd_add(_dd_mul(x[0], y[1]), _dd_mul(x[1], y[0])),
+    )
+
+
+def _cdd_take(x: CDD, sel: slice) -> CDD:
+    return (x[0][0][sel], x[0][1][sel]), (x[1][0][sel], x[1][1][sel])
+
+
+def build_table_t2(
+    samples: ComplexArray, small: NDArray[np.bool_], escape_radius: float, dc_exponent: int | None
+) -> BlaTableX:
+    """The T2 table (spec/deep-zoom.md "BLA at T2"): T1's recurrences for A and B carried in
+    double-double, each entry storing the hi of each component, and T1's radii in floatexp
+    with the dc bound 2^dc_exponent (None: zero), from those stored values. A step at a
+    small index (``small``: the orbit's small table) has radius 0, so no span containing
+    one is ever taken: its float64 sample may have lost bits."""
+    from heaton_life.core import floatexp as fx
+
+    zr_all = np.ascontiguousarray(samples.real)
+    zi_all = np.ascontiguousarray(samples.imag)
+    r2 = escape_radius * escape_radius
+    with np.errstate(over="ignore", invalid="ignore"):
+        escaped = np.flatnonzero((zr_all[1:] * zr_all[1:] + zi_all[1:] * zi_all[1:]) > r2)
+    extent = int(escaped[0]) + 1 if escaped.size else len(samples) - 1
+    n0 = max(extent, 0) // STRIDE
+    if n0 == 0:
+        return BlaTableX((), extent)
+    base = np.arange(n0) * STRIDE
+    zero = np.zeros(n0)
+    coeff_a: CDD = ((np.ones(n0), zero.copy()), (zero.copy(), zero.copy()))
+    coeff_b: CDD = ((zero.copy(), zero.copy()), (zero.copy(), zero.copy()))
+    one: DD = (np.ones(n0), zero.copy())
+    rm = np.zeros(n0)
+    re = np.zeros(n0, dtype=np.int64)
+    r_inf = np.ones(n0, dtype=bool)
+    with np.errstate(over="ignore", invalid="ignore"):
+        for j in range(STRIDE):
+            zr = zr_all[base + j]
+            zi = zi_all[base + j]
+            step: CDD = ((2.0 * zr, zero.copy()), (2.0 * zi, zero.copy()))  # 2Z, exact
+            sm, se = fx.vnormalize(
+                np.where(small[base + j], 0.0, mag(zr, zi)), np.full(n0, -53, dtype=np.int64)
+            )  # eps |Z|, exact
+            rm, re, r_inf = _merge_x(
+                rm,
+                re,
+                r_inf,
+                sm,
+                se,
+                coeff_a[0][0],
+                coeff_a[1][0],
+                coeff_b[0][0],
+                coeff_b[1][0],
+                dc_exponent,
+            )
+            ab = _cdd_mul(step, coeff_b)
+            coeff_b = (_dd_add(ab[0], one), ab[1])
+            coeff_a = _cdd_mul(step, coeff_a)
+    pairs = [(coeff_a, coeff_b)]
+    levels = [_level_x(coeff_a[0][0], coeff_a[1][0], coeff_b[0][0], coeff_b[1][0], rm, re, r_inf)]
+    while len(levels) < LEVEL_CAP and levels[-1].rm.size >= 2:
+        below = levels[-1]
+        below_a, below_b = pairs[-1]
+        count = below.rm.size // 2
+        x = slice(0, 2 * count, 2)
+        y = slice(1, 2 * count, 2)
+        xa, xb = _cdd_take(below_a, x), _cdd_take(below_b, x)
+        ya, yb = _cdd_take(below_a, y), _cdd_take(below_b, y)
+        with np.errstate(over="ignore", invalid="ignore"):
+            coeff_a = _cdd_mul(ya, xa)
+            yxb = _cdd_mul(ya, xb)
+            coeff_b = (_dd_add(yxb[0], yb[0]), _dd_add(yxb[1], yb[1]))
+        rm, re, r_inf = _merge_x(
+            below.rm[x],
+            below.re[x],
+            np.zeros(count, dtype=bool),
+            below.rm[y],
+            below.re[y],
+            below.ar[x],
+            below.ai[x],
+            below.br[x],
+            below.bi[x],
+            dc_exponent,
+        )
+        pairs.append((coeff_a, coeff_b))
+        levels.append(
+            _level_x(coeff_a[0][0], coeff_a[1][0], coeff_b[0][0], coeff_b[1][0], rm, re, r_inf)
+        )
+    return BlaTableX(tuple(levels), extent)
+
+
+def table_words_x(table: BlaTableX) -> FloatArray:
+    """The T2 table as one float64 array, level by level, each level's ar, ai, br, bi, the
+    radii's mantissas and their exponents (exact as float64) in turn -- the layout of a
+    vector's bla_table_x output (spec/fractals.md)."""
+    parts = [
+        part
+        for level in table.levels
+        for part in (level.ar, level.ai, level.br, level.bi, level.rm, level.re.astype(np.float64))
+    ]
+    words: FloatArray = np.concatenate(parts) if parts else np.zeros(0)
+    return words

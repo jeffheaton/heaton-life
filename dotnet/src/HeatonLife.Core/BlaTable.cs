@@ -270,5 +270,343 @@ namespace HeatonLife
             }
             return new BlaTable(ar, ai, br, bi, r, extent);
         }
+
+        // --- T2 (spec/deep-zoom.md "BLA at T2") ---------------------------------------------
+
+        private static readonly ConditionalWeakTable<double[], List<(double[] Im, int Samples, double R, long? Dc, BlaTableX Table)>> TablesX =
+            new ConditionalWeakTable<double[], List<(double[] Im, int Samples, double R, long? Dc, BlaTableX Table)>>();
+
+        /// <summary><see cref="BuildX"/>, re-using a table already built for these same arrays and inputs.</summary>
+        internal static BlaTableX GetX(double[] orbitRe, double[] orbitIm, bool[] small, int samples, double escapeRadius, long? dcExponent)
+        {
+            var list = TablesX.GetValue(orbitRe, _ => new List<(double[], int, double, long?, BlaTableX)>());
+            lock (list)
+            {
+                foreach (var entry in list)
+                {
+                    if (ReferenceEquals(entry.Im, orbitIm) && entry.Samples == samples
+                        && entry.R.Equals(escapeRadius) && entry.Dc == dcExponent)
+                        return entry.Table;
+                }
+            }
+            var table = BuildX(orbitRe, orbitIm, small, samples, escapeRadius, dcExponent);
+            lock (list)
+            {
+                if (list.Count >= 4)
+                    list.RemoveAt(0);
+                list.Add((orbitIm, samples, escapeRadius, dcExponent, table));
+            }
+            return table;
+        }
+
+        /// <summary><see cref="FrameDcBoundExponent(FloatExp, FloatExp)"/> over a T2 frame's own floatexp pixel deltas (an off-center offset included).</summary>
+        internal static long? FrameDcBoundExponent(int width, int height, Viewport viewport)
+        {
+            FloatExp ps = FractalEngine.PixelScaleX(width, viewport.ZoomLog10);
+            bool offCenter = viewport.HasReference;
+            FloatExp dRe = offCenter ? DecimalText.DifferenceX(viewport.CenterRe, viewport.ReferenceRe!) : FloatExp.Zero;
+            FloatExp dIm = offCenter ? DecimalText.DifferenceX(viewport.CenterIm, viewport.ReferenceIm!) : FloatExp.Zero;
+            FloatExp maxRe = FloatExp.Zero, maxIm = FloatExp.Zero;
+            for (int x = 0; x < width; x++)
+            {
+                FloatExp v = FractalEngine.OffsetReX(x, width, ps);
+                if (offCenter)
+                    v = FloatExp.Add(dRe, v);
+                if (v.M < 0.0)
+                    v = v.Neg();
+                if (FloatExp.Compare(v, maxRe) > 0)
+                    maxRe = v;
+            }
+            for (int y = 0; y < height; y++)
+            {
+                FloatExp v = FractalEngine.OffsetImX(y, height, ps);
+                if (offCenter)
+                    v = FloatExp.Add(dIm, v);
+                if (v.M < 0.0)
+                    v = v.Neg();
+                if (FloatExp.Compare(v, maxIm) > 0)
+                    maxIm = v;
+            }
+            return FrameDcBoundExponent(maxRe, maxIm);
+        }
+
+        /// <summary>
+        /// The T2 frame's bound on |dc| as 2^k: Mag(max |dc.re|, max |dc.im|) over the frame's
+        /// floatexp pixel deltas, rounded up to a power of two; null when every delta is zero.
+        /// The magnitude is <see cref="Mag"/> of the pair scaled by 2^-E (E the larger exponent
+        /// of the nonzero maxima), times 2^E.
+        /// </summary>
+        internal static long? FrameDcBoundExponent(FloatExp maxAbsRe, FloatExp maxAbsIm)
+        {
+            if (maxAbsRe.IsZero && maxAbsIm.IsZero)
+                return null;
+            long exponent = maxAbsIm.IsZero ? maxAbsRe.E : maxAbsRe.IsZero ? maxAbsIm.E : Math.Max(maxAbsRe.E, maxAbsIm.E);
+            double m = Mag(maxAbsRe.Scaled(exponent), maxAbsIm.Scaled(exponent));   // in [1, 2√2]
+            int binade = FloatExp.Binade(m);
+            return exponent + (m == FloatExp.Pow2(binade) ? binade : binade + 1);
+        }
+
+        /// <summary>
+        /// T1's merge in floatexp: num = r2 − |B_x|·2^k; num &gt; 0 ? min(r1, num / |A_x|) : 0,
+        /// |A_x| = 0 keeping r1 (and its +∞); a magnitude that is not finite gives 0 (such an
+        /// entry is dead anyway: its own coefficients cannot be finite).
+        /// </summary>
+        private static FloatExp MergeX(
+            FloatExp r1, bool r1Infinite, FloatExp r2, double ar, double ai, double br, double bi, long? dcExponent,
+            out bool infinite)
+        {
+            infinite = false;
+            double magA = Mag(ar, ai), magB = Mag(br, bi);
+            if (double.IsNaN(magA) || double.IsInfinity(magA) || double.IsNaN(magB) || double.IsInfinity(magB))
+                return FloatExp.Zero;
+            FloatExp term = dcExponent.HasValue ? FloatExp.Normalize(magB, dcExponent.Value) : FloatExp.Zero;
+            FloatExp num = FloatExp.Sub(r2, term);
+            if (!(num.M > 0.0))
+                return FloatExp.Zero;
+            if (magA == 0.0)
+            {
+                infinite = r1Infinite;
+                return r1;
+            }
+            FloatExp q = FloatExp.Div(num, FloatExp.FromDouble(magA));
+            return r1Infinite || FloatExp.Compare(q, r1) < 0 ? q : r1;
+        }
+
+        /// <summary>The dead rule at T2: live only if the radius is positive and finite and |A|, |B| &lt; 2^960.</summary>
+        private static FloatExp AliveX(FloatExp r, bool infinite, double ar, double ai, double br, double bi)
+            => r.M > 0.0 && !infinite && Mag(ar, ai) < Cap && Mag(br, bi) < Cap ? r : FloatExp.Zero;
+
+        /// <summary>
+        /// The T2 table (spec/deep-zoom.md "BLA at T2"): <see cref="Build"/>'s recurrences for A
+        /// and B carried in double-double (<see cref="Dd"/>), each entry storing the hi of each
+        /// component, and its radii in floatexp with the dc bound 2^dcExponent (null: zero),
+        /// from those stored values. A step at a small index (<paramref name="small"/>, the
+        /// orbit's small table) has radius 0, so no span containing one is ever taken: its
+        /// float64 sample may have lost bits.
+        /// </summary>
+        internal static BlaTableX BuildX(
+            double[] orbitRe, double[] orbitIm, bool[] small, int samples, double escapeRadius, long? dcExponent)
+        {
+            if (samples < 1 || samples > orbitRe.Length || samples > orbitIm.Length || samples > small.Length)
+                throw new ArgumentOutOfRangeException(nameof(samples));
+            double r2 = escapeRadius * escapeRadius;
+            int extent = samples - 1;
+            for (int k = 1; k < samples; k++)
+            {
+                if (orbitRe[k] * orbitRe[k] + orbitIm[k] * orbitIm[k] > r2)
+                {
+                    extent = k;
+                    break;
+                }
+            }
+            int n0 = Math.Max(extent, 0) / Stride;
+            if (n0 == 0)
+                return new BlaTableX(new double[0][], new double[0][], new double[0][], new double[0][], new FloatExp[0][], extent);
+            int levels = 1;
+            for (int count = n0; levels < LevelCap && count >= 2; count /= 2)
+                levels++;
+            var ar = new double[levels][];
+            var ai = new double[levels][];
+            var br = new double[levels][];
+            var bi = new double[levels][];
+            var r = new FloatExp[levels][];
+            // The lo parts, level by level: a merge reads its children's pairs.
+            var arLo = new double[levels][];
+            var aiLo = new double[levels][];
+            var brLo = new double[levels][];
+            var biLo = new double[levels][];
+            ar[0] = new double[n0];
+            ai[0] = new double[n0];
+            br[0] = new double[n0];
+            bi[0] = new double[n0];
+            arLo[0] = new double[n0];
+            aiLo[0] = new double[n0];
+            brLo[0] = new double[n0];
+            biLo[0] = new double[n0];
+            r[0] = new FloatExp[n0];
+            for (int block = 0; block < n0; block++)
+            {
+                Dd xar = new Dd(1.0, 0.0), xai = new Dd(0.0, 0.0), xbr = new Dd(0.0, 0.0), xbi = new Dd(0.0, 0.0);
+                FloatExp radius = FloatExp.Zero;
+                bool infinite = true;
+                for (int j = 0; j < Stride; j++)
+                {
+                    int index = block * Stride + j;
+                    double zr = orbitRe[index], zi = orbitIm[index];
+                    var sr = new Dd(2.0 * zr, 0.0);
+                    var si = new Dd(2.0 * zi, 0.0);
+                    // eps·|Z|, exact; 0 at a small index
+                    FloatExp step = small[index] ? FloatExp.Zero : FloatExp.Normalize(Mag(zr, zi), -53);
+                    radius = MergeX(radius, infinite, step, xar.Hi, xai.Hi, xbr.Hi, xbi.Hi, dcExponent, out infinite);
+                    Dd.CMul(sr, si, xbr, xbi, out Dd abr, out Dd abi);
+                    Dd.CMul(sr, si, xar, xai, out Dd nar, out Dd nai);
+                    xbr = Dd.Add(abr, new Dd(1.0, 0.0));
+                    xbi = abi;
+                    xar = nar;
+                    xai = nai;
+                }
+                ar[0][block] = xar.Hi;
+                ai[0][block] = xai.Hi;
+                br[0][block] = xbr.Hi;
+                bi[0][block] = xbi.Hi;
+                arLo[0][block] = xar.Lo;
+                aiLo[0][block] = xai.Lo;
+                brLo[0][block] = xbr.Lo;
+                biLo[0][block] = xbi.Lo;
+                r[0][block] = AliveX(radius, infinite, xar.Hi, xai.Hi, xbr.Hi, xbi.Hi);
+            }
+            for (int level = 1; level < levels; level++)
+            {
+                int count = r[level - 1].Length / 2;
+                ar[level] = new double[count];
+                ai[level] = new double[count];
+                br[level] = new double[count];
+                bi[level] = new double[count];
+                arLo[level] = new double[count];
+                aiLo[level] = new double[count];
+                brLo[level] = new double[count];
+                biLo[level] = new double[count];
+                r[level] = new FloatExp[count];
+                int below = level - 1;
+                for (int k = 0; k < count; k++)
+                {
+                    int x = 2 * k, y = 2 * k + 1;
+                    var xar = new Dd(ar[below][x], arLo[below][x]);
+                    var xai = new Dd(ai[below][x], aiLo[below][x]);
+                    var xbr = new Dd(br[below][x], brLo[below][x]);
+                    var xbi = new Dd(bi[below][x], biLo[below][x]);
+                    var yar = new Dd(ar[below][y], arLo[below][y]);
+                    var yai = new Dd(ai[below][y], aiLo[below][y]);
+                    var ybr = new Dd(br[below][y], brLo[below][y]);
+                    var ybi = new Dd(bi[below][y], biLo[below][y]);
+                    Dd.CMul(yar, yai, xar, xai, out Dd nar, out Dd nai);
+                    Dd.CMul(yar, yai, xbr, xbi, out Dd pr, out Dd pi);
+                    Dd nbr = Dd.Add(pr, ybr);
+                    Dd nbi = Dd.Add(pi, ybi);
+                    FloatExp radius = MergeX(
+                        r[below][x], false, r[below][y], xar.Hi, xai.Hi, xbr.Hi, xbi.Hi, dcExponent, out bool infinite);
+                    ar[level][k] = nar.Hi;
+                    ai[level][k] = nai.Hi;
+                    br[level][k] = nbr.Hi;
+                    bi[level][k] = nbi.Hi;
+                    arLo[level][k] = nar.Lo;
+                    aiLo[level][k] = nai.Lo;
+                    brLo[level][k] = nbr.Lo;
+                    biLo[level][k] = nbi.Lo;
+                    r[level][k] = AliveX(radius, infinite, nar.Hi, nai.Hi, nbr.Hi, nbi.Hi);
+                }
+            }
+            return new BlaTableX(ar, ai, br, bi, r, extent);
+        }
+
+        /// <summary>
+        /// Double-double (spec/deep-zoom.md "BLA at T2", "Coefficients"): a value is Hi + Lo, two
+        /// doubles; every operation is plain IEEE float64 with no fused multiply-add, in the
+        /// Python reference's order, so both ports agree bit for bit.
+        /// </summary>
+        private readonly struct Dd
+        {
+            private const double Splitter = 134217729.0;   // 2^27 + 1, Dekker's
+
+            internal readonly double Hi;
+            internal readonly double Lo;
+
+            internal Dd(double hi, double lo)
+            {
+                Hi = hi;
+                Lo = lo;
+            }
+
+            private static Dd TwoSum(double a, double b)
+            {
+                double s = a + b;
+                double bb = s - a;
+                return new Dd(s, (a - (s - bb)) + (b - bb));
+            }
+
+            private static Dd QuickTwoSum(double a, double b)
+            {
+                double s = a + b;
+                return new Dd(s, b - (s - a));
+            }
+
+            private static void Split(double a, out double hi, out double lo)
+            {
+                double t = Splitter * a;
+                hi = t - (t - a);
+                lo = a - hi;
+            }
+
+            private static Dd TwoProd(double a, double b)
+            {
+                double p = a * b;
+                Split(a, out double ah, out double al);
+                Split(b, out double bh, out double bl);
+                return new Dd(p, (((ah * bh - p) + ah * bl) + al * bh) + al * bl);
+            }
+
+            internal static Dd Mul(Dd x, Dd y)
+            {
+                Dd p = TwoProd(x.Hi, y.Hi);
+                return QuickTwoSum(p.Hi, p.Lo + (x.Hi * y.Lo + x.Lo * y.Hi));
+            }
+
+            internal static Dd Add(Dd x, Dd y)
+            {
+                Dd s = TwoSum(x.Hi, y.Hi);
+                return QuickTwoSum(s.Hi, s.Lo + (x.Lo + y.Lo));
+            }
+
+            private Dd Neg() => new Dd(-Hi, -Lo);
+
+            /// <summary>(x.re y.re − x.im y.im, x.re y.im + x.im y.re).</summary>
+            internal static void CMul(Dd xr, Dd xi, Dd yr, Dd yi, out Dd pr, out Dd pi)
+            {
+                pr = Add(Mul(xr, yr), Mul(xi, yi).Neg());
+                pi = Add(Mul(xr, yi), Mul(xi, yr));
+            }
+        }
+    }
+
+    /// <summary>
+    /// A T2 BLA table (spec/deep-zoom.md "BLA at T2"): <see cref="BlaTable"/>'s coefficients
+    /// with each radius in floatexp (zero = dead).
+    /// </summary>
+    internal sealed class BlaTableX
+    {
+        internal BlaTableX(double[][] ar, double[][] ai, double[][] br, double[][] bi, FloatExp[][] r, int extent)
+        {
+            Ar = ar;
+            Ai = ai;
+            Br = br;
+            Bi = bi;
+            R = r;
+            Extent = extent;
+        }
+
+        internal double[][] Ar { get; }
+        internal double[][] Ai { get; }
+        internal double[][] Br { get; }
+        internal double[][] Bi { get; }
+        internal FloatExp[][] R { get; }
+
+        /// <summary>k*: the steps tabulated are 0 .. Extent - 1.</summary>
+        internal int Extent { get; }
+
+        internal int Levels => R.Length;
+
+        /// <summary>Whether any entry can ever be taken (a parent is dead when its left child is).</summary>
+        internal bool Live
+        {
+            get
+            {
+                if (R.Length == 0)
+                    return false;
+                foreach (FloatExp r in R[0])
+                    if (r.M > 0.0)
+                        return true;
+                return false;
+            }
+        }
     }
 }

@@ -130,6 +130,16 @@ def sub(a: X, b: X) -> X:
     return add(a, neg(b))
 
 
+def div(a: X, b: X) -> X:
+    """a / b for a nonzero b: normalize(a.m / b.m, a.e - b.e), one IEEE division, so
+    correctly rounded (the quotient of two mantissas lies in (1/2, 2))."""
+    if b[0] == 0.0:
+        raise ZeroDivisionError("floatexp division by zero")
+    if a[0] == 0.0:
+        return ZERO
+    return normalize(a[0] / b[0], a[1] - b[1])
+
+
 def compare(a: X, b: X) -> int:
     """-1, 0 or 1 as a <, =, > b (a total order on values; zero has no sign)."""
     sa = (a[0] > 0.0) - (a[0] < 0.0)
@@ -206,6 +216,11 @@ def vadd(am: FloatArray, ae: IntArray, bm: FloatArray, be: IntArray) -> tuple[Fl
     m = np.where(a_zero, bm, np.where(b_zero, am, m))
     e = np.where(a_zero, be, np.where(b_zero, ae, e))
     return m, e.astype(np.int64)
+
+
+def vdiv(am: FloatArray, ae: IntArray, bm: FloatArray, be: IntArray) -> tuple[FloatArray, IntArray]:
+    """div elementwise; every b must be nonzero."""
+    return vnormalize(am / bm, ae - be)
 
 
 def vto_double(m: FloatArray, e: IntArray) -> FloatArray:

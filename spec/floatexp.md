@@ -67,6 +67,9 @@ below `2^18`.
   - Otherwise the result is `normalize(a.m + b.m · 2^−gap, a.e)`. The scaling is exact
     (`|b.m · 2^−gap| ≥ 2^−64`), and the IEEE add rounds once.
   - `sub(a, b) = add(a, neg(b))`.
+- **div(a, b)**, for a nonzero `b` (BLA at T2's radii): zero if `a` is zero, else
+  `normalize(a.m / b.m, a.e − b.e)`. The quotient of two mantissas lies in `(1/2, 2)`, so
+  the one IEEE division is the only rounding: correctly rounded.
 - **compare(a, b)**: sign first (zero has none), then the exponent, then `|m|`, the
   order reversed for negatives. It is a total order on values.
 - **to_double(x)**, the double nearest `x`, rounded once:
@@ -94,5 +97,6 @@ subnormal exactly while denormals-are-zero is off (deep-zoom.md "Platform contra
 
 `vectors/floatexp/` pins the operations at their boundaries: add at gaps 63, 64 and 65,
 ties to even, cancellation to zero, `to_double` at `−1022`, `−1074` and `−2044`, the
-`from_fixed` carry, the floor, and `compare` with zeros, signs and exponents. Each input and output is a mantissa bit pattern and
+`from_fixed` carry, the floor, and `compare` with zeros, signs and exponents;
+`vectors/floatexp/division` pins `div`. Each input and output is a mantissa bit pattern and
 an exponent. [pow10.md](pow10.md) "Floatexp" pins `pow10x`.

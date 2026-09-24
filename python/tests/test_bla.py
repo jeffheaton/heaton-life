@@ -4,6 +4,7 @@ equality where nothing engages, and the counts against direct iteration."""
 
 from __future__ import annotations
 
+import json
 import math
 import sys
 from pathlib import Path
@@ -11,19 +12,23 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from heaton_life.core.bignum import reference_orbit
+from heaton_life.core.bignum import reference_orbit, reference_orbit_x
 from heaton_life.core.viewport import Viewport
 from heaton_life.fractal import Julia, Mandelbrot
 from heaton_life.fractal.bla import (
     EPSILON,
     STRIDE,
+    BlaTable,
+    BlaTableX,
     build_table,
+    build_table_t2,
     ceil_power_of_two,
     frame_dc_bound,
+    frame_dc_bound_exponent,
     mag,
     perturb_z2_bla,
 )
-from heaton_life.fractal.engine import pixel_deltas, pixel_scale
+from heaton_life.fractal.engine import pixel_deltas, pixel_deltas_x, pixel_scale
 from heaton_life.fractal.perturbation import perturb_z2
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
@@ -32,6 +37,7 @@ from gen_vectors import (
     ELEVEN_DIMENSIONS_RE,
     NUCLEUS_P16,
     NUCLEUS_P1959,
+    P830_CENTER,
     _shifted,
 )
 
@@ -49,7 +55,7 @@ def _scalar(
     """The per-pixel loop exactly as spec/deep-zoom.md "BLA" writes it, one pixel at a
     time (the C# port's shape), for the vectorized one to match. ``events`` counts the
     rare branches: an escape or a rebase right after a skip, a span cut by max_iter."""
-    levels = table.levels  # type: ignore[attr-defined]
+    levels = table.levels
     sizes = [level.r.size for level in levels]
     last = len(orbit) - 1
     tally = events if events is not None else {}
@@ -209,7 +215,7 @@ def test_where_nothing_engages_bla_is_bla_off() -> None:
     assert np.array_equal(counts.reshape(32, 32), on.counts)
 
 
-def test_bla_is_opt_in_and_t1_only() -> None:
+def test_bla_is_opt_in_and_off_at_t0() -> None:
     home = Viewport("-0.5", "0.0", 0.0)
     a = Mandelbrot(max_iter=300, bla=True).fields((16, 16), home, bla_applications=True)
     b = Mandelbrot(max_iter=300).fields((16, 16), home, bla_applications=True)
@@ -283,3 +289,113 @@ def test_the_rare_branches_stay_covered(case: str, event: str) -> None:
     skips = np.frombuffer((root / "bla_applications.i32").read_bytes(), dtype="<i4")
     assert counts == stored.tolist() and applied == skips.tolist()
     assert events[event] > 0, events
+
+
+def _t1_frame_tables(small_at: tuple[int, ...] = ()) -> tuple[BlaTable, BlaTableX]:
+    """A zoom-100 frame near the p830 minibrot: T1's table and the T2 table of the same
+    orbit and frame (``small_at``: indices to flag small)."""
+    vp = Viewport(P830_CENTER[:120], "1e-100", 100.0)
+    orbit = reference_orbit_x("mandelbrot", *vp.orbit_center, 100.0, 11620)
+    small = np.zeros(len(orbit.samples), dtype=bool)
+    small[orbit.small.index] = True
+    small[list(small_at)] = True
+    t1 = build_table(orbit.samples, 1000.0, frame_dc_bound(pixel_deltas((16, 16), vp)))
+    dx = pixel_deltas_x((16, 16), vp)
+    k = frame_dc_bound_exponent(dx.rm, dx.re, dx.im, dx.ie)
+    assert k is not None and 2.0**k == frame_dc_bound(pixel_deltas((16, 16), vp))
+    return t1, build_table_t2(orbit.samples, small, 1000.0, k)
+
+
+def test_the_t2_coefficients_are_correctly_rounded() -> None:
+    """spec/deep-zoom.md "BLA at T2": T1's recurrences carried in double-double, each entry
+    storing the hi -- measured equal to the exactly computed coefficient rounded once, on
+    every live entry of levels 0-3 of two complex stored orbits."""
+    from fractions import Fraction
+
+    root = Path(__file__).resolve().parents[2] / "vectors" / "mandelbrot"
+    for name in ("bla-p1959-zoom30-16", "bla-11dim-offref-zoom30-24"):
+        case = root / name
+        max_iter = json.loads((case / "params.json").read_text())["params"]["max_iter"]
+        samples = np.frombuffer((case / "orbit.c128").read_bytes(), dtype="<c16")[: max_iter + 1]
+        table = build_table_t2(samples, np.zeros(samples.size, dtype=bool), 1000.0, -100)
+        exact_a: list[tuple[Fraction, Fraction]] = []
+        exact_b: list[tuple[Fraction, Fraction]] = []
+        for k in range(table.levels[0].rm.size):
+            a, b = (Fraction(1), Fraction(0)), (Fraction(0), Fraction(0))
+            for j in range(STRIDE):
+                z = samples[k * STRIDE + j]
+                sr, si = 2 * Fraction(z.real), 2 * Fraction(z.imag)
+                b = (sr * b[0] - si * b[1] + 1, sr * b[1] + si * b[0])
+                a = (sr * a[0] - si * a[1], sr * a[1] + si * a[0])
+            exact_a.append(a)
+            exact_b.append(b)
+        checked = 0
+        for level in table.levels[:4]:
+            for k, (a, b) in enumerate(zip(exact_a, exact_b, strict=True)):
+                if level.rm[k] > 0:
+                    got = (level.ar[k], level.ai[k], level.br[k], level.bi[k])
+                    assert got == (float(a[0]), float(a[1]), float(b[0]), float(b[1])), (name, k)
+                    checked += 1
+            pairs = range(len(exact_a) // 2)
+            ya = [exact_a[2 * k + 1] for k in pairs]
+            xa = [exact_a[2 * k] for k in pairs]
+            xb = [exact_b[2 * k] for k in pairs]
+            yb = [exact_b[2 * k + 1] for k in pairs]
+            exact_a = [
+                (y[0] * x[0] - y[1] * x[1], y[0] * x[1] + y[1] * x[0]) for y, x in zip(ya, xa)
+            ]
+            exact_b = [
+                (y[0] * x[0] - y[1] * x[1] + c[0], y[0] * x[1] + y[1] * x[0] + c[1])
+                for y, x, c in zip(ya, xb, yb)
+            ]
+        assert checked > 900
+
+
+@pytest.mark.parametrize(
+    ("mx", "my", "k"),
+    [
+        ((1.0, -100), (0.0, 0), -100),  # |dc| exactly 2^-100: its own power of two
+        ((1.5, -100), (1.0, -100), -99),  # sqrt(1.5^2 + 1) = 1.80: up to 2^-99
+        ((0.0, 0), (1.0, -5), -5),  # a zero real part (a one-column frame)
+        ((1.0, -100), (1.0, -200), -100),  # the smaller part scales to 2^-100: m = 1
+        ((1.25, -3000), (1.75, -3000), -2998),  # sqrt(1.25^2 + 1.75^2) = 2.15
+        ((0.0, 0), (0.0, 0), None),  # every delta zero: no bound
+        ((1.0, -100), (1.0, -1500), -100),  # E is the larger exponent (the other scales to 0)
+    ],
+)
+def test_frame_dc_bound_exponent(
+    mx: tuple[float, int], my: tuple[float, int], k: int | None
+) -> None:
+    """spec/deep-zoom.md "BLA at T2", the frame's bound: E the larger exponent of the
+    nonzero maxima, m = mag of the pair scaled by 2^-E, k = E + the least j with 2^j >= m."""
+    got = frame_dc_bound_exponent(
+        np.array([mx[0]]), np.array([mx[1]]), np.array([my[0]]), np.array([my[1]])
+    )
+    assert got == k
+
+
+def test_the_t2_table_never_spans_a_small_index() -> None:
+    """A step at a small index has radius 0: every entry whose span contains it is dead,
+    and no other entry changes."""
+    _, clean = _t1_frame_tables()
+    _, marked = _t1_frame_tables(small_at=(44,))
+    for level_index, (a, b) in enumerate(zip(clean.levels, marked.levels, strict=True)):
+        span = STRIDE << level_index
+        covers = np.arange(a.rm.size) == 44 // span
+        assert not b.rm[covers].any()
+        assert np.array_equal(a.rm[~covers], b.rm[~covers])
+        assert np.array_equal(a.re[~covers], b.re[~covers])
+    assert clean.levels[0].rm[44 // STRIDE] > 0
+
+
+def test_the_t2_table_stops_where_t1_does() -> None:
+    """The T2 table's extent is T1's k*: the first sample past R, not the orbit's end."""
+    root = Path(__file__).resolve().parents[2] / "vectors" / "mandelbrot"
+    for name in ("bla-landing-escape-8", "bla-p1959-zoom30-16", "bla-11dim-zoom30-32"):
+        case = root / name
+        max_iter = json.loads((case / "params.json").read_text())["params"]["max_iter"]
+        samples = np.frombuffer((case / "orbit.c128").read_bytes(), dtype="<c16")[: max_iter + 1]
+        t1 = build_table(samples, 1000.0, 0.0)
+        t2 = build_table_t2(samples, np.zeros(samples.size, dtype=bool), 1000.0, None)
+        assert t2.extent == t1.extent
+        assert [level.rm.size for level in t2.levels] == [level.r.size for level in t1.levels]

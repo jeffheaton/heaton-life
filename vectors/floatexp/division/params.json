@@ -1,0 +1,87 @@
+{
+  "cases": [
+    {
+      "a": [
+        "0x3FF0000000000000",
+        0
+      ],
+      "b": [
+        "0x3FF8000000000000",
+        0
+      ],
+      "expected": [
+        "0x3FF5555555555555",
+        -1
+      ],
+      "note": "2/3: one rounding, renormalized up a binade",
+      "op": "div"
+    },
+    {
+      "a": [
+        "0x3FF8000000000000",
+        3000
+      ],
+      "b": [
+        "0x3FF4000000000000",
+        -3000
+      ],
+      "expected": [
+        "0x3FF3333333333333",
+        6000
+      ],
+      "note": "exponents subtract: no range limit",
+      "op": "div"
+    },
+    {
+      "a": [
+        "0xBFFFFFFFFFFFFFFF",
+        -5
+      ],
+      "b": [
+        "0x3FF0000000000001",
+        7
+      ],
+      "expected": [
+        "0xBFFFFFFFFFFFFFFD",
+        -12
+      ],
+      "note": "mixed signs",
+      "op": "div"
+    },
+    {
+      "a": [
+        "0x3FF4000000000000",
+        0
+      ],
+      "b": [
+        "0x3FF4000000000000",
+        9
+      ],
+      "expected": [
+        "0x3FF0000000000000",
+        -9
+      ],
+      "note": "an exact quotient",
+      "op": "div"
+    },
+    {
+      "a": [
+        "0x0000000000000000",
+        0
+      ],
+      "b": [
+        "0x3FF8000000000000",
+        -9000
+      ],
+      "expected": [
+        "0x0000000000000000",
+        0
+      ],
+      "note": "zero over b is zero",
+      "op": "div"
+    }
+  ],
+  "family": "floatexp",
+  "spec_version": "0.10.0",
+  "tier": "bit-exact"
+}

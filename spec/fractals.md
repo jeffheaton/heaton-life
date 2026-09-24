@@ -196,11 +196,12 @@ Coloring with it: [fractal-color.md](fractal-color.md).
   unconverged) and `iterations` (1-based, −1 if unconverged). Roots are
   `exp(2πik/d)`, k = 0..d−1.
 
-## BLA (Mandelbrot, T1, opt-in)
+## BLA (Mandelbrot, T1 and T2, opt-in)
 
 `Mandelbrot(bla=True)` skips whole spans of the reference orbit where a pixel follows it
-linearly: [deep-zoom.md](deep-zoom.md#bla-bivariate-linear-approximation-mandelbrot-opt-in).
-Counts differ from BLA-off only on float64-chaotic pixels; BLA cases are bit-exact among
+linearly: [deep-zoom.md](deep-zoom.md#bla-bivariate-linear-approximation-mandelbrot-opt-in),
+and past zoom 290 [BLA at T2](deep-zoom.md#bla-at-t2). Counts differ from BLA-off only
+on pixels the float64 orbit and arithmetic cannot resolve; BLA cases are bit-exact among
 themselves.
 
 ## Tiering (automatic)
@@ -254,7 +255,8 @@ or stops the work and **never changes a completed frame's output**:
   be reused frame after frame.
 - **Cancellation** (`CancellationToken`): checked before each row, every 4,096 orbit
   iterations up to 1,024 bits of precision (proportionally more often above, down to
-  every iteration of a T2 Julia orbit), and every 2^16 iterations of a T2 pixel. A canceled render throws `OperationCanceledException` with its output
+  every iteration of a T2 Julia orbit), and every 2^16 passes of a T2 pixel's loop (a
+  plain iteration or a BLA skip is one pass). A canceled render throws `OperationCanceledException` with its output
   buffers partly written; a canceled orbit is never cached.
 - **Caller buffers**: counts and raw smooth values `μ` (before normalization; 0 where
   interior) into the host's arrays, and the normalization into another pair — nothing
@@ -304,6 +306,16 @@ or stops the work and **never changes a completed frame's output**:
   orbit and the frame's `dc_bound`, level by level `ar, ai, br, bi, r`, compared value for
   value with every NaN equal to every NaN — build differences flip table bits on every
   frame but counts only on rare pixels.
+- A T2 BLA case ([deep-zoom.md](deep-zoom.md#bla-at-t2)) carries
+  `"dc_bound_exponent"` at the top level: the integer `k` of the frame's dc bound `2^k`, or
+  `null` when every pixel delta is zero. It is required exactly when `params.bla` is true
+  and `zoom_log10` is past 290, and a runner computes it and compares. Such a case may add
+  a `bla_table_x` output (`bla_table_x.f64`, `"entries"` per level): the T2 table built
+  from the frame's own orbit, small samples and floatexp dc bound, level by level the
+  coefficients' `ar, ai, br, bi` (each the `hi` of its double-double), the radii's
+  mantissas, then their exponents (exact as float64), compared value for value with every
+  NaN equal to every NaN (an overflowed dead entry stores NaN, whose sign varies by
+  platform).
 - A T2 case ([deep-zoom.md](deep-zoom.md#t2-perturbation-past-1e290), zoom past 290)
   ships no orbit file: its orbits run to tens of thousands of bits. It carries
   `"reference_small"` (and, for Julia, `"critical_small"`) =

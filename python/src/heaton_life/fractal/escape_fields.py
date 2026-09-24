@@ -16,7 +16,13 @@ from numpy.typing import NDArray
 from heaton_life.core.bignum import reference_orbit, reference_orbit_x
 from heaton_life.core.params import Params
 from heaton_life.core.viewport import Viewport
-from heaton_life.fractal.bla import build_table, frame_dc_bound, perturb_z2_bla
+from heaton_life.fractal.bla import (
+    build_table,
+    build_table_t2,
+    frame_dc_bound,
+    frame_dc_bound_exponent,
+    perturb_z2_bla,
+)
 from heaton_life.fractal.engine import (
     CARDIOID_OR_BULB,
     ESCAPED,
@@ -52,7 +58,7 @@ from heaton_life.fractal.perturbation_t2 import T2Result, XPair, perturb_t2
 # The derivative at escape: (dr, di), or at T2 (dr, di, exponent) for d = (dr, di) 2^exponent.
 Derivative = tuple[FloatArray, FloatArray] | tuple[FloatArray, FloatArray, NDArray[np.int64]]
 # (counts, final z, status, derivative at escape, BLA applications); the last two only
-# when asked for (distance) or taken (BLA at T1).
+# when asked for (distance) or taken (BLA at T1 and T2).
 _Computed = tuple[IntArray, ComplexArray, StatusArray, Derivative | None, IntArray | None]
 _ComputedT1 = tuple[IntArray, ComplexArray, Derivative | None, IntArray | None]
 
@@ -86,7 +92,7 @@ class _EscapeField:
 
     max_zoom_log10 = T2_MAX_ZOOM  # the deepest zoom this family renders
     supports_distance = True  # a distance estimate needs an analytic map (not Burning Ship)
-    supports_bla = False  # bivariate linear approximation at T1 (Mandelbrot only so far)
+    supports_bla = False  # bivariate linear approximation past T0 (Mandelbrot only so far)
 
     def __init__(self, max_iter: int = 500, escape_radius: float = 1000.0) -> None:
         if max_iter < 1:
@@ -228,8 +234,9 @@ class MandelbrotParams(Params):
 
 class Mandelbrot(_EscapeField):
     """z <- z^2 + c, c = pixel, z0 = 0. ``bla`` turns on bivariate linear approximation
-    at T1 (spec/deep-zoom.md "BLA"): far fewer steps at depth, counts that differ from
-    BLA-off only on float64-chaotic pixels -- an algorithm choice, so it is a parameter."""
+    at T1 and T2 (spec/deep-zoom.md "BLA", "BLA at T2"): far fewer steps at depth, counts
+    that differ from BLA-off only on pixels float64 cannot resolve -- an algorithm choice,
+    so it is a parameter."""
 
     supports_bla = True
 
@@ -292,7 +299,6 @@ class Mandelbrot(_EscapeField):
     def _compute_t2(
         self, size: tuple[int, int], viewport: Viewport, distance: bool = False
     ) -> _ComputedT1:
-        # BLA does not run at T2 yet (spec/deep-zoom.md "T2"): the plain T2 loop.
         orbit = reference_orbit_x(
             "mandelbrot", *viewport.orbit_center, viewport.zoom_log10, self.max_iter
         )
@@ -300,17 +306,24 @@ class Mandelbrot(_EscapeField):
         derivative = None
         if distance:
             derivative = (XPair.zeros(dc.rm.size), pixel_scale_x(size, viewport))
+        table = None
+        if self.bla:  # spec/deep-zoom.md "BLA at T2"
+            samples = orbit.samples[: self.max_iter + 1]
+            small = np.zeros(samples.size, dtype=bool)
+            small[orbit.small.index[orbit.small.index < samples.size]] = True
+            k = frame_dc_bound_exponent(dc.rm, dc.re, dc.im, dc.ie)
+            table = build_table_t2(samples, small, self.escape_radius, k)
         result = perturb_t2(
-            orbit, None, dc, self.max_iter, self.escape_radius, derivative=derivative
+            orbit, None, dc, self.max_iter, self.escape_radius, derivative=derivative, table=table
         )
-        return _t2_output(result, distance)
+        return _t2_output(result, distance, bla=self.bla)
 
 
-def _t2_output(result: T2Result, distance: bool) -> _ComputedT1:
+def _t2_output(result: T2Result, distance: bool, bla: bool = False) -> _ComputedT1:
     derivative: Derivative | None = None
     if distance:
         derivative = (result.dr, result.di, result.d_exponent)
-    return result.counts, result.final, derivative, None
+    return result.counts, result.final, derivative, (result.applications if bla else None)
 
 
 @dataclasses.dataclass(frozen=True)

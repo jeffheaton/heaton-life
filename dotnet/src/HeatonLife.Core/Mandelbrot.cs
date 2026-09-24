@@ -13,9 +13,9 @@ namespace HeatonLife
         public double EscapeRadius { get; }
 
         /// <summary>
-        /// Bivariate linear approximation at T1 (spec/deep-zoom.md "BLA"): far fewer steps at
-        /// depth, counts that differ from BLA-off only on float64-chaotic pixels — an algorithm
-        /// choice, so a constructor parameter. T0 ignores it.
+        /// Bivariate linear approximation at T1 and T2 (spec/deep-zoom.md "BLA", "BLA at T2"): far
+        /// fewer steps at depth, counts that differ from BLA-off only on pixels float64 cannot
+        /// resolve — an algorithm choice, so a constructor parameter. T0 ignores it.
         /// </summary>
         public bool Bla { get; }
 
@@ -24,7 +24,7 @@ namespace HeatonLife
         {
         }
 
-        /// <summary>A Mandelbrot field, with <paramref name="bla"/> choosing BLA at T1.</summary>
+        /// <summary>A Mandelbrot field, with <paramref name="bla"/> choosing BLA at T1 and T2.</summary>
         public Mandelbrot(int maxIter, double escapeRadius, int workers, bool bla)
         {
             if (maxIter < 1)
@@ -346,8 +346,9 @@ namespace HeatonLife
 
         /// <summary>
         /// The T2 path (spec/deep-zoom.md "T2"): the orbit and its small samples, floatexp
-        /// pixel deltas, and <see cref="PerturbationT2"/> per pixel. BLA does not run at T2
-        /// yet; statuses are Escaped or Exhausted.
+        /// pixel deltas, and <see cref="PerturbationT2"/> per pixel, with BLA skips when
+        /// <see cref="Bla"/> is on (spec/deep-zoom.md "BLA at T2"); statuses are Escaped or
+        /// Exhausted.
         /// </summary>
         private void ComputeT2(
             int width, int height, Viewport viewport, int[] counts, double[]? mu, RenderProgress? progress,
@@ -365,6 +366,16 @@ namespace HeatonLife
             FloatExp dIm = offCenter ? DecimalText.DifferenceX(viewport.CenterIm, viewport.ReferenceIm!) : FloatExp.Zero;
             double logR = Math.Log(EscapeRadius);
             bool track = distance != null;
+            // BLA at T2 (spec/deep-zoom.md "BLA at T2"): double-double coefficients, floatexp radii
+            // for the frame's dc bound 2^k, built once before rows fan out.
+            BlaTableX? table = null;
+            if (Bla)
+            {
+                int samples = (int)Math.Min(re.Length, (long)MaxIter + 1);
+                table = BlaTable.GetX(re, im, orbit.Small, samples, EscapeRadius, BlaTable.FrameDcBoundExponent(width, height, viewport));
+                if (!table.Live)
+                    table = null;                   // nothing can be taken: the plain loop, bit for bit
+            }
             void Row(int y)
             {
                 FloatExp oy = FractalEngine.OffsetImX(y, height, ps);
@@ -377,8 +388,8 @@ namespace HeatonLife
                         ox = FloatExp.Add(dRe, ox);
                     int count = PerturbationT2.Perturb(
                         orbit, rebase, FloatExp.Zero, FloatExp.Zero, ox, oy, MaxIter, EscapeRadius,
-                        track, FloatExp.Zero, FloatExp.Zero, ps, true,
-                        out double fr, out double fi, out double dr, out double di, out long dE,
+                        track, FloatExp.Zero, FloatExp.Zero, ps, true, table,
+                        out double fr, out double fi, out double dr, out double di, out long dE, out int applied,
                         cancellationToken);
                     counts[y * width + x] = count;
                     if (status != null)
@@ -388,7 +399,7 @@ namespace HeatonLife
                     if (distance != null)
                         distance[y * width + x] = PerturbationT2.DistanceEstimate(count, fr, fi, dr, di, dE);
                     if (blaApplications != null)
-                        blaApplications[y * width + x] = 0;
+                        blaApplications[y * width + x] = applied;
                 }
             }
 

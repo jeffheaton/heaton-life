@@ -1,0 +1,65 @@
+{
+  "dc_bound_exponent": -997,
+  "family": "mandelbrot",
+  "outputs": [
+    {
+      "file": "iterations.i32",
+      "kind": "iterations",
+      "shape": [
+        4,
+        4
+      ]
+    },
+    {
+      "file": "bla_applications.i32",
+      "kind": "bla_applications",
+      "shape": [
+        4,
+        4
+      ]
+    },
+    {
+      "entries": [
+        31,
+        15,
+        7,
+        3,
+        1
+      ],
+      "file": "bla_table_x.f64",
+      "kind": "bla_table_x",
+      "shape": [
+        342
+      ]
+    }
+  ],
+  "params": {
+    "bla": true,
+    "escape_radius": 1000.0,
+    "max_iter": 250
+  },
+  "reference_small": {
+    "length": 251,
+    "rows": [
+      [
+        0,
+        "0x0000000000000000",
+        0,
+        "0x0000000000000000",
+        0
+      ]
+    ],
+    "sha256": "be102cf191f453a9e453a2cc1878fc832afe40fb59f9f75eba06a3a21064724a"
+  },
+  "size": [
+    4,
+    4
+  ],
+  "spec_version": "0.10.0",
+  "tier": "bit-exact",
+  "viewport": {
+    "center_im": "0",
+    "center_re": "1e-90",
+    "zoom_log10": 300.5
+  }
+}

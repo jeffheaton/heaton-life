@@ -19,8 +19,15 @@ import pytest
 from heaton_life.core.bignum import reference_orbit, reference_orbit_x
 from heaton_life.core.viewport import Viewport
 from heaton_life.fractal import BurningShip, Julia, Mandelbrot, Newton
-from heaton_life.fractal.bla import build_table, frame_dc_bound, table_words
-from heaton_life.fractal.engine import orbit_zoom, pixel_deltas
+from heaton_life.fractal.bla import (
+    build_table,
+    build_table_t2,
+    frame_dc_bound,
+    frame_dc_bound_exponent,
+    table_words,
+    table_words_x,
+)
+from heaton_life.fractal.engine import orbit_zoom, pixel_deltas, pixel_deltas_x
 
 VECTOR_ROOT = Path(__file__).resolve().parents[2] / "vectors"
 
@@ -56,6 +63,7 @@ TOP_KEYS = {
     "source",
     "reference_small",
     "critical_small",
+    "dc_bound_exponent",
 }
 PARAM_KEYS = {
     "mandelbrot": {"max_iter", "escape_radius"},
@@ -132,6 +140,13 @@ def test_fractal_vector(case: Path) -> None:
             assert output["file"].endswith(".f64") and "bla" in meta["params"], case
             assert output["shape"] == [5 * sum(output["entries"])], case
             continue
+        if output["kind"] == "bla_table_x":
+            # spec/deep-zoom.md "BLA at T2" (0.10.0): double-double coefficients, floatexp radii.
+            assert set(output) == {"kind", "file", "shape", "entries"}, case
+            assert output["file"].endswith(".f64") and "bla" in meta["params"], case
+            assert output["shape"] == [6 * sum(output["entries"])], case
+            assert _version(meta["spec_version"]) >= (0, 10, 0), f"{case}: T2 table before 0.10.0"
+            continue
         if output["kind"] == "distance":
             # spec/fractals.md "Distance estimate" (0.7.0): float64, relative epsilon.
             assert set(output) == {"kind", "file", "shape", "relative_epsilon"}, case
@@ -147,6 +162,15 @@ def test_fractal_vector(case: Path) -> None:
     field = FIELDS[family](meta["params"])
     viewport = Viewport.from_dict(meta["viewport"])
     size = (meta["size"][0], meta["size"][1])
+    if bla and viewport.zoom_log10 > 290.0:
+        # spec/deep-zoom.md "BLA at T2" (0.10.0): the frame's dc bound exponent, which no
+        # output can show past zoom ~300, is pinned by value (null: every delta zero).
+        assert "dc_bound_exponent" in meta, f"{case}: a T2 BLA case records its bound"
+        deltas = pixel_deltas_x(size, viewport)
+        got_k = frame_dc_bound_exponent(deltas.rm, deltas.re, deltas.im, deltas.ie)
+        assert got_k == meta["dc_bound_exponent"], f"{case}: dc bound exponent"
+    else:
+        assert "dc_bound_exponent" not in meta, f"{case}: a bound without BLA at T2"
 
     produced = dict(field.outputs(size, viewport))
     kinds = {output["kind"] for output in meta["outputs"]}
@@ -178,6 +202,23 @@ def test_fractal_vector(case: Path) -> None:
     assert not bla or "bla_applications" in kinds, f"{case}: a BLA case records its applications"
     for output in meta["outputs"]:
         what = f"{family}/{case_dir.name}: {output['kind']}"
+        if output["kind"] == "bla_table_x":
+            orbit_x = reference_orbit_x(
+                "mandelbrot",
+                *viewport.orbit_center,
+                viewport.zoom_log10,
+                meta["params"]["max_iter"],
+            )
+            samples = orbit_x.samples[: meta["params"]["max_iter"] + 1]
+            small = np.zeros(samples.size, dtype=bool)
+            small[orbit_x.small.index[orbit_x.small.index < samples.size]] = True
+            deltas = pixel_deltas_x(size, viewport)
+            k = frame_dc_bound_exponent(deltas.rm, deltas.re, deltas.im, deltas.ie)
+            table_x = build_table_t2(samples, small, meta["params"]["escape_radius"], k)
+            assert [int(level.rm.size) for level in table_x.levels] == output["entries"], what
+            want = np.frombuffer((case_dir / output["file"]).read_bytes(), dtype="<f8")
+            assert np.array_equal(table_words_x(table_x), want, equal_nan=True), what
+            continue
         if output["kind"] == "bla_table":
             stored_orbit = np.frombuffer(
                 (case_dir / meta["reference_orbit"]["file"]).read_bytes(), dtype="<c16"

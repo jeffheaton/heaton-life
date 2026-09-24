@@ -18,6 +18,7 @@ namespace HeatonLife.Tests
             ["add"] = new[] { "a", "b" },
             ["mul"] = new[] { "a", "b" },
             ["compare"] = new[] { "a", "b" },
+            ["div"] = new[] { "a", "b" },
             ["to_double"] = new[] { "a" },
             ["from_fixed"] = new[] { "value", "bits" },
             ["normalize"] = new[] { "value", "exponent" },
@@ -26,13 +27,24 @@ namespace HeatonLife.Tests
         [Fact]
         public void Operations()
         {
-            string path = Path.Combine(TestPaths.VectorRoot(), "floatexp", "operations", "params.json");
+            var names = new List<string>();
+            foreach (string dir in Directory.GetDirectories(Path.Combine(TestPaths.VectorRoot(), "floatexp")))
+                names.Add(Path.GetFileName(dir));
+            names.Sort(StringComparer.Ordinal);
+            Assert.Equal(new[] { "division", "operations" }, names);
+            var seen = new HashSet<string>();
+            foreach (string name in names)
+                Replay(Path.Combine(TestPaths.VectorRoot(), "floatexp", name, "params.json"), seen);
+            Assert.True(seen.SetEquals(Keys.Keys));
+        }
+
+        private static void Replay(string path, HashSet<string> seen)
+        {
             using var doc = JsonDocument.Parse(File.ReadAllText(path));
             var root = doc.RootElement;
             Assert.Equal("0.10.0", root.GetProperty("spec_version").GetString());
             Assert.Equal("floatexp", root.GetProperty("family").GetString());
             Assert.Equal("bit-exact", root.GetProperty("tier").GetString());
-            var seen = new HashSet<string>();
             foreach (var c in root.GetProperty("cases").EnumerateArray())
             {
                 string op = c.GetProperty("op").GetString()!;
@@ -53,6 +65,9 @@ namespace HeatonLife.Tests
                     case "mul":
                         AssertX(expected, FloatExp.Mul(X(c.GetProperty("a")), X(c.GetProperty("b"))), note);
                         break;
+                    case "div":
+                        AssertX(expected, FloatExp.Div(X(c.GetProperty("a")), X(c.GetProperty("b"))), note);
+                        break;
                     case "compare":
                         Assert.True(expected.GetInt32() == FloatExp.Compare(X(c.GetProperty("a")), X(c.GetProperty("b"))), note);
                         break;
@@ -67,7 +82,6 @@ namespace HeatonLife.Tests
                         break;
                 }
             }
-            Assert.True(seen.SetEquals(Keys.Keys));
         }
 
         [Fact]

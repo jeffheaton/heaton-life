@@ -101,6 +101,17 @@ namespace HeatonLife
 
         internal static FloatExp Sub(FloatExp a, FloatExp b) => Add(a, b.Neg());
 
+        /// <summary>
+        /// a / b for a nonzero b: Normalize(a.M / b.M, a.E − b.E), one IEEE division, so
+        /// correctly rounded (the quotient of two mantissas lies in (1/2, 2)).
+        /// </summary>
+        internal static FloatExp Div(FloatExp a, FloatExp b)
+        {
+            if (b.IsZero)
+                throw new DivideByZeroException("floatexp division by zero");
+            return a.IsZero ? Zero : Normalize(a.M / b.M, a.E - b.E);
+        }
+
         /// <summary>-1, 0 or 1 as a &lt;, =, &gt; b (a total order on values; zero has no sign).</summary>
         internal static int Compare(FloatExp a, FloatExp b)
         {

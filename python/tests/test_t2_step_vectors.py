@@ -12,6 +12,7 @@ import pytest
 
 from heaton_life.core import floatexp as fx
 from heaton_life.core.bignum import OrbitX, SmallSamples
+from heaton_life.fractal.bla import build_table_t2, table_words_x
 from heaton_life.fractal.perturbation_t2 import XPair, perturb_t2
 
 ROOT = Path(__file__).resolve().parents[2] / "vectors" / "t2-steps"
@@ -73,18 +74,28 @@ def _pair(data: list[Any] | None) -> XPair | None:
 
 def test_every_case_is_listed() -> None:
     assert CASES == [
+        "bla-branch-order",
+        "bla-complex-skip",
+        "bla-dc-bad",
+        "bla-dc-left-child",
+        "bla-dead-before-merge",
+        "bla-dead-rules",
+        "bla-deep-radius",
+        "bla-loop-end",
+        "bla-radius-tie",
         "delta-gap",
         "derivative-gap",
         "final-inf-imaginary",
         "final-inf-real",
         "huge-sample",
+        "loop-end",
     ]
 
 
 @pytest.mark.parametrize("name", CASES)
 def test_t2_step(name: str) -> None:
     meta = json.loads((ROOT / name / "params.json").read_text())
-    assert set(meta) == KEYS
+    assert set(meta) - {"bla"} == KEYS
     assert (meta["spec_version"], meta["family"], meta["tier"]) == (
         "0.10.0",
         "t2-steps",
@@ -97,6 +108,14 @@ def test_t2_step(name: str) -> None:
         assert set(meta["derivative"]) == {"d0", "add"}
         add = meta["derivative"]["add"]
         derivative = (_pair(meta["derivative"]["d0"]), None if add is None else _x(add))
+    table = None
+    if "bla" in meta:
+        # BLA at T2 (spec/deep-zoom.md "BLA at T2"): the table from the crafted orbit.
+        assert set(meta["bla"]) == {"dc_exponent"} and meta["rebase_orbit"] is None
+        samples = orbit.samples[: meta["max_iter"] + 1]
+        small = np.zeros(samples.size, dtype=bool)
+        small[orbit.small.index[orbit.small.index < samples.size]] = True
+        table = build_table_t2(samples, small, meta["escape_radius"], meta["bla"]["dc_exponent"])
     stats: dict[str, int] = {}
     result = perturb_t2(
         orbit,
@@ -107,15 +126,28 @@ def test_t2_step(name: str) -> None:
         rebase_orbit=rebase,
         derivative=derivative,  # type: ignore[arg-type]
         stats=stats,
+        table=table,
     )
     for path in meta["paths"]:
         assert stats.get(path, 0) > 0, f"{path} never ran"
     expected = meta["expected"]
-    assert set(expected) == {"count", "final", "derivative"}
+    extra = {"applications", "table"} if table is not None else set()
+    assert set(expected) == {"count", "final", "derivative"} | extra
     assert int(result.counts[0]) == expected["count"]
     assert [_bits(result.final[0].real), _bits(result.final[0].imag)] == expected["final"]
     got = [_bits(float(result.dr[0])), _bits(float(result.di[0])), int(result.d_exponent[0])]
     assert got == expected["derivative"]
+    if table is not None:
+        assert int(result.applications[0]) == expected["applications"]
+        # Every NaN equals every NaN (spec/fractals.md, tables): a dead entry's overflowed
+        # coefficient is NaN, and the sign of a default NaN depends on the platform.
+        want = np.array([_double(w) for w in expected["table"]])
+        assert np.array_equal(table_words_x(table), want, equal_nan=True)
+        got_bits = [_bits(float(w)) for w in table_words_x(table)]
+        numbers = ~np.isnan(want)  # and every other word bit for bit (-0.0 included)
+        assert [g for g, keep in zip(got_bits, numbers, strict=True) if keep] == [
+            b for b, keep in zip(expected["table"], numbers, strict=True) if keep
+        ]
 
 
 RARE_PATHS = {
@@ -128,6 +160,9 @@ RARE_PATHS = {
     "rebase_normal",
     "d_slow_small",
     "d_slow_gap",
+    "bla_skip",
+    "bla_skip_escape",  # a skip that lands on an escape
+    "bla_skip_small",  # a skip that lands on a small index
 }
 
 
@@ -152,7 +187,7 @@ def test_every_rare_path_runs_in_some_vector(monkeypatch: pytest.MonkeyPatch) ->
         field = (
             Julia(c=complex(p["c_re"], p["c_im"]), max_iter=p["max_iter"])
             if meta["family"] == "julia"
-            else Mandelbrot(max_iter=p["max_iter"])
+            else Mandelbrot(max_iter=p["max_iter"], bla=bool(p.get("bla", False)))
         )
         field.fields(tuple(meta["outputs"][0]["shape"][::-1]), viewport, distance=True)
     for name in CASES:

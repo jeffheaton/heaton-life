@@ -35,7 +35,26 @@ namespace HeatonLife.Tests
             foreach (object[] c in Cases())
                 names.Add((string)c[0]);
             names.Sort(StringComparer.Ordinal);
-            Assert.Equal(new[] { "delta-gap", "derivative-gap", "final-inf-imaginary", "final-inf-real", "huge-sample" }, names);
+            Assert.Equal(
+                new[]
+                {
+                    "bla-branch-order",
+                    "bla-complex-skip",
+                    "bla-dc-bad",
+                    "bla-dc-left-child",
+                    "bla-dead-before-merge",
+                    "bla-dead-rules",
+                    "bla-deep-radius",
+                    "bla-loop-end",
+                    "bla-radius-tie",
+                    "delta-gap",
+                    "derivative-gap",
+                    "final-inf-imaginary",
+                    "final-inf-real",
+                    "huge-sample",
+                    "loop-end",
+                },
+                names);
         }
 
         [Theory]
@@ -44,7 +63,11 @@ namespace HeatonLife.Tests
         {
             using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(Dir, name, "params.json")));
             var root = doc.RootElement;
-            AssertKeys(root, Keys);
+            bool withBla = root.TryGetProperty("bla", out var blaElement);
+            var keys = new List<string>(Keys);
+            if (withBla)
+                keys.Add("bla");
+            AssertKeys(root, keys.ToArray());
             Assert.Equal("0.10.0", root.GetProperty("spec_version").GetString());
             Assert.Equal("t2-steps", root.GetProperty("family").GetString());
             Assert.Equal("bit-exact", root.GetProperty("tier").GetString());
@@ -68,14 +91,28 @@ namespace HeatonLife.Tests
                     add = X(addElement);
             }
 
+            int maxIter = root.GetProperty("max_iter").GetInt32();
+            double escapeRadius = root.GetProperty("escape_radius").GetDouble();
+            BlaTableX? table = null;
+            if (withBla)
+            {
+                // BLA at T2 (spec/deep-zoom.md "BLA at T2"): the table from the crafted orbit.
+                AssertKeys(blaElement, new[] { "dc_exponent" });
+                Assert.Equal(JsonValueKind.Null, rebaseElement.ValueKind);
+                var k = blaElement.GetProperty("dc_exponent");
+                int samples = Math.Min(orbit.Re.Length, maxIter + 1);
+                table = BlaTable.BuildX(orbit.Re, orbit.Im, orbit.Small, samples, escapeRadius,
+                    k.ValueKind == JsonValueKind.Null ? (long?)null : k.GetInt64());
+            }
             int count = PerturbationT2.Perturb(
-                orbit, rebase, d0r, d0i, dcr, dci,
-                root.GetProperty("max_iter").GetInt32(), root.GetProperty("escape_radius").GetDouble(),
-                track, dd0r, dd0i, add, hasAdd,
-                out double finalRe, out double finalIm, out double dr, out double di, out long dExponent);
+                orbit, rebase, d0r, d0i, dcr, dci, maxIter, escapeRadius,
+                track, dd0r, dd0i, add, hasAdd, table,
+                out double finalRe, out double finalIm, out double dr, out double di, out long dExponent, out int applied);
 
             var expected = root.GetProperty("expected");
-            AssertKeys(expected, new[] { "count", "final", "derivative" });
+            AssertKeys(expected, withBla
+                ? new[] { "count", "final", "derivative", "applications", "table" }
+                : new[] { "count", "final", "derivative" });
             Assert.Equal(expected.GetProperty("count").GetInt32(), count);
             var final = expected.GetProperty("final");
             Assert.Equal(final[0].GetString(), Bits(finalRe));
@@ -84,6 +121,31 @@ namespace HeatonLife.Tests
             Assert.Equal(d[0].GetString(), Bits(dr));
             Assert.Equal(d[1].GetString(), Bits(di));
             Assert.Equal(d[2].GetInt64(), dExponent);
+            if (table != null)
+            {
+                Assert.Equal(expected.GetProperty("applications").GetInt32(), applied);
+                var words = new List<string>();
+                for (int level = 0; level < table.Levels; level++)
+                {
+                    foreach (double w in table.Ar[level]) words.Add(Bits(w));
+                    foreach (double w in table.Ai[level]) words.Add(Bits(w));
+                    foreach (double w in table.Br[level]) words.Add(Bits(w));
+                    foreach (double w in table.Bi[level]) words.Add(Bits(w));
+                    foreach (FloatExp r in table.R[level]) words.Add(Bits(r.M));
+                    foreach (FloatExp r in table.R[level]) words.Add(Bits(r.E));
+                }
+                // Every NaN equals every NaN (spec/fractals.md, tables): a dead entry's overflowed
+                // coefficient is NaN, and the sign of a default NaN depends on the platform.
+                var want = expected.GetProperty("table");
+                Assert.Equal(want.GetArrayLength(), words.Count);
+                for (int i = 0; i < words.Count; i++)
+                {
+                    if (double.IsNaN(Double(want[i].GetString()!)))
+                        Assert.True(double.IsNaN(Double(words[i])), $"table word {i}: {words[i]}, want NaN");
+                    else
+                        Assert.Equal(want[i].GetString(), words[i]);
+                }
+            }
         }
 
         private static PerturbationT2.Orbit ReadOrbit(JsonElement element)

@@ -244,11 +244,13 @@ where every dropped `δ²` term is below float64 rounding. A table of `(A, B, r)
 power-of-two spans of the orbit lets a pixel skip whole spans (Zhuoran 2021; the radii
 and merge rule of Fraktaler-3 and Heaton Fractal). It changes counts, but only on
 float64-chaotic pixels — pixels whose true count moves when `δc` moves by a few ulps
-(measured against 1024-bit iteration: BLA-on and BLA-off are equally often right) — so
+(measured at T1 against 1024-bit iteration: BLA-on and BLA-off are equally often right;
+T2's longer orbits are measured under [BLA at T2](#bla-at-t2)) — so
 it is an **opt-in algorithm parameter** with its own bit-exact vectors:
 `Mandelbrot(bla=True)`, C# `new Mandelbrot(maxIter, escapeRadius, workers, bla: true)`.
-T0 ignores it. Julia (`B = 0`, a table on the critical orbit too) and the Burning Ship
-(an ABS-BLA) are future work.
+T0 ignores it; T2 runs it with floatexp radii and skips ([BLA at T2](#bla-at-t2)). Julia
+(`B = 0`, a table on the critical orbit too) and the Burning Ship (an ABS-BLA) are future
+work.
 
 Constants: stride `S = 8`, `ε = 2⁻⁵³` (float64's unit roundoff; Heaton Fractal's `2⁻²⁴`
 is float32's, and at float64 it flips counts on up to 14% of pixels), at most 32 levels.
@@ -503,6 +505,97 @@ rounding ties to even, a subnormal operand read as itself, `2^−1082` underflow
 two multiplies, `(1 + 2^−52) + 2^−53` rounding at double precision), with inputs read at
 run time so no compiler folds them. The Python suite runs the same canaries on NumPy.
 
+### BLA at T2
+
+A Mandelbrot `bla=True` frame past zoom 290 skips spans too
+([BLA](#bla-bivariate-linear-approximation-mandelbrot-opt-in)). The table has T1's shape,
+with its coefficients carried in double-double; the radii, the radius test and every skip
+run in floatexp. Python `bla.build_table_t2` and `perturb_t2(table=…)`, C#
+`BlaTable.BuildX` and `PerturbationT2.Perturb`.
+
+- **Coefficients.** `A` and `B` follow T1's recurrences over the orbit's float64 samples
+  (the first `min(len, max_iter + 1)`), with T1's extent `k*`, stride and levels, but in
+  **double-double**, a value `hi + lo` of two doubles, with plain IEEE operations only (no
+  fma):
+  ```
+  split(a):        t = 134217729·a;  hi = t − (t − a);  lo = a − hi
+  two_prod(a, b):  p = a·b; (ah, al) = split(a); (bh, bl) = split(b)
+                   → (p, (((ah·bh − p) + ah·bl) + al·bh) + al·bl)
+  two_sum(a, b):   s = a + b; v = s − a  → (s, (a − (s − v)) + (b − v))
+  quick(a, b):     s = a + b  → (s, b − (s − a))
+  mul(x, y):       (p, e) = two_prod(x.hi, y.hi);  quick(p, e + (x.hi·y.lo + x.lo·y.hi))
+  add(x, y):       (s, e) = two_sum(x.hi, y.hi);   quick(s, e + (x.lo + y.lo))
+  x·y (complex):   (add(mul(x.re, y.re), −mul(x.im, y.im)), add(mul(x.re, y.im), mul(x.im, y.re)))
+  ```
+  Level 0 starts from `A = 1`, `B = 0` and, per step with `a = 2Z` (exact, `lo = 0`),
+  takes `B ← (add((a·B).re, 1), (a·B).im)`, `A ← a·A`; level `l` takes `A = A_y·A_x` and
+  `B = (add((A_y·B_x).re, B_y.re), add((A_y·B_x).im, B_y.im))` from its children's pairs.
+  Each entry stores the `hi` of each component; the radii and the dead rule read those.
+  In float64, T1's products drift about 100 ulps over the top levels, which at T2 costs
+  counts on pixels whose truth holds under ±100 ulps of `δc`; the stored `hi` has
+  measured equal to the exact coefficient rounded once on every live entry checked.
+  (T1 keeps its float64 table, and its 0.8.0 vectors.) An entry past `2^996` or with an
+  overflowing product may store NaN; such an entry is dead. The dead rule's
+  `|A|, |B| < 2^960` is T1's.
+- **The frame's bound** is a power of two, `2^k`. Over the frame's floatexp pixel deltas
+  (the off-center offset included), `mx = max |δc.re|` and `my = max |δc.im|`, each exact.
+  With `E` the larger exponent of the nonzero ones, `m = mag(scaled(mx, E), scaled(my, E))`
+  (T1's `mag`, a double in `[1, 2√2]`), and `k = E + j` for the least `j` with `2^j ≥ m`.
+  When every delta is zero there is no bound and the `dc` term below is 0.
+- **Radii** are floatexp, or `+∞` before a level-0 fold's first merge. Level 0 folds as at
+  T1 with the step radius `ε·mag(z) = normalize(mag(z), −53)` (exact), except that a step
+  at a **small index** has radius 0. Its float64 sample may have lost bits or be 0, so no
+  span containing it is ever taken, and the pixel steps through it in floatexp.
+  `merge(r1, r2, A1, B1)`:
+  - if `mag(A1)` or `mag(B1)` is not finite, 0 (such an entry's own coefficients are not
+    finite either: it is dead);
+  - `num = sub(r2, t)` with `t = mag(B1)·2^k`, exact (`t = 0` with no bound); unless
+    `num > 0`, 0;
+  - if `mag(A1) = 0`, `r1`;
+  - otherwise `q = div(num, from_double(mag(A1)))`, one rounding, and the result is `q`
+    when `r1 = +∞` or `compare(q, r1) < 0`, else `r1`.
+
+  The dead rule then keeps an entry only if its radius is positive and finite and
+  `|A|, |B| < 2^960`, else its radius is 0. Past zoom about 300 the `dc` term never
+  reaches a live radius (`t` falls more than 64 binades below `r2`): only
+  `vectors/t2-steps/bla-radius-tie`, a crafted table with `k = −60`, can show it, and
+  each T2 BLA case records `dc_bound_exponent` for the runners to check.
+- **Per pixel.** Each pixel keeps its own count `n`. At `m % 8 = 0` with `m/8 < n₀` the
+  ascending level search runs as at T1: stop unless `m % span = 0`, `m/span < n_l`,
+  `n + span ≤ max_iter` and `normalize(mag(w), E) < r` (a strict floatexp compare, `mag`
+  T1's on `w`). A **skip** from entry `(A, B)`, with `A`, `B` each component by
+  `from_double`:
+  ```
+  p  = (sub(mul(A.re, δ.re), mul(A.im, δ.im)), add(mul(A.re, δ.im), mul(A.im, δ.re)))
+  q  = the same product of B and δc
+  δ' = (add(p.re, q.re), add(p.im, q.im))
+  ```
+  then `(w, E)` from `δ'` as after a slow step (both parts zero keep `E`), `m += span`,
+  `n += span`. The distance derivative through a skip is `d' = (add(p_d.re, mul(B.re, ps)),
+  add(p_d.im, mul(B.im, ps)))`, `p_d` the same product of `A` and `d`, then `(dw, dE)`
+  from it (both parts zero keep `dE`); `dcS` and `addS` follow `E` and `dE` as always
+  (`vectors/t2-steps/bla-complex-skip` pins these bits through complex skips). Otherwise
+  the pixel runs one plain T2 iteration (steps 1–4 above), `n += 1`.
+  The landing tests and the rebase follow either (steps 5 and 6). A pixel that reaches
+  `n = max_iter` without escaping counts `−1`.
+
+Measured: at 1e996.5 on the p830 minibrot, 11× faster than the plain T2 loop in C# (4–8×
+in Python), counts equal on every pixel, and distance estimates within `5e-11` relative on
+the shipped 16×16 off-axis frame (`1.4e-10` on the axis); from zoom
+290.5 to 700 near it, every count agrees. At 1e320 on Heaton Fractal's p135310 nucleus
+(200,000 iterations), 45× faster in C#, with every count equal at 16×16 and 52 of 1,024
+different at 32×32. Against a direct fixed-point iteration those 52 are pixels the float64
+orbit cannot resolve: on 44 both loops are wrong (chaotic: the plain loop's own count moves
+on 32 of them when `δc.re` moves by 16 ulps), and on 8 (two orbits of the frame's symmetry)
+BLA gives what exact arithmetic on the float64 samples gives while the plain loop's
+rounding happens to land on the truth, as under "Against truth". With T1's float64
+coefficients, 12 more counts differed, 4 of them on pixels whose truth holds under ±100
+ulps of `δc`.
+
+**Not pinned.** A skip that lands on a normal index and rebases there needs a reference
+passing within `[2^−400, 2^−53]` of 0 at a multiple of 8 at a T2 zoom; no vector has one. It
+runs the same landing code as a plain step, which the vectors pin.
+
 ### Pixel deltas at T2
 
 - `ps = normalize(fl(fl(4/W) · m), n)` with `(m, n) = pow10x(−zoom)`
@@ -517,8 +610,7 @@ run time so no compiler folds them. The Python suite runs the same canaries on N
 
 ### What T2 does not do yet
 
-BLA (a Mandelbrot `bla=True` frame renders the plain T2 loop), the Burning Ship,
-period-bounded orbits, and interior shortcuts at T2 (statuses are escaped or exhausted).
+The Burning Ship, period-bounded orbits, and interior shortcuts at T2 (statuses are escaped or exhausted).
 Counts may differ from T1's across zoom 290 on float64-chaotic pixels, since T2 has no
 fma, as they do across zoom 12.
 
@@ -533,7 +625,8 @@ deep nucleus a pixel that runs 170,000 iterations can land one count off.
 
 **Cost.** A T2 pixel-iteration costs about 1.3–2× T1's (C#) and the orbit grows
 superlinearly with `F`; the ceiling of 9000 is a correctness bound, not a usability one.
-The C# pixel loop polls its cancellation token every 2^16 iterations.
+The C# pixel loop polls its cancellation token every 2^16 passes (a plain iteration or a
+BLA skip is one pass).
 
 ## Precision tiers (auto-selected from zoom)
 

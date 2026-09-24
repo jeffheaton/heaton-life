@@ -21,6 +21,7 @@ from numpy.typing import NDArray
 
 from heaton_life.core import floatexp as fx
 from heaton_life.core.bignum import OrbitX
+from heaton_life.fractal.bla import STRIDE, BlaTableX, mag
 
 FloatArray = NDArray[np.float64]
 IntArray = NDArray[np.int64]
@@ -212,6 +213,7 @@ class T2Result:
     dr: FloatArray
     di: FloatArray
     d_exponent: IntArray
+    applications: NDArray[np.int32]  # BLA skips per pixel (zeros without a table)
 
 
 def perturb_t2(
@@ -223,16 +225,22 @@ def perturb_t2(
     rebase_orbit: OrbitX | None = None,
     derivative: tuple[XPair, fx.X | None] | None = None,
     stats: dict[str, int] | None = None,
+    table: BlaTableX | None = None,
 ) -> T2Result:
     """T2 escape counts for z^2 + c maps (Mandelbrot: delta0 None, i.e. 0; Julia:
     delta_c None, i.e. 0, and ``rebase_orbit`` the critical orbit). ``derivative`` =
     (d0, add): the distance derivative's start and its per-step addition (Mandelbrot: 0
     and ps; Julia: ps and None), each in floatexp. ``stats``, when given, counts each rare
-    path taken (tests: every path must be exercised by some vector)."""
+    path taken (tests: every path must be exercised by some vector). ``table``: BLA at T2
+    (spec/deep-zoom.md "BLA at T2"; Mandelbrot only, so no ``rebase_orbit``): at a
+    stride-aligned index a pixel takes the longest live span whose floatexp radius
+    exceeds |delta|, the skip itself in floatexp."""
 
     def count(name: str, mask: Any) -> None:
         if stats is not None:
             stats[name] = stats.get(name, 0) + int(np.count_nonzero(mask))
+
+    counting = stats is not None
 
     refs = _Refs.build([orbit] if rebase_orbit is None else [orbit, rebase_orbit])
     rebase_start = 0 if rebase_orbit is None else len(orbit.samples)
@@ -243,6 +251,7 @@ def perturb_t2(
     out_dr = np.zeros(n, dtype=np.float64)
     out_di = np.zeros(n, dtype=np.float64)
     out_de = np.zeros(n, dtype=np.int64)
+    out_apps = np.zeros(n, dtype=np.int32)
     r2 = escape_radius * escape_radius
     r2x = fx.from_double(r2)
 
@@ -275,6 +284,11 @@ def perturb_t2(
     m = np.zeros(n, dtype=np.int64)
     last = np.full(n, len(orbit.samples) - 1, dtype=np.int64)
     idx = np.arange(n)
+    steps = np.zeros(n, dtype=np.int64)  # iterations done: the count at escape
+    apps = np.zeros(n, dtype=np.int32)
+    levels = () if table is None or not table.live else table.levels
+    assert not levels or rebase_orbit is None, "BLA at T2 is Mandelbrot's (one orbit)"
+    sizes = [level.rm.size for level in levels]
 
     # The distance derivative: its own scaled pair (dw, dE) and add/2^dE.
     track = derivative is not None
@@ -300,12 +314,80 @@ def perturb_t2(
     if track:
         adds, add_bad = add_scaled(d_exp)
 
-    for it in range(1, max_iter + 1):
+    skip: Any
+    plain: Any  # a mask, or a plain bool when no lane skips this pass
+    while idx.size and max_iter > 0:  # max_iter 0: no step, every count -1
+        # --- BLA: the longest live span from here whose radius exceeds |delta| -----------
+        any_skip = False
+        if levels:
+            chosen = np.full(idx.size, -1, dtype=np.int64)
+            cand = np.flatnonzero((m % STRIDE == 0) & (m // STRIDE < sizes[0]))
+            if cand.size:
+                dm, de = fx.vnormalize(mag(wr[cand], wi[cand]), exponent[cand])  # |delta|
+                mm = m[cand]
+                nn = steps[cand]
+                alive = np.ones(cand.size, dtype=bool)
+                for level_index, level in enumerate(levels):
+                    span = STRIDE << level_index
+                    alive &= (mm % span == 0) & (mm // span < sizes[level_index])
+                    alive &= nn + span <= max_iter
+                    slot = np.where(alive, mm // span, 0)
+                    alive &= (level.rm[slot] > 0.0) & (
+                        fx.vcompare_magnitude2(dm, de, level.rm[slot], level.re[slot]) < 0
+                    )
+                    if not alive.any():
+                        break
+                    chosen[cand[alive]] = level_index
+            skip = chosen >= 0
+            any_skip = bool(skip.any())
+        if any_skip:
+            # A skip, from the pre-step state, in floatexp per component:
+            # delta' = A delta + B delta_c, d' = A d + B ps (fractals.md "Distance estimate").
+            ssel = np.flatnonzero(skip)
+            sar = np.empty(ssel.size)
+            sai = np.empty(ssel.size)
+            sbr = np.empty(ssel.size)
+            sbi = np.empty(ssel.size)
+            for level_index in np.unique(chosen[ssel]):
+                at = chosen[ssel] == level_index
+                level = levels[int(level_index)]
+                e = m[ssel][at] // (STRIDE << int(level_index))
+                sar[at], sai[at], sbr[at], sbi[at] = (
+                    level.ar[e],
+                    level.ai[e],
+                    level.br[e],
+                    level.bi[e],
+                )
+            coeff_a = _x_of_pair(sar, sai, np.zeros(ssel.size, dtype=np.int64))
+            coeff_b = _x_of_pair(sbr, sbi, np.zeros(ssel.size, dtype=np.int64))
+            delta = _x_of_pair(wr[ssel], wi[ssel], exponent[ssel])
+            nxt = _cadd(_cmul(coeff_a, delta), _cmul(coeff_b, dc.take(ssel)))
+            skip_wr, skip_wi, skip_e = _split_pair(nxt, exponent[ssel])
+            if track:
+                d = _x_of_pair(dwr[ssel], dwi[ssel], d_exp[ssel])
+                prod = _cmul(coeff_a, d)
+                if add_x is not None:
+                    am, ae = add_x
+                    full_m = np.full(ssel.size, am)
+                    full_e = np.full(ssel.size, ae, dtype=np.int64)
+                    br_x = fx.vmul(coeff_b.rm, coeff_b.re, full_m, full_e)
+                    bi_x = fx.vmul(coeff_b.im, coeff_b.ie, full_m, full_e)
+                    real = fx.vadd(prod.rm, prod.re, *br_x)
+                    imag = fx.vadd(prod.im, prod.ie, *bi_x)
+                    prod = XPair(real[0], real[1], imag[0], imag[1])
+                skip_dwr, skip_dwi, skip_de = _split_pair(prod, d_exp[ssel])
+            count("bla_skip", skip)
+            plain = ~skip
+        else:
+            skip = False
+            plain = True
+
         if track:
             # d' = 2 z d + add, from the pre-step z (fractals.md "Distance estimate").
             slow_d = z_small | add_bad
-            count("d_slow_small", z_small)
-            count("d_slow_gap", add_bad & ~z_small)
+            if counting:
+                count("d_slow_small", z_small & plain)
+                count("d_slow_gap", add_bad & ~z_small & plain)
             with np.errstate(over="ignore", invalid="ignore"):
                 tr = 2.0 * (zdr * dwr - zdi * dwi) + adds
                 ti = 2.0 * (zdr * dwi + zdi * dwr)
@@ -336,16 +418,19 @@ def perturb_t2(
                 tr[sel], ti[sel] = nr, ni
                 d_exp[sel] = ne
             dwr, dwi = tr, ti
+            if any_skip:
+                dwr[ssel], dwi[ssel], d_exp[ssel] = skip_dwr, skip_dwi, skip_de
             moved = _renormalize(dwr, dwi, d_exp)
-            if slow_d.any() or moved.any():
+            if slow_d.any() or moved.any() or any_skip:
                 adds, add_bad = add_scaled(d_exp)
 
         # --- the step ------------------------------------------------------------------
         zr_m = refs.zr[m]
         zi_m = refs.zi[m]
         slow = refs.small[m] | dc_bad
-        count("slow_small", refs.small[m])
-        count("slow_gap", dc_bad & ~refs.small[m])
+        if counting:
+            count("slow_small", refs.small[m] & plain)
+            count("slow_gap", dc_bad & ~refs.small[m] & plain)
         ddr, ddi = _delta_double(wr, wi, exponent)
         with np.errstate(over="ignore", invalid="ignore"):
             tr = 2.0 * zr_m + ddr
@@ -359,18 +444,32 @@ def perturb_t2(
             delta = _x_of_pair(wr[sel], wi[sel], exponent[sel])
             t = _cadd(_twice(z), delta)
             nxt = _cadd(_cmul(t, delta), dc.take(sel))
-            count(
-                "floor", (nxt.rm == 0.0) & (nxt.im == 0.0) & ((delta.rm != 0.0) | (delta.im != 0.0))
-            )
+            if counting:
+                count(
+                    "floor",
+                    (nxt.rm == 0.0)
+                    & (nxt.im == 0.0)
+                    & ((delta.rm != 0.0) | (delta.im != 0.0))
+                    & (plain[sel] if any_skip else True),
+                )
             sr, si, se = _split_pair(nxt, exponent[sel])
             nwr[sel], nwi[sel] = sr, si
             exponent[sel] = se
             changed[sel] = True
         wr, wi = nwr, nwi
-        m = np.minimum(m + 1, last)
+        if any_skip:
+            wr[ssel], wi[ssel], exponent[ssel] = skip_wr, skip_wi, skip_e
+            changed[ssel] = True
+            m = np.where(skip, m + (STRIDE << np.maximum(chosen, 0)), np.minimum(m + 1, last))
+            steps = steps + np.where(skip, STRIDE << np.maximum(chosen, 0), 1)
+            apps = apps + skip.astype(np.int32)
+        else:
+            m = np.minimum(m + 1, last)
+            steps = steps + 1
         moved = _renormalize(wr, wi, exponent)
-        count("renormalize", moved)
-        count("floor", moved & (wr == 0.0) & (wi == 0.0))
+        if counting:
+            count("renormalize", moved)
+            count("floor", moved & (wr == 0.0) & (wi == 0.0))
         changed |= moved
         if changed.any():
             sel = np.flatnonzero(changed)
@@ -403,11 +502,16 @@ def perturb_t2(
             rebase[sel] = reb
         rebase &= ~escaped
         count("escape_small", escaped & small_now)
+        if counting and any_skip:
+            count("bla_skip_escape", escaped & skip)
+            count("bla_skip_small", small_now & skip)
+        done = escaped | (steps >= max_iter)
+        rebase &= ~done
         count("rebase_small", rebase & small_now)
         count("rebase_normal", rebase & ~small_now)
-        if escaped.any():
+        if done.any():
             hits = idx[escaped]
-            counts[hits] = it
+            counts[hits] = steps[escaped]
             # Per component (to_double of each): zdr + 1j * zdi would be a complex multiply,
             # turning an infinite imaginary part into a NaN real part and -0.0 into +0.0.
             final.real[hits] = zdr[escaped]
@@ -416,14 +520,17 @@ def perturb_t2(
                 out_dr[hits] = dwr[escaped]
                 out_di[hits] = dwi[escaped]
                 out_de[hits] = d_exp[escaped]
-            keep = ~escaped
-            wr, wi, exponent, m, last, idx = (
+            out_apps[idx[done]] = apps[done]
+            keep = ~done
+            wr, wi, exponent, m, last, idx, steps, apps = (
                 wr[keep],
                 wi[keep],
                 exponent[keep],
                 m[keep],
                 last[keep],
                 idx[keep],
+                steps[keep],
+                apps[keep],
             )
             dcs_r, dcs_i, dc_bad = dcs_r[keep], dcs_i[keep], dc_bad[keep]
             dc = dc.take(keep)
@@ -454,7 +561,7 @@ def perturb_t2(
             dcs_r[sel], dcs_i[sel], dc_bad[sel] = a, b, c
         if track:
             z_small = small_now
-    return T2Result(counts, final, out_dr, out_di, out_de)
+    return T2Result(counts, final, out_dr, out_di, out_de, out_apps)
 
 
 def _landing_z(
