@@ -39,7 +39,7 @@ pip install -e ".[dev,playground]"
 | `dev` | pytest, pytest-cov, ruff, mypy, gmpy2 (the test suite exercises the fast deep-zoom path), mpmath (an independent oracle in `test_pow10.py`) |
 | `playground` | PyQt6, for the interactive app and its offscreen tests |
 | `precision` | gmpy2 for faster deep-zoom reference orbits (plain Python ints otherwise; identical results) |
-| `video` | imageio-ffmpeg for `.mp4` output from `Animation.save` |
+| `video` | imageio-ffmpeg for `.mp4` output from `Animation.save`, `render_zoom_movie` / `MovieWriter` and `encode_frames` |
 
 ## Layout
 

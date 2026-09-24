@@ -581,6 +581,7 @@ def main() -> None:
     write_t2_cases()
     write_t2_bla_cases()
     write_turns_cases()
+    write_zoom_cases()
 
     print("done")
 
@@ -3521,6 +3522,320 @@ def write_png_io_cases() -> None:
     rgba_buf = io.BytesIO()
     Image.fromarray(rgba, mode="RGBA").save(rgba_buf, format="PNG")
     write("decode-rgba-dropped", rgba_buf.getvalue(), 1)
+
+
+class _RecordingMandelbrot:
+    """A Mandelbrot field that records each probe's (zoom, budget) for the zoom vectors."""
+
+    def __init__(self, budget: int, asked: list[tuple[float, int]]) -> None:
+        from heaton_life.fractal import Mandelbrot
+
+        self._field = Mandelbrot(max_iter=budget)
+        self._asked = asked
+        self.budget = budget
+        self.max_zoom_log10 = self._field.max_zoom_log10
+        self.supports_distance = self._field.supports_distance
+
+    def fields(self, size: tuple[int, int], viewport: object, **options: bool) -> object:
+        self._asked.append((viewport.zoom_log10, self.budget))  # type: ignore[attr-defined]
+        return self._field.fields(size, viewport, **options)  # type: ignore[arg-type]
+
+
+def write_zoom_cases() -> None:
+    """spec/zoom.md (0.13.0): the schedule, the plan's frame progress, zooms and speeds,
+    the movie budgets, the survey's stations, its patience rule on synthetic probes, and
+    whole surveys with real Mandelbrot probes (192 x 108). Floats as IEEE-754 bit
+    patterns."""
+    from heaton_life.fractal.engine import CARDIOID_OR_BULB, ESCAPED, EXHAUSTED
+    from heaton_life.fractal.escape_fields import EscapeFields
+    from heaton_life.fractal.movie import (
+        UNIFORM,
+        ZoomPlan,
+        ZoomSchedule,
+        probe_station,
+        survey_stations,
+    )
+    from heaton_life.fractal.policy import measured_max_iter, movie_max_iter, need_at
+
+    root = VECTOR_ROOT / "zoom"
+    nan, inf = float("nan"), float("inf")
+
+    def save(name: str, payload: dict[str, object]) -> None:
+        case_dir = root / name
+        case_dir.mkdir(parents=True, exist_ok=True)
+        meta = {"spec_version": "0.13.0", "family": "zoom", "tier": "bit-exact", **payload}
+        (case_dir / "params.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+        print(f"wrote vectors/zoom/{name}")
+
+    # Schedules: resolved segments, then progress and speed at sampled times.
+    schedule_rows = [
+        ((3.0, 5.0, 5.0, 5.0), 30.0),
+        ((3.0, 5.0, 5.0, 5.0), 10.0),
+        ((3.0, 5.0, 5.0, 5.0), 119 / 24),
+        ((0.0, 0.0, 0.0, 0.0), 10 / 24),
+        ((0.0, 5.0, 0.0, 0.0), 20.0),
+        ((1.0, 0.0, 0.0, 1.0), 2.0),
+        ((5.0, 2.0, 0.5, 0.0), 363 / 60),
+        ((5.0, 3.0, 0.5, 0.0), 57 / 50),
+        ((1.1, 2.3, 3.7, 1.3), 7.3),
+        ((nan, -1.0, inf, 0.25), 3.0),
+        ((3.0, 5.0, 5.0, 5.0), 0.0),
+        ((3.0, 5.0, 5.0, 5.0), -1.0),
+        ((3.0, 5.0, 5.0, 5.0), nan),
+        ((3.0, 5.0, 5.0, 5.0), inf),
+        # Heaton Fractal's ease-out branch gives 1 + 2^-52 at the closing hold's start
+        # (t = 2743/120 < D): the clamp.
+        ((1.4, 0.6, 2.2, 1.2), 2887 / 120),
+    ]
+    schedules = []
+    for segments, duration in schedule_rows:
+        resolved = ZoomSchedule(*segments).resolved(duration)
+        span = resolved.duration
+        times = [-1.0, 0.0, span, span + 1.0]
+        times += [span * k / 16 for k in range(1, 16)]
+        times += [resolved.hold_start, resolved.hold_start + resolved.ease_in]
+        times += [span - resolved.hold_end, span - resolved.hold_end - resolved.ease_out]
+        samples = [
+            {
+                "t": _bits(t),
+                "progress": _bits(resolved.progress(t)),
+                "speed_fraction": _bits(resolved.speed_fraction(t)),
+            }
+            for t in times
+        ]
+        schedules.append(
+            {
+                "segments": [_bits(v) for v in segments],
+                "duration": _bits(duration),
+                "resolved": [
+                    _bits(v)
+                    for v in (
+                        resolved.duration,
+                        resolved.hold_start,
+                        resolved.ease_in,
+                        resolved.ease_out,
+                        resolved.hold_end,
+                        resolved.cruise,
+                        resolved.effective_seconds,
+                        resolved.peak_over_average,
+                    )
+                ],
+                "samples": samples,
+            }
+        )
+    save("schedules", {"schedules": schedules})
+
+    # Plans: every frame's zoom and speed. The first three are the design review's
+    # known answers (a closing hold an ulp short, and two overshoots past the end).
+    plan_rows = [
+        (0.0, 290.0, 120, 24, ZoomSchedule()),
+        (0.0, 9000.0, 364, 60, ZoomSchedule(5.0, 2.0, 0.5, 0.0)),
+        (0.0, 290.0, 58, 50, ZoomSchedule(5.0, 3.0, 0.5, 0.0)),
+        (0.0, 4.0, 90, 30, UNIFORM),
+        (0.0, 219.1498368433709, 601, 60, ZoomSchedule()),
+        (-0.0, 12.5, 2, 1, UNIFORM),
+        (30.0, 0.0, 97, 24, ZoomSchedule(1.0, 2.0, 1.0, 0.5)),
+        (1.25, 1.25, 5, 30, ZoomSchedule()),
+        (-3.0, 17.0, 250, 25, ZoomSchedule(1.1, 2.3, 3.7, 1.3)),
+        (0.0, 50.0, 300, 60, ZoomSchedule(0.0, 5.0, 0.0, 0.0)),
+        (0.0, 100.0, 2888, 120, ZoomSchedule(1.4, 0.6, 2.2, 1.2)),
+    ]
+    plans = []
+    for start, end, frames, fps, schedule in plan_rows:
+        plan = ZoomPlan(start, end, frames, fps, schedule)
+        plans.append(
+            {
+                "start_zoom": _bits(start),
+                "end_zoom": _bits(end),
+                "frames": frames,
+                "fps": fps,
+                "schedule": [
+                    _bits(v)
+                    for v in (
+                        schedule.hold_start,
+                        schedule.ease_in,
+                        schedule.ease_out,
+                        schedule.hold_end,
+                    )
+                ],
+                "progress": [_bits(plan.progress(f)) for f in range(frames)],
+                "zooms": [_bits(z) for z in plan.zooms()],
+                "speeds": [_bits(plan.speed(f)) for f in range(frames)],
+            }
+        )
+    save("plans", {"plans": plans})
+
+    # Budgets: movie_max_iter with and without a limit; need_at and measured_max_iter.
+    eleven = 219.1498368433709  # Heaton Fractal's 11 Dimensions preset, limit 1,100,000
+    ramp_rows = [(z, eleven, 1_100_000) for z in (0.0, 1.0, 30.0, 100.0, 200.0, eleven, 250.0)]
+    ramp_rows += [(z, eleven, None) for z in (0.0, 30.0, eleven)]
+    ramp_rows += [(z, 100.0, 1000) for z in (0.0, 2.0, 3.0, 50.0, 100.0)]
+    ramp_rows += [(z, 9000.0, 2**31 - 1) for z in (0.0, 4500.0, 9000.0)]
+    ramp_rows += [(z, 12.0, 1) for z in (0.0, 12.0)]
+    ramp_rows += [(-2.0, 5.0, 7777)]
+    budgets = [
+        {
+            "zoom": _bits(z),
+            "target": _bits(t),
+            "user_limit": u,
+            "max_iter": movie_max_iter(z, t, u),
+        }
+        for z, t, u in ramp_rows
+    ]
+    knot_sets = [
+        [],
+        [(10.0, 5000)],
+        [(0.0, 120), (5.0, 3000), (10.0, 900), (15.0, 60000)],
+        [(0.0, 2**31 - 1), (1.0, 7)],
+    ]
+    measured = []
+    for knots in knot_sets:
+        zooms = [-1.0, 0.0, 2.5, 5.0, 7.5, 10.0, 12.5, 15.0, 20.0]
+        measured.append(
+            {
+                "knots": [[_bits(z), n] for z, n in knots],
+                "rows": [
+                    {
+                        "zoom": _bits(z),
+                        "need": need_at(z, knots),
+                        "max_iter": measured_max_iter(z, knots),
+                    }
+                    for z in zooms
+                ],
+            }
+        )
+    save("budgets", {"ramps": budgets, "measured": measured})
+
+    # Stations: the survey's depths for a range of plans and spacings.
+    station_rows = [
+        (0.0, eleven, 64),
+        (0.0, 3.0, 64),
+        (0.0, 0.2, 64),
+        (5.0, 5.0, 64),
+        (300.0, 0.0, 64),
+        (-4.0, 60.0, 8),
+        (0.0, 9000.0, 64),
+        (100.0, 110.0, 1),
+        # The approach 6 octaves short of 2.0 lies within an octave past the shallow end:
+        # dropped (Heaton Fractal's filter, past magnification 1, would keep it).
+        (0.0, 2.0, 64),
+    ]
+    stations = []
+    for start, end, spacing in station_rows:
+        plan = ZoomPlan(start, end, 2, 1)
+        stations.append(
+            {
+                "start_zoom": _bits(start),
+                "end_zoom": _bits(end),
+                "spacing_octaves": spacing,
+                "stations": [_bits(z) for z in survey_stations(plan, spacing)],
+            }
+        )
+    save("stations", {"stations": stations})
+
+    # The patience rule on synthetic probes: each point escapes at its count once the
+    # budget reaches it; -1 never escapes (exhausted), -2 is proven interior.
+    populations = [
+        ("escapes-early", [3, 5, 8, 13, 21] * 20, 0.0, 10**6, True, None),
+        ("tail", [25, 40, 70, 150, 290, 590, 1100] * 3 + [-1] * 5, 0.0, 10**6, True, None),
+        ("interior-proven", [-2] * 50 + [7, 9, 11], 0.0, 10**6, True, None),
+        ("nothing-escapes", [-1] * 40, 1.0, 5000, True, None),
+        ("late-band", [-1] * 10 + [4_000_000] * 30, 10.0, 2**31 - 1, True, None),
+        ("capped", [300, 700, 1500, 3100, 6300, -1], 0.0, 5000, True, None),
+        ("impatient", [300, 700, 1500, 3100, 6300, -1], 0.0, 5000, False, 1500),
+        ("gap-past-double", [10] * 900 + [5000] * 99 + [300000], 0.0, 10**6, True, None),
+        ("budget-given", [700, 900, 5000, -1], 0.0, 10**6, True, 600),
+        ("budget-over-cap", [50, -1], 0.0, 300, True, 1000),
+        # The budget lands exactly on twice the latest escape: b >= 2L stops (b > 2L would not).
+        ("at-twice-latest", [200] * 10 + [-1], 0.0, 10**6, True, None),
+    ]
+    probes = []
+    for name, points, zoom, cap, patient, budget in populations:
+        values = np.array(points, dtype=np.int64)
+        asked: list[int] = []
+
+        def probe(b: int, values: object = values, asked: list[int] = asked) -> EscapeFields:
+            asked.append(b)
+            v = np.asarray(values)
+            escaped = (v > 0) & (v <= b)
+            counts = np.where(escaped, v, -1).astype(np.int32)
+            status = np.where(escaped, ESCAPED, np.where(v == -2, CARDIOID_OR_BULB, EXHAUSTED))
+            return EscapeFields(counts=counts[None, :], status=status.astype(np.int8)[None, :])
+
+        station, _ = probe_station(probe, zoom, cap=cap, patient=patient, budget=budget)
+        probes.append(
+            {
+                "name": name,
+                "points": points,
+                "zoom": _bits(zoom),
+                "cap": cap,
+                "patient": patient,
+                "budget": budget,
+                "expected": {
+                    "budgets": asked,
+                    "budget": station.budget,
+                    "need": station.need,
+                    "escaped": station.escaped,
+                    "unresolved": station.unresolved,
+                    "samples": station.samples,
+                },
+            }
+        )
+    save("probes", {"probes": probes})
+
+    # Real surveys: Mandelbrot probes at the pinned 192 x 108, every budget each station
+    # asked for, the knots' stations, and every frame's budget.
+    from heaton_life.core.viewport import Viewport
+    from heaton_life.fractal.movie import survey_movie
+
+    survey_rows = [
+        ("seahorse-measured", "-0.743643887037151", "0.13182590420533", None),
+        ("seahorse-limited", "-0.743643887037151", "0.13182590420533", 5000),
+        ("cardioid-measured", "-0.5", "0.0", None),
+    ]
+    surveys = []
+    for name, center_re, center_im, limit in survey_rows:
+        plan = ZoomPlan(0.0, 3.0, 16, 5)
+        asked: list[tuple[float, int]] = []
+
+        def field_for(budget: int, asked: list[tuple[float, int]] = asked) -> Mandelbrot:
+            return _RecordingMandelbrot(budget, asked)
+
+        survey = survey_movie(field_for, Viewport(center_re, center_im), plan, user_limit=limit)
+        stations_out = []
+        for station in survey.stations:
+            budgets = [b for z, b in asked if z == station.zoom_log10]
+            stations_out.append(
+                {
+                    "zoom": _bits(station.zoom_log10),
+                    "budgets": budgets,
+                    "budget": station.budget,
+                    "need": station.need,
+                    "escaped": station.escaped,
+                    "unresolved": station.unresolved,
+                    "samples": station.samples,
+                }
+            )
+        surveys.append(
+            {
+                "name": name,
+                "family": "mandelbrot",
+                "center_re": center_re,
+                "center_im": center_im,
+                "plan": {
+                    "start_zoom": _bits(plan.start_zoom),
+                    "end_zoom": _bits(plan.end_zoom),
+                    "frames": plan.frames,
+                    "fps": plan.fps,
+                },
+                "user_limit": limit,
+                "expected": {
+                    "stations": stations_out,
+                    "max_iter": [survey.max_iter(z) for z in plan.zooms()],
+                },
+            }
+        )
+    save("surveys", {"probe_size": [192, 108], "surveys": surveys})
 
 
 if __name__ == "__main__":

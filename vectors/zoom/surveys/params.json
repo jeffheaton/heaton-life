@@ -1,0 +1,519 @@
+{
+  "family": "zoom",
+  "probe_size": [
+    192,
+    108
+  ],
+  "spec_version": "0.13.0",
+  "surveys": [
+    {
+      "center_im": "0.13182590420533",
+      "center_re": "-0.743643887037151",
+      "expected": {
+        "max_iter": [
+          9280,
+          9280,
+          9280,
+          16938,
+          16938,
+          26738,
+          29234,
+          29234,
+          29234,
+          28252,
+          28252,
+          43626,
+          43626,
+          43626,
+          3334,
+          3334
+        ],
+        "stations": [
+          {
+            "budget": 12800,
+            "budgets": [
+              400,
+              800,
+              1600,
+              3200,
+              6400,
+              12800
+            ],
+            "escaped": 17274,
+            "need": 518,
+            "samples": 20736,
+            "unresolved": 13,
+            "zoom": "0x0000000000000000"
+          },
+          {
+            "budget": 33152,
+            "budgets": [
+              518,
+              1036,
+              2072,
+              4144,
+              8288,
+              16576,
+              33152
+            ],
+            "escaped": 4684,
+            "need": 4640,
+            "samples": 20736,
+            "unresolved": 16,
+            "zoom": "0x3FE2EFB2BD821804"
+          },
+          {
+            "budget": 37056,
+            "budgets": [
+              579,
+              1158,
+              2316,
+              4632,
+              9264,
+              18528,
+              37056
+            ],
+            "escaped": 3303,
+            "need": 8469,
+            "samples": 20736,
+            "unresolved": 16,
+            "zoom": "0x3FEC91BC65D1D504"
+          },
+          {
+            "budget": 64000,
+            "budgets": [
+              639,
+              1278,
+              2556,
+              5112,
+              10224,
+              20448,
+              40896,
+              64000
+            ],
+            "escaped": 4440,
+            "need": 13369,
+            "samples": 20736,
+            "unresolved": 11,
+            "zoom": "0x3FF319E30710C902"
+          },
+          {
+            "budget": 64000,
+            "budgets": [
+              699,
+              1398,
+              2796,
+              5592,
+              11184,
+              22368,
+              44736,
+              64000
+            ],
+            "escaped": 7961,
+            "need": 14617,
+            "samples": 20736,
+            "unresolved": 36,
+            "zoom": "0x3FF7EAE7DB38A781"
+          },
+          {
+            "budget": 64000,
+            "budgets": [
+              759,
+              1518,
+              3036,
+              6072,
+              12144,
+              24288,
+              48576,
+              64000
+            ],
+            "escaped": 12117,
+            "need": 11321,
+            "samples": 20736,
+            "unresolved": 21,
+            "zoom": "0x3FFCBBECAF608601"
+          },
+          {
+            "budget": 64000,
+            "budgets": [
+              819,
+              1638,
+              3276,
+              6552,
+              13104,
+              26208,
+              52416,
+              64000
+            ],
+            "escaped": 13819,
+            "need": 14126,
+            "samples": 20736,
+            "unresolved": 65,
+            "zoom": "0x4000C678C1C43240"
+          },
+          {
+            "budget": 64000,
+            "budgets": [
+              880,
+              1760,
+              3520,
+              7040,
+              14080,
+              28160,
+              56320,
+              64000
+            ],
+            "escaped": 17676,
+            "need": 21813,
+            "samples": 20736,
+            "unresolved": 81,
+            "zoom": "0x40032EFB2BD82180"
+          },
+          {
+            "budget": 7520,
+            "budgets": [
+              940,
+              1880,
+              3760,
+              7520
+            ],
+            "escaped": 20732,
+            "need": 1667,
+            "samples": 20736,
+            "unresolved": 2,
+            "zoom": "0x4005977D95EC10C0"
+          },
+          {
+            "budget": 2000,
+            "budgets": [
+              1000,
+              2000
+            ],
+            "escaped": 20736,
+            "need": 662,
+            "samples": 20736,
+            "unresolved": 0,
+            "zoom": "0x4008000000000000"
+          }
+        ]
+      },
+      "family": "mandelbrot",
+      "name": "seahorse-measured",
+      "plan": {
+        "end_zoom": "0x4008000000000000",
+        "fps": 5,
+        "frames": 16,
+        "start_zoom": "0x0000000000000000"
+      },
+      "user_limit": null
+    },
+    {
+      "center_im": "0.13182590420533",
+      "center_re": "-0.743643887037151",
+      "expected": {
+        "max_iter": [
+          2000,
+          2200,
+          2400,
+          2600,
+          2800,
+          3000,
+          3200,
+          3400,
+          3600,
+          3800,
+          4000,
+          4200,
+          4400,
+          4600,
+          4800,
+          5000
+        ],
+        "stations": [
+          {
+            "budget": 2000,
+            "budgets": [
+              2000
+            ],
+            "escaped": 17270,
+            "need": 452,
+            "samples": 20736,
+            "unresolved": 73,
+            "zoom": "0x0000000000000000"
+          },
+          {
+            "budget": 2590,
+            "budgets": [
+              2590
+            ],
+            "escaped": 4673,
+            "need": 2144,
+            "samples": 20736,
+            "unresolved": 104,
+            "zoom": "0x3FE2EFB2BD821804"
+          },
+          {
+            "budget": 2895,
+            "budgets": [
+              2895
+            ],
+            "escaped": 3288,
+            "need": 2331,
+            "samples": 20736,
+            "unresolved": 115,
+            "zoom": "0x3FEC91BC65D1D504"
+          },
+          {
+            "budget": 3195,
+            "budgets": [
+              3195
+            ],
+            "escaped": 4419,
+            "need": 2643,
+            "samples": 20736,
+            "unresolved": 151,
+            "zoom": "0x3FF319E30710C902"
+          },
+          {
+            "budget": 3495,
+            "budgets": [
+              3495
+            ],
+            "escaped": 7917,
+            "need": 3044,
+            "samples": 20736,
+            "unresolved": 307,
+            "zoom": "0x3FF7EAE7DB38A781"
+          },
+          {
+            "budget": 3795,
+            "budgets": [
+              3795
+            ],
+            "escaped": 12077,
+            "need": 2841,
+            "samples": 20736,
+            "unresolved": 311,
+            "zoom": "0x3FFCBBECAF608601"
+          },
+          {
+            "budget": 4095,
+            "budgets": [
+              4095
+            ],
+            "escaped": 13750,
+            "need": 3567,
+            "samples": 20736,
+            "unresolved": 632,
+            "zoom": "0x4000C678C1C43240"
+          },
+          {
+            "budget": 4400,
+            "budgets": [
+              4400
+            ],
+            "escaped": 17547,
+            "need": 4011,
+            "samples": 20736,
+            "unresolved": 647,
+            "zoom": "0x40032EFB2BD82180"
+          },
+          {
+            "budget": 4700,
+            "budgets": [
+              4700
+            ],
+            "escaped": 20732,
+            "need": 1667,
+            "samples": 20736,
+            "unresolved": 2,
+            "zoom": "0x4005977D95EC10C0"
+          },
+          {
+            "budget": 5000,
+            "budgets": [
+              5000
+            ],
+            "escaped": 20736,
+            "need": 662,
+            "samples": 20736,
+            "unresolved": 0,
+            "zoom": "0x4008000000000000"
+          }
+        ]
+      },
+      "family": "mandelbrot",
+      "name": "seahorse-limited",
+      "plan": {
+        "end_zoom": "0x4008000000000000",
+        "fps": 5,
+        "frames": 16,
+        "start_zoom": "0x0000000000000000"
+      },
+      "user_limit": 5000
+    },
+    {
+      "center_im": "0.0",
+      "center_re": "-0.5",
+      "expected": {
+        "max_iter": [
+          27600,
+          27600,
+          27600,
+          28590,
+          28590,
+          28590,
+          28590,
+          28590,
+          28590,
+          28590,
+          28590,
+          28590,
+          28590,
+          28590,
+          28590,
+          28590
+        ],
+        "stations": [
+          {
+            "budget": 12800,
+            "budgets": [
+              400,
+              800,
+              1600,
+              3200,
+              6400,
+              12800
+            ],
+            "escaped": 17260,
+            "need": 758,
+            "samples": 20736,
+            "unresolved": 16,
+            "zoom": "0x0000000000000000"
+          },
+          {
+            "budget": 33152,
+            "budgets": [
+              518,
+              1036,
+              2072,
+              4144,
+              8288,
+              16576,
+              33152
+            ],
+            "escaped": 1928,
+            "need": 13800,
+            "samples": 20736,
+            "unresolved": 8,
+            "zoom": "0x3FE2EFB2BD821804"
+          },
+          {
+            "budget": 37056,
+            "budgets": [
+              579,
+              1158,
+              2316,
+              4632,
+              9264,
+              18528,
+              37056
+            ],
+            "escaped": 368,
+            "need": 14295,
+            "samples": 20736,
+            "unresolved": 6,
+            "zoom": "0x3FEC91BC65D1D504"
+          },
+          {
+            "budget": 639,
+            "budgets": [
+              639
+            ],
+            "escaped": 0,
+            "need": null,
+            "samples": 20736,
+            "unresolved": 0,
+            "zoom": "0x3FF319E30710C902"
+          },
+          {
+            "budget": 699,
+            "budgets": [
+              699
+            ],
+            "escaped": 0,
+            "need": null,
+            "samples": 20736,
+            "unresolved": 0,
+            "zoom": "0x3FF7EAE7DB38A781"
+          },
+          {
+            "budget": 759,
+            "budgets": [
+              759
+            ],
+            "escaped": 0,
+            "need": null,
+            "samples": 20736,
+            "unresolved": 0,
+            "zoom": "0x3FFCBBECAF608601"
+          },
+          {
+            "budget": 819,
+            "budgets": [
+              819
+            ],
+            "escaped": 0,
+            "need": null,
+            "samples": 20736,
+            "unresolved": 0,
+            "zoom": "0x4000C678C1C43240"
+          },
+          {
+            "budget": 880,
+            "budgets": [
+              880
+            ],
+            "escaped": 0,
+            "need": null,
+            "samples": 20736,
+            "unresolved": 0,
+            "zoom": "0x40032EFB2BD82180"
+          },
+          {
+            "budget": 940,
+            "budgets": [
+              940
+            ],
+            "escaped": 0,
+            "need": null,
+            "samples": 20736,
+            "unresolved": 0,
+            "zoom": "0x4005977D95EC10C0"
+          },
+          {
+            "budget": 1000,
+            "budgets": [
+              1000
+            ],
+            "escaped": 0,
+            "need": null,
+            "samples": 20736,
+            "unresolved": 0,
+            "zoom": "0x4008000000000000"
+          }
+        ]
+      },
+      "family": "mandelbrot",
+      "name": "cardioid-measured",
+      "plan": {
+        "end_zoom": "0x4008000000000000",
+        "fps": 5,
+        "frames": 16,
+        "start_zoom": "0x0000000000000000"
+      },
+      "user_limit": null
+    }
+  ],
+  "tier": "bit-exact"
+}

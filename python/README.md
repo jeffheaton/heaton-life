@@ -60,10 +60,16 @@ field = frac.render((1920, 1080), hl.Viewport(
 ))
 hl.render.to_image(field, cmap="fire").save("deep.png")
 
-# Zoom movie (also .mp4 with the video extra):
-hl.fractal.zoom_animation(frac, (512, 512), hl.Viewport(
-    center_re="-0.7435", center_im="0.1314", zoom_log10=4.0,
-), steps=90, cmap="fire").save("zoom.gif")
+# Zoom movie: each frame's iteration budget measured down the descent, colors that
+# hold still, frames streamed to disk (an .mp4 needs the video extra; any other path
+# is a folder of PNG frames):
+hl.fractal.render_zoom_movie(
+    lambda max_iter: hl.fractal.Mandelbrot(max_iter=max_iter),
+    (640, 360),
+    hl.Viewport(center_re="-0.7435", center_im="0.1314"),
+    hl.fractal.ZoomPlan(start_zoom=0.0, end_zoom=4.0, frames=240, fps=30),
+    "zoom.mp4",
+)
 
 # Evolve MergeLife rules with the paper's objective — reproducible from a seed
 # (slow: a few minutes at these settings):

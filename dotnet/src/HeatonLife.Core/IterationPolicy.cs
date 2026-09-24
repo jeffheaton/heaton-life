@@ -57,5 +57,73 @@ namespace HeatonLife
             long twice = 2L * NeedFromCounts(counts);
             return (int)Math.Min(Math.Max(AutoMaxIter(zoomLog10), twice), int.MaxValue);
         }
+
+        /// <summary>
+        /// A movie frame's budget without a user limit (spec/zoom.md "Iteration budget"): the
+        /// depth ramp.
+        /// </summary>
+        public static int MovieMaxIter(double zoomLog10, double targetZoomLog10) =>
+            AutoMaxIter(zoomLog10);
+
+        /// <summary>
+        /// A movie frame's budget with a user limit U (1 ≤ U): the depth ramp scaled to
+        /// reach exactly U at the target, min(U, max(a, (U · a) / a_T)) with a =
+        /// AutoMaxIter(zoom) and a_T = AutoMaxIter(target), the product in 64 bits (it
+        /// reaches 2^62) and the quotient floored.
+        /// </summary>
+        public static int MovieMaxIter(double zoomLog10, double targetZoomLog10, int userLimit)
+        {
+            if (userLimit < 1)
+                throw new ArgumentOutOfRangeException(nameof(userLimit), $"an iteration limit must lie in [1, 2^31 - 1], got {userLimit}");
+            int ramp = AutoMaxIter(zoomLog10);
+            long scaled = (long)userLimit * ramp / AutoMaxIter(targetZoomLog10);
+            return (int)Math.Min(userLimit, Math.Max(ramp, scaled));
+        }
+
+        /// <summary>
+        /// The measured need at a depth from a survey's knots (zoom, need), ascending in zoom:
+        /// the larger of the two knots around it; the nearer knot's past either end; at a knot,
+        /// the largest of it and its two neighbors. No knots: 0.
+        /// </summary>
+        public static int NeedAt(double zoomLog10, (double Zoom, int Need)[] knots)
+        {
+            if (double.IsNaN(zoomLog10) || double.IsInfinity(zoomLog10))
+                throw new ArgumentException($"zoom must be finite, got {zoomLog10}", nameof(zoomLog10));
+            if (knots == null)
+                throw new ArgumentNullException(nameof(knots));
+            int n = knots.Length;
+            if (n == 0)
+                return 0;
+            for (int k = 0; k < n; k++)
+            {
+                if (knots[k].Zoom == zoomLog10)
+                {
+                    int need = knots[k].Need;
+                    if (k > 0)
+                        need = Math.Max(need, knots[k - 1].Need);
+                    if (k + 1 < n)
+                        need = Math.Max(need, knots[k + 1].Need);
+                    return need;
+                }
+            }
+            if (!(zoomLog10 > knots[0].Zoom))
+                return knots[0].Need;
+            if (!(zoomLog10 < knots[n - 1].Zoom))
+                return knots[n - 1].Need;
+            int deeper = 1;
+            while (!(knots[deeper].Zoom > zoomLog10))
+                deeper++;
+            return Math.Max(knots[deeper - 1].Need, knots[deeper].Need);
+        }
+
+        /// <summary>
+        /// A movie frame's budget from a survey (Heaton Fractal's measured mode):
+        /// min(max(AutoMaxIter(zoom), 2 · NeedAt(zoom, knots)), 2^31 − 1).
+        /// </summary>
+        public static int MeasuredMaxIter(double zoomLog10, (double Zoom, int Need)[] knots)
+        {
+            long twice = 2L * NeedAt(zoomLog10, knots);
+            return (int)Math.Min(Math.Max(AutoMaxIter(zoomLog10), twice), int.MaxValue);
+        }
     }
 }

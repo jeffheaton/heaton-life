@@ -12,9 +12,7 @@ from heaton_life.render import Animation, apply_colormap
 
 
 class _Renderable(Protocol):
-    def render(
-        self, size: tuple[int, int], viewport: Viewport
-    ) -> NDArray[np.float64]: ...
+    def render(self, size: tuple[int, int], viewport: Viewport) -> NDArray[np.float64]: ...
 
 
 def zoom_animation(
@@ -28,7 +26,10 @@ def zoom_animation(
     fps: int = 30,
     scale: int = 1,
 ) -> Animation:
-    """Frames from start_zoom to target.zoom_log10 at the target's center."""
+    """Frames from start_zoom to target.zoom_log10 at the target's center, held in memory,
+    each with its own stretch and one max_iter: a quick look, and Newton's path. For an
+    escape-time movie use render_zoom_movie (heaton_life.fractal.movie): measured
+    budgets, colors that hold still, streamed to disk."""
     if steps < 2:
         raise ValueError("steps must be >= 2")
     zooms = np.linspace(start_zoom, target.zoom_log10, steps)

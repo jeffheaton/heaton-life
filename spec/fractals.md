@@ -112,7 +112,9 @@ libm `pow`:
   integers; 0 when nothing escaped.
 - `suggest_max_iter(z, counts) = min(max(auto_max_iter(z), 2 · need), 2³¹ − 1)`.
 
-Python `heaton_life.fractal.policy`; C# `IterationPolicy`.
+Python `heaton_life.fractal.policy`; C# `IterationPolicy`. A zoom movie's budgets
+(`movie_max_iter`, and the measured `need_at` / `measured_max_iter`) are policy too:
+[zoom.md](zoom.md#iteration-budget).
 
 ## Distance estimate
 
