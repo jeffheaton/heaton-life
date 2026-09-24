@@ -22,7 +22,7 @@ namespace HeatonLife.Tests
         // Everything this runner understands. A key outside these sets fails the case
         // rather than being skipped: a runner that ignored, say, "critical_orbit" would
         // replay a deep Julia case the old way and fail confusingly or pass wrongly.
-        private static readonly HashSet<string> SpecVersions = new HashSet<string> { "0.2.0", "0.3.0", "0.4.0", "0.6.0", "0.7.0" };
+        private static readonly HashSet<string> SpecVersions = new HashSet<string> { "0.2.0", "0.3.0", "0.4.0", "0.6.0", "0.7.0", "0.8.0" };
         private static readonly HashSet<string> TopKeys = new HashSet<string>
         {
             "spec_version", "family", "tier", "params", "viewport", "size", "outputs",
@@ -35,7 +35,7 @@ namespace HeatonLife.Tests
             ["burning-ship"] = new HashSet<string> { "max_iter", "escape_radius" },
             ["newton"] = new HashSet<string> { "degree", "max_iter" },
         };
-        private static readonly HashSet<string> OutputKinds = new HashSet<string> { "iterations", "roots", "status" };
+        private static readonly HashSet<string> OutputKinds = new HashSet<string> { "iterations", "roots", "status", "bla_applications" };
 
         /// <summary>spec_version as integers, compared component by component ("0.10.0" &gt; "0.4.0").</summary>
         private static bool AtLeast(string version, int major, int minor, int patch)
@@ -68,6 +68,14 @@ namespace HeatonLife.Tests
             var paramNames = new HashSet<string>();
             foreach (var property in p.EnumerateObject())
                 paramNames.Add(property.Name);
+            bool bla = false;
+            if (paramNames.Remove("bla"))
+            {
+                // spec/deep-zoom.md "BLA" (0.8.0): an algorithm parameter, Mandelbrot only.
+                Assert.True(family == "mandelbrot", $"{family}/{caseName}: {family} has no BLA");
+                Assert.True(AtLeast(root.GetProperty("spec_version").GetString()!, 0, 8, 0), $"{family}/{caseName}: bla before 0.8.0");
+                bla = p.GetProperty("bla").GetBoolean();
+            }
             Assert.True(ParamKeys[family].SetEquals(paramNames), $"{family}/{caseName}: unexpected params");
             Assert.True(family == "julia" || !root.TryGetProperty("critical_orbit", out _));
             var vp = root.GetProperty("viewport");
@@ -90,7 +98,7 @@ namespace HeatonLife.Tests
                 AssertKeys(orbit, $"{family}/{caseName} {key}", "file", "length");
                 Assert.EndsWith(".c128", orbit.GetProperty("file").GetString()!);
             }
-            bool withStatus = false, withDistance = false;
+            bool withStatus = false, withDistance = false, withBla = false;
             string version = root.GetProperty("spec_version").GetString()!;
             foreach (var output in root.GetProperty("outputs").EnumerateArray())
             {
@@ -107,6 +115,7 @@ namespace HeatonLife.Tests
                 {
                     AssertKeys(output, $"{family}/{caseName} output", "kind", "file", "shape");
                     withStatus |= output.GetProperty("kind").GetString() == "status";
+                    withBla |= output.GetProperty("kind").GetString() == "bla_applications";
                     Assert.True(
                         OutputKinds.Contains(output.GetProperty("kind").GetString()!)
                         && output.GetProperty("file").GetString()!.EndsWith(".i32", StringComparison.Ordinal),
@@ -118,6 +127,8 @@ namespace HeatonLife.Tests
             }
             // spec/fractals.md "Status" (0.6.0): how each count was decided.
             Assert.True(!withStatus || AtLeast(version, 0, 6, 0), $"{family}/{caseName}: status before 0.6.0");
+            // A BLA case records its applications, and only a BLA case has them.
+            Assert.True(bla == withBla, $"{family}/{caseName}: bla and bla_applications go together");
             var viewport = new Viewport(
                 vp.GetProperty("center_re").GetString()!,
                 vp.GetProperty("center_im").GetString()!,
@@ -148,10 +159,10 @@ namespace HeatonLife.Tests
             foreach (int workers in new[] { 1, 5 })
             {
                 double[]? distance = null;
-                var produced = withDistance
+                var produced = withDistance || withBla
                     ? ComputeFields(
                         family, p, viewport, width, height, orbitRe, orbitIm, criticalRe, criticalIm, workers, withStatus,
-                        out distance)
+                        withDistance, bla, out distance)
                     : ComputeOutputs(
                         family, p, viewport, width, height, orbitRe, orbitIm, criticalRe, criticalIm, workers, withStatus);
                 foreach (var output in root.GetProperty("outputs").EnumerateArray())
@@ -293,16 +304,21 @@ namespace HeatonLife.Tests
             double[]? criticalIm,
             int workers,
             bool withStatus,
-            out double[] distance)
+            bool withDistance,
+            bool bla,
+            out double[]? distance)
         {
             var counts = new int[width * height];
             byte[]? status = withStatus ? new byte[width * height] : null;
-            distance = new double[width * height];
+            distance = withDistance ? new double[width * height] : null;
+            int[]? applications = bla ? new int[width * height] : null;
             if (family == "mandelbrot")
             {
-                var field = new Mandelbrot(p.GetProperty("max_iter").GetInt32(), p.GetProperty("escape_radius").GetDouble(), workers);
+                var field = new Mandelbrot(p.GetProperty("max_iter").GetInt32(), p.GetProperty("escape_radius").GetDouble(), workers, bla);
                 if (orbitRe != null)
-                    field.Fields(width, height, viewport, orbitRe, orbitIm!, counts, status, distance);
+                    field.Fields(width, height, viewport, orbitRe, orbitIm!, counts, status, distance, applications);
+                else if (applications != null)
+                    field.Fields(width, height, viewport, counts, applications, status: status, distance: distance);
                 else
                     field.Fields(width, height, viewport, counts, status: status, distance: distance);
             }
@@ -316,6 +332,14 @@ namespace HeatonLife.Tests
                     field.Fields(width, height, viewport, counts, status: status, distance: distance);
             }
             var produced = new Dictionary<string, int[]> { ["iterations"] = counts };
+            if (applications != null)
+            {
+                long total = 0;
+                foreach (int a in applications)
+                    total += a;
+                Assert.True(total > 0, "a BLA case must engage, or it pins nothing");
+                produced["bla_applications"] = applications;
+            }
             if (status != null)
             {
                 var statusInts = new int[status.Length];

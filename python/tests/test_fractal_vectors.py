@@ -21,7 +21,9 @@ from heaton_life.fractal import BurningShip, Julia, Mandelbrot, Newton
 VECTOR_ROOT = Path(__file__).resolve().parents[2] / "vectors"
 
 FIELDS = {
-    "mandelbrot": lambda p: Mandelbrot(max_iter=p["max_iter"], escape_radius=p["escape_radius"]),
+    "mandelbrot": lambda p: Mandelbrot(
+        max_iter=p["max_iter"], escape_radius=p["escape_radius"], bla=p.get("bla", False)
+    ),
     "julia": lambda p: Julia(
         c=complex(p["c_re"], p["c_im"]),
         max_iter=p["max_iter"],
@@ -36,7 +38,7 @@ ORBIT_KINDS = {"mandelbrot": "mandelbrot", "julia": "julia", "burning-ship": "bu
 # Everything this runner understands. A key outside these sets fails the case rather
 # than being skipped: a runner that ignored, say, "critical_orbit" would replay a deep
 # Julia case the old way and either fail confusingly or pass for the wrong reason.
-SPEC_VERSIONS = {"0.2.0", "0.3.0", "0.4.0", "0.6.0", "0.7.0"}
+SPEC_VERSIONS = {"0.2.0", "0.3.0", "0.4.0", "0.6.0", "0.7.0", "0.8.0"}
 TOP_KEYS = {
     "spec_version",
     "family",
@@ -55,7 +57,8 @@ PARAM_KEYS = {
     "burning-ship": {"max_iter", "escape_radius"},
     "newton": {"degree", "max_iter"},
 }
-OUTPUT_KINDS = {"iterations", "roots", "status", "distance"}
+OUTPUT_KINDS = {"iterations", "roots", "status", "distance", "bla_applications"}
+BLA_FAMILIES = {"mandelbrot"}
 DISTANCE_FAMILIES = {"mandelbrot", "julia"}
 
 
@@ -92,7 +95,15 @@ def test_fractal_vector(case: Path) -> None:
     assert not unknown, f"{case}: runner does not understand {sorted(unknown)}; teach it first"
     assert meta["spec_version"] in SPEC_VERSIONS, f"{case}: unknown spec_version"
     assert meta["tier"] == "bit-exact"
-    assert set(meta["params"]) == PARAM_KEYS[family], f"{case}: unexpected params"
+    params = set(meta["params"])
+    bla = bool(meta["params"].get("bla", False))
+    if "bla" in params:
+        # spec/deep-zoom.md "BLA" (0.8.0): an algorithm parameter, Mandelbrot only.
+        assert family in BLA_FAMILIES, f"{case}: {family} has no BLA"
+        assert isinstance(meta["params"]["bla"], bool), f"{case}: bla must be a bool"
+        assert _version(meta["spec_version"]) >= (0, 8, 0), f"{case}: bla before 0.8.0"
+        params.discard("bla")
+    assert params == PARAM_KEYS[family], f"{case}: unexpected params"
     assert "critical_orbit" not in meta or family == "julia"
     viewport_keys = {"center_re", "center_im", "zoom_log10"}
     if "reference_re" in meta["viewport"] or "reference_im" in meta["viewport"]:
@@ -127,14 +138,28 @@ def test_fractal_vector(case: Path) -> None:
         # spec/fractals.md "Status" (0.6.0): how each count was decided.
         assert _version(meta["spec_version"]) >= (0, 6, 0), f"{case}: status before 0.6.0"
         produced["status"] = field.counts_and_status(size, viewport)[1]  # type: ignore[attr-defined]
-    if "distance" in kinds:
+    if "distance" in kinds or "bla_applications" in kinds:
         # The distance loop is its own code path: its counts and statuses must be the
         # other paths' exactly, so they are checked against the same files.
-        fields = field.fields(size, viewport, status="status" in kinds, distance=True)  # type: ignore[attr-defined]
-        assert np.array_equal(fields.counts, produced["iterations"]), f"{case}: distance counts"
+        fields = field.fields(  # type: ignore[attr-defined]
+            size,
+            viewport,
+            status="status" in kinds,
+            distance="distance" in kinds,
+            bla_applications="bla_applications" in kinds,
+        )
+        assert np.array_equal(fields.counts, produced["iterations"]), f"{case}: fields counts"
         if fields.status is not None:
-            assert np.array_equal(fields.status, produced["status"]), f"{case}: distance status"
+            assert np.array_equal(fields.status, produced["status"]), f"{case}: fields status"
         produced["distance"] = fields.distance
+        produced["bla_applications"] = fields.bla_applications
+    if "bla_applications" in kinds:
+        # spec/deep-zoom.md "BLA": a BLA case must engage, or it pins nothing.
+        assert bla and _version(meta["spec_version"]) >= (0, 8, 0), (
+            f"{case}: applications without bla"
+        )
+        assert int(np.sum(produced["bla_applications"])) > 0, f"{case}: BLA never engaged"
+    assert not bla or "bla_applications" in kinds, f"{case}: a BLA case records its applications"
     for output in meta["outputs"]:
         what = f"{family}/{case_dir.name}: {output['kind']}"
         if output["kind"] == "distance":

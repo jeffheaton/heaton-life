@@ -13,6 +13,7 @@ import numpy as np
 from heaton_life.core.bignum import reference_orbit
 from heaton_life.core.params import Params
 from heaton_life.core.viewport import Viewport
+from heaton_life.fractal.bla import build_table, frame_dc_bound, perturb_z2_bla
 from heaton_life.fractal.engine import (
     CARDIOID_OR_BULB,
     ESCAPED,
@@ -40,8 +41,10 @@ from heaton_life.fractal.perturbation import (
 )
 
 Derivative = tuple[FloatArray, FloatArray]
-_Computed = tuple[IntArray, ComplexArray, StatusArray, Derivative | None]
-_ComputedT1 = tuple[IntArray, ComplexArray, Derivative | None]
+# (counts, final z, status, derivative at escape, BLA applications); the last two only
+# when asked for (distance) or taken (BLA at T1).
+_Computed = tuple[IntArray, ComplexArray, StatusArray, Derivative | None, IntArray | None]
+_ComputedT1 = tuple[IntArray, ComplexArray, Derivative | None, IntArray | None]
 
 
 def _z2_update(z: ComplexArray, c: ComplexArray) -> ComplexArray:
@@ -65,6 +68,7 @@ class EscapeFields:
     smooth: FloatArray | None = None
     status: StatusArray | None = None
     distance: FloatArray | None = None
+    bla_applications: IntArray | None = None
 
 
 class _EscapeField:
@@ -86,9 +90,9 @@ class _EscapeField:
         if zoom <= T0_MAX_ZOOM:
             return self._compute_t0(size, viewport, distance)
         if zoom <= T1_MAX_ZOOM:
-            counts, final, derivative = self._compute_t1(size, viewport, distance)
+            counts, final, derivative, applications = self._compute_t1(size, viewport, distance)
             status = np.where(counts > 0, ESCAPED, EXHAUSTED).astype(np.int8)
-            return counts, final, status, derivative
+            return counts, final, status, derivative, applications
         raise ValueError(
             f"zoom 1e{zoom:g} exceeds the float64 perturbation tier (~1e{T1_MAX_ZOOM:g}); "
             "the floatexp tier is not implemented yet"
@@ -112,19 +116,22 @@ class _EscapeField:
         smooth: bool = False,
         status: bool = False,
         distance: bool = False,
+        bla_applications: bool = False,
     ) -> EscapeFields:
         """One computation, every output a host asks for (spec/fractals.md): counts, and
         optionally smooth values, statuses and the distance estimate. Counts, smooth and
         status are exactly what iterations / counts_and_smooth / counts_and_status give.
         The distance estimate is Mandelbrot and Julia only, with 2 <= escape_radius <=
-        1e64; it runs a separate loop that also carries the derivative."""
+        1e64; it runs a separate loop that also carries the derivative.
+        ``bla_applications``: how many BLA skips each pixel took (spec/deep-zoom.md "BLA";
+        0 wherever BLA is off or the tier is T0)."""
         if distance:
             if not self.supports_distance:
                 raise ValueError(f"{type(self).__name__} has no distance estimate")
             if not 2.0 <= self.escape_radius <= 1e64:
                 raise ValueError("a distance estimate needs 2 <= escape_radius <= 1e64")
         width, height = size
-        counts, final, statuses, derivative = self._compute(size, viewport, distance)
+        counts, final, statuses, derivative, applications = self._compute(size, viewport, distance)
         de = None
         if derivative is not None:
             de = distance_estimate(counts, final, *derivative).reshape(height, width)
@@ -134,12 +141,19 @@ class _EscapeField:
             smooth=None if mu is None else mu.reshape(height, width),
             status=statuses.reshape(height, width) if status else None,
             distance=de,
+            bla_applications=(
+                None
+                if not bla_applications
+                else (
+                    np.zeros(counts.size, dtype=np.int32) if applications is None else applications
+                ).reshape(height, width)
+            ),
         )
 
     def iterations(self, size: tuple[int, int], viewport: Viewport) -> IntArray:
         """Raw escape counts, shape (height, width). The bit-exact conformance output."""
         width, height = size
-        counts, _, _, _ = self._compute(size, viewport)
+        counts, _, _, _, _ = self._compute(size, viewport)
         return counts.reshape(height, width)
 
     def counts_and_status(
@@ -149,7 +163,7 @@ class _EscapeField:
         (height, width): 0 escaped, 1 max_iter exhausted, 2 inside the cardioid or bulb,
         3 an exact cycle. A host tells "needs more iterations" (1) from "interior" (2, 3)."""
         width, height = size
-        counts, _, status, _ = self._compute(size, viewport)
+        counts, _, status, _, _ = self._compute(size, viewport)
         return counts.reshape(height, width), status.reshape(height, width)
 
     def outputs(self, size: tuple[int, int], viewport: Viewport) -> dict[str, IntArray]:
@@ -161,7 +175,7 @@ class _EscapeField:
         """Raw counts and smooth values mu (0 where interior), each (height, width),
         before normalization -- so a host can recolor without re-rendering."""
         width, height = size
-        counts, final, _, _ = self._compute(size, viewport)
+        counts, final, _, _, _ = self._compute(size, viewport)
         mu = smooth_iterations(counts, final, self.escape_radius)
         return counts.reshape(height, width), mu.reshape(height, width)
 
@@ -181,10 +195,19 @@ class _EscapeField:
 class MandelbrotParams(Params):
     max_iter: int = 500
     escape_radius: float = 1000.0
+    bla: bool = False
 
 
 class Mandelbrot(_EscapeField):
-    """z <- z^2 + c, c = pixel, z0 = 0."""
+    """z <- z^2 + c, c = pixel, z0 = 0. ``bla`` turns on bivariate linear approximation
+    at T1 (spec/deep-zoom.md "BLA"): far fewer steps at depth, counts that differ from
+    BLA-off only on float64-chaotic pixels -- an algorithm choice, so it is a parameter."""
+
+    def __init__(
+        self, max_iter: int = 500, escape_radius: float = 1000.0, bla: bool = False
+    ) -> None:
+        super().__init__(max_iter, escape_radius)
+        self.bla = bool(bla)
 
     def _compute_t0(
         self, size: tuple[int, int], viewport: Viewport, distance: bool = False
@@ -201,14 +224,14 @@ class Mandelbrot(_EscapeField):
             counts[rest], final[rest], status[rest] = escape_time(
                 np.zeros_like(rest_c), rest_c, _z2_update, self.max_iter, self.escape_radius
             )
-            return counts, final, status, None
+            return counts, final, status, None, None
         dr = np.zeros(c.size, dtype=np.float64)
         di = np.zeros(c.size, dtype=np.float64)
         ps = pixel_scale(size, viewport)
         counts[rest], final[rest], status[rest], (dr[rest], di[rest]) = escape_time_distance(
             np.zeros_like(rest_c), rest_c, self.max_iter, self.escape_radius, (0.0, 0.0), ps
         )
-        return counts, final, status, (dr, di)
+        return counts, final, status, (dr, di), None
 
     def _compute_t1(
         self, size: tuple[int, int], viewport: Viewport, distance: bool = False
@@ -217,14 +240,21 @@ class Mandelbrot(_EscapeField):
             "mandelbrot", *viewport.orbit_center, viewport.zoom_log10, self.max_iter
         )
         dc = pixel_deltas(size, viewport)
+        if self.bla:
+            table = build_table(orbit, self.escape_radius, frame_dc_bound(dc))
+            scale = pixel_scale(size, viewport) if distance else None
+            return perturb_z2_bla(orbit, dc, self.max_iter, self.escape_radius, table, scale)
         if not distance:
             counts, final = perturb_z2(
                 orbit, np.zeros_like(dc), dc, self.max_iter, self.escape_radius
             )
-            return counts, final, None
+            return counts, final, None, None
         ps = pixel_scale(size, viewport)
-        return perturb_z2_distance(
-            orbit, np.zeros_like(dc), dc, self.max_iter, self.escape_radius, (0.0, 0.0), ps
+        return (
+            *perturb_z2_distance(
+                orbit, np.zeros_like(dc), dc, self.max_iter, self.escape_radius, (0.0, 0.0), ps
+            ),
+            None,
         )
 
 
@@ -254,9 +284,12 @@ class Julia(_EscapeField):
         z0 = pixel_grid(size, viewport)
         c = np.full_like(z0, self.c)
         if not distance:
-            return (*escape_time(z0, c, _z2_update, self.max_iter, self.escape_radius), None)
+            return (*escape_time(z0, c, _z2_update, self.max_iter, self.escape_radius), None, None)
         ps = pixel_scale(size, viewport)
-        return escape_time_distance(z0, c, self.max_iter, self.escape_radius, (ps, 0.0), None)
+        return (
+            *escape_time_distance(z0, c, self.max_iter, self.escape_radius, (ps, 0.0), None),
+            None,
+        )
 
     def _compute_t1(
         self, size: tuple[int, int], viewport: Viewport, distance: bool = False
@@ -287,10 +320,13 @@ class Julia(_EscapeField):
             counts, final = perturb_z2(
                 orbit, dz0, dc, self.max_iter, self.escape_radius, rebase_orbit=critical
             )
-            return counts, final, None
+            return counts, final, None, None
         ps = pixel_scale(size, viewport)
-        return perturb_z2_distance(
-            orbit, dz0, dc, self.max_iter, self.escape_radius, (ps, 0.0), None, critical
+        return (
+            *perturb_z2_distance(
+                orbit, dz0, dc, self.max_iter, self.escape_radius, (ps, 0.0), None, critical
+            ),
+            None,
         )
 
 
@@ -310,7 +346,7 @@ class BurningShip(_EscapeField):
     ) -> _Computed:
         c = pixel_grid(size, viewport)
         z0 = np.zeros_like(c)
-        return (*escape_time(z0, c, _ship_update, self.max_iter, self.escape_radius), None)
+        return (*escape_time(z0, c, _ship_update, self.max_iter, self.escape_radius), None, None)
 
     def _compute_t1(
         self, size: tuple[int, int], viewport: Viewport, distance: bool = False
@@ -319,4 +355,4 @@ class BurningShip(_EscapeField):
             "burning_ship", *viewport.orbit_center, viewport.zoom_log10, self.max_iter
         )
         dc = pixel_deltas(size, viewport)
-        return (*perturb_burning_ship(orbit, dc, self.max_iter, self.escape_radius), None)
+        return (*perturb_burning_ship(orbit, dc, self.max_iter, self.escape_radius), None, None)

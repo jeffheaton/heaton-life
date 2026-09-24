@@ -12,7 +12,20 @@ namespace HeatonLife
         public int Workers { get; }
         public double EscapeRadius { get; }
 
+        /// <summary>
+        /// Bivariate linear approximation at T1 (spec/deep-zoom.md "BLA"): far fewer steps at
+        /// depth, counts that differ from BLA-off only on float64-chaotic pixels — an algorithm
+        /// choice, so a constructor parameter. T0 ignores it.
+        /// </summary>
+        public bool Bla { get; }
+
         public Mandelbrot(int maxIter = 500, double escapeRadius = 1000.0, int workers = 1)
+            : this(maxIter, escapeRadius, workers, false)
+        {
+        }
+
+        /// <summary>A Mandelbrot field, with <paramref name="bla"/> choosing BLA at T1.</summary>
+        public Mandelbrot(int maxIter, double escapeRadius, int workers, bool bla)
         {
             if (maxIter < 1)
                 throw new ArgumentException("max_iter must be positive");
@@ -21,6 +34,7 @@ namespace HeatonLife
             MaxIter = maxIter;
             EscapeRadius = escapeRadius;
             Workers = workers;
+            Bla = bla;
         }
 
         /// <summary>
@@ -156,15 +170,32 @@ namespace HeatonLife
 
         /// <summary>
         /// <see cref="Fields(int,int,Viewport,int[],double[],byte[],double[],RenderProgress,CancellationToken)"/>
+        /// that also reports how many BLA skips each pixel took (spec/deep-zoom.md "BLA"; 0
+        /// wherever BLA is off or the tier is T0) into <paramref name="blaApplications"/>.
+        /// </summary>
+        public void Fields(
+            int width, int height, Viewport viewport, int[] counts, int[] blaApplications, double[]? smooth = null,
+            byte[]? status = null, double[]? distance = null, RenderProgress? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (blaApplications == null)
+                throw new ArgumentNullException(nameof(blaApplications));
+            if (distance != null)
+                FractalEngine.RequireDistanceRadius(EscapeRadius);
+            Compute(width, height, viewport, null, null, counts, smooth, progress, cancellationToken, status, distance, blaApplications);
+        }
+
+        /// <summary>
+        /// <see cref="Fields(int,int,Viewport,int[],double[],byte[],double[],RenderProgress,CancellationToken)"/>
         /// against a stored reference orbit — the conformance runners' replay path.
         /// </summary>
         internal void Fields(
             int width, int height, Viewport viewport, double[] orbitRe, double[] orbitIm, int[] counts,
-            byte[]? status, double[]? distance)
+            byte[]? status, double[]? distance, int[]? blaApplications = null)
         {
             if (distance != null)
                 FractalEngine.RequireDistanceRadius(EscapeRadius);
-            Compute(width, height, viewport, orbitRe, orbitIm, counts, null, null, default, status, distance);
+            Compute(width, height, viewport, orbitRe, orbitIm, counts, null, null, default, status, distance, blaApplications);
         }
 
         /// <summary>Whether this family has a distance estimate: yes (spec/fractals.md "Distance estimate").</summary>
@@ -193,8 +224,11 @@ namespace HeatonLife
             RenderProgress? progress = null,
             CancellationToken cancellationToken = default,
             byte[]? status = null,
-            double[]? distance = null)
+            double[]? distance = null,
+            int[]? blaApplications = null)
         {
+            if (blaApplications != null && blaApplications.Length != width * height)
+                throw new ArgumentException($"expected {width * height} BLA counts, got {blaApplications.Length}");
             if (status != null && status.Length != width * height)
                 throw new ArgumentException($"expected {width * height} statuses, got {status.Length}");
             if (distance != null && distance.Length != width * height)
@@ -227,6 +261,26 @@ namespace HeatonLife
             double logR = Math.Log(EscapeRadius);
             // The cardioid/bulb shortcut only where no interior orbit can cross the radius.
             bool shortcut = EscapeRadius >= 2.0;
+            // BLA (spec/deep-zoom.md "BLA"): one table per frame, built before rows fan out
+            // from the orbit, R and the frame's dc bound (its largest |dc.re|, |dc.im|).
+            BlaTable? table = null;
+            if (t1 && Bla)
+            {
+                double maxRe = 0.0, maxIm = 0.0;
+                for (int x = 0; x < width; x++)
+                {
+                    double v = Math.Abs(offCenter ? FractalEngine.DeltaRe(x, width, ps, dRe) : FractalEngine.OffsetRe(x, width, ps));
+                    if (v > maxRe)
+                        maxRe = v;
+                }
+                for (int y = 0; y < height; y++)
+                {
+                    double v = Math.Abs(offCenter ? FractalEngine.DeltaIm(y, height, ps, dIm) : FractalEngine.OffsetIm(y, height, ps));
+                    if (v > maxIm)
+                        maxIm = v;
+                }
+                table = BlaTable.Build(orbitRe!, orbitIm!, EscapeRadius, BlaTable.DcBound(maxRe, maxIm));
+            }
             void Row(int y)
             {
                 double oy = offCenter ? FractalEngine.DeltaIm(y, height, ps, dIm) : FractalEngine.OffsetIm(y, height, ps);
@@ -235,8 +289,16 @@ namespace HeatonLife
                     double ox = offCenter ? FractalEngine.DeltaRe(x, width, ps, dRe) : FractalEngine.OffsetRe(x, width, ps);
                     int count;
                     double fr, fi, fdr = 0.0, fdi = 0.0;
+                    int applied = 0;
                     PixelStatus pixel;
-                    if (t1)
+                    if (table != null)
+                    {
+                        count = Perturbation.PerturbZ2Bla(
+                            orbitRe!, orbitIm!, table, ox, oy, MaxIter, EscapeRadius, distance != null, ps,
+                            out fr, out fi, out fdr, out fdi, out applied);
+                        pixel = count > 0 ? PixelStatus.Escaped : PixelStatus.Exhausted;
+                    }
+                    else if (t1)
                     {
                         count = distance == null
                             ? Perturbation.PerturbZ2(
@@ -273,6 +335,8 @@ namespace HeatonLife
                         mu[y * width + x] = FractalEngine.SmoothMu(count, fr, fi, logR);
                     if (distance != null)
                         distance[y * width + x] = FractalEngine.DistanceEstimate(count, fr, fi, fdr, fdi);
+                    if (blaApplications != null)
+                        blaApplications[y * width + x] = applied;
                 }
             }
 

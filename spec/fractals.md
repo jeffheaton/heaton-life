@@ -194,6 +194,13 @@ Coloring with it: [fractal-color.md](fractal-color.md).
   unconverged) and `iterations` (1-based, −1 if unconverged). Roots are
   `exp(2πik/d)`, k = 0..d−1.
 
+## BLA (Mandelbrot, T1, opt-in)
+
+`Mandelbrot(bla=True)` skips whole spans of the reference orbit where a pixel follows it
+linearly: [deep-zoom.md](deep-zoom.md#bla-bivariate-linear-approximation-mandelbrot-opt-in).
+Counts differ from BLA-off only on float64-chaotic pixels; BLA cases are bit-exact among
+themselves.
+
 ## Tiering (automatic)
 
 | Tier | zoom_log10 | Engine |
@@ -279,8 +286,12 @@ or stops the work and **never changes a completed frame's output**:
   `"relative_epsilon": 1e-12`; such cases carry `"spec_version": "0.7.0"`. The case's
   `tier` describes its integer outputs; an output with `relative_epsilon` is compared as
   that section says. A runner computes the case's counts through the distance path too.
+- A Mandelbrot case may set `"bla": true` in its params ([deep-zoom.md](deep-zoom.md#bla-bivariate-linear-approximation-mandelbrot-opt-in));
+  it then carries a `bla_applications` output (`bla_applications.i32`, each pixel's
+  number of skips), whose total must be positive — a BLA case that never engages pins
+  nothing — and `"spec_version": "0.8.0"` or later.
 - Cases written from 2026-09-23 carry `"spec_version": "0.3.0"`, those with a reference
   `"0.4.0"` or later, those with a status `"0.6.0"` or later, those with a distance
-  `"0.7.0"` (earlier ones keep `0.2.0`; [vectors/README.md](../vectors/README.md) lists
+  `"0.7.0"` or later, those with BLA `"0.8.0"` (earlier ones keep `0.2.0`; [vectors/README.md](../vectors/README.md) lists
   what each adds). Versions compare numerically, component by component. Runners are
   strict: a key, output kind, codec or version they do not know fails the case.

@@ -548,6 +548,7 @@ def main() -> None:
         status=True,
     )
     write_distance_cases()
+    write_bla_cases()
 
     # -- iteration policy (spec/fractals.md "Iteration policy") -----------------------
     write_policy_cases()
@@ -584,6 +585,7 @@ def write_fractal_case(
     spec_version: str = SPEC_VERSION,
     status: bool = False,
     distance: bool = False,
+    bla: bool = False,
 ) -> None:
     case_dir = VECTOR_ROOT / family / name
     case_dir.mkdir(parents=True, exist_ok=True)
@@ -595,6 +597,19 @@ def write_fractal_case(
         file = f"{kind}.i32"
         (case_dir / file).write_bytes(np.ascontiguousarray(grid, dtype="<i4").tobytes())
         outputs.append({"kind": kind, "file": file, "shape": list(grid.shape)})
+    if bla:  # spec/deep-zoom.md "BLA": each pixel's skips, which must happen
+        applied = field.fields(size, viewport, bla_applications=True).bla_applications
+        assert int(applied.sum()) > 0, f"{family}/{name}: BLA never engaged"
+        (case_dir / "bla_applications.i32").write_bytes(
+            np.ascontiguousarray(applied, dtype="<i4").tobytes()
+        )
+        outputs.append(
+            {
+                "kind": "bla_applications",
+                "file": "bla_applications.i32",
+                "shape": list(applied.shape),
+            }
+        )
     if distance:  # spec/fractals.md "Distance estimate": relative epsilon
         fields = field.fields(size, viewport, distance=True)
         assert np.array_equal(fields.counts, grids["iterations"]), "the distance loop's counts"
@@ -785,6 +800,87 @@ def write_distance_cases() -> None:
         spec_version="0.7.0",
         distance=True,
     )
+
+
+# A period-16 nucleus (the reference passes within 5e-120 of 0 at Z_16, Z_32, ...).
+NUCLEUS_P16 = (
+    "-0.15290632811969396953419706326289366549612424542171",
+    "1.03966209947138144375000734681034193201188490626331",
+)
+NUCLEUS_P1959 = (
+    (
+        "-0.74179270142920012328415486246133486546597975955966921338142290897793331586511"
+        "46245001356794980988932282797"
+    ),
+    (
+        "0.123977941724695971711689620339223320892796574416415373390553636985046660821372"
+        "5129489699597506805010116194"
+    ),
+)
+
+
+def _shifted(center: tuple[str, str], zoom: float, fx: float, fy: float) -> tuple[str, str]:
+    """The center moved (fx, fy) frame widths, exactly in decimal (4 x 10^-zoom wide)."""
+    import decimal
+
+    with decimal.localcontext() as ctx:
+        ctx.prec = 120
+        span = decimal.Decimal(4) * decimal.Decimal(10) ** decimal.Decimal(repr(-zoom))
+        return (
+            str(decimal.Decimal(center[0]) + span * decimal.Decimal(repr(fx))),
+            str(decimal.Decimal(center[1]) + span * decimal.Decimal(repr(fy))),
+        )
+
+
+def write_bla_cases() -> None:
+    """BLA (spec/deep-zoom.md "BLA", 0.8.0): counts and per-pixel skips, bit-exact."""
+
+    def case(
+        name: str, max_iter: int, viewport: Viewport, size: tuple[int, int], **kw: Any
+    ) -> None:
+        write_fractal_case(
+            "mandelbrot",
+            name,
+            Mandelbrot(max_iter=max_iter, bla=True),
+            {"max_iter": max_iter, "escape_radius": 1000.0, "bla": True},
+            viewport,
+            size,
+            orbit_kind="mandelbrot",
+            spec_version="0.8.0",
+            bla=True,
+            **kw,
+        )
+
+    eleven = (ELEVEN_DIMENSIONS_RE, ELEVEN_DIMENSIONS_IM)
+    # Multi-level skips on a non-escaping reference: 10 levels, 39 skips on some pixels.
+    case("bla-11dim-zoom30-32", 8000, Viewport(*eleven, 30.0), (32, 32))
+    # The same with an off-center reference: the dc bound includes the offset.
+    case(
+        "bla-11dim-offref-zoom30-24",
+        8000,
+        Viewport(*eleven, 30.0).with_reference(*_shifted(eleven, 30.0, 0.2, -0.1)),
+        (24, 24),
+    )
+    # A reference that escapes, pixels that rebase between skips (the oracle frame).
+    case(
+        "bla-p1959-zoom30-16",
+        20000,
+        Viewport(*_shifted(NUCLEUS_P1959, 30.0, 0.7, 0.0), 30.0),
+        (16, 16),
+    )
+    # Deltas near 1e-295: the dc bound and |dz| far below 1e-154, exponent-scaled.
+    case("bla-tinyim-zoom280-32", 1000, Viewport("-2", "1e-295", 280.0), (32, 32))
+    # The distance estimate through skips: d' = A d + B ps.
+    case("bla-far-zoom170-16", 2000, Viewport("-0.75", "0.1", 170.0), (16, 16), distance=True)
+    # Skips that land on a rebase: the reference passes near 0 at every multiple of 16.
+    case(
+        "bla-landing-rebase-12",
+        3000,
+        Viewport(*_shifted(NUCLEUS_P16, 25.0, 0.3, 0.1), 25.0),
+        (12, 12),
+    )
+    # Skips that land on an escape: the reference escapes at Z_32, a multiple of the stride.
+    case("bla-landing-escape-8", 2000, Viewport("-0.75", "0.10999", 30.0), (8, 8))
 
 
 def _bits(value: float) -> str:

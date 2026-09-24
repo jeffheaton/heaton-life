@@ -171,6 +171,118 @@ namespace HeatonLife
             return -1;
         }
 
+        /// <summary>
+        /// Mandelbrot perturbation with BLA skips (spec/deep-zoom.md "BLA"): each pass, a
+        /// pixel at a stride-aligned reference index takes the longest live span of
+        /// <paramref name="table"/> whose radius exceeds |dz| and that fits in maxIter, else
+        /// one plain step exactly as <see cref="PerturbZ2(double[],double[],double,double,double,double,int,double,out double,out double)"/>
+        /// takes it. A skip is plain doubles: dz' = A·dz + B·dc, and with
+        /// <paramref name="distance"/> the derivative d' = A·d + B·ps. Returns the count
+        /// (-1 if none) and how many skips the pixel took.
+        /// </summary>
+        internal static int PerturbZ2Bla(
+            double[] orbitRe,
+            double[] orbitIm,
+            BlaTable table,
+            double dcRe,
+            double dcIm,
+            int maxIter,
+            double escapeRadius,
+            bool distance,
+            double ps,
+            out double finalRe,
+            out double finalIm,
+            out double finalDr,
+            out double finalDi,
+            out int applications)
+        {
+            const int stride = BlaTable.Stride;
+            double dzr = 0.0, dzi = 0.0;
+            int m = 0;
+            long n = 0;
+            int last = orbitRe.Length - 1;
+            double r2 = escapeRadius * escapeRadius;
+            double dr = 0.0, di = 0.0;
+            double zr = orbitRe[0] + dzr;                  // the pre-square z of the first pass
+            double zi = orbitIm[0] + dzi;
+            int levels = table.Levels;
+            int blocks = levels > 0 ? table.R[0].Length : 0;
+            applications = 0;
+            while (n < maxIter)
+            {
+                int chosen = -1;
+                if (levels > 0 && m % stride == 0 && m / stride < blocks)
+                {
+                    double dm = BlaTable.Mag(dzr, dzi);
+                    for (int level = 0; level < levels; level++)
+                    {
+                        long span = (long)stride << level;
+                        if (m % span != 0 || m / span >= table.R[level].Length || n + span > maxIter
+                            || !(dm < table.R[level][m / span]))
+                            break;
+                        chosen = level;
+                    }
+                }
+                if (chosen >= 0)
+                {
+                    int span = stride << chosen;
+                    int e = m / span;
+                    double ar = table.Ar[chosen][e], ai = table.Ai[chosen][e];
+                    double br = table.Br[chosen][e], bi = table.Bi[chosen][e];
+                    if (distance)
+                    {
+                        double tdr = (ar * dr - ai * di) + br * ps;
+                        double tdi = (ar * di + ai * dr) + bi * ps;
+                        dr = tdr;
+                        di = tdi;
+                    }
+                    double nr = (ar * dzr - ai * dzi) + (br * dcRe - bi * dcIm);
+                    double ni = (ar * dzi + ai * dzr) + (br * dcIm + bi * dcRe);
+                    dzr = nr;
+                    dzi = ni;
+                    m += span;
+                    n += span;
+                    applications++;
+                }
+                else
+                {
+                    if (distance)
+                    {
+                        double tdr = 2.0 * (zr * dr - zi * di) + ps;
+                        double tdi = 2.0 * (zr * di + zi * dr);
+                        dr = tdr;
+                        di = tdi;
+                    }
+                    double tr = 2.0 * orbitRe[m] + dzr;
+                    double ti = 2.0 * orbitIm[m] + dzi;
+                    var (mr, mi) = FractalEngine.ComplexMul(tr, ti, dzr, dzi);
+                    dzr = mr + dcRe;
+                    dzi = mi + dcIm;
+                    m = Math.Min(m + 1, last);
+                    n++;
+                }
+                zr = orbitRe[m] + dzr;
+                zi = orbitIm[m] + dzi;
+                double zabs2 = zr * zr + zi * zi;
+                if (zabs2 > r2)
+                {
+                    finalRe = zr;
+                    finalIm = zi;
+                    finalDr = dr;
+                    finalDi = di;
+                    return (int)n;
+                }
+                if (zabs2 < dzr * dzr + dzi * dzi)
+                {
+                    dzr = zr;                               // z and the derivative are unchanged
+                    dzi = zi;
+                    m = 0;
+                }
+            }
+            finalRe = finalIm = finalDr = finalDi = 0.0;
+            return -1;
+        }
+
         /// <summary>Component-form perturbation for the Burning Ship, using stable diffabs.</summary>
         public static int PerturbBurningShip(
             double[] orbitRe,

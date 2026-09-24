@@ -1,0 +1,41 @@
+{
+  "family": "mandelbrot",
+  "outputs": [
+    {
+      "file": "iterations.i32",
+      "kind": "iterations",
+      "shape": [
+        16,
+        16
+      ]
+    },
+    {
+      "file": "bla_applications.i32",
+      "kind": "bla_applications",
+      "shape": [
+        16,
+        16
+      ]
+    }
+  ],
+  "params": {
+    "bla": true,
+    "escape_radius": 1000.0,
+    "max_iter": 20000
+  },
+  "reference_orbit": {
+    "file": "orbit.c128",
+    "length": 3911
+  },
+  "size": [
+    16,
+    16
+  ],
+  "spec_version": "0.8.0",
+  "tier": "bit-exact",
+  "viewport": {
+    "center_im": "0.1239779417246959717116896203392233208927965744164153733905536369850466608213725129489699597506805010116194",
+    "center_re": "-0.7417927014292001232841548624585348654659797595596692133814229089779333158651146245001356794980988932282797",
+    "zoom_log10": 30.0
+  }
+}

@@ -218,6 +218,103 @@ The suggested rule: keep `R` while it lies within the frame (Python
 While it is kept, a pan hits the [orbit cache](#caching--interactivity), whose key does
 not involve `C`.
 
+### BLA: bivariate linear approximation (Mandelbrot, opt-in)
+
+Far from its own escape a pixel follows the reference almost linearly: over `l` steps
+from reference index `m`, `δ_{m+l} ≈ A·δ_m + B·δc` while `|δ|` stays below a radius
+where every dropped `δ²` term is below float64 rounding. A table of `(A, B, r)` over
+power-of-two spans of the orbit lets a pixel skip whole spans (Zhuoran 2021; the radii
+and merge rule of Fraktaler-3 and Heaton Fractal). It changes counts, but only on
+float64-chaotic pixels — pixels whose true count moves when `δc` moves by a few ulps
+(measured against 1024-bit iteration: BLA-on and BLA-off are equally often right) — so
+it is an **opt-in algorithm parameter** with its own bit-exact vectors:
+`Mandelbrot(bla=True)`, C# `new Mandelbrot(maxIter, escapeRadius, workers, bla: true)`.
+T0 ignores it. Julia (`B = 0`, a table on the critical orbit too) and the Burning Ship
+(an ABS-BLA) are future work.
+
+Constants: stride `S = 8`, `ε = 2⁻⁵³` (float64's unit roundoff; Heaton Fractal's `2⁻²⁴`
+is float32's, and at float64 it flips counts on up to 14% of pixels), at most 32 levels.
+
+**Arithmetic.** Every BLA operation is plain float64 on real values — NumPy real
+arrays, never complex arrays or Python/NumPy complex scalars (whose multiply may be
+fma-contracted, depending on the compiler), C# plain doubles, never `ComplexMul`. A
+product `x·y` of pairs is `(x.re·y.re − x.im·y.im, x.re·y.im + x.im·y.re)`. Magnitudes
+are exponent-scaled:
+
+```
+mag(x, y):  a = max(|x|, |y|);  s = 2^600 if a < 2^−400,  2^−600 if a > 2^400,  else 1
+            mag = sqrt((x·s)·(x·s) + (y·s)·(y·s)) · (1/s)
+```
+
+(`0`, `+∞` and `NaN` come out as themselves.)
+
+**Table** — a pure function of the float64 orbit samples, `R` and the frame's `dc`
+bound:
+
+- `k*`, the extent: the least `k ≥ 1` with `Zr_k² + Zi_k² > R²`, else `len − 1`. Steps
+  `0 … k* − 1` are tabulated (step `j` uses `Z_j` and lands on `j + 1`).
+- Level 0: `⌊k*/S⌋` entries; entry `k` folds steps `kS … kS + 7` left to right:
+
+  ```
+  A = (1, 0);  B = (0, 0);  r = +∞
+  for j in 0 … S−1:   z = Z[kS + j];  a = (2·z.re, 2·z.im)
+      r = merge(r, ε·mag(z), A, B)                 A, B before this step
+      B = ((a·B).re + 1, (a·B).im)
+      A = a·A
+  ```
+
+- Level `l ≥ 1`: `⌊n_{l−1}/2⌋` entries; entry `k` merges `x = (l−1, 2k)` then
+  `y = (l−1, 2k+1)`: `A = A_y·A_x`, `B = ((A_y·B_x).re + B_y.re, (A_y·B_x).im + B_y.im)`,
+  `r = merge(r_x, r_y, A_x, B_x)`. Entry `(l, k)` covers steps `k·S·2^l … (k+1)·S·2^l − 1`.
+- `merge(r1, r2, A1, B1)`: `num = r2 − mag(B1)·dc_bound`; `cand = num / mag(A1)`;
+  the result is `cand < r1 ? cand : r1` if `num > 0`, else `0` — spelled exactly so
+  (a NaN `num` gives 0, a NaN `cand` keeps `r1`, `|A1| = 0` gives `+∞` and keeps `r1`).
+- **Dead rule**, applied to each entry as it is made, before any parent reads it: unless
+  `r > 0`, `mag(A) < 2^960` and `mag(B) < 2^960`, `r = 0`. `Z₀ = 0` kills every entry that
+  starts at step 0.
+- `dc_bound = mag(max |δc.re|, max |δc.im|)` over the frame's pixel deltas (columns,
+  rows; an off-center reference's offset included), computed once per frame before
+  rows fan out — so tiles of one frame would need the whole frame's bound.
+
+**Per pixel** (the BLA-off loop is untouched):
+
+```
+δ = 0; m = 0; n = 0                                  (with a distance estimate: d, z as usual)
+while n < max_iter:
+    level = −1
+    if m % S = 0 and m/S < n₀:
+        for l = 0, 1, …:  span = S·2^l
+            stop unless  m % span = 0,  m/span < n_l,  n + span ≤ max_iter,
+                         mag(δ) < r[l][m/span]                          (strict)
+            level = l
+    if level ≥ 0:                       a skip, entry e = m/span:
+        d = ((A·d).re + B.re·ps, (A·d).im + B.im·ps)             [distance]
+        δ = ((A·δ).re + (B·δc).re, (A·δ).im + (B·δc).im)
+        m += span;  n += span
+    else:                               the plain step, exactly as without BLA
+        d from the pre-square z [distance];  δ = (2Z[m] + δ)·δ + δc;  m = min(m+1, last);  n += 1
+    z = Z[m] + δ
+    |z|² > R²    → count n
+    |z|² < |δ|²  → rebase: δ = z, m = 0
+count −1 when n reaches max_iter
+```
+
+- The ascending search, stopping at the first failure, finds the longest usable span:
+  radii never increase up a level (`merge` takes a minimum), and every other condition
+  holds for a level only if it holds for the ones below.
+- A skip lands at most on `k* ≤ last`, never needing the end clamp. A table built on a
+  longer orbit (a cached one past `max_iter`) gives the same pixels: an entry a pixel
+  could use ends at `m + span ≤ n + span ≤ max_iter`.
+- Inside a live span `|δ_j| < ε|Z_j|`, so no rebase is missed (`|Z_j + δ_j| > |δ_j|`); an
+  escape inside a span would need `|Z_j|` within a relative `ε` of `R` — counts follow the
+  BLA path by definition. The landing sample is not constrained: a skip may land on an
+  escape (a reference that escapes at a multiple of `S`) or a rebase (a reference near 0
+  there, as on a nucleus of period `8k`).
+- The distance estimate's derivative through a skip is `A·d + B·ps`, the linearized
+  step; its relative error against stepping grows to about `span·ε`.
+- `fields(..., bla_applications=True)` / C# `Fields(…, blaApplications)` report each
+  pixel's number of skips (0 at T0 or with BLA off).
+
 ## Precision tiers (auto-selected from zoom)
 
 | Tier | Range (zoom = 10^k) | δ arithmetic | Status |
@@ -361,7 +458,8 @@ Hard-won; each has broken, or would break, bit-exact agreement between the ports
 
 ## Future work (explicitly out of v1)
 
-- **BLA** (bivariate linear approximation) for iteration skipping at extreme depth.
+- BLA for Julia (`B = 0`, a table on the critical orbit as well) and the Burning Ship (an
+  ABS-BLA); Mandelbrot BLA landed in 0.8.0 ([BLA](#bla-bivariate-linear-approximation-mandelbrot-opt-in)).
 - T2 floatexp arithmetic.
 - Distance-estimation anti-aliasing (the [distance estimate](fractals.md#distance-estimate)
   itself, interior shortcuts and palette antialiasing landed in 0.6.0 and 0.7.0).
