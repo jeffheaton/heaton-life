@@ -18,8 +18,9 @@ namespace HeatonLife
     ///
     /// The layout is the one already on disk in shipped saves; it is a storage
     /// contract, not merely an implementation detail. Do not change it. (Extended
-    /// once, before any release shipped — 2026-08-22: an elementary save carries
-    /// the space-time diagram after the tape, and tape-only saves still load.)
+    /// once, in 1.1.0 — 2026-08-22, after the 1.0.0 packages shipped: an elementary
+    /// save carries the space-time diagram after the tape. Tape-only saves, which is
+    /// what 1.0.0 writes, still load; 1.0.0 cannot read the extended ones.)
     /// </summary>
     public static class StateCodec
     {
@@ -83,7 +84,7 @@ namespace HeatonLife
             return bytes;
         }
 
-        /// <summary>Accepts both layouts: tape only (pre-2026-08-22 saves) or tape + diagram.</summary>
+        /// <summary>Accepts both layouts: tape only (what 1.0.0 writes) or tape + diagram (1.1.0 on).</summary>
         private static void LoadElementary(Elementary sim, byte[] bytes, int generation)
         {
             int width = sim.Width;

@@ -4,7 +4,7 @@ namespace HeatonLife
     /// <summary>Version and build stamp of this HeatonLife.Core assembly.</summary>
     public static class HeatonLifeVersion
     {
-        public const string Version = "1.0.0";
+        public const string Version = "1.1.0";
         public const string BuildDate = "";
         public const int Build = 0;
     }

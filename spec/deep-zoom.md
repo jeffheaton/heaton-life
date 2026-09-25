@@ -115,8 +115,9 @@ t·δₙ   = ( fma(tᵣ, δᵣ, −(tᵢ·δᵢ)),  fma(tᵣ, δᵢ, tᵢ·δᵣ
 δₙ₊₁   = t·δₙ + δc                         (component-wise)
 ```
 
-The product is FMA-contracted because that is what NumPy 2.x's complex multiply
-does; the C# port mirrors it with `FractalEngine.ComplexMul` (see
+The product is FMA-contracted because that is what NumPy's complex multiply does from
+2.0.2 on (earlier versions did not always; [self-check.md](self-check.md), `numpy-fma`);
+the C# port mirrors it with `FractalEngine.ComplexMul` (see
 [Float-determinism gotchas](#float-determinism-gotchas)).
 
 Escape test and smooth coloring use the reconstructed `z = Z[m] + δ`:

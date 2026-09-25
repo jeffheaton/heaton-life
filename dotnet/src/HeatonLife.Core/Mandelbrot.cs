@@ -41,13 +41,14 @@ namespace HeatonLife
 
         /// <summary>
         /// Escape counts into <paramref name="counts"/>, tiered by zoom: T0 (direct float64)
-        /// through 1e12, then T1 (perturbation against a reference orbit this call computes)
-        /// through 1e290.
+        /// through 1e12, T1 (perturbation against a reference orbit this call computes)
+        /// through 1e290, then T2 (floatexp perturbation) through
+        /// <see cref="MaxZoomLog10"/>, 1e9000.
         /// </summary>
         public void Iterations(int width, int height, Viewport viewport, int[] counts)
             => Compute(width, height, viewport, null, null, counts, null);
 
-        /// <summary>Escape counts, row-major (height, width), tiered by zoom through 1e290.</summary>
+        /// <summary>Escape counts, row-major (height, width), tiered by zoom through <see cref="MaxZoomLog10"/> (1e9000).</summary>
         public int[] Iterations(int width, int height, Viewport viewport)
         {
             var counts = new int[width * height];

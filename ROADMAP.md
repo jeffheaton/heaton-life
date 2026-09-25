@@ -1,6 +1,6 @@
 # Roadmap
 
-Build order for the library — the Python reference implementation, the PyQt6 playground, and the .NET port — sequenced so each phase proves the layer the next one leans on. Phases 0–9 are complete and 1.0.0 of both packages shipped on 2026-08-22; what remains is under "Future work". Every phase also lands its spec pages and conformance vectors — the spec is written *with* the first implementation, not after it.
+Build order for the library — the Python reference implementation, the PyQt6 playground, and the .NET port — sequenced so each phase proves the layer the next one leans on. Phases 0–10 are complete: 1.0.0 of both packages shipped on 2026-08-22 with Phases 0–9, and 1.1.0 carries Phase 10 ([CHANGELOG.md](CHANGELOG.md)); what remains is under "Future work". Every phase also lands its spec pages and conformance vectors — the spec is written *with* the first implementation, not after it.
 
 ## Phase 0 — Scaffold ✅
 
@@ -95,10 +95,37 @@ published by the manually dispatched Build Library workflows (python/DEVELOPMENT
 dotnet/DEVELOPMENT.md, "Releasing"; NuGet through Trusted Publishing, no stored key).
 Consumer-facing READMEs on both package pages, the intro notebook installing from PyPI.
 
+## Phase 10 — Deep zoom to 1e9000, zoom movies, platform self-check ✅
+
+Aligning the library with Heaton Fractal's deep zoom, in stages (spec_version 0.2.0 →
+0.13.0, every vector 1.0.0 shipped byte-identical), released as 1.1.0 (see
+[CHANGELOG.md](CHANGELOG.md)):
+
+- One orbit arithmetic in both ports (fixed point on integers), Julia's critical-orbit
+  rebasing, an exact software fma, and one decimal grammar for centers.
+- Off-center references, exact navigation, location import (Kalles Fraktaler,
+  Fraktaler-3, Heaton Fractal), and a nucleus finder.
+- Pixel status, interior shortcuts, the distance estimate, an iteration policy, and
+  fractal color (stretch, depth phase, distance shading, cyclic palettes).
+- T2 floatexp perturbation to 1e9000 for Mandelbrot and Julia, and BLA at T1 and T2
+  with double-double coefficients.
+- Newton's roots from pinned integer turns instead of libm `cos`/`sin`.
+- Zoom movies: schedules, plans and measured budgets in both ports, rendering in Python
+  (`render_zoom_movie`, [spec/zoom.md](spec/zoom.md)).
+- The platform self-check ([spec/self-check.md](spec/self-check.md)), which a host runs
+  on its own runtime. The Heaton Life app runs it at launch from its next release, and
+  it passed on every platform the app ships to (macOS, the Mac App Store sandbox,
+  Windows, Android, and iOS).
+- Python requires NumPy 2.0.2: before it, NumPy counted an output that merely touched an
+  input's memory as overlapping (numpy#27077) and took a plain C loop, unfused in most
+  builds.
+
 ## Future work
 
 - Fractals: progressive refinement with cancellation in the playground; optional
   numba kernels; BLA for Julia and the Burning Ship; the Burning Ship past 1e290.
+- Zoom movies: log-polar strips, rotation, and motion blur (spec/zoom.md, "Not yet");
+  rendering movies in the .NET port, where the Unity app would use them.
 - Boids spatial hash if flocks ever need >2k; Lenia multi-channel; Orbium and
   friends as stampable Lenia creatures; MP4/GIF export buttons in the playground.
 - Python 3.13+ in the classifiers once the suite has run there; a project-scoped

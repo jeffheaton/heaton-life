@@ -111,6 +111,38 @@ def test_numpy_error_state_does_not_fail_the_platform() -> None:
     assert results["numpy-fma"].passed, results["numpy-fma"].detail
 
 
+def test_numpy_fma_catches_the_numpy_1_touching_operand_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Before 2.0.2, NumPy counted an output that merely touched an input's memory as
+    overlapping (numpy#27077) and sent it to a plain C loop, which is unfused unless the
+    wheel's compiler contracted it (NumPy 1.26's macOS wheel and Linux GCC builds do
+    not). Consecutive large allocations often touch, so renders depended on the
+    allocator. Replay that fallback: the check must fail, and must fail as itself, not
+    only through a render digest further down."""
+    import numpy as np
+
+    fused = np.multiply
+
+    def touches(x: np.ndarray, y: np.ndarray) -> bool:
+        x0, y0 = x.ctypes.data, y.ctypes.data
+        return x0 == y0 + y.nbytes or y0 == x0 + x.nbytes
+
+    def numpy1_multiply(x: np.ndarray, y: np.ndarray, out: np.ndarray | None = None) -> object:
+        if out is None or not (touches(out, x) or touches(out, y)):
+            return fused(x, y, out=out)
+        xr, xi, yr, yi = x.real.copy(), x.imag.copy(), y.real.copy(), y.imag.copy()
+        out.real = xr * yr - xi * yi  # three ufunc calls, three roundings: no fma
+        out.imag = xr * yi + xi * yr
+        return out
+
+    monkeypatch.setattr(self_check.np, "multiply", numpy1_multiply)
+    results = {r.name: r for r in run_all()}
+    assert not results["numpy-fma"].passed
+    assert "output right" in results["numpy-fma"].detail
+    assert results["fp-contract"].passed  # scalar and elementwise real arithmetic is fine
+
+
 def test_a_run_leaves_the_orbit_cache_alone() -> None:
     bignum.clear_cache()
     host = bignum.reference_orbit("mandelbrot", "-0.75", "0.1", 20.0, 500)

@@ -303,8 +303,9 @@ namespace HeatonLife
 
         /// <summary>
         /// The software fma against exactly rounded answers: the Dekker path, the slow paths,
-        /// and exact residuals c = -round(a·b) (only a fused multiply-add returns the product's
-        /// rounding error). Contraction as such is fp-contract's to detect.
+        /// ties that only the product's rounding error breaks (a form that rounds twice gets
+        /// them wrong), and exact residuals c = -round(a·b) (only a fused multiply-add returns
+        /// the product's rounding error). Contraction as such is fp-contract's to detect.
         /// </summary>
         private static void SoftwareFma()
         {

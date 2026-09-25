@@ -160,14 +160,43 @@ def _numpy_fma() -> None:
 
 
 def _numpy_products(d: dict[str, Any], a: float, b: float, c: float, dd: float) -> None:
+    # Operands laid out inside one buffer, so the check does not depend on where the
+    # allocator happens to put arrays. Before 2.0.2, NumPy's overlap test counted an
+    # output that merely touched an input as overlapping (numpy#27077) and sent it to a
+    # plain C loop, fused only where the wheel's compiler contracted it; consecutive large
+    # allocations often touch. Every element is checked.
     for n in d["lengths"]:
-        z = np.full(n, complex(a, b), dtype=np.complex128)
-        w = np.full(n, complex(c, dd), dtype=np.complex128)
-        square = np.multiply(z, z)
-        product = np.multiply(z, w)
-        for k in (0, n - 1):
-            _expect(_bits(float(square[k].real)), d["square_re"], f"length {n}: (a+bi)^2 real")
-            _expect(_bits(float(product[k].imag)), d["product_im"], f"length {n}: imaginary")
+        buf = np.empty(6 * n + 6, dtype=np.complex128)
+        for layout, (zo, wo, oo) in _numpy_layouts(n).items():
+            z, w, out = buf[zo : zo + n], buf[wo : wo + n], buf[oo : oo + n]
+            where = f"length {n}, {layout}"
+            z[:] = complex(a, b)
+            w[:] = complex(c, dd)
+            np.multiply(z, z, out=out)
+            _expect_all(out.real, d["square_re"], f"{where}: (a+bi)^2 real")
+            np.multiply(z, w, out=out)
+            _expect_all(out.imag, d["product_im"], f"{where}: imaginary")
+
+
+def _numpy_layouts(n: int) -> dict[str, tuple[int, int, int]]:
+    """Element offsets of (z, w, out) in a buffer of 6n + 6: the operands apart, and the
+    output touching each input from either side (it never overlaps one)."""
+    far = 3 * n + 3
+    return {
+        "operands apart": (0, 2 * n + 2, 4 * n + 4),
+        "output right after z": (0, far, n),
+        "output right before z": (n, far, 0),
+        "output right after w": (far, 0, n),
+        "output right before w": (0, far, far - n),
+    }
+
+
+def _expect_all(values: NDArray[Any], want: int, what: str) -> None:
+    bits = np.ascontiguousarray(values).view(np.uint64)
+    wrong = np.flatnonzero(bits != np.uint64(want))
+    if wrong.size:
+        k = int(wrong[0])
+        _expect(int(bits[k]), want, f"{what}, element {k} of {bits.size} ({wrong.size} wrong)")
 
 
 def _pcg32() -> None:

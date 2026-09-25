@@ -7,9 +7,10 @@
 
 HeatonLife.Core is a .NET library for exploring emergence: simple rules that give rise
 to complex, organic-looking behavior. It brings together cellular automata (MergeLife,
-Life-like, Elementary, Cyclic, and Wireworld), three flavors of Lenia, escape-time
-fractals with deep zoom (Mandelbrot, Julia, Burning Ship, and Newton), Reynolds boids,
-and Gray-Scott reaction-diffusion under one consistent API. Every system steps and
+Life-like, Elementary, Cyclic, and Wireworld), three flavors of Lenia, fractals
+(Newton's basins, and Mandelbrot, Julia, and Burning Ship with deep zoom, to 10⁹⁰⁰⁰ for
+Mandelbrot and Julia), Reynolds boids, and Gray-Scott reaction-diffusion under one
+consistent API. Every system steps and
 renders the same way, so a few lines of C# give you a frame as a plain array,
 colormapped RGB, or a PNG, and a genetic evolver can search for new MergeLife rules.
 
@@ -47,7 +48,7 @@ For Unity (2021.2 or newer, which supports .NET Standard 2.1), copy
 `HeatonLife.Core.dll` and the `HeatonLife.Core.xml` beside it (for IntelliSense) into
 your project's `Assets/Plugins` folder. There is no native code and nothing else to
 install. Each release also ships the DLL, the XML docs, and the PDB together as
-[`heaton-life-dotnet-1.0.0.zip`](https://data.heatonresearch.com/library/heaton-life-dotnet-1.0.0.zip).
+[`heaton-life-dotnet-1.1.0.zip`](https://data.heatonresearch.com/library/heaton-life-dotnet-1.1.0.zip).
 The NuGet package also carries a symbols package (`.snupkg`, a portable PDB with
 SourceLink to this repository), so a debugger configured for the NuGet.org symbol
 server can step into the library's source.
@@ -122,11 +123,32 @@ palettes, `deep`, `classic`, `embers` and `glacier` (`Colormaps.CyclicNames`), w
 `Colormaps.ApplyPhase` wraps around: with `FractalColor.DepthPhase` a point keeps its
 color at every zoom, so a dive does not flicker the way a per-frame stretch does.
 
+# Checking the runtime
+
+The identical results rest on IEEE-754 double arithmetic with no fused multiply-add
+contraction, no flush-to-zero, and no extended precision. A host that runs the library
+somewhere unusual (Unity's IL2CPP on a phone, Mono, WebGL) can confirm that its runtime
+keeps that contract with the platform self-check: 21 checks against answers embedded in
+the assembly, needing no files and taking well under a second on a phone. Run it once,
+and off the main thread wherever the host has threads (WebGL has none, so there it runs
+on the main thread):
+
+```csharp
+using HeatonLife;
+
+bool ok = SelfCheck.Run(out string report);   // report: one PASS/FAIL line per check
+
+// Or gate a feature on exactly what a failure would invalidate:
+SelfCheck.Result[] results = SelfCheck.RunAll();
+bool deepZoomSafe = SelfCheck.Passed(results, SelfCheckScope.T1 | SelfCheckScope.T2);
+```
+
 # Helpful Links
 
 - [Repository](https://github.com/jeffheaton/heaton-life) — specifications, conformance vectors, and the Python implementation
 - [Algorithm specifications](https://github.com/jeffheaton/heaton-life/tree/main/spec)
 - [Python package](https://pypi.org/project/heaton-life/) and its [intro notebook](https://github.com/jeffheaton/heaton-life/blob/main/python/examples/heaton_life_intro.ipynb), which runs in Colab and shows the same systems
+- [Release notes](https://github.com/jeffheaton/heaton-life/blob/main/CHANGELOG.md) — what changed in each version
 - [Bug tracker](https://github.com/jeffheaton/heaton-life/issues)
 
 # Development

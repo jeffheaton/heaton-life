@@ -31,7 +31,7 @@ The project convention is a virtual environment at `python/.venv`:
 ```
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -e ".[dev,playground]"
+pip install -e ".[dev,playground,video]"
 ```
 
 | Extra | What it adds |
@@ -129,7 +129,7 @@ Some floating-point rules are not obvious and are easy to "clean up" by mistake:
   (the integer algorithm in `../spec/pow10.md`), never `10 ** x`, `math.pow`, or
   `log10`. Platform math libraries differ in the last bit at fractional zooms, and
   that flips escape counts in a bit-exact vector.
-- NumPy 2.x fuses complex multiplies into FMAs; the C# port mirrors that at the
+- NumPy (2.0.2 and later, hence the floor) fuses complex multiplies into FMAs; the C# port mirrors that at the
   same sites. Do not restructure the complex arithmetic in the fractal engine.
 - Rounding is half-even (`np.round`), and operation order is specified where it
   matters (for example the Gray-Scott Laplacian `((N + S) + W) + E - 4C`).
@@ -184,16 +184,20 @@ what needs changing.
 
 ## Versioning
 
-The version is declared in two places that must agree: `version` in
-`pyproject.toml` and `__version__` in `src/heaton_life/__init__.py`. The build
-fails if they differ. The .NET library's `<Version>` in
-`../dotnet/src/HeatonLife.Core/HeatonLife.Core.csproj` is bumped in step with
-them.
+The version lives in six places that move together, three of them here: `version` in
+`pyproject.toml`, `__version__` in `src/heaton_life/__init__.py`, and the `VERSION`
+baseline in `src/heaton_life/version.py`; and three in the .NET library: `<Version>` in
+`../dotnet/src/HeatonLife.Core/HeatonLife.Core.csproj`, the `Version` constant in its
+`Version.cs` baseline, and the `heaton-life-dotnet-<version>.zip` link in
+`../dotnet/README.md`. `tests/test_release_version.py` fails unless all six agree, and
+the Build Library workflow also refuses a `pyproject.toml` that disagrees with
+`__version__`.
 
 `src/heaton_life/version.py` is the build stamp that ships inside the wheel
 (`VERSION`, `BUILD_DATE`, `BUILD`). The tracked file is a baseline with `BUILD = 0`,
-meaning a local build; the Build Library workflow regenerates it with the run
-number and date before packaging.
+meaning a local build (local and editable installs report its `VERSION`, and so does
+the self-check's report header); the Build Library workflow regenerates it with the
+run number and date before packaging.
 
 ## Releasing
 
@@ -223,11 +227,14 @@ project-scoped one and update the repository secret.
 Release checklist:
 
 1. Bump the version in `pyproject.toml`, `__version__` in `src/heaton_life/__init__.py`,
-   and the `VERSION` baseline in `src/heaton_life/version.py` (CI checks only the first
-   two against each other; the baseline is what local and editable builds report), in
-   step with the .NET csproj, its `Version.cs` baseline, and the zip link in
-   `dotnet/README.md` (see `../dotnet/DEVELOPMENT.md`, "Releasing"). `README.md` is
-   frozen into the wheel as the PyPI project page, so finish README edits first.
+   and the `VERSION` baseline in `src/heaton_life/version.py` (the baseline is what local
+   and editable builds report), in step with the .NET csproj, its `Version.cs` baseline,
+   and the zip link in `dotnet/README.md` (see `../dotnet/DEVELOPMENT.md`, "Releasing");
+   `tests/test_release_version.py` checks all six, and each build workflow checks the
+   places it ships. Add the release's entry to
+   `../CHANGELOG.md` (what changed, and every behavior a user of the previous version
+   would notice). `README.md` is frozen into the wheel as the PyPI project page, so
+   finish README edits first.
 2. Run the four checks locally, commit, and push.
 3. Dispatch Build Library:
 
@@ -240,7 +247,7 @@ Release checklist:
 4. Dispatch the deploy with the wheel's file name:
 
    ```
-   gh workflow run deploy-lib.yml -R jeffheaton/heaton-life -f whl_file=heaton_life-1.0.0-py3-none-any.whl
+   gh workflow run deploy-lib.yml -R jeffheaton/heaton-life -f whl_file=heaton_life-<version>-py3-none-any.whl
    ```
 
    PyPI versions are immutable: anything that needs changing after the upload
@@ -255,6 +262,11 @@ Release checklist:
 6. Once both packages are out, tag the released commit (one tag serves both,
    since the versions move together) and push it:
    `git tag -a v<version> -m "heaton-life <version>" && git push origin v<version>`.
+   One tag is only true if both builds ran on the same commit, so first confirm that
+   the Build Library and Build Library (.NET) runs report the same head commit
+   (`gh run list -R jeffheaton/heaton-life --limit 5 --json workflowName,headSha`).
+   The two 1.0.0 packages did not: the wheel was built at `59da437` and the NuGet
+   package at `234075b` (the Python sources are identical at both).
 
 ## Code style
 

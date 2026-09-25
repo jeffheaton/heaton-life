@@ -36,7 +36,7 @@ This repo's identity is that Python and .NET produce **the same output** for the
   fractional zooms (Windows UCRT vs macOS libm vs numpy's vendored routines —
   measured 2026-08-21 as flipped escape counts in a bit-exact vector), so the
   historical `10^(log10(4/width) − zoom)` expression is forbidden.
-- NumPy 2.x contracts complex multiplies into FMAs: real = `fma(a,c,−bd)`, imag = `fma(a,d,bc)`. The C# side mirrors this exactly via `FractalEngine.ComplexMul`/`Fma` (software fma — netstandard2.1 has no intrinsic) at the sites where NumPy runs its multiply ufunc, and **only** there. Real-array NumPy ufunc chains never contract across calls, so expression-shape porting elsewhere is safe without fma.
+- NumPy (2.0.2 and later; the package's floor, see spec/self-check.md `numpy-fma`) contracts complex multiplies into FMAs: real = `fma(a,c,−bd)`, imag = `fma(a,d,bc)`. The C# side mirrors this exactly via `FractalEngine.ComplexMul`/`Fma` (software fma — netstandard2.1 has no intrinsic) at the sites where NumPy runs its multiply ufunc, and **only** there. Real-array NumPy ufunc chains never contract across calls, so expression-shape porting elsewhere is safe without fma.
 - `np.round` and the colormap/interp rounding are **half-even** (banker's); C# `Math.Round` default matches.
 - Operation order is spec'd where it matters (e.g. the Gray-Scott Laplacian `((N+S)+W)+E − 4C`); port expression shapes literally.
 - MergeLife's numerics (stable sort by limit alone, mode-padded neighbor sum, 127/128 percent scaling, floor semantics) are the upstream cross-engine contract — byte-identical with github.com/jeffheaton/mergelife.
@@ -82,7 +82,7 @@ dotnet test dotnet --nologo
 # Release build (single dependency-free netstandard2.1 assembly) and a local package to
 # try as a user would (see dotnet/DEVELOPMENT.md, "The checks")
 dotnet build dotnet/src/HeatonLife.Core -c Release
-dotnet pack dotnet/src/HeatonLife.Core -c Release -o dotnet/nupkgs -p:Version=1.0.1-local   # a version not on NuGet.org, so the package cache cannot substitute the published one
+dotnet pack dotnet/src/HeatonLife.Core -c Release -o dotnet/nupkgs -p:Version=1.1.1-local.1   # a version not on NuGet.org and never packed before (count the last number up per trial), so the package cache cannot substitute another
 ```
 
 
@@ -95,7 +95,8 @@ Nothing runs on push. Three `workflow_dispatch` workflows in `.github/workflows/
   stamp, the wheel → `twine check` → artifact → `s3://data.heatonresearch.com/library/`.
 - **Deploy Library to PyPI** (`deploy-lib.yml`): takes a wheel file name, pulls it
   from that S3 prefix, uploads to PyPI.
-- **Build Library (.NET)** (`build-lib-dotnet.yml`): `dotnet format` gate, vulnerable
+- **Build Library (.NET)** (`build-lib-dotnet.yml`): a check that the csproj version agrees with
+  `pyproject.toml` and the README's zip link, the `dotnet format` gate, vulnerable
   package report (advisory), a regenerated `src/HeatonLife.Core/Version.cs`, Release
   build, xunit with TRX, the DLL zip → artifact → S3, and `dotnet pack` (package + `.snupkg` symbols) → NuGet.org via
   Trusted Publishing (OIDC; no stored API key).
@@ -104,7 +105,9 @@ Versions live in six places that move together: `python/pyproject.toml` ↔
 `heaton_life.__version__` (the build fails if they disagree), the tracked
 `src/heaton_life/version.py` baseline, `<Version>` in `HeatonLife.Core.csproj`, the tracked
 `Version.cs` baseline, and the `heaton-life-dotnet-<version>.zip` link under "Install" in
-`dotnet/README.md` (that README is packed into every NuGet package). The baselines (BUILD 0)
+`dotnet/README.md` (that README is packed into every NuGet package);
+`python/tests/test_release_version.py` fails unless all six agree, and each release adds
+its entry to `CHANGELOG.md`. The baselines (BUILD 0)
 exist so the stamp always exists in local builds; CI overwrites them. The step-by-step
 release checklists (`gh workflow run build-lib.yml` → `gh workflow run deploy-lib.yml -f
 whl_file=…`; `gh workflow run build-lib-dotnet.yml`) are in `python/DEVELOPMENT.md` and

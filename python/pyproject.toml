@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "heaton-life"
-version = "1.0.0"
+version = "1.1.0"
 description = "Explore emergence in Python: cellular automata (MergeLife, Life-like, Elementary, Cyclic, Wireworld), Lenia, deep-zoom fractals, boids, and Gray-Scott reaction-diffusion under one deterministic API, rendered to images, GIFs, and MP4s, with a MergeLife evolver and a PyQt6 playground."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -27,7 +27,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "numpy>=1.24",
+    "numpy>=2.0.2",
     "pillow>=10.0",
 ]
 

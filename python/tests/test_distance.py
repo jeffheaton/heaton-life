@@ -4,10 +4,8 @@ guards, and the domain."""
 
 from __future__ import annotations
 
-import gmpy2
 import numpy as np
 import pytest
-from gmpy2 import mpc, mpfr
 
 from heaton_life.core import decimal_text
 from heaton_life.core.viewport import Viewport
@@ -19,6 +17,9 @@ from heaton_life.fractal.engine import (
     pixel_grid,
     pixel_scale,
 )
+
+gmpy2 = pytest.importorskip("gmpy2")  # the dev extra's high-precision oracle
+mpc, mpfr = gmpy2.mpc, gmpy2.mpfr
 
 SEAHORSE = ("-0.743643887037158704752191506114774", "0.131825904205311970493132056385139")
 RABBIT = complex(-0.123, 0.745)

@@ -10,9 +10,10 @@
 
 heaton-life is a Python library for exploring emergence: simple rules that give rise to
 complex, organic-looking behavior. It brings together cellular automata (MergeLife,
-Life-like, Elementary, Cyclic, and Wireworld), three flavors of Lenia, escape-time
-fractals with deep zoom (Mandelbrot, Julia, Burning Ship, and Newton), Reynolds boids,
-and Gray-Scott reaction-diffusion under one consistent API. Every system steps and
+Life-like, Elementary, Cyclic, and Wireworld), three flavors of Lenia, fractals
+(Newton's basins, and Mandelbrot, Julia, and Burning Ship with deep zoom, to 10⁹⁰⁰⁰ for
+Mandelbrot and Julia), Reynolds boids, and Gray-Scott reaction-diffusion under one
+consistent API. Every system steps and
 renders the same way, so a few lines of NumPy-backed code give you a still image, an
 animated GIF, or an MP4. A genetic evolver can search for new MergeLife rules, and an
 optional PyQt6 playground lets you explore everything interactively.
@@ -37,7 +38,8 @@ Install from [PyPI](https://pypi.org/project/heaton-life/).
 pip install heaton-life
 ```
 
-heaton-life requires Python 3.11 or newer and depends only on NumPy and Pillow.
+heaton-life requires Python 3.11 or newer and depends only on NumPy (2.0.2 or newer)
+and Pillow.
 Extras: `heaton-life[playground]` (the PyQt6 app), `[precision]` (gmpy2 for faster
 deep-zoom reference orbits; plain Python integers give the same orbit otherwise),
 `[video]` (MP4 export).
@@ -78,6 +80,22 @@ best = Evolver(size=(64, 64), population_size=20, seed=42).run(max_evals=200)
 print(best.genome, best.score)
 ```
 
+# Checking the runtime
+
+The identical results rest on IEEE-754 double arithmetic with no fused multiply-add
+contraction and no flush-to-zero, and on NumPy fusing its complex multiply the way the
+specifications assume. To confirm that your own installation keeps that contract (an
+unusual NumPy build, or a process that has loaded a library compiled with
+`-ffast-math`), run the platform self-check: 21 checks against answers embedded in the
+package, in well under a second.
+
+```python
+from heaton_life import self_check
+
+ok, report = self_check.run()   # report: one PASS/FAIL line per check
+print(report)
+```
+
 # Playground
 
 ```
@@ -94,6 +112,7 @@ form is generated from each family's params dataclass — new families get a UI 
 - [.NET package](https://www.nuget.org/packages/HeatonLife.Core/) — `HeatonLife.Core`, the same systems for C#, .NET, and Unity, held to the same conformance vectors
 - [Repository](https://github.com/jeffheaton/heaton-life) — specifications, conformance vectors, and the .NET implementation
 - [Algorithm specifications](https://github.com/jeffheaton/heaton-life/tree/main/spec)
+- [Release notes](https://github.com/jeffheaton/heaton-life/blob/main/CHANGELOG.md) — what changed in each version
 - [Bug tracker](https://github.com/jeffheaton/heaton-life/issues)
 
 # Development

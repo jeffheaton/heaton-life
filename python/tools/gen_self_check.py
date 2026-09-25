@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import struct
 import sys
 from fractions import Fraction
@@ -86,12 +87,28 @@ def meta(case: str) -> dict[str, Any]:
 # --- the data -----------------------------------------------------------------------
 
 
+def _double_rounded_fma(a: float, b: float, c: float) -> float:
+    """The Dekker form HeatonLife.Core used through 1.0.0: error-free product and sum,
+    then round(s + round(t + e)) -- two roundings (Python floats never contract)."""
+    split = 134217729.0
+    p = a * b
+    ta, tb = split * a, split * b
+    ahi, bhi = ta - (ta - a), tb - (tb - b)
+    alo, blo = a - ahi, b - bhi
+    e = ((ahi * bhi - p) + ahi * blo + alo * bhi) + alo * blo
+    s = p + c
+    v = s - p
+    t = (p - (s - v)) + (c - v)
+    return s + (t + e)
+
+
 def fma_triples() -> list[tuple[int, int, int, int]]:
     """Software fma known answers (C#): 22 triples across the Dekker path and the slow
-    paths (tiny products, huge operands, overflow, an infinite addend), then exact
-    residuals c = -round(a*b), where the fused result is the product's rounding error
-    and any unfused path returns 0 -- the shape that shows whether the fma is fused at
-    all. Every finite answer is checked here against the exactly rounded a*b + c
+    paths (tiny products, huge operands, overflow, an infinite addend); 2 ties that only
+    the product's rounding error breaks, which a form rounding twice gets wrong; then
+    exact residuals c = -round(a*b), where the fused result is the product's rounding
+    error and any unfused path returns 0 -- the shape that shows whether the fma is fused
+    at all. Every finite answer is checked here against the exactly rounded a*b + c
     (fractions.Fraction); the C# suite checks all of them against
     Math.FusedMultiplyAdd."""
     triples = [
@@ -118,6 +135,13 @@ def fma_triples() -> list[tuple[int, int, int, int]]:
         (0x697F5AA543C31387, 0x697F5AA543C31387, 0xFFE1CCF385EBC8A0, 0x7FF0000000000000),
         (0x5FF7DDDF6B095FF1, 0x5FF7DDDF6B095FF1, 0xFFF0000000000000, 0xFFF0000000000000),
     ]
+    # a*b = +-h(1 - 2^-60) with h = ulp(c)/2 rounds to +-h, so p + c is an exact tie and
+    # the product's error decides it (found by the 1.1.0 release review).
+    for c, sign in [(1 + 2.0**-52, 1.0), (1 + 3 * 2.0**-52, -1.0)]:
+        a, b = 1 + 2.0**-30, sign * math.ulp(c) / 2 * (1 - 2.0**-30)
+        exact = float(Fraction(a) * Fraction(b) + Fraction(c))
+        assert _double_rounded_fma(a, b, c) != exact, (a, b, c)
+        triples.append((bits_of(a), bits_of(b), bits_of(c), bits_of(exact)))
     for a, b in [
         (1 + 2.0**-30, 1 + 2.0**-31),
         (0.1, 0.7),

@@ -117,6 +117,47 @@ namespace HeatonLife.Tests
             }
         }
 
+        /// <summary>
+        /// Ties that only the product's error term breaks. With c a 53-bit x and a*b =
+        /// ±h(1 − k²2^−2m), h = ulp(x)/2, the product rounds to ±h whenever k² ≤ 2^(2m−54)
+        /// (about half the draws; the rest are ordinary Dekker-path checks), so p + c is an
+        /// exact tie and the tiny error e alone decides the rounding. Rounding t + e and then
+        /// s + t + e to nearest rounds twice and lands on the even neighbor instead: a quarter
+        /// of these checks went wrong before the error terms were rounded to odd, and random
+        /// operands almost never produce one (22 in 2,000,000 of the reviewer's family).
+        /// </summary>
+        [Fact]
+        public void SoftwareFmaBreaksTiesWithTheProductsErrorTerm()
+        {
+            void Check(double a, double b, double c)
+            {
+                double expected = Math.FusedMultiplyAdd(a, b, c);
+                double got = FractalEngine.Fma(a, b, c);
+                Assert.True(
+                    BitConverter.DoubleToInt64Bits(expected) == BitConverter.DoubleToInt64Bits(got),
+                    $"fma mismatch for ({a:R}, {b:R}, {c:R}): {expected:R} vs {got:R}");
+            }
+
+            // The case the second release review found: the hardware gives 1 + 2^-52.
+            Check(1.0 + Math.Pow(2, -30), Math.Pow(2, -53) * (1.0 - Math.Pow(2, -30)), 1.0 + Math.Pow(2, -52));
+
+            var rng = new Pcg32(1101);
+            for (int i = 0; i < 200_000; i++)
+            {
+                int exponent = (int)(rng.NextU32() % 1800) - 900;
+                long mantissa = (1L << 52) | (((long)rng.NextU32() << 20 | (rng.NextU32() >> 12)) & ((1L << 52) - 1));
+                double x = mantissa * Math.Pow(2, exponent - 52);
+                double h = (BitConverter.Int64BitsToDouble(BitConverter.DoubleToInt64Bits(x) + 1) - x) / 2.0;
+                int m = 27 + (int)(rng.NextU32() % 19);
+                int shift = (int)(rng.NextU32() % 40) - 20;
+                double k = 1 + rng.NextU32() % 1023;
+                double a = (1.0 + k * Math.Pow(2, -m)) * Math.Pow(2, shift);
+                double b = (rng.NextU32() % 2 == 0 ? 1 : -1) * h * (1.0 - k * Math.Pow(2, -m)) * Math.Pow(2, -shift);
+                Check(a, b, x);
+                Check(a, -b, -x);
+            }
+        }
+
         [Fact]
         public void MandelbrotInteriorNeverEscapes()
         {

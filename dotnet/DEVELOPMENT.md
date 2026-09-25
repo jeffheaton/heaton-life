@@ -62,10 +62,12 @@ dotnet test tests/HeatonLife.Core.Tests/HeatonLife.Core.Tests.csproj -c Release 
   project's dependencies, the only place a package could enter:
   `dotnet list tests/HeatonLife.Core.Tests/HeatonLife.Core.Tests.csproj package --vulnerable --include-transitive`.
 - To try the package as a user would, pack it at a version that is not on NuGet.org so
-  the global package cache cannot substitute the published one:
-  `dotnet pack src/HeatonLife.Core -c Release -o nupkgs -p:Version=1.0.1-local`, then
-  `dotnet add package HeatonLife.Core --version 1.0.1-local --source ./nupkgs` in a
-  fresh project (`nupkgs/` is ignored by git).
+  the global package cache cannot substitute the published one, and that you have not
+  packed before, since the cache keeps the first package it restores at a version:
+  `dotnet pack src/HeatonLife.Core -c Release -o nupkgs -p:Version=1.1.1-local.1`, then
+  `dotnet add package HeatonLife.Core --version 1.1.1-local.1 --source ./nupkgs` in a
+  fresh project (`nupkgs/` is ignored by git). Count the last number up for each trial,
+  or delete `~/.nuget/packages/heatonlife.core/*-local*` first.
 
 ## How the library is built: the spec decides
 
@@ -86,7 +88,7 @@ What that means for C# specifically:
 - **Powers of ten** in the fractal pixel scale go through `Pow10.Compute`
   (`../spec/pow10.md`), never `Math.Pow` or `Math.Log10`. Platform math libraries
   differ in the last bit at fractional zooms, and that flips escape counts.
-- **NumPy 2.x fuses complex multiplies into FMAs.** The fractal engine mirrors that
+- **NumPy (2.0.2 and later) fuses complex multiplies into FMAs.** The fractal engine mirrors that
   with a software fused multiply-add at exactly the sites where NumPy contracts, and
   only there (`netstandard2.1` has no FMA intrinsic). Do not restructure the complex
   arithmetic in `FractalEngine` or `Perturbation`. The software fma is a real one —
@@ -181,9 +183,12 @@ On this side:
 
 ## Versioning
 
-`<Version>` in `src/HeatonLife.Core/HeatonLife.Core.csproj` is the package version,
-and it is bumped in step with `version` in `../python/pyproject.toml` and
-`__version__` in the Python package.
+`<Version>` in `src/HeatonLife.Core/HeatonLife.Core.csproj` is the package version.
+The version lives in six places that move together: that one, the `Version` constant
+in the `Version.cs` baseline, and the `heaton-life-dotnet-<version>.zip` link in
+`README.md`; and in Python, `version` in `../python/pyproject.toml`, `__version__`,
+and the `version.py` baseline. `../python/tests/test_release_version.py` fails unless
+all six agree.
 
 `src/HeatonLife.Core/Version.cs` is the build stamp that ships inside the assembly
 (`HeatonLifeVersion.Version`, `BuildDate`, and `Build`). The tracked file is a
@@ -195,7 +200,8 @@ workflow regenerates it with the run number and date before building.
 One manually dispatched GitHub workflow, **Build Library (.NET)**
 (`.github/workflows/build-lib-dotnet.yml`), the same shape as the workflows in the
 maintainer's [dynaface](https://github.com/jeffheaton/dynaface) project. Nothing
-runs on push. In order: restore, the `dotnet format` gate, the vulnerable-package
+runs on push. In order: a check that the csproj version agrees with `pyproject.toml`
+and with the zip link in `README.md`, restore, the `dotnet format` gate, the vulnerable-package
 report (advisory), the regenerated `Version.cs`, the Release build, the xunit suite
 (published as a test report), then `heaton-life-dotnet-<version>.zip` (DLL + XML
 docs + PDB) as the `heaton-life-dotnet-dll` workflow artifact and a public copy on
@@ -235,9 +241,12 @@ Release checklist:
 1. Bump `<Version>` in the csproj (in step with the Python version), the `Version`
    constant in the tracked `src/HeatonLife.Core/Version.cs` baseline (CI regenerates
    the file, but local builds report the baseline), and the version in the
-   `heaton-life-dotnet-<version>.zip` link under "Install" in `README.md`. The
-   package README and icon are frozen into each version, so also update `README.md`
-   first if the API or the sample changed.
+   `heaton-life-dotnet-<version>.zip` link under "Install" in `README.md`
+   (`../python/tests/test_release_version.py` fails unless these three agree with the
+   three Python places, and the workflow refuses, before it builds anything, a README
+   zip link or a `pyproject.toml` version that disagrees with the csproj). Add the release's entry to `../CHANGELOG.md`, which the
+   package's release notes link to. The package README and icon are frozen into each
+   version, so also update `README.md` first if the API or the sample changed.
 2. Run the checks locally, commit, and push.
 3. Dispatch the workflow:
 
@@ -257,5 +266,5 @@ Release checklist:
    `.snupkg`; its push is separate from the main one, so check it explicitly), and
    `https://data.heatonresearch.com/library/heaton-life-dotnet-<version>.zip` resolves
    and contains the DLL, XML, and PDB. Then record the release in `../ROADMAP.md` and
-   tag the commit once the Python package is out too (see `../python/DEVELOPMENT.md`,
-   "Releasing").
+   tag the commit once the Python package is out too, after confirming both workflow
+   runs built the same commit (see `../python/DEVELOPMENT.md`, "Releasing").

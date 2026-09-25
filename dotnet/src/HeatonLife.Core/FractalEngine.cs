@@ -161,7 +161,7 @@ namespace HeatonLife
         /// <summary>
         /// The reference's complex multiply, (a+bi)(c+di): NumPy's SIMD kernels contract
         /// one product per component into an FMA — real = fma(a, c, -(b*d)),
-        /// imag = fma(a, d, b*c) — verified exhaustively against numpy 2.x. IEEE 754
+        /// imag = fma(a, d, b*c) — verified exhaustively against NumPy 2.0.2 and later. IEEE 754
         /// specifies fma exactly, so this is deterministic everywhere. Bit-exact fractal
         /// outputs require matching it wherever the reference runs its multiply ufunc.
         /// </summary>
@@ -186,13 +186,15 @@ namespace HeatonLife
         /// Software fused multiply-add: round(a*b + c) with a single rounding, as IEEE 754
         /// defines it and NumPy's hardware FMA computes it. netstandard2.1 has no
         /// Math.FusedMultiplyAdd, and Unity must run this, so the common case is built
-        /// from error-free transforms (Dekker TwoProduct + TwoSum) — plain IEEE ops. Those
-        /// are exact only while the product's low bits stay representable, |a*b| &gt;=
-        /// 2^-968; below that the exact sum is formed in integers and rounded once
-        /// (spec/deep-zoom.md "Float-determinism gotchas"). Julia T1 lands there — its
-        /// delta has no dc floor — and the Dekker form differed from the hardware in a
-        /// third of such cases. The test suite pins the whole thing bitwise against the
-        /// hardware intrinsic.
+        /// from error-free transforms (Dekker TwoProduct + TwoSum) — plain IEEE ops — with the
+        /// error terms' sum rounded to odd, so the last rounding is the only one that counts
+        /// (until 1.1.0 it rounded twice and missed ties that only the product's error term
+        /// breaks). Those transforms are exact only while the product's low bits stay
+        /// representable, |a*b| &gt;= 2^-968; below that the exact sum is formed in integers
+        /// and rounded once (spec/deep-zoom.md "Float-determinism gotchas"). Julia T1 lands
+        /// there — its delta has no dc floor — and the Dekker form differed from the
+        /// hardware in a third of such cases. The test suite pins the whole thing bitwise
+        /// against the hardware intrinsic.
         /// </summary>
         internal static double Fma(double a, double b, double c)
         {
@@ -222,7 +224,24 @@ namespace HeatonLife
             double s = p + c;
             double v = s - p;
             double t = (p - (s - v)) + (c - v); // s + t == p + c
-            return s + (t + e);
+            // a*b + c == s + t + e exactly. Rounding t + e to nearest and then s plus that to
+            // nearest rounds twice, and goes wrong when a tiny e is all that breaks a tie in
+            // s + t. Rounding t + e to odd instead makes the final rounding correct (Boldo and
+            // Melquiond, "Emulation of FMA and correctly rounded sums: proved algorithms using
+            // rounding to odd", 2008). It can only matter when s + u is exactly a midpoint:
+            // |t + e| <= 1.5 ulp(s) (an inexact s + t has |p| <= 2|s|, so |e| <= ulp(s)), and
+            // every midpoint that close to s is s plus an offset of at most 3 significant
+            // bits. So only a u with that few bits (the low 48 clear) is rounded to odd; for
+            // any other u the second rounding cannot cross a midpoint.
+            double u = t + e;
+            if ((BitConverter.DoubleToInt64Bits(u) & 0x0000FFFFFFFFFFFFL) == 0)
+            {
+                double w = u - t;
+                double r = (t - (u - w)) + (e - w); // u + r == t + e
+                if (r != 0.0)                       // inexact, and u's last bit is 0: step toward r
+                    u = BitConverter.Int64BitsToDouble(BitConverter.DoubleToInt64Bits(u) + ((u > 0.0) == (r > 0.0) ? 1L : -1L));
+            }
+            return s + u;
         }
 
         /// <summary>

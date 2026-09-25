@@ -7,8 +7,8 @@
     <RootNamespace>HeatonLife</RootNamespace>
     <!-- Source of truth for the Build Library (.NET) workflow's version stamping
          (mirrors python/pyproject.toml). Bump this for releases. -->
-    <Version>1.0.0</Version>
-    <Description>Explore emergence in .NET: cellular automata (MergeLife, Life-like, Elementary, Cyclic, Wireworld), three flavors of Lenia, escape-time fractals with deep zoom (Mandelbrot, Julia, Burning Ship, Newton), Reynolds boids, and Gray-Scott reaction-diffusion under one consistent API, plus a genetic evolver that searches for new MergeLife rules. Pure C#, netstandard2.1, zero dependencies: it runs anywhere .NET does, including Unity and IL2CPP, and its step and frame APIs allocate nothing. Every system follows a written specification and conformance vectors shared with the Python package, so the same parameters and seed give the same run in either language.</Description>
+    <Version>1.1.0</Version>
+    <Description>Explore emergence in .NET: cellular automata (MergeLife, Life-like, Elementary, Cyclic, Wireworld), three flavors of Lenia, fractals (Newton's basins, and Mandelbrot, Julia, and Burning Ship with deep zoom, to 1e9000 for Mandelbrot and Julia), Reynolds boids, and Gray-Scott reaction-diffusion under one consistent API, plus a genetic evolver that searches for new MergeLife rules. Pure C#, netstandard2.1, zero dependencies: it runs anywhere .NET does, including Unity and IL2CPP, and its step and frame APIs allocate nothing. Every system follows a written specification and conformance vectors shared with the Python package, so the same parameters and seed give the same run in either language.</Description>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <!-- Ship IntelliSense docs alongside the DLL (Unity reads the .xml next to it).
          CS1591 stays off: undocumented public members are fine; spec-relevant docs exist. -->
@@ -32,6 +32,7 @@
     <PackageProjectUrl>https://github.com/jeffheaton/heaton-life</PackageProjectUrl>
     <RepositoryUrl>https://github.com/jeffheaton/heaton-life</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+    <PackageReleaseNotes>What changed in each version: https://github.com/jeffheaton/heaton-life/blob/main/CHANGELOG.md</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
