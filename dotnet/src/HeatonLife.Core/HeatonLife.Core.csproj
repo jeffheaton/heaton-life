@@ -40,12 +40,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The only grant. Downstream hosts (the Unity app's EditMode suite among them)
+         build on the public API: the platform self-check (SelfCheck) is public, so no
+         host needs internals to prove its runtime. -->
     <InternalsVisibleTo Include="HeatonLife.Core.Tests" />
-    <!-- Downstream hosts consume this assembly as a DLL; their conformance and
-         self-check assemblies replay the vectors against internals (e.g.
-         FractalEngine.Fma), so the grants are compiled in here. -->
-    <InternalsVisibleTo Include="HeatonLife.Core.EditorTests" />
-    <InternalsVisibleTo Include="HeatonLife.Unity" />
   </ItemGroup>
 
 </Project>

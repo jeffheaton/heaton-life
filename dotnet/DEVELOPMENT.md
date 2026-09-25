@@ -172,11 +172,11 @@ On this side:
   buffers, and the `Colormaps.Apply*` overloads that take an output buffer do the
   same. Allocating `Frame()` conveniences exist beside them.
 - Nullable reference types are enabled.
-- Hosts build on the public API. The `InternalsVisibleTo` grants in the csproj
-  (`HeatonLife.Core.Tests`, `HeatonLife.Core.EditorTests`, `HeatonLife.Unity`) exist
-  so that the conformance and self-check code in those assemblies can replay the
-  vectors against internals such as the fractal engine's FMA helper; they are not a
-  license to depend on internals.
+- Hosts build on the public API. The one `InternalsVisibleTo` grant in the csproj is
+  this repo's own test project (`HeatonLife.Core.Tests`). A host proves its runtime with
+  the public `SelfCheck` ([spec/self-check.md](../spec/self-check.md)) and replays
+  vectors through public members; the Unity app's EditMode suite and on-device check
+  have needed no grant since 2026-09-24.
 - Nothing merges without its spec page and vectors.
 
 ## Versioning
