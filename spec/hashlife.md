@@ -41,6 +41,11 @@ edge, which shifts rows by one: the upper-left cell of the root's SE child is (0
 [Macrocell](macrocell.md) file therefore lands on the same cells here as in Golly (the
 Caterpillar's file puts its top-left cell at (0, 0) in both).
 
+**Depth.** A tree is at most level 512 (`MAX_LEVEL`), so every live cell lies within
+±2^511, and a port that recurses once per level never goes deeper than 512 calls. A
+[Macrocell](macrocell.md) node above level 512 is an error, and `step` refuses work that
+would need a deeper root ("The deepest step", below).
+
 How a port lays nodes out — ids, hashing, leaf encoding, caches — is not observable and
 not specified.
 
@@ -76,6 +81,12 @@ N alone: a 3 × 3 neighborhood moves information at most one cell per generation
 Full-speed results are cached per node; fixed-step results per node for the current j,
 cleared when j changes. Caches never change results. A port may decompose n another way;
 only the cells after n generations are observable.
+
+**The deepest step.** Sub-step j needs a root of level j + 3, so `step(n)` with
+n ≥ 2^510 raises an error before changing anything. A sub-step whose root would have to
+grow past level 512 to hold the pattern (one that has spread to about ±2^509) raises an
+error at that sub-step's boundary: as with cancellation, the universe holds the last
+completed sub-step.
 
 ### Cancellation
 
@@ -137,7 +148,9 @@ whole footprint is larger.
   flight). Cached results whose nodes are collected are dropped.
 - A sub-step that cannot finish within the budget is retried after collection, then split
   into two half sub-steps, recursively, down to single generations. If one generation
-  cannot fit, `step` raises `HashLifeMemoryError` and the universe is unchanged.
+  cannot fit, `step` raises `HashLifeMemoryError` at that sub-step's boundary: as with
+  cancellation, the universe holds the last completed sub-step, and `generation` says
+  which.
 - Loading and editing never fail for lack of budget: a tree larger than the budget loads,
   renders, and reports, and the next `step` raises if it cannot make room.
 
@@ -185,6 +198,11 @@ integers), so ports move views identically and an app keeps no copy of the math:
   top = ⌊(y0 − 1) / 2^s⌋, bottom = ⌊(y1 − 1) / 2^s⌋ — satisfies right − left < w and
   bottom − top < h; the view is then `(⌊(left + right) / 2⌋ − w div 2,
   ⌊(top + bottom) / 2⌋ − h div 2, mag)`. An empty universe fits as `centered(0, 0, 0, …)`.
+  From −mag = b + 1 on, where b is the largest bit length of x0, x1, y0 − 1, and y1 − 1
+  (a negative v counted as −v − 1), every span is fixed, so a box that does not fit there
+  never will and `fit` raises an error. That happens only for a frame 0 pixels across, or
+  1 pixel across while the box spans tree position 0 in that direction (x0 < 0 ≤ x1, or
+  y0 ≤ 0 < y1): no aligned block straddles it.
 
 ## Parameters
 
@@ -219,7 +237,7 @@ Each case under `vectors/hashlife/` has a `params.json` with `family: "hashlife"
 | `evolve` | `input` (an `.rle` or `.mc` file, loaded by content) | `checkpoints`: states in order; a runner steps by each difference |
 | `macrocell` | `input.mc` | the state, and `rle` (the canonical RLE file) or `rle_error: true`; or `error: true` |
 | `rle` | `input.rle` | the state and `rle` (the canonical RLE file); or `error: true` |
-| `view` | `operations`: each names a view function and its inputs (views as `[x, y, mag]`, big integers as strings) | each operation's `expect` |
+| `view` | `operations`: each names a view function and its inputs (views as `[x, y, mag]`, big integers as strings) | each operation's `expect`, or `error: true` where the function must raise |
 | `render` | `input`, stepped to `generation`; each frame's `view`, `size` (`[width, height]`), and `mode` | each frame's 8-bit grayscale PNG (compared by decoded pixels; the PNG bytes are the encoder's) |
 | `edit` | `rule`, then `ops` in order on an empty universe: `set_cell` (`x`, `y`, `alive`), `set_rect` (`x`, `y`, `mode`, `cells` as rows of `.`/`*`), `clear_rect` (`x0`…`y1`), `fill_random` (`x0`…`y1`, `density`, `seed`), `step` (`n`, a decimal string), `clear` | the final state; an op with `error: true` must raise and change nothing |
 

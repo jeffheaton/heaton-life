@@ -78,26 +78,32 @@ def _view(fields: list[Any]) -> LifeView:
     return LifeView(int(fields[0]), int(fields[1]), fields[2])
 
 
-def _check_view_op(op: dict[str, Any]) -> None:
+def _view_result(op: dict[str, Any]) -> tuple[Any, ...]:
     kind = op["op"]
     if kind == "pan":
-        got: tuple[Any, ...] = tuple(vars(pan(_view(op["view"]), op["dx"], op["dy"])).values())
-    elif kind == "zoom_at":
-        got = tuple(vars(zoom_at(_view(op["view"]), op["i"], op["j"], op["steps"])).values())
-    elif kind == "cell_at":
-        got = cell_at(_view(op["view"]), op["i"], op["j"])
-    elif kind == "center_cell":
-        got = center_cell(_view(op["view"]), tuple(op["size"]))
-    elif kind == "centered":
+        return tuple(vars(pan(_view(op["view"]), op["dx"], op["dy"])).values())
+    if kind == "zoom_at":
+        return tuple(vars(zoom_at(_view(op["view"]), op["i"], op["j"], op["steps"])).values())
+    if kind == "cell_at":
+        return cell_at(_view(op["view"]), op["i"], op["j"])
+    if kind == "center_cell":
+        return center_cell(_view(op["view"]), tuple(op["size"]))
+    if kind == "centered":
         cx, cy = (int(c) for c in op["cell"])
-        got = tuple(vars(centered(cx, cy, op["mag"], tuple(op["size"]))).values())
-    elif kind == "fit":
+        return tuple(vars(centered(cx, cy, op["mag"], tuple(op["size"]))).values())
+    if kind == "fit":
         box = None if op["box"] is None else tuple(int(c) for c in op["box"])
-        got = tuple(vars(fit(box, tuple(op["size"]))).values())  # type: ignore[arg-type]
-    else:
-        raise AssertionError(f"unknown view op {kind!r}")
+        return tuple(vars(fit(box, tuple(op["size"]))).values())  # type: ignore[arg-type]
+    raise AssertionError(f"unknown view op {kind!r}")
+
+
+def _check_view_op(op: dict[str, Any]) -> None:
+    if op.get("error"):
+        with pytest.raises(ValueError):
+            _view_result(op)
+        return
     want = tuple(int(e) if isinstance(e, str) else e for e in op["expect"])
-    assert got == want, op
+    assert _view_result(op) == want, op
 
 
 def test_hashlife_vectors_exist() -> None:
@@ -146,10 +152,10 @@ def test_hashlife_vector(case: Path) -> None:
         u = HashLife(meta["rule"])
         for op in meta["ops"]:
             if op.get("error"):
-                before = u.to_macrocell()
-                with pytest.raises(ValueError, match="editing box"):
+                before = (u.to_macrocell(), u.generation)
+                with pytest.raises(ValueError):
                     _apply(u, op)
-                assert u.to_macrocell() == before
+                assert (u.to_macrocell(), u.generation) == before
             else:
                 _apply(u, op)
         _expect_state(d, u, meta)

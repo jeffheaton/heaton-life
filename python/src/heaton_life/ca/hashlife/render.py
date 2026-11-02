@@ -55,6 +55,8 @@ def _blocks(
     store = universe._store
     t = s + 3  # tile level: 8×8 blocks
     root, k = universe._root, universe._level
+    if s >= k - 1:  # each of the root's quarters lies inside one block: no tree to build
+        return _quarters(universe, out, bx0, by0, s, mode)
     while k <= t:  # tiles must be proper, aligned descendants of the (centered) root
         e = store.empty(k - 1)
         a, b, c, d = store.data[root]
@@ -90,6 +92,22 @@ def _blocks(
         lvl -= 1
         stack += ((a, lvl, nx, ny), (b, lvl, nx + half, ny), (c, lvl, nx, ny + half))
         stack.append((d, lvl, nx + half, ny + half))
+    return out
+
+
+def _quarters(
+    universe: HashLife, out: NDArray[np.uint8], bx0: int, by0: int, s: int, mode: RenderMode
+) -> NDArray[np.uint8]:
+    """Blocks of level s ≥ k − 1 around a level-k root: its NW, NE, SW, and SE quarters
+    fill blocks (−1, −1), (0, −1), (−1, 0), and (0, 0), and every other block is empty.
+    Frames this far out cost O(1) however distant, with no tree built past the root."""
+    store = universe._store
+    h, w = out.shape
+    for q, child in enumerate(store.data[universe._root]):
+        pop = store.population(child, universe._level - 1)
+        col, row = (q & 1) - 1 - bx0, (q >> 1) - 1 - by0
+        if pop and 0 <= col < w and 0 <= row < h:
+            out[row, col] = 255 if mode == "any" else (255 * pop + (1 << 2 * s) - 1) >> (2 * s)
     return out
 
 

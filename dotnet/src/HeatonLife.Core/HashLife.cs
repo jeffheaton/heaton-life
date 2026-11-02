@@ -114,6 +114,13 @@ namespace HeatonLife
         /// <summary>The smallest allowed budget, in MiB.</summary>
         public const int MinMemoryMb = 10;
 
+        /// <summary>The deepest tree (spec/hashlife.md "Depth"): every live cell lies within ±2^511,
+        /// and the store's walks recurse at most once per level, which a small thread stack holds.</summary>
+        public const int MaxLevel = 512;
+
+        /// <summary>2^(MaxLevel − 2): sub-step j needs a level-(j + 3) root, so steps stay below it.</summary>
+        private static readonly BigInteger StepLimit = BigInteger.One << (MaxLevel - 2);
+
         private const int MinLevel = 4;     // the root is always an internal node
         private const int MinStepLevel = 6; // sub-steps check containment on great-grandchildren
         private const int WindowLevel = 31; // the four level-31 nodes around the origin hold the editing box
@@ -334,8 +341,10 @@ namespace HeatonLife
         // -- evolution --------------------------------------------------------------------------
 
         /// <summary>
-        /// Advance exactly <paramref name="n"/> generations, any n ≥ 0 (spec/hashlife.md
-        /// "Evolution"). A canceled token stops the step at the boundary of a completed sub-step
+        /// Advance exactly <paramref name="n"/> generations, 0 ≤ n &lt; 2^510 (spec/hashlife.md
+        /// "Evolution", "Depth"): a larger n throws <see cref="ArgumentOutOfRangeException"/> before
+        /// anything runs, and a pattern spread too far for a level-<see cref="MaxLevel"/> root throws
+        /// <see cref="InvalidOperationException"/> at a sub-step boundary. A canceled token stops the step at the boundary of a completed sub-step
         /// with <see cref="OperationCanceledException"/>; a step that cannot fit one generation
         /// into the budget throws <see cref="HashLifeMemoryException"/>. Either way the universe
         /// holds the state at the last completed sub-step, and <see cref="Generation"/> says which.
@@ -344,6 +353,9 @@ namespace HeatonLife
         {
             if (n.Sign < 0)
                 throw new ArgumentOutOfRangeException(nameof(n), n, "cannot step backward");
+            if (n.CompareTo(StepLimit) >= 0)
+                throw new ArgumentOutOfRangeException(
+                    nameof(n), n, $"a step of 2^{MaxLevel - 2} generations or more needs a tree deeper than level {MaxLevel}");
             if (n.IsZero)
                 return;
             _store.Cancel = cancellationToken;
@@ -436,7 +448,13 @@ namespace HeatonLife
             try
             {
                 while (s.Level < need || !Centered())
+                {
+                    if (s.Level >= MaxLevel)
+                        throw new InvalidOperationException(
+                            $"the pattern has spread too far to step 2^{j} generations within a level-{MaxLevel} "
+                            + $"tree (spec/hashlife.md \"Depth\"); the universe is at generation {Generation}");
                     Expand();
+                }
                 root = s.Stepped(s.Root, s.Level, j);
             }
             finally

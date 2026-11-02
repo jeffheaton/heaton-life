@@ -19,7 +19,8 @@ Readers follow Golly's two-state reader. A file is lines of ASCII text:
 2. **`#` lines**, anywhere after the header:
    - `#R <rule>` — the rule: a Life-like rulestring ([lifelike.md](lifelike.md)); B0 rules
      are rejected ([hashlife.md](hashlife.md#state)). Without `#R` the rule is `B3/S23`.
-   - `#G <n>` — the generation, a non-negative decimal integer of any size; 0 without it.
+   - `#G <n>` — the generation: one or more ASCII digits `0`–`9`, any size, no sign (a
+     sign or any other character is an error); 0 without it.
    - `#FRAMES …` and `#FRAME …` — Golly's timeline frames; skipped.
    - Any other `#` line is a comment (Golly writes them as `#C …`); skipped.
 3. **Node lines**, numbered 1, 2, 3, … in file order (blank and `#` lines don't count):
@@ -29,7 +30,8 @@ Readers follow Golly's two-state reader. A file is lines of ASCII text:
      cells in a row is an error. A line is a leaf iff it starts with `.`, `*`, or `$`.
    - **Internal**: `<level> <nw> <ne> <sw> <se>` — five decimal integers; each child is
      the number of an earlier node line of level `level − 1`, or `0` for an empty square.
-     Two-state files use level ≥ 4 here.
+     Two-state files use level ≥ 4 here. A level above 512 is an error
+     ([hashlife.md](hashlife.md#quadtree), "Depth").
    - **Multistate syntax**, accepted when every state is 0 or 1: `1 <nw> <ne> <sw> <se>`
      is a 2 × 2 square whose four values are cell states; `2 …` and `3 …` lines have
      children of level 1 and 2. (A level-3 line built this way is a leaf.)

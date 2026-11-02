@@ -62,9 +62,9 @@ def rle_runs(text: str) -> tuple[RleInfo, Iterator[tuple[int, int, int, int]]]:
             key, _, value = field.partition("=")
             if key == "Pos":
                 px, _, py = value.partition(",")
-                position = (int(px), int(py))
+                position = (_cxrle_int(px, signed=True), _cxrle_int(py, signed=True))
             elif key == "Gen":
-                generation = int(value)
+                generation = _cxrle_int(value, signed=False)
     lines = [ln for ln in lines if not ln.startswith("#")]
     rule: str | None = None
     if lines and (header := _HEADER.match(lines[0])):
@@ -73,6 +73,15 @@ def rle_runs(text: str) -> tuple[RleInfo, Iterator[tuple[int, int, int, int]]]:
     body = "".join(lines)
     extended = _is_extended(body, rule)
     return RleInfo(rule, position, generation, extended), _scan(body, extended)
+
+
+def _cxrle_int(text: str, *, signed: bool) -> int:
+    """A ``#CXRLE`` integer: ASCII digits, after an optional ``-`` where ``signed``."""
+    digits = text[1:] if signed and text.startswith("-") else text
+    if not (digits.isascii() and digits.isdigit()):
+        kind = "an integer" if signed else "a generation in digits"
+        raise ValueError(f"#CXRLE needs {kind}, got {text!r}")
+    return int(text)
 
 
 def _scan(body: str, extended: bool) -> Iterator[tuple[int, int, int, int]]:
@@ -174,6 +183,7 @@ def rle_encode(grid: NDArray[np.uint8], rule: str = "B3/S23", *, line_width: int
         if run_val > 0:  # trailing dead runs in a row are omitted by convention
             tokens.append(_run(run_len, run_val, multistate))
         tokens.append("$" if y < height - 1 else "!")
+    tokens = _row_end_runs(tokens)
 
     body_lines: list[str] = []
     line = ""
@@ -185,6 +195,23 @@ def rle_encode(grid: NDArray[np.uint8], rule: str = "B3/S23", *, line_width: int
     body_lines.append(line)
     header = f"x = {width}, y = {height}, rule = {rule}"
     return "\n".join([header, *body_lines]) + "\n"
+
+
+def _row_end_runs(tokens: list[str]) -> list[str]:
+    """Write k ≥ 2 consecutive ``$`` tokens as one ``k$`` (spec/patterns.md "Encoding")."""
+    out: list[str] = []
+    ends = 0
+    for tok in tokens:
+        if tok == "$":
+            ends += 1
+            continue
+        if ends:
+            out.append("$" if ends == 1 else f"{ends}$")
+            ends = 0
+        out.append(tok)
+    if ends:
+        out.append("$" if ends == 1 else f"{ends}$")
+    return out
 
 
 def _run(length: int, value: int, multistate: bool) -> str:

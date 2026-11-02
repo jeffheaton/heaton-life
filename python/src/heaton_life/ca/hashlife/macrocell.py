@@ -11,7 +11,7 @@ from __future__ import annotations
 import gzip
 
 from heaton_life.ca.hashlife.leaves import SQUARE4, compose
-from heaton_life.ca.hashlife.universe import DEFAULT_MEMORY_MB, HashLife
+from heaton_life.ca.hashlife.universe import DEFAULT_MEMORY_MB, MAX_LEVEL, HashLife
 
 HEADER = "[M2] (heaton-life)"
 _TO_BITS = str.maketrans(".*", "01")
@@ -24,6 +24,11 @@ def _text(source: str | bytes) -> str:
             source = gzip.decompress(source)
         return source.decode("latin-1")
     return source
+
+
+def _digits(text: str) -> bool:
+    """One or more ASCII digits: no sign, no underscores, no other scripts' digits."""
+    return text.isascii() and text.isdigit()
 
 
 def _leaf_bits(line: str, number: int) -> int:
@@ -84,15 +89,25 @@ def read_macrocell(source: str | bytes, *, max_memory_mb: int = DEFAULT_MEMORY_M
             if line.startswith("#R"):
                 universe.rule = line[2:].strip()
             elif line.startswith("#G"):
-                generation = int(line[2:].strip())
+                value = line[2:].strip()
+                if not _digits(value):
+                    raise ValueError(
+                        f"line {number}: #G needs a generation in digits, got {value!r}"
+                    )
+                generation = int(value)
             continue
         if line[0] in ".*$":
             nodes.append((store.leaf(_leaf_bits(line, number)), 3))
             continue
         fields = line.split()
-        if len(fields) != 5 or not all(f.isdigit() for f in fields):
+        if len(fields) != 5 or not all(_digits(f) for f in fields):
             raise ValueError(f"line {number}: expected a leaf or 'level nw ne sw se'")
         level, nw, ne, sw, se = (int(f) for f in fields)
+        if level > MAX_LEVEL:
+            raise ValueError(
+                f"line {number}: level {level} is past the deepest tree, level {MAX_LEVEL} "
+                '(spec/hashlife.md "Depth")'
+            )
         if level == 1:
             if max(nw, ne, sw, se) > 1:
                 raise ValueError(f"line {number}: HashLife cells are 0 or 1")

@@ -222,8 +222,9 @@ namespace HeatonLife
         private const int MarkBit = int.MinValue;
         private const int CheckEvery = 4096; // allocations between cancellation checks
 
-        /// <summary>The deepest root a step may build; the fixed-step tag holds j + 1 in 15 bits.</summary>
-        internal const int MaxLevel = 30000;
+        /// <summary>The deepest root (spec/hashlife.md "Depth"); the fixed-step tag would hold j + 1
+        /// in 15 bits, far past it.</summary>
+        internal const int MaxLevel = HashLife.MaxLevel;
 
         /// <summary>The store's accounting: a 32-byte record plus 8 bytes of hash table.</summary>
         internal const int BytesPerNode = 40;

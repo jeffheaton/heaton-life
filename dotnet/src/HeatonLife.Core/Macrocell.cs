@@ -114,7 +114,7 @@ namespace HeatonLife
                 else if (level >= 4)
                 {
                     if (level > HashLifeStore.MaxLevel)
-                        throw new FormatException($"line {number}: level {level} is past the deepest supported tree");
+                        throw new FormatException($"line {number}: level {level} is past the deepest tree, level {HashLifeStore.MaxLevel}");
                     int k = (int)level;
                     int nw = (int)Child(values, levels, fields[1], k - 1, number, store);
                     int ne = (int)Child(values, levels, fields[2], k - 1, number, store);
@@ -156,17 +156,17 @@ namespace HeatonLife
             return universe;
         }
 
+        /// <summary>One or more ASCII digits, no sign (spec/macrocell.md "Reading").</summary>
         private static BigInteger ParseGeneration(string text, int number)
         {
-            int start = text.Length > 0 && text[0] == '+' ? 1 : 0;
-            if (start == text.Length)
-                throw new FormatException($"line {number}: #G needs a non-negative generation");
-            for (int i = start; i < text.Length; i++)
+            if (text.Length == 0)
+                throw new FormatException($"line {number}: #G needs a generation in digits");
+            for (int i = 0; i < text.Length; i++)
             {
                 if (text[i] < '0' || text[i] > '9')
-                    throw new FormatException($"line {number}: #G needs a non-negative generation, got '{text}'");
+                    throw new FormatException($"line {number}: #G needs a generation in digits, got '{text}'");
             }
-            return BigInteger.Parse(text.Substring(start), NumberStyles.None, CultureInfo.InvariantCulture);
+            return BigInteger.Parse(text, NumberStyles.None, CultureInfo.InvariantCulture);
         }
 
         /// <summary>The five decimal fields of <c>level nw ne sw se</c>.</summary>

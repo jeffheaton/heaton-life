@@ -1,0 +1,88 @@
+{
+  "family": "hashlife",
+  "frames": [
+    {
+      "file": "frame-0.png",
+      "mode": "density",
+      "size": [
+        6,
+        6
+      ],
+      "view": [
+        "-3",
+        "-3",
+        -6
+      ]
+    },
+    {
+      "file": "frame-1.png",
+      "mode": "any",
+      "size": [
+        6,
+        6
+      ],
+      "view": [
+        "-3",
+        "-3",
+        -10
+      ]
+    },
+    {
+      "file": "frame-2.png",
+      "mode": "density",
+      "size": [
+        6,
+        6
+      ],
+      "view": [
+        "-3",
+        "-3",
+        -10
+      ]
+    },
+    {
+      "file": "frame-3.png",
+      "mode": "density",
+      "size": [
+        6,
+        6
+      ],
+      "view": [
+        "-3",
+        "-3",
+        -600
+      ]
+    },
+    {
+      "file": "frame-4.png",
+      "mode": "any",
+      "size": [
+        6,
+        6
+      ],
+      "view": [
+        "-3",
+        "-3",
+        -5000
+      ]
+    },
+    {
+      "file": "frame-5.png",
+      "mode": "density",
+      "size": [
+        6,
+        6
+      ],
+      "view": [
+        "-3",
+        "-3",
+        -5000
+      ]
+    }
+  ],
+  "generation": "0",
+  "input": "input.rle",
+  "kind": "render",
+  "spec_version": "0.14.0",
+  "tier": "bit-exact"
+}

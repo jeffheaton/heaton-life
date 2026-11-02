@@ -350,6 +350,7 @@ namespace HeatonLife.Tests
             Assert.Equal(500, HashLife.DefaultMaxMemoryMb);
             Assert.Equal(10, HashLife.MinMemoryMb);
             Assert.Equal(1_000_000_000, HashLife.EditLimit);
+            Assert.Equal(512, HashLife.MaxLevel);
             Assert.Equal(5, LifeView.MaxMag);
             Assert.True(u.Generation.IsZero);
             Assert.True(u.Population.IsZero);
@@ -399,6 +400,7 @@ namespace HeatonLife.Tests
             var u = new HashLife();
             Assert.Throws<ArgumentOutOfRangeException>(() => u.Step(-1));
             Assert.Throws<ArgumentOutOfRangeException>(() => u.SetCell(HashLife.EditLimit + 1, 0, true));
+            Assert.Throws<ArgumentOutOfRangeException>(() => u.Step(System.Numerics.BigInteger.One << 510));
             Assert.Throws<ArgumentException>(() => u.Restore(new HashLife().Snapshot()));
             Assert.Throws<ArgumentException>(() => u.WriteFrame(new byte[3], 2, 2, new LifeView(0, 0, 0)));
         }

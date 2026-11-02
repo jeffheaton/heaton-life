@@ -36,6 +36,9 @@ from heaton_life.init.seeding import soup
 
 EDIT_LIMIT = 1_000_000_000
 """Editing reaches cells with |x| ≤ EDIT_LIMIT and |y| ≤ EDIT_LIMIT."""
+MAX_LEVEL = 512
+"""The deepest tree (spec/hashlife.md "Depth"): every live cell lies within ±2^511, and
+the walks below recurse at most once per level, well inside Python's recursion limit."""
 DEFAULT_MEMORY_MB = 500
 MIN_MEMORY_MB = 10
 PasteMode = Literal["copy", "or", "xor"]
@@ -263,11 +266,18 @@ class HashLife:
     # -- evolution ----------------------------------------------------------------------
 
     def step(self, n: int = 1) -> None:
-        """Advance exactly ``n`` generations (any n ≥ 0). Raises ``StepCanceled`` if
-        ``cancel()`` stops it, ``HashLifeMemoryError`` if one generation can't fit."""
+        """Advance exactly ``n`` generations (0 ≤ n < 2^510). Raises ``StepCanceled`` if
+        ``cancel()`` stops it, ``HashLifeMemoryError`` if one generation can't fit, and
+        ValueError if a sub-step needs a tree deeper than ``MAX_LEVEL``."""
         n = operator.index(n)
         if n < 0:
             raise ValueError(f"cannot step backward ({n} generations)")
+        if n.bit_length() > MAX_LEVEL - 2:
+            raise ValueError(
+                f"a step of 2^{n.bit_length() - 1} generations or more needs a tree deeper "
+                f"than level {MAX_LEVEL}; step(n) takes n < 2^{MAX_LEVEL - 2} "
+                '(spec/hashlife.md "Depth")'
+            )
         self._store.cancel_requested = False
         j = 0
         while n:
@@ -282,34 +292,44 @@ class HashLife:
 
     def _advance(self, j: int) -> None:
         """Advance 2^j generations: collect when three-quarters full, try twice, then
-        split into two halves (spec/hashlife.md "Memory")."""
+        split into two halves (spec/hashlife.md "Memory"). Halves wait on a list rather
+        than the call stack, so splitting never adds to the recursion of a deep step."""
         store = self._store
-        for _ in range(2):
-            if store.memory_used() > store.budget * 3 // 4:
-                self._collect()
-            try:
-                self._sub_step(j)
-            except Abort as abort:
-                if abort.canceled:
-                    raise StepCanceled(
-                        f"canceled; the universe is at generation {self._generation}"
-                    ) from None
+        pending = [j]
+        while pending:
+            j = pending.pop()
+            for _ in range(2):
+                if store.memory_used() > store.budget * 3 // 4:
+                    self._collect()
+                try:
+                    self._sub_step(j)
+                except Abort as abort:
+                    if abort.canceled:
+                        raise StepCanceled(
+                            f"canceled; the universe is at generation {self._generation}"
+                        ) from None
+                else:
+                    break
             else:
-                return
-        if j == 0:
-            self._collect()  # the abandoned attempts are garbage; the cells are unchanged
-            raise HashLifeMemoryError(
-                f"one generation does not fit in max_memory_mb={self._max_memory_mb} "
-                f"(the pattern itself takes about {store.memory_used() >> 20} MB of it); "
-                "raise the budget"
-            )
-        self._advance(j - 1)
-        self._advance(j - 1)
+                if j == 0:
+                    self._collect()  # the abandoned attempts are garbage; the cells are unchanged
+                    raise HashLifeMemoryError(
+                        f"one generation does not fit in max_memory_mb={self._max_memory_mb} "
+                        f"(the pattern itself takes about {store.memory_used() >> 20} MB of "
+                        "it); raise the budget"
+                    )
+                pending += (j - 1, j - 1)
 
     def _sub_step(self, j: int) -> None:
         store = self._store
         need = max(j + 3, _MIN_STEP_LEVEL)
         while self._level < need or not self._centered():
+            if self._level == MAX_LEVEL:
+                raise ValueError(
+                    f"the pattern has spread too far to step 2^{j} generations within a "
+                    f'level-{MAX_LEVEL} tree (spec/hashlife.md "Depth"); the universe is at '
+                    f"generation {self._generation}"
+                )
             self._expand()
         store.use_step(j)
         store.guard = True
@@ -675,6 +695,7 @@ class HashLife:
         memo: dict[int, int] = {}
 
         def walk(n: int, k: int) -> int:
+            # Plain loops, not comprehensions: one frame per level (spec/hashlife.md "Depth").
             hit = memo.get(n)
             if hit is not None:
                 return hit
@@ -685,17 +706,19 @@ class HashLife:
                     r = (cols & -cols).bit_length() - 1 if lowest else cols.bit_length() - 1
                 else:
                     r = ((b & -b).bit_length() - 1 if lowest else b.bit_length() - 1) >> 3
-            else:
-                kids = data[n]
-                e = store.empty(k - 1)
-                half = 1 << (k - 1)
-                pick = min if lowest else max
-                first = [walk(kids[i], k - 1) for i in near if kids[i] != e]
-                if first:
-                    r = pick(first) + (0 if lowest else half)
-                else:
-                    r = pick(walk(kids[i], k - 1) for i in far if kids[i] != e)
-                    r += half if lowest else 0
+                memo[n] = r
+                return r
+            kids = data[n]
+            e = store.empty(k - 1)
+            half = 1 << (k - 1)
+            side, offset = near, 0 if lowest else half
+            if all(kids[i] == e for i in near):
+                side, offset = far, half if lowest else 0
+            found = []
+            for i in side:
+                if kids[i] != e:
+                    found.append(walk(kids[i], k - 1))
+            r = (min(found) if lowest else max(found)) + offset
             memo[n] = r
             return r
 

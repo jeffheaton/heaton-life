@@ -1,0 +1,17 @@
+{
+  "bounding_box": [
+    "-3",
+    "-1000000000",
+    "1",
+    "1000000000"
+  ],
+  "family": "hashlife",
+  "generation": "0",
+  "input": "input.rle",
+  "kind": "rle",
+  "population": "8",
+  "rle": "canonical.rle",
+  "spec_version": "0.14.0",
+  "state": "canonical.mc",
+  "tier": "bit-exact"
+}

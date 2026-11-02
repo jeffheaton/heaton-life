@@ -158,6 +158,7 @@ namespace HeatonLife
                     tokens.Add(Run(runLen, runVal, multistate));
                 tokens.Add(y < height - 1 ? "$" : "!");
             }
+            tokens = RowEndRuns(tokens);
 
             var body = new List<string>();
             string line = "";
@@ -306,14 +307,12 @@ namespace HeatonLife
                 if (key == "Pos")
                 {
                     int comma = value.IndexOf(',');
-                    posX = ParseInteger(comma < 0 ? value : value.Substring(0, comma));
-                    posY = ParseInteger(comma < 0 ? "" : value.Substring(comma + 1));
+                    posX = ParseInteger(comma < 0 ? value : value.Substring(0, comma), signed: true);
+                    posY = ParseInteger(comma < 0 ? "" : value.Substring(comma + 1), signed: true);
                 }
                 else if (key == "Gen")
                 {
-                    generation = ParseInteger(value);
-                    if (generation.Sign < 0)
-                        throw new FormatException($"#CXRLE Gen must be a non-negative generation, got {value}");
+                    generation = ParseInteger(value, signed: false);
                 }
             }
         }
@@ -337,15 +336,18 @@ namespace HeatonLife
             return parts.ToArray();
         }
 
-        private static BigInteger ParseInteger(string text)
+        /// <summary>A <c>#CXRLE</c> number (spec/patterns.md): ASCII digits, after an optional
+        /// <c>-</c> where <paramref name="signed"/> (Pos); a generation takes digits only.</summary>
+        private static BigInteger ParseInteger(string text, bool signed)
         {
-            int i = text.Length > 0 && (text[0] == '-' || text[0] == '+') ? 1 : 0;
+            int i = signed && text.Length > 0 && text[0] == '-' ? 1 : 0;
+            string kind = signed ? "an integer" : "a generation in digits";
             if (i == text.Length)
-                throw new FormatException($"invalid integer '{text}' in #CXRLE");
+                throw new FormatException($"#CXRLE needs {kind}, got '{text}'");
             for (int j = i; j < text.Length; j++)
             {
                 if (text[j] < '0' || text[j] > '9')
-                    throw new FormatException($"invalid integer '{text}' in #CXRLE");
+                    throw new FormatException($"#CXRLE needs {kind}, got '{text}'");
             }
             BigInteger magnitude = BigInteger.Parse(text.Substring(i), NumberStyles.None, CultureInfo.InvariantCulture);
             return text[0] == '-' ? -magnitude : magnitude;
@@ -441,25 +443,54 @@ namespace HeatonLife
             text.Append("x = ").Append((x1 - x0 + 1).ToString(CultureInfo.InvariantCulture))
                 .Append(", y = ").Append((y1 - y0 + 1).ToString(CultureInfo.InvariantCulture))
                 .Append(", rule = ").Append(universe.Rule).Append('\n');
+            // Live rows only: the gap between two is one k$ token (spec/patterns.md), so the text
+            // grows with the live rows, not the box's height.
+            var liveRows = new List<long>(rows.Keys);
+            liveRows.Sort();
             int lineLength = 0;
-            for (long cy = y0; cy <= y1; cy++)
+            long previous = y0;
+            foreach (long cy in liveRows)
             {
+                if (cy > y0)
+                    AppendToken(text, ref lineLength, cy - previous, '$');
+                List<long> runs = rows[cy];
                 long pos = x0;
-                if (rows.TryGetValue(cy, out List<long>? runs))
+                for (int r = 0; r < runs.Count; r += 2)
                 {
-                    for (int r = 0; r < runs.Count; r += 2)
-                    {
-                        long start = runs[r], length = runs[r + 1];
-                        if (start > pos)
-                            AppendToken(text, ref lineLength, start - pos, 'b');
-                        AppendToken(text, ref lineLength, length, 'o');
-                        pos = start + length;
-                    }
+                    long start = runs[r], length = runs[r + 1];
+                    if (start > pos)
+                        AppendToken(text, ref lineLength, start - pos, 'b');
+                    AppendToken(text, ref lineLength, length, 'o');
+                    pos = start + length;
                 }
-                AppendToken(text, ref lineLength, 1, cy < y1 ? '$' : '!');
+                previous = cy;
             }
+            AppendToken(text, ref lineLength, 1, '!');
             text.Append('\n');
             return text.ToString();
+        }
+
+        /// <summary>Write k ≥ 2 consecutive <c>$</c> tokens as one <c>k$</c> (spec/patterns.md
+        /// "Encoding"): a run of empty rows costs one token.</summary>
+        private static List<string> RowEndRuns(List<string> tokens)
+        {
+            var result = new List<string>(tokens.Count);
+            int ends = 0;
+            foreach (string token in tokens)
+            {
+                if (token == "$")
+                {
+                    ends++;
+                    continue;
+                }
+                if (ends > 0)
+                    result.Add(ends == 1 ? "$" : ends.ToString(CultureInfo.InvariantCulture) + "$");
+                ends = 0;
+                result.Add(token);
+            }
+            if (ends > 0)
+                result.Add(ends == 1 ? "$" : ends.ToString(CultureInfo.InvariantCulture) + "$");
+            return result;
         }
 
         /// <summary>One run token, wrapped as <see cref="RleEncode"/> wraps: a token that would

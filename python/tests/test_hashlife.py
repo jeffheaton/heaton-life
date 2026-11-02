@@ -14,6 +14,7 @@ from numpy.typing import NDArray
 from heaton_life.ca import LifeLike
 from heaton_life.ca.hashlife import (
     EDIT_LIMIT,
+    MAX_LEVEL,
     HashLife,
     HashLifeMemoryError,
     HashLifeParams,
@@ -26,7 +27,7 @@ from heaton_life.ca.hashlife import (
     pan,
     zoom_at,
 )
-from heaton_life.init import BUILTIN_PATTERNS, soup
+from heaton_life.init import BUILTIN_PATTERNS, rle_encode, soup
 
 
 def _builtin(name: str) -> NDArray[np.uint8]:
@@ -393,3 +394,123 @@ def test_view_arithmetic_round_trips() -> None:
     tl, br = (cell_at(view, *c) for c in corners)
     assert tl[0] <= box[0] and tl[1] <= box[1] and br[0] >= box[2] and br[1] >= box[3]
     assert fit((0, 0, 2, 2), (640, 480)).mag == 5
+
+
+@pytest.mark.parametrize(
+    ("box", "size"),
+    [
+        ((-5, 3, 7, 9), (1, 50)),  # straddles x = 0 in a frame 1 pixel wide
+        ((3, -5, 9, 7), (50, 1)),  # straddles tree row 0 in a frame 1 pixel high
+        ((-(10**30), 1, 10**30, 1), (1, 10)),
+        ((3, 5, 9, 7), (0, 5)),  # a frame 0 pixels across holds nothing
+    ],
+)
+def test_fit_raises_when_no_view_holds_the_box(
+    box: tuple[int, int, int, int], size: tuple[int, int]
+) -> None:
+    with pytest.raises(ValueError, match="no view"):
+        fit(box, size)
+
+
+def test_fit_one_pixel_frames_when_nothing_straddles() -> None:
+    assert fit((3, 5, 9, 7), (1, 1)) == LifeView(0, 0, -4)
+    assert fit((0, 0, 0, 0), (1, 1)) == LifeView(0, -1, 0)
+    assert fit((-5, 3, 7, 9), (2, 2)).mag == -3
+
+
+def test_frames_far_out_match_block_populations() -> None:
+    """Past the root's own size a frame shows at most its four quarters, at any distance."""
+    u = HashLife()
+    u.set_rect(-1, 0, np.ones((2, 2), np.uint8))  # one cell in each quarter of the root
+    u.set_rect(5, -40, _builtin("Glider"))
+    u.set_rect(-90, 70, _builtin("Glider"))
+    for s in (*range(1, 13), 600, 5000):
+        for mode in ("any", "density"):
+            frame = u.render(LifeView(-3, -3, -s), (6, 6), mode)  # type: ignore[arg-type]
+            for j in range(6):
+                for i in range(6):
+                    bx, by = i - 3, j - 3
+                    p = u.population_in(bx << s, (by << s) + 1, ((bx + 1) << s) - 1, (by + 1) << s)
+                    want = (255 if p else 0) if mode == "any" else (255 * p + 4**s - 1) >> (2 * s)
+                    assert frame[j, i] == want, (s, mode, i, j)
+
+
+# -- file numbers and row ends ----------------------------------------------------------------
+
+
+@pytest.mark.parametrize("value", ["-5", "+5", "1_0", "٣", "", "5x"])
+def test_generations_are_ascii_digits(value: str) -> None:
+    with pytest.raises(ValueError, match="generation"):
+        HashLife.from_macrocell(f"[M2]\n#G {value}\n*$\n")
+    with pytest.raises(ValueError, match="generation"):
+        HashLife.from_rle(f"#CXRLE Gen={value}\nx = 1, y = 1\no!\n")
+
+
+@pytest.mark.parametrize("value", ["+5", "1_0", "٣", "", "--5", "5-"])
+def test_positions_are_ascii_digits_after_an_optional_minus(value: str) -> None:
+    for pos in (f"{value},0", f"0,{value}"):
+        with pytest.raises(ValueError, match="integer"):
+            HashLife.from_rle(f"#CXRLE Pos={pos}\nx = 1, y = 1\no!\n")
+
+
+def test_file_numbers_accept_plain_digits() -> None:
+    u = HashLife.from_rle("#CXRLE Pos=-3,007 Gen=0012\nx = 1, y = 1\no!\n")
+    assert (u.bounding_box(), u.generation) == ((-3, 7, -3, 7), 12)
+    assert HashLife.from_macrocell("[M2]\n#G 007\n*$\n").generation == 7
+    with pytest.raises(ValueError, match="level nw ne sw se"):
+        HashLife.from_macrocell("[M2]\n*$\n4 0 0 0 ١\n")
+
+
+def test_rle_writes_a_run_of_row_ends_as_one_token() -> None:
+    grid = np.zeros((7, 3), np.uint8)
+    grid[0, 0] = grid[3, 1] = grid[6, 2] = 1
+    assert rle_encode(grid) == "x = 3, y = 7, rule = B3/S23\no3$bo3$2bo!\n"
+    u = HashLife()
+    u.set_rect(-3, -EDIT_LIMIT, np.ones((2, 2), np.uint8))
+    u.set_rect(0, EDIT_LIMIT - 1, np.ones((2, 2), np.uint8))
+    text = u.to_rle()  # two billion rows, one token for the empty ones
+    assert text.endswith("x = 5, y = 2000000001, rule = B3/S23\n2o$2o1999999998$3b2o$3b2o!\n")
+    assert HashLife.from_rle(text).to_macrocell() == u.to_macrocell()
+
+
+# -- the deepest tree (spec/hashlife.md "Depth") -------------------------------------------------
+
+
+def test_steps_stop_at_the_deepest_tree() -> None:
+    u = _universe("Glider")
+    start = u.to_macrocell()
+    for n in (2 ** (MAX_LEVEL - 2), 2 ** (MAX_LEVEL - 2) + 1):  # refused before anything runs
+        with pytest.raises(ValueError, match="deeper"):
+            u.step(n)
+        assert (u.to_macrocell(), u.generation) == (start, 0)
+    deepest = 2 ** (MAX_LEVEL - 3)  # the largest sub-step: a level-512 root
+    for _ in range(4):
+        u.step(deepest)
+    m = 2 ** (MAX_LEVEL - 3)  # a glider moves (m, m) in 4m generations
+    assert u.bounding_box() == (m, m, m + 2, m + 2)
+    state = u.to_macrocell()
+    for n in (deepest, 1):  # it has spread past what a level-512 root can step
+        with pytest.raises(ValueError, match="spread too far"):
+            u.step(n)
+        assert (u.to_macrocell(), u.generation) == (state, 4 * deepest)
+    # Everything else still works at that depth.
+    assert u.population == u.population_in(m, m, m + 2, m + 2) == 5
+    assert u.get_rect(0, 0, 1, 1).sum() == 0
+    assert u.render(LifeView(m >> 2, (m - 1) >> 2, -2), (2, 2), "density").sum() > 0
+    snap = u.snapshot()
+    u.collect_garbage()
+    u.clear()
+    u.restore(snap)
+    assert HashLife.from_macrocell(u.to_macrocell()).to_macrocell() == state
+
+
+def test_macrocell_nodes_stop_at_the_deepest_level() -> None:
+    def chain(top: int) -> str:  # one cell in the far corner of a level-`top` tree
+        return "[M2]\n*$\n4 0 0 0 1\n" + "".join(f"{k} 0 0 0 {k - 3}\n" for k in range(5, top + 1))
+
+    u = HashLife.from_macrocell(chain(MAX_LEVEL))
+    corner = 2 ** (MAX_LEVEL - 1) - 8
+    assert u.bounding_box() == (corner, corner + 1, corner, corner + 1)
+    assert u.to_macrocell() == chain(MAX_LEVEL).replace("[M2]", "[M2] (heaton-life)\n#R B3/S23")
+    with pytest.raises(ValueError, match="deepest tree"):
+        HashLife.from_macrocell(chain(MAX_LEVEL + 1))

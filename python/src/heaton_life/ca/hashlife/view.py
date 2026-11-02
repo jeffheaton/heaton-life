@@ -78,12 +78,17 @@ def center_cell(view: LifeView, size: tuple[int, int]) -> tuple[int, int]:
 
 def fit(box: tuple[int, int, int, int] | None, size: tuple[int, int]) -> LifeView:
     """The deepest view (mag ≤ ``MAX_MAG``) whose frame holds the inclusive box, centered
-    on it; an empty universe (``None``) gives the origin at 1:1."""
+    on it; an empty universe (``None``) gives the origin at 1:1. Raises ValueError when no
+    view can hold the box (spec/hashlife.md "View and render")."""
     width, height = size
     if box is None:
         return centered(0, 0, 0, size)
     x0, y0, x1, y1 = box
     ty0, ty1 = y0 - 1, y1 - 1
+    # From −mag = bits + 1 on every span is fixed (a negative v counts as −v − 1 = ~v), so
+    # a box that doesn't fit there never will: a frame 0 pixels across, or 1 across while
+    # the box straddles tree position 0, which no aligned block does.
+    bits = max((v if v >= 0 else ~v).bit_length() for v in (x0, x1, ty0, ty1))
     mag = MAX_MAG
     while True:
         if mag >= 0:
@@ -96,4 +101,6 @@ def fit(box: tuple[int, int, int, int] | None, size: tuple[int, int]) -> LifeVie
             return LifeView(
                 (left + right) // 2 - width // 2, (top + bottom) // 2 - height // 2, mag
             )
+        if -mag > bits + 1:
+            raise ValueError(f"no view of {width} × {height} pixels holds the box {box}")
         mag -= 1

@@ -93,15 +93,21 @@ def write_rle(universe: HashLife) -> str:
                     row[-1][1] += length
                 else:
                     row.append([s, length])
+    # Live rows only: the gap between two is one "k$" token (spec/patterns.md), so the
+    # text grows with the live rows, not the box's height.
     tokens: list[str] = []
-    for y in range(y0, y1 + 1):
+    prev = y0
+    for y in sorted(rows):
+        if y > y0:
+            tokens.append(_run(y - prev, "$"))
         pos = x0
-        for start, length in rows.get(y, ()):
+        for start, length in rows[y]:
             if start > pos:
                 tokens.append(_run(start - pos, "b"))
             tokens.append(_run(length, "o"))
             pos = start + length
-        tokens.append("$" if y < y1 else "!")
+        prev = y
+    tokens.append("!")
     body: list[str] = []
     line = ""
     for tok in tokens:

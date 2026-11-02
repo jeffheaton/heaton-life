@@ -149,10 +149,10 @@ namespace HeatonLife.Tests
                         {
                             if (op.TryGetProperty("error", out JsonElement error) && error.GetBoolean())
                             {
-                                string before = u.ToMacrocell();
-                                var refused = Assert.ThrowsAny<ArgumentException>(() => Apply(u, op));
-                                Assert.Contains("editing box", refused.Message);
-                                Assert.Equal(before, u.ToMacrocell());
+                                (string, BigInteger) before = (u.ToMacrocell(), u.Generation);
+                                Exception e = Assert.ThrowsAny<Exception>(() => Apply(u, op));
+                                Assert.True(e is ArgumentException || e is InvalidOperationException, e.ToString());
+                                Assert.Equal(before, (u.ToMacrocell(), u.Generation));
                             }
                             else
                             {
@@ -253,6 +253,18 @@ namespace HeatonLife.Tests
 
         private static void CheckViewOp(JsonElement op)
         {
+            if (op.TryGetProperty("error", out JsonElement error) && error.GetBoolean())
+            {
+                Assert.ThrowsAny<ArgumentException>(() => ViewResult(op));
+                return;
+            }
+            BigInteger[] want = op.GetProperty("expect").EnumerateArray().Select(Big).ToArray();
+            BigInteger[] got = ViewResult(op);
+            Assert.True(want.SequenceEqual(got), $"{op}: got [{string.Join(", ", got)}]");
+        }
+
+        private static BigInteger[] ViewResult(JsonElement op)
+        {
             BigInteger[] got;
             switch (op.GetProperty("op").GetString())
             {
@@ -296,8 +308,7 @@ namespace HeatonLife.Tests
                 default:
                     throw new InvalidDataException($"unknown view op {op.GetProperty("op").GetString()}");
             }
-            BigInteger[] want = op.GetProperty("expect").EnumerateArray().Select(Big).ToArray();
-            Assert.True(want.SequenceEqual(got), $"{op}: got [{string.Join(", ", got)}]");
+            return got;
         }
 
         private static BigInteger[] Parts(LifeView view) => new[] { view.X, view.Y, new BigInteger(view.Mag) };

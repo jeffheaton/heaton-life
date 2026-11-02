@@ -64,8 +64,10 @@ wrong from a conforming encoder.)
 **Encoding** (canonical): header `x = W, y = H, rule = R`; two-state grids
 (max cell ≤ 1) use `b`/`o`; grids with any cell ≥ 2 use `.`/`A`..`X` (cells
 above 24 are unencodable — an error). Runs of length 1 omit the count; trailing
-dead runs in a row are omitted; rows end with `$` (last row with `!`); lines
-wrap at 70 characters. Encoding then decoding reproduces the grid exactly.
+dead runs in a row are omitted; rows end with `$` (last row with `!`), and k ≥ 2
+consecutive `$` are written as one token `k$`, so a run of empty rows costs one
+token; lines wrap at 70 characters. Encoding then decoding reproduces the grid
+exactly.
 
 MergeLife, Lenia, and Gray-Scott patterns are **not RLE-representable**; they
 travel as raw cell payloads (the catalog/zoo container format, app-level).
@@ -81,8 +83,9 @@ never becomes a dense array. Extended RLE (Golly's) puts the position on the fil
 ```
 
 Space-separated `key=value` fields: `Pos` is the top-left cell of the pattern's
-rectangle (y down); `Gen` is the generation, a non-negative integer of any size. Either
-may be missing; unknown keys are ignored. The `#C` prefix makes other readers skip the
+rectangle (y down), two integers separated by a comma, each an optional `-` and one or
+more ASCII digits; `Gen` is the generation, ASCII digits only. Both may be any size; any
+other spelling of either is an error. Either may be missing; unknown keys are ignored. The `#C` prefix makes other readers skip the
 line as a comment. Anywhere but the first line, `#CXRLE` is an ordinary comment.
 
 **Reading into the universe.** The dialect rules above apply, and the file must be
@@ -97,7 +100,9 @@ is refused.
 ` Gen=<n>` appended when the generation is above 0, where (x0, y0) is the top-left of
 the bounding box. Then comes the canonical encoding above of the bounding box's cells,
 the header naming the universe's rule: the same tokens and line breaks `rle_encode`
-produces for that rectangle. An empty universe writes `#CXRLE Pos=0,0`, then
+produces for that rectangle. Since a run of row ends is one token, the text grows with
+the live rows, not the box's height: two live rows 2·10⁹ apart are joined by one
+`2000000000$`. An empty universe writes `#CXRLE Pos=0,0`, then
 `x = 0, y = 0, rule = <rule>`, then `!`. A pattern that reaches outside the editing box
 is refused; [Macrocell](macrocell.md) carries it.
 

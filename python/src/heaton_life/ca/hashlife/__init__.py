@@ -2,13 +2,14 @@
 
 A hash-consed quadtree with memoized futures runs regular patterns of trillions of cells
 and jumps any number of generations. Editing reaches |x|, |y| ≤ 10⁹ (``EDIT_LIMIT``);
-queries and rendering reach everywhere.
+queries and rendering reach everywhere. Trees stop at level 512 (``MAX_LEVEL``).
 """
 
 from heaton_life.ca.hashlife.render import RENDER_MODES, RenderMode
 from heaton_life.ca.hashlife.universe import (
     DEFAULT_MEMORY_MB,
     EDIT_LIMIT,
+    MAX_LEVEL,
     MIN_MEMORY_MB,
     PASTE_MODES,
     HashLife,
@@ -32,6 +33,7 @@ from heaton_life.ca.hashlife.view import (
 __all__ = [
     "DEFAULT_MEMORY_MB",
     "EDIT_LIMIT",
+    "MAX_LEVEL",
     "MAX_MAG",
     "MIN_MEMORY_MB",
     "PASTE_MODES",

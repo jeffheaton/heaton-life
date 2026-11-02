@@ -298,10 +298,12 @@ namespace HeatonLife.Tests
             u.FillRandom(Limit - 7, Limit - 7, Limit, Limit, 1.0, 3);
             Assert.Equal(66, (int)u.Population);
             Assert.True(u.GetRect(Limit - 7, Limit - 7, Limit, Limit).All(c => c == 1));
-            // (Its RLE would be legal but spell 2·10⁹ rows one '$' at a time; Macrocell is compact.)
-            HashLife back = HashLife.FromMacrocell(u.ToMacrocell());
-            Assert.Equal(u.BoundingBox, back.BoundingBox);
-            Assert.Equal(u.ToMacrocell(), back.ToMacrocell());
+            // Both files carry it compactly: RLE spends one k$ token on each run of empty rows.
+            foreach (HashLife back in new[] { HashLife.FromMacrocell(u.ToMacrocell()), HashLife.FromRle(u.ToRle()) })
+            {
+                Assert.Equal(u.BoundingBox, back.BoundingBox);
+                Assert.Equal(u.ToMacrocell(), back.ToMacrocell());
+            }
         }
 
         [Fact]
@@ -684,6 +686,160 @@ namespace HeatonLife.Tests
             Assert.Equal(5, LifeView.Fit(new CellBox(0, 0, 2, 2), 640, 480).Mag);
             // A box straddling an axis can't fit one pixel; Fit says so instead of searching forever.
             Assert.Throws<ArgumentException>(() => LifeView.Fit(new CellBox(-1, 0, 0, 0), 1, 1));
+        }
+
+        [Theory]
+        [InlineData(1, 50, -5, 3, 7, 9)] // straddles x = 0 in a frame 1 pixel wide
+        [InlineData(50, 1, 3, -5, 9, 7)] // straddles tree row 0 in a frame 1 pixel high
+        [InlineData(0, 5, 3, 5, 9, 7)]   // a frame 0 pixels across holds nothing
+        public void FitThrowsWhenNoViewHoldsTheBox(long width, long height, long x0, long y0, long x1, long y1)
+        {
+            Assert.Throws<ArgumentException>(() => LifeView.Fit(new CellBox(x0, y0, x1, y1), width, height));
+        }
+
+        [Fact]
+        public void FitOnePixelFramesWhenNothingStraddles()
+        {
+            Assert.Equal(new LifeView(0, 0, -4), LifeView.Fit(new CellBox(3, 5, 9, 7), 1, 1));
+            Assert.Equal(new LifeView(0, -1, 0), LifeView.Fit(new CellBox(0, 0, 0, 0), 1, 1));
+            Assert.Equal(-3, LifeView.Fit(new CellBox(-5, 3, 7, 9), 2, 2).Mag);
+            BigInteger big = BigInteger.Pow(10, 30);
+            Assert.Throws<ArgumentException>(() => LifeView.Fit(new CellBox(-big, 1, big, 1), 1, 10));
+        }
+
+        [Fact]
+        public void FramesFarOutMatchBlockPopulations()
+        {
+            // Past the root's own size a frame shows at most its four quarters, at any distance.
+            var u = new HashLife();
+            u.SetRect(-1, 0, new byte[] { 1, 1, 1, 1 }, 2, 2); // one cell in each quarter of the root
+            var (glider, width, height) = Builtin("Glider");
+            u.SetRect(5, -40, glider, width, height);
+            u.SetRect(-90, 70, glider, width, height);
+            var frame = new byte[36];
+            foreach (int s in Enumerable.Range(1, 12).Concat(new[] { 600, 5000 }))
+            {
+                BigInteger block = BigInteger.One << s, area = block * block;
+                foreach (var mode in new[] { HashLifeRenderMode.Any, HashLifeRenderMode.Density })
+                {
+                    u.WriteFrame(frame, 6, 6, new LifeView(-3, -3, -s), mode);
+                    for (int j = 0; j < 6; j++)
+                    {
+                        for (int i = 0; i < 6; i++)
+                        {
+                            BigInteger bx = i - 3, by = j - 3;
+                            BigInteger p = u.PopulationIn(bx * block, by * block + 1, (bx + 1) * block - 1, (by + 1) * block);
+                            int want = mode == HashLifeRenderMode.Any ? (p.IsZero ? 0 : 255) : (int)((255 * p + area - 1) / area);
+                            Assert.Equal(want, frame[j * 6 + i]);
+                        }
+                    }
+                }
+            }
+        }
+
+        // -- file numbers and row ends ----------------------------------------------------------
+
+        [Theory]
+        [InlineData("-5")]
+        [InlineData("+5")]
+        [InlineData("1_0")]
+        [InlineData("٣")]
+        [InlineData("")]
+        [InlineData("5x")]
+        public void GenerationsAreAsciiDigits(string value)
+        {
+            Assert.Throws<FormatException>(() => HashLife.FromMacrocell($"[M2]\n#G {value}\n*$\n"));
+            Assert.Throws<FormatException>(() => HashLife.FromRle($"#CXRLE Gen={value}\nx = 1, y = 1\no!\n"));
+        }
+
+        [Theory]
+        [InlineData("+5")]
+        [InlineData("1_0")]
+        [InlineData("٣")]
+        [InlineData("")]
+        [InlineData("--5")]
+        [InlineData("5-")]
+        public void PositionsAreAsciiDigitsAfterAnOptionalMinus(string value)
+        {
+            Assert.Throws<FormatException>(() => HashLife.FromRle($"#CXRLE Pos={value},0\nx = 1, y = 1\no!\n"));
+            Assert.Throws<FormatException>(() => HashLife.FromRle($"#CXRLE Pos=0,{value}\nx = 1, y = 1\no!\n"));
+        }
+
+        [Fact]
+        public void FileNumbersAcceptPlainDigits()
+        {
+            HashLife u = HashLife.FromRle("#CXRLE Pos=-3,007 Gen=0012\nx = 1, y = 1\no!\n");
+            Assert.Equal(new CellBox(-3, 7, -3, 7), u.BoundingBox);
+            Assert.Equal(12, (int)u.Generation);
+            Assert.Equal(7, (int)HashLife.FromMacrocell("[M2]\n#G 007\n*$\n").Generation);
+            Assert.Throws<FormatException>(() => HashLife.FromMacrocell("[M2]\n*$\n4 0 0 0 ١\n"));
+        }
+
+        [Fact]
+        public void RleWritesARunOfRowEndsAsOneToken()
+        {
+            var grid = new byte[7 * 3];
+            grid[0] = grid[3 * 3 + 1] = grid[6 * 3 + 2] = 1;
+            Assert.Equal("x = 3, y = 7, rule = B3/S23\no3$bo3$2bo!\n", Patterns.RleEncode(grid, 3, 7));
+            var u = new HashLife();
+            u.SetRect(-3, -Limit, new byte[] { 1, 1, 1, 1 }, 2, 2);
+            u.SetRect(0, Limit - 1, new byte[] { 1, 1, 1, 1 }, 2, 2);
+            string text = u.ToRle(); // two billion rows, one token for the empty ones
+            Assert.EndsWith("x = 5, y = 2000000001, rule = B3/S23\n2o$2o1999999998$3b2o$3b2o!\n", text);
+            Assert.Equal(u.ToMacrocell(), HashLife.FromRle(text).ToMacrocell());
+        }
+
+        // -- the deepest tree (spec/hashlife.md "Depth") ------------------------------------------
+
+        [Fact]
+        public void StepsStopAtTheDeepestTree()
+        {
+            HashLife u = Universe("Glider");
+            string start = u.ToMacrocell();
+            BigInteger tooFar = BigInteger.One << (HashLife.MaxLevel - 2);
+            foreach (BigInteger n in new[] { tooFar, tooFar + 1 }) // refused before anything runs
+            {
+                Assert.Throws<ArgumentOutOfRangeException>(() => u.Step(n));
+                Assert.Equal((start, BigInteger.Zero), (u.ToMacrocell(), u.Generation));
+            }
+            BigInteger deepest = BigInteger.One << (HashLife.MaxLevel - 3); // the largest sub-step: a level-512 root
+            for (int i = 0; i < 4; i++)
+                u.Step(deepest);
+            BigInteger m = deepest; // a glider moves (m, m) in 4m generations
+            Assert.Equal(new CellBox(m, m, m + 2, m + 2), u.BoundingBox);
+            string state = u.ToMacrocell();
+            foreach (BigInteger n in new[] { deepest, BigInteger.One }) // spread past what level 512 steps
+            {
+                Assert.Contains("spread too far", Assert.Throws<InvalidOperationException>(() => u.Step(n)).Message);
+                Assert.Equal((state, 4 * deepest), (u.ToMacrocell(), u.Generation));
+            }
+            // Everything else still works at that depth.
+            Assert.Equal(5, (int)u.Population);
+            Assert.Equal(5, (int)u.PopulationIn(m, m, m + 2, m + 2));
+            Assert.Contains(u.Frame(2, 2, new LifeView(m >> 2, (m - 1) >> 2, -2), HashLifeRenderMode.Density), b => b > 0);
+            HashLifeSnapshot snapshot = u.Snapshot();
+            u.Clear();
+            u.Restore(snapshot);
+            Assert.Equal(state, HashLife.FromMacrocell(u.ToMacrocell()).ToMacrocell());
+        }
+
+        [Fact]
+        public void MacrocellNodesStopAtTheDeepestLevel()
+        {
+            static string Chain(int top) // one cell in the far corner of a level-`top` tree
+            {
+                var text = new StringBuilder("[M2]\n*$\n4 0 0 0 1\n");
+                for (int k = 5; k <= top; k++)
+                    text.Append($"{k} 0 0 0 {k - 3}\n");
+                return text.ToString();
+            }
+            HashLife u = HashLife.FromMacrocell(Chain(HashLife.MaxLevel));
+            BigInteger corner = (BigInteger.One << (HashLife.MaxLevel - 1)) - 8;
+            Assert.Equal(new CellBox(corner, corner + 1, corner, corner + 1), u.BoundingBox);
+            Assert.Equal(Chain(HashLife.MaxLevel).Replace("[M2]", "[M2] (heaton-life)\n#R B3/S23"), u.ToMacrocell());
+            Assert.Contains(
+                "deepest tree",
+                Assert.Throws<FormatException>(() => HashLife.FromMacrocell(Chain(HashLife.MaxLevel + 1))).Message);
         }
     }
 }

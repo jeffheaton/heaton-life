@@ -3989,6 +3989,13 @@ def write_hashlife_cases() -> None:
     macrocell("error-state-2", "[M2]\n1 0 2 0 0\n")
     macrocell("error-wide-row", "[M2]\n*********$\n")
     macrocell("error-no-nodes", "[M2] (example 1.0)\n#R B3/S23\n")
+    macrocell("error-negative-generation", "[M2]\n#G -1\n**$\n")
+
+    def chain(top: int) -> str:  # one cell in the far corner of a level-`top` tree
+        return "[M2]\n*$\n4 0 0 0 1\n" + "".join(f"{k} 0 0 0 {k - 3}\n" for k in range(5, top + 1))
+
+    macrocell("deepest-tree", chain(512))
+    macrocell("error-past-the-deepest-tree", chain(513))
 
     # -- rle: input -> canonical Macrocell and canonical RLE, or an error -----------------
     def rle(name: str, text: str) -> None:
@@ -4014,6 +4021,12 @@ def write_hashlife_cases() -> None:
     rle("empty", "x = 0, y = 0, rule = B3/S23\n!\n")
     rle("error-extended", "x = 2, y = 1, rule = B3/S23\n.A!\n")
     rle("error-outside-the-box", "#CXRLE Pos=999999999,0\nx = 3, y = 1\n3o!\n")
+    rle("error-negative-generation", "#CXRLE Pos=0,0 Gen=-1\nx = 2, y = 1, rule = B3/S23\n2o!\n")
+    rle(
+        "tall-and-sparse",
+        "#CXRLE Pos=-3,-1000000000\nx = 5, y = 2000000001, rule = B3/S23\n"
+        "2o$2o1999999998$3b2o$3b2o!\n",
+    )
 
     # -- edit: operations in order -> final canonical text; errors change nothing ---------
     def edit(name: str, rule: str, ops: list[dict[str, Any]]) -> None:
@@ -4169,6 +4182,25 @@ def write_hashlife_cases() -> None:
     d = case("view-arithmetic")
     save(d, {"kind": "view", "operations": ops})
 
+    fits: list[dict[str, Any]] = []
+    for box, size in (
+        ((-5, 3, 7, 9), (1, 50)),  # straddles x = 0, one pixel wide: no aligned block holds it
+        ((3, -5, 9, 7), (50, 1)),  # straddles tree row 0, one pixel high
+        ((-big, 1, big, 1), (1, 10)),
+        ((3, 5, 9, 7), (0, 5)),  # nothing fits a frame 0 pixels across
+        ((3, 5, 9, 7), (1, 1)),
+        ((-5, 3, 7, 9), (2, 2)),
+        ((-big, -big, -big, -big), (1, 1)),
+    ):
+        op: dict[str, Any] = {"op": "fit", "box": [str(c) for c in box], "size": list(size)}
+        try:
+            op["expect"] = v(fit(box, size))
+        except ValueError:
+            op["error"] = True
+        fits.append(op)
+    d = case("view-fit-impossible")
+    save(d, {"kind": "view", "operations": fits})
+
     # -- render: frames of a state at several views and both modes -------------------------
     import io
 
@@ -4252,6 +4284,41 @@ def write_hashlife_cases() -> None:
             (centered(2**69 - 8, 2**69 - 7, 0, (24, 24)), (24, 24), "any"),
             (centered(2**69, 2**69, -60, (16, 16)), (16, 16), "density"),
             (LifeView(0, 0, -75), (4, 4), "any"),
+        ],
+    )
+
+    far_out = HashLife()
+    far_out.set_rect(-1, 0, np.ones((2, 2), np.uint8))  # one cell in each quarter of the root
+    far_out.set_rect(5, -40, builtin("Glider"))
+    far_out.set_rect(-90, 70, builtin("Glider"))
+    render_case(
+        "far-past-the-root",
+        "input.rle",
+        far_out.to_rle(),
+        0,
+        [
+            (LifeView(-3, -3, -6), (6, 6), "density"),
+            (LifeView(-3, -3, -10), (6, 6), "any"),
+            (LifeView(-3, -3, -10), (6, 6), "density"),
+            (LifeView(-3, -3, -600), (6, 6), "density"),
+            (LifeView(-3, -3, -5000), (6, 6), "any"),
+            (LifeView(-3, -3, -5000), (6, 6), "density"),
+        ],
+    )
+
+    deepest = str(2**509)  # the largest sub-step: a level-512 root
+    edit(
+        "deepest-tree",
+        "B3/S23",
+        [
+            {"op": "set_rect", "x": 0, "y": 0, "mode": "copy", "cells": [".*.", "..*", "***"]},
+            {"op": "step", "n": str(2**510), "error": True},
+            {"op": "step", "n": deepest},
+            {"op": "step", "n": deepest},
+            {"op": "step", "n": deepest},
+            {"op": "step", "n": deepest},
+            {"op": "step", "n": deepest, "error": True},  # spread past what level 512 steps
+            {"op": "step", "n": "1", "error": True},
         ],
     )
 
