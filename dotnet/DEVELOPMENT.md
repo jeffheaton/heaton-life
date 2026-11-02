@@ -58,6 +58,11 @@ dotnet test tests/HeatonLife.Core.Tests/HeatonLife.Core.Tests.csproj -c Release 
   `--verify-no-changes`) fixes what it reports.
 - **The tests** take a few seconds and replay every conformance vector; from the
   repository root, `dotnet test dotnet --nologo` is the short form.
+- **The HashLife giants** (the Caterpillar and Annelid; `HashLifeGiantTests.cs`) run only
+  when `HEATON_LIFE_PATTERNS` names the cache that `../python/tools/fetch_patterns.py`
+  fills, and report as skipped otherwise. Neither file has a stated license, so neither is
+  committed. With the cache in place they take about half a minute (the test build is
+  Debug; a Release build runs each period in about 5 s) and under 1 GB of memory.
 - The workflow also runs an advisory vulnerable-package report over the test
   project's dependencies, the only place a package could enter:
   `dotnet list tests/HeatonLife.Core.Tests/HeatonLife.Core.Tests.csproj package --vulnerable --include-transitive`.
@@ -126,6 +131,7 @@ meets.
 | `ISimulation` + frame-source interfaces | ✅ the C# side of Python's `Simulation` protocol; the polymorphic surface a host (e.g. a Unity adapter) drives |
 | Evolve: paper objective + GA (`../spec/evolve.md`) | ✅ bit-exact, incl. a replayed end-to-end mini evolution run |
 | Patterns: RLE (both dialects), transforms, extract/stamp (`../spec/patterns.md`) | ✅ bit-exact, Golly-compatible |
+| HashLife: the unbounded universe, Macrocell, sparse `#CXRLE` RLE, views and frames (`../spec/hashlife.md`, `../spec/macrocell.md`) | ✅ bit-exact against `../vectors/hashlife/`; the giant patterns behind `HEATON_LIFE_PATTERNS` |
 
 The port landed in the order RNG → Life-like → remaining discrete CAs → continuous
 grids → fractals → boids → render → evolve, each stage with its conformance replay

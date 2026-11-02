@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Numerics;
 using System.Text;
 
 namespace HeatonLife
@@ -177,6 +179,302 @@ namespace HeatonLife
                 sb.Append('\n').Append(bodyLine);
             sb.Append('\n');
             return sb.ToString();
+        }
+
+        // ---- RLE in the unbounded universe (spec/patterns.md "RLE in the unbounded universe") --
+
+        private const long RunCap = 1L << 40; // run counts and offsets saturate here, far past the editing box
+
+        /// <summary>
+        /// A HashLife universe from two-state RLE, streamed run by run into quadtree leaves so a
+        /// file never becomes a dense grid. <c>#CXRLE Pos=x,y Gen=n</c> on the first line places
+        /// the pattern's top-left cell (at (0, 0) without it) and sets the generation; any other
+        /// <c>#</c> line is a comment. The rule is the header's, or B3/S23. An extended file, a
+        /// state above 1, or a cell outside the editing box is refused.
+        /// </summary>
+        public static HashLife RleToHashLife(string text, int maxMemoryMb = HashLife.DefaultMaxMemoryMb)
+        {
+            if (text == null)
+                throw new ArgumentNullException(nameof(text));
+            var lines = new List<string>();
+            foreach (string raw in TextLines.Split(text))
+            {
+                string line = TextLines.Strip(raw);
+                if (line.Length > 0)
+                    lines.Add(line);
+            }
+            BigInteger posX = BigInteger.Zero, posY = BigInteger.Zero, generation = BigInteger.Zero;
+            if (lines.Count > 0 && lines[0].StartsWith("#CXRLE", StringComparison.Ordinal))
+                ReadCxrle(lines[0], ref posX, ref posY, ref generation);
+            lines.RemoveAll(line => line[0] == '#');
+            string? rule = null;
+            if (lines.Count > 0 && TryParseHeader(lines[0], out _, out _, out rule))
+                lines.RemoveAt(0);
+            string body = string.Concat(lines);
+            bool extended = rule != null && !IsLifelikeRule(rule);
+            foreach (char c in body)
+            {
+                if (c == '.' || (c >= 'A' && c <= 'X' && c != 'B' && c != 'O'))
+                    extended = true;
+            }
+            if (extended)
+                throw new FormatException("HashLife reads two-state RLE only (this file is extended RLE)");
+            var universe = new HashLife(rule ?? "B3/S23", maxMemoryMb);
+
+            const long limit = HashLife.EditLimit;
+            bool placed = BigInteger.Abs(posX) <= limit && BigInteger.Abs(posY) <= limit;
+            long x0 = placed ? (long)posX : 0, y0 = placed ? (long)posY : 0;
+            var blocks = new Dictionary<long, ulong>();
+            long width = 0, height = 0, x = 0, y = 0;
+            int i = 0;
+            while (i < body.Length)
+            {
+                char c = body[i];
+                if (TextLines.IsSpace(c))
+                {
+                    i++;
+                    continue;
+                }
+                // A token is a run count and a tag (the reference's (\d*)(\S)); a count that
+                // whitespace or the end follows leaves its own last digit as the tag.
+                long count = 1;
+                int start = i;
+                while (i < body.Length && body[i] >= '0' && body[i] <= '9')
+                    i++;
+                if (i > start)
+                {
+                    if (i == body.Length || TextLines.IsSpace(body[i]))
+                        throw new FormatException($"unsupported RLE tag: '{body[i - 1]}'");
+                    count = 0;
+                    for (int d = start; d < i; d++)
+                        count = Math.Min(count * 10 + (body[d] - '0'), RunCap);
+                }
+                char tag = body[i++];
+                if (tag == 'b' || tag == 'B')
+                {
+                    x = Math.Min(x + count, RunCap);
+                }
+                else if (tag == 'o' || tag == 'O')
+                {
+                    width = Math.Max(width, Math.Min(x + count, RunCap));
+                    height = Math.Max(height, y + 1);
+                    if (count > 0)
+                    {
+                        // A live cell outside the box dooms the file: refuse it now rather than
+                        // spelling out a run that may be astronomically long.
+                        if (!placed)
+                            throw new ArgumentOutOfRangeException(
+                                null, $"#CXRLE Pos={posX},{posY} lies outside the editing box |x|, |y| <= 1,000,000,000");
+                        if (x0 + x + count - 1 > limit || y0 + y > limit)
+                            HashLife.CheckBox(x0, y0, x0 + x + count - 1, y0 + y);
+                        AddRun(blocks, x0 + x, y0 + y - 1, count);
+                    }
+                    x = Math.Min(x + count, RunCap);
+                }
+                else if (tag == '$')
+                {
+                    y = Math.Min(y + count, RunCap);
+                    x = 0;
+                }
+                else if (tag == '!')
+                {
+                    break;
+                }
+                else
+                {
+                    throw new FormatException($"unsupported RLE tag: '{tag}'");
+                }
+            }
+            if (blocks.Count > 0)
+            {
+                HashLife.CheckBox(x0, y0, x0 + width - 1, y0 + height - 1);
+                universe.PasteBlocks(blocks, x0, y0 - 1, x0 + width - 1, y0 + height - 2, HashLifePasteMode.Or);
+            }
+            universe.SetGeneration(generation);
+            return universe;
+        }
+
+        private static void ReadCxrle(string line, ref BigInteger posX, ref BigInteger posY, ref BigInteger generation)
+        {
+            string[] fields = SplitSpace(line);
+            for (int f = 1; f < fields.Length; f++)
+            {
+                string field = fields[f];
+                int eq = field.IndexOf('=');
+                string key = eq < 0 ? field : field.Substring(0, eq);
+                string value = eq < 0 ? "" : field.Substring(eq + 1);
+                if (key == "Pos")
+                {
+                    int comma = value.IndexOf(',');
+                    posX = ParseInteger(comma < 0 ? value : value.Substring(0, comma));
+                    posY = ParseInteger(comma < 0 ? "" : value.Substring(comma + 1));
+                }
+                else if (key == "Gen")
+                {
+                    generation = ParseInteger(value);
+                    if (generation.Sign < 0)
+                        throw new FormatException($"#CXRLE Gen must be a non-negative generation, got {value}");
+                }
+            }
+        }
+
+        private static string[] SplitSpace(string line)
+        {
+            var parts = new List<string>();
+            int i = 0;
+            while (i < line.Length)
+            {
+                if (TextLines.IsSpace(line[i]))
+                {
+                    i++;
+                    continue;
+                }
+                int start = i;
+                while (i < line.Length && !TextLines.IsSpace(line[i]))
+                    i++;
+                parts.Add(line.Substring(start, i - start));
+            }
+            return parts.ToArray();
+        }
+
+        private static BigInteger ParseInteger(string text)
+        {
+            int i = text.Length > 0 && (text[0] == '-' || text[0] == '+') ? 1 : 0;
+            if (i == text.Length)
+                throw new FormatException($"invalid integer '{text}' in #CXRLE");
+            for (int j = i; j < text.Length; j++)
+            {
+                if (text[j] < '0' || text[j] > '9')
+                    throw new FormatException($"invalid integer '{text}' in #CXRLE");
+            }
+            BigInteger magnitude = BigInteger.Parse(text.Substring(i), NumberStyles.None, CultureInfo.InvariantCulture);
+            return text[0] == '-' ? -magnitude : magnitude;
+        }
+
+        /// <summary>Set <paramref name="length"/> cells from tree position (tx, ty) rightward.</summary>
+        private static void AddRun(Dictionary<long, ulong> blocks, long tx, long ty, long length)
+        {
+            long by = ty >> 3;
+            int shift = (int)(ty & 7) * 8;
+            while (length > 0)
+            {
+                long bx = tx >> 3;
+                int offset = (int)(tx & 7);
+                int take = (int)Math.Min(8 - offset, length);
+                long key = HashLife.BlockKey(bx, by);
+                blocks.TryGetValue(key, out ulong bits);
+                blocks[key] = bits | (((1UL << take) - 1) << (offset + shift));
+                tx += take;
+                length -= take;
+            }
+        }
+
+        /// <summary>
+        /// The universe as RLE: <c>#CXRLE Pos=x0,y0</c> (with <c> Gen=n</c> past generation 0),
+        /// then the canonical encoding of the bounding box — the same tokens and line breaks
+        /// <see cref="RleEncode"/> gives that rectangle. A pattern reaching outside the editing
+        /// box throws <see cref="InvalidOperationException"/>; Macrocell carries it.
+        /// </summary>
+        public static string HashLifeToRle(HashLife universe)
+        {
+            if (universe == null)
+                throw new ArgumentNullException(nameof(universe));
+            BigInteger generation = universe.Generation;
+            string gen = generation.Sign > 0 ? " Gen=" + generation.ToString(CultureInfo.InvariantCulture) : "";
+            CellBox? found = universe.BoundingBox;
+            if (found == null)
+                return $"#CXRLE Pos=0,0{gen}\nx = 0, y = 0, rule = {universe.Rule}\n!\n";
+            CellBox box = found.Value;
+            const long limit = HashLife.EditLimit;
+            if (BigInteger.Abs(box.X0) > limit || BigInteger.Abs(box.X1) > limit
+                || BigInteger.Abs(box.Y0) > limit || BigInteger.Abs(box.Y1) > limit)
+                throw new InvalidOperationException(
+                    $"the pattern {box} reaches outside the editing box |x|, |y| <= 1,000,000,000; "
+                    + "RLE can't carry it — save as Macrocell");
+            long x0 = (long)box.X0, y0 = (long)box.Y0, x1 = (long)box.X1, y1 = (long)box.Y1;
+
+            // Every row's live runs, built leaf by leaf in x order (leaves never overlap).
+            var leaves = new List<(long X, long Y, ulong Bits)>();
+            universe.CollectLeaves(leaves);
+            leaves.Sort((a, b) => a.Y != b.Y ? a.Y.CompareTo(b.Y) : a.X.CompareTo(b.X));
+            var rows = new Dictionary<long, List<long>>(); // y → start, length, start, length, ...
+            foreach (var (tx, ty, bits) in leaves)
+            {
+                for (int r = 0; r < 8; r++)
+                {
+                    int row = (int)((bits >> (8 * r)) & 0xFF);
+                    if (row == 0)
+                        continue;
+                    long cy = ty + r + 1;
+                    if (!rows.TryGetValue(cy, out List<long>? runs))
+                    {
+                        runs = new List<long>();
+                        rows[cy] = runs;
+                    }
+                    int col = 0;
+                    while (col < 8)
+                    {
+                        if (((row >> col) & 1) == 0)
+                        {
+                            col++;
+                            continue;
+                        }
+                        int first = col;
+                        while (col < 8 && ((row >> col) & 1) != 0)
+                            col++;
+                        long s = tx + first;
+                        int n = runs.Count;
+                        if (n > 0 && runs[n - 2] + runs[n - 1] == s)
+                            runs[n - 1] += col - first;
+                        else
+                        {
+                            runs.Add(s);
+                            runs.Add(col - first);
+                        }
+                    }
+                }
+            }
+
+            var text = new StringBuilder();
+            text.Append("#CXRLE Pos=").Append(x0.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(y0.ToString(CultureInfo.InvariantCulture)).Append(gen).Append('\n');
+            text.Append("x = ").Append((x1 - x0 + 1).ToString(CultureInfo.InvariantCulture))
+                .Append(", y = ").Append((y1 - y0 + 1).ToString(CultureInfo.InvariantCulture))
+                .Append(", rule = ").Append(universe.Rule).Append('\n');
+            int lineLength = 0;
+            for (long cy = y0; cy <= y1; cy++)
+            {
+                long pos = x0;
+                if (rows.TryGetValue(cy, out List<long>? runs))
+                {
+                    for (int r = 0; r < runs.Count; r += 2)
+                    {
+                        long start = runs[r], length = runs[r + 1];
+                        if (start > pos)
+                            AppendToken(text, ref lineLength, start - pos, 'b');
+                        AppendToken(text, ref lineLength, length, 'o');
+                        pos = start + length;
+                    }
+                }
+                AppendToken(text, ref lineLength, 1, cy < y1 ? '$' : '!');
+            }
+            text.Append('\n');
+            return text.ToString();
+        }
+
+        /// <summary>One run token, wrapped as <see cref="RleEncode"/> wraps: a token that would
+        /// pass column 70 starts a new line.</summary>
+        private static void AppendToken(StringBuilder text, ref int lineLength, long length, char tag)
+        {
+            string count = length == 1 ? "" : length.ToString(CultureInfo.InvariantCulture);
+            int size = count.Length + 1;
+            if (lineLength + size > 70)
+            {
+                text.Append('\n');
+                lineLength = 0;
+            }
+            text.Append(count).Append(tag);
+            lineLength += size;
         }
 
         // ---- Transforms (channels-aware: 1 = scalar, 2 = Gray-Scott, 3 = RGB) ----

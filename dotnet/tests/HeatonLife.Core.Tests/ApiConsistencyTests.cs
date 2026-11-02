@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Xunit;
 
 namespace HeatonLife.Tests
@@ -333,6 +334,73 @@ namespace HeatonLife.Tests
             newton.Basins(32, 32, vp, rootsBuf, itersBuf);
             Assert.Equal(roots, rootsBuf);
             Assert.Equal(iters, itersBuf);
+        }
+
+        // -- HashLife: the unbounded family ------------------------------------------------------
+        // Not an ISimulation (its generations and coordinates are BigIntegers), but the same host
+        // contract: the Python constructor's defaults, frames written into caller buffers that
+        // take the indexed colormap path, and the reference's validation.
+
+        [Fact]
+        public void HashLifeConstructorMatchesPythonDefaults()
+        {
+            var u = new HashLife();
+            Assert.Equal("B3/S23", u.Rule);
+            Assert.Equal(HashLife.DefaultMaxMemoryMb, u.MaxMemoryMb);
+            Assert.Equal(500, HashLife.DefaultMaxMemoryMb);
+            Assert.Equal(10, HashLife.MinMemoryMb);
+            Assert.Equal(1_000_000_000, HashLife.EditLimit);
+            Assert.Equal(5, LifeView.MaxMag);
+            Assert.True(u.Generation.IsZero);
+            Assert.True(u.Population.IsZero);
+            Assert.Null(u.BoundingBox);
+            Assert.Equal(0, u.Collections);
+            // The empty universe's canonical forms (spec/macrocell.md, spec/patterns.md).
+            Assert.Equal("[M2] (heaton-life)\n#R B3/S23\n$\n", u.ToMacrocell());
+            Assert.Equal("#CXRLE Pos=0,0\nx = 0, y = 0, rule = B3/S23\n!\n", u.ToRle());
+        }
+
+        [Fact]
+        public void HashLifeFramesTakeTheIndexedColormapPath()
+        {
+            HashLife u = HashLife.FromRle("bo$2bo$3o!");
+            LifeView view = LifeView.Fit(u.BoundingBox, 32, 24);
+            var frame = new byte[32 * 24];
+            u.WriteFrame(frame, 32, 24, view);
+            Assert.Equal(u.Frame(32, 24, view), frame);
+            Assert.Equal(3, view.Mag); // fit zooms the 3 × 3 glider to 1:8, 24 pixels tall
+            // Every pixel shows the cell CellAt names (the frame cuts the last row of cells to 7
+            // pixels: fit centers by floor).
+            for (int j = 0; j < 24; j++)
+            {
+                for (int i = 0; i < 32; i++)
+                {
+                    var (cx, cy) = LifeView.CellAt(view, i, j);
+                    Assert.Equal(u.GetCell((long)cx, (long)cy) ? 255 : 0, frame[j * 32 + i]);
+                }
+            }
+            Assert.Equal(2 * 64 + 3 * 56, frame.Count(v => v == 255));
+            byte[] lut = Colormaps.Get("ice");
+            var rgba = new byte[frame.Length * 4];
+            Colormaps.ApplyIndexedRgba(frame, lut, rgba);
+            for (int i = 0; i < frame.Length; i++)
+            {
+                Assert.Equal(lut[frame[i] * 3], rgba[i * 4]);
+                Assert.Equal(255, rgba[i * 4 + 3]);
+            }
+        }
+
+        [Fact]
+        public void HashLifeRejectsWhatThePythonReferenceRejects()
+        {
+            Assert.Throws<ArgumentException>(() => new HashLife("B03/S23"));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new HashLife(maxMemoryMb: 9));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new LifeView(0, 0, LifeView.MaxMag + 1));
+            var u = new HashLife();
+            Assert.Throws<ArgumentOutOfRangeException>(() => u.Step(-1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => u.SetCell(HashLife.EditLimit + 1, 0, true));
+            Assert.Throws<ArgumentException>(() => u.Restore(new HashLife().Snapshot()));
+            Assert.Throws<ArgumentException>(() => u.WriteFrame(new byte[3], 2, 2, new LifeView(0, 0, 0)));
         }
 
         [Fact]

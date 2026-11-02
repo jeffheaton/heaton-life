@@ -16,7 +16,7 @@ namespace HeatonLife
         /// became an unchecked double-to-ulong conversion — a degenerate grid
         /// instead of an error.
         /// </summary>
-        private static ulong Threshold(double density)
+        internal static ulong Threshold(double density)
         {
             if (!(density >= 0.0) || density > 1.0)
                 throw new ArgumentOutOfRangeException(
