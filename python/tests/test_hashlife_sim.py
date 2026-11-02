@@ -4,6 +4,7 @@ edits and navigates with the spec's exact view arithmetic, and Save picks the fo
 
 from __future__ import annotations
 
+import dataclasses
 import gzip
 from pathlib import Path
 
@@ -12,6 +13,7 @@ import pytest
 
 from heaton_life.ca.hashlife import (
     EDIT_LIMIT,
+    MAX_LEVEL,
     HashLife,
     cell_at,
     center_cell,
@@ -226,3 +228,35 @@ def test_a_cancel_between_steps_is_forgotten() -> None:
     sim.cancel()  # no step is running: the next one clears it (spec/hashlife.md)
     sim.step(1)
     assert sim.generation == 1 << 12
+
+
+def test_the_step_field_stops_at_the_deepest_sub_step() -> None:
+    field = next(f for f in dataclasses.fields(HashLifeSimParams) if f.name == "step_exponent")
+    assert field.metadata["max"] == MAX_LEVEL - 3  # 2^509 needs a level-512 root
+    good = HashLifeSimParams()
+    assert validate(good.replace(step_exponent=MAX_LEVEL - 3)) is None
+    assert validate(good.replace(step_exponent=MAX_LEVEL - 2))[0] == "step_exponent"  # type: ignore[index]
+    sim = _sim(pattern="Block")
+    with pytest.raises(ValueError, match="deepest tree"):
+        sim.apply(sim.params.replace(step_exponent=MAX_LEVEL - 2))
+
+
+def test_a_batch_past_one_engine_step_goes_in_parts() -> None:
+    sim = _sim(pattern="Glider", step_exponent=MAX_LEVEL - 3)
+    sim.step(3)  # 3 · 2^509 generations: past 2^510, so three engine steps
+    m = 3 << (MAX_LEVEL - 5)  # a glider moves (m, m) in 4m generations
+    assert sim.generation == 3 << (MAX_LEVEL - 3)
+    assert sim.universe.bounding_box() == (m, m, m + 2, m + 2)
+
+
+def test_a_cancel_stops_a_batch_between_its_parts(monkeypatch: pytest.MonkeyPatch) -> None:
+    sim = _sim(pattern="Block", step_exponent=MAX_LEVEL - 3)
+    real_step = sim.universe.step
+
+    def step_then_cancel(n: int = 1) -> None:
+        real_step(n)
+        sim.cancel()  # arrives after the first part has finished
+
+    monkeypatch.setattr(sim.universe, "step", step_then_cancel)
+    sim.step(3)
+    assert sim.generation == 1 << (MAX_LEVEL - 3)

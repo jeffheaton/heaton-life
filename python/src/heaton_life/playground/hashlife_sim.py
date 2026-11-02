@@ -21,6 +21,7 @@ from numpy.typing import NDArray
 from heaton_life.ca.hashlife import (
     DEFAULT_MEMORY_MB,
     EDIT_LIMIT,
+    MAX_LEVEL,
     MAX_MAG,
     MIN_MEMORY_MB,
     RENDER_MODES,
@@ -46,6 +47,8 @@ _SAVE_FILTERS = {
     ".mc.gz": "Gzipped Macrocell (*.mc.gz)",
 }
 SAVE_FILTER = ";;".join(_SAVE_FILTERS.values())
+MAX_STEP_EXPONENT = MAX_LEVEL - 3  # 2^509, the largest sub-step (spec/hashlife.md "Depth")
+_STEP_LIMIT = 1 << (MAX_LEVEL - 2)  # one engine step takes fewer generations than this
 
 
 @dataclasses.dataclass(frozen=True)
@@ -56,7 +59,7 @@ class HashLifeSimParams(Params):
     )
     rule: str = dataclasses.field(default="B3/S23", metadata={"label": "Rule (B/S)"})
     step_exponent: int = dataclasses.field(
-        default=0, metadata={"min": 0, "max": 1000, "label": "Step (2^k gens)"}
+        default=0, metadata={"min": 0, "max": MAX_STEP_EXPONENT, "label": "Step (2^k gens)"}
     )
     max_memory_mb: int = dataclasses.field(
         default=DEFAULT_MEMORY_MB,
@@ -113,6 +116,12 @@ def _hot_problem(params: HashLifeSimParams) -> tuple[str, str] | None:
             _integer(getattr(params, name), f"view {name}")
         except ValueError as exc:
             return (name, str(exc))
+    if not 0 <= params.step_exponent <= MAX_STEP_EXPONENT:
+        message = (
+            f"a step is 2^0 to 2^{MAX_STEP_EXPONENT} generations, the deepest tree's "
+            f'largest sub-step (spec/hashlife.md "Depth"); got 2^{params.step_exponent}'
+        )
+        return ("step_exponent", message)
     try:
         HashLife(params.rule, max_memory_mb=params.max_memory_mb)
     except ValueError as exc:
@@ -141,6 +150,7 @@ class HashLifeSim:
         self._view = view_of(params)
         self._start = universe.snapshot()
         self._frame: NDArray[np.uint8] | None = None
+        self._canceled = False
 
     @classmethod
     def build(cls, params: Params) -> HashLifeSim:
@@ -167,13 +177,21 @@ class HashLifeSim:
 
     def step(self, n: int = 1) -> None:
         """Advance n steps of 2^step_exponent generations; ``cancel()`` cuts it short at a
-        completed sub-step. A step that can't fit one generation into the budget raises
-        HashLifeMemoryError (the engine stops playing and shows it)."""
+        completed sub-step. A batch that would reach 2^510 generations, past what one
+        engine step takes, goes in parts. A step that can't fit one generation into the
+        budget raises HashLifeMemoryError, and a pattern spread past the deepest tree
+        raises ValueError (the engine stops playing and shows either)."""
         universe = self.universe
         if universe.generation == self._start.generation:
             self._start = universe.snapshot()  # edits made at the start belong to it
+        k = self.params.step_exponent
+        per_part = (_STEP_LIMIT - 1) >> k  # whole steps one engine call can take
+        self._canceled = False
         try:
-            universe.step(n << self.params.step_exponent)
+            while n > 0 and not self._canceled:
+                part = min(n, per_part)
+                universe.step(part << k)
+                n -= part
         except StepCanceled:
             pass  # the universe holds the last completed sub-step
         finally:
@@ -186,7 +204,8 @@ class HashLifeSim:
 
     def cancel(self) -> None:
         """Stop a running step early; safe to call from another thread."""
-        self.universe.cancel()
+        self._canceled = True  # between parts of a batch
+        self.universe.cancel()  # inside one
 
     @property
     def generation(self) -> int:
