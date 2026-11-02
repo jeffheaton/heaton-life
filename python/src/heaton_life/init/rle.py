@@ -9,7 +9,9 @@ cell ≥ 2 emit ``.``/letters; cells above 24 are unencodable.
 
 from __future__ import annotations
 
+import dataclasses
 import re
+from collections.abc import Iterator
 
 import numpy as np
 from numpy.typing import NDArray
@@ -18,6 +20,80 @@ _HEADER = re.compile(
     r"x\s*=\s*(\d+)\s*,\s*y\s*=\s*(\d+)(?:\s*,\s*rule\s*=\s*(\S+))?", re.IGNORECASE
 )
 _LIFELIKE_RULE = re.compile(r"^[Bb][0-8]*/[Ss][0-8]*$")
+_TOKEN = re.compile(r"(\d*)(\S)")
+
+
+def _is_extended(body: str, rule: str | None) -> bool:
+    """Dialect detection (spec/patterns.md): uppercase B/O are dead/alive in two-state
+    files but states 2/15 in extended RLE. Extended iff the body holds '.', any state
+    letter other than B/O, or the header names a non-Life-like rule."""
+    return (
+        "." in body
+        or any("A" <= ch <= "X" and ch not in ("B", "O") for ch in body)
+        or (rule is not None and not _LIFELIKE_RULE.match(rule))
+    )
+
+
+@dataclasses.dataclass(frozen=True)
+class RleInfo:
+    """What an RLE file says about itself besides its cells (spec/patterns.md)."""
+
+    rule: str | None
+    position: tuple[int, int] | None
+    """``#CXRLE Pos=x,y``: the top-left cell of the bounding rectangle, if given."""
+    generation: int
+    """``#CXRLE Gen=n``, or 0."""
+    extended: bool
+
+
+def rle_runs(text: str) -> tuple[RleInfo, Iterator[tuple[int, int, int, int]]]:
+    """Scan RLE text as runs of non-zero cells: ``(x, y, length, state)`` relative to the
+    pattern's top-left, in file order. Streams, so a giant file never becomes a grid.
+
+    Extended RLE's ``#CXRLE Pos=x,y Gen=n`` counts only on the first line (Golly reads it
+    nowhere else); every other ``#`` line is a comment.
+    """
+    lines = [ln.strip() for ln in text.splitlines()]
+    lines = [ln for ln in lines if ln]
+    position: tuple[int, int] | None = None
+    generation = 0
+    if lines and lines[0].startswith("#CXRLE"):
+        for field in lines[0].split()[1:]:
+            key, _, value = field.partition("=")
+            if key == "Pos":
+                px, _, py = value.partition(",")
+                position = (int(px), int(py))
+            elif key == "Gen":
+                generation = int(value)
+    lines = [ln for ln in lines if not ln.startswith("#")]
+    rule: str | None = None
+    if lines and (header := _HEADER.match(lines[0])):
+        rule = header.group(3)
+        lines = lines[1:]
+    body = "".join(lines)
+    extended = _is_extended(body, rule)
+    return RleInfo(rule, position, generation, extended), _scan(body, extended)
+
+
+def _scan(body: str, extended: bool) -> Iterator[tuple[int, int, int, int]]:
+    x = y = 0
+    for count_text, tag in _TOKEN.findall(body):
+        count = int(count_text) if count_text else 1
+        if tag == "b" or tag == "." or (not extended and tag == "B"):
+            x += count
+        elif tag == "o" or (not extended and tag == "O"):
+            yield x, y, count, 1
+            x += count
+        elif extended and "A" <= tag <= "X":
+            yield x, y, count, ord(tag) - ord("A") + 1
+            x += count
+        elif tag == "$":
+            y += count
+            x = 0
+        elif tag == "!":
+            return
+        else:
+            raise ValueError(f"unsupported RLE tag: {tag!r}")
 
 
 def rle_decode(text: str) -> tuple[NDArray[np.uint8], str | None]:
@@ -37,14 +113,7 @@ def rle_decode(text: str) -> tuple[NDArray[np.uint8], str | None]:
         declared_w = declared_h = 0
         body = "".join(lines)
 
-    # Dialect detection (spec/patterns.md): uppercase B/O are dead/alive in
-    # two-state files but states 2/15 in extended RLE. Extended iff the body
-    # holds '.', any state letter other than B/O, or a non-Life-like rule.
-    extended = (
-        "." in body
-        or any("A" <= ch <= "X" and ch not in ("B", "O") for ch in body)
-        or (rule is not None and not _LIFELIKE_RULE.match(rule))
-    )
+    extended = _is_extended(body, rule)
 
     rows: list[list[int]] = [[]]
     count = 0

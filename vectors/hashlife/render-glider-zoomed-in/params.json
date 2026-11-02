@@ -1,0 +1,49 @@
+{
+  "family": "hashlife",
+  "frames": [
+    {
+      "file": "frame-0.png",
+      "mode": "any",
+      "size": [
+        64,
+        48
+      ],
+      "view": [
+        "-24",
+        "-20",
+        2
+      ]
+    },
+    {
+      "file": "frame-1.png",
+      "mode": "any",
+      "size": [
+        160,
+        120
+      ],
+      "view": [
+        "-16",
+        "4",
+        5
+      ]
+    },
+    {
+      "file": "frame-2.png",
+      "mode": "density",
+      "size": [
+        13,
+        9
+      ],
+      "view": [
+        "-3",
+        "-2",
+        1
+      ]
+    }
+  ],
+  "generation": "6",
+  "input": "input.rle",
+  "kind": "render",
+  "spec_version": "0.14.0",
+  "tier": "bit-exact"
+}

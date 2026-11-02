@@ -17,13 +17,13 @@ Each family gets one page structured as:
 ## Determinism contract
 
 - **RNG is pinned**: PCG32 (`state = state * 6364136223846793005 + inc`, XSH-RR output). Both implementations carry their own ~10-line copy; native RNGs never touch simulation state. Seeding and draw order are part of each family's init spec.
-- **Discrete CAs are specified in integer math** (Life-like, Elementary, Cyclic, Wireworld, MergeLife) so cross-language runs match bit-for-bit.
+- **Discrete CAs are specified in integer math** (Life-like, HashLife, Elementary, Cyclic, Wireworld, MergeLife) so cross-language runs match bit-for-bit.
 - **Float families** (Lenia, Gray-Scott, boids, smooth fractal coloring) conform within a per-family ε after N steps; transcendentals and FFT rounding make bitwise equality unrealistic.
 - **The platform is part of the contract.** Every float bit-exact output rests on IEEE-754 binary64 rounded to nearest even, with no contraction of `a·b ± c` into a fused multiply-add (a C++ backend such as IL2CPP is built with `-ffp-contract=off`), no x87 extended precision or exponent range, and gradual underflow (no flush-to-zero, no denormals-are-zero). Where the ports rely on a fused multiply-add they say so and compute it exactly ([deep-zoom.md](deep-zoom.md)). A host on a runtime the suites do not cover runs the [platform self-check](self-check.md) there.
 
 | Tier | Families | Test |
 |---|---|---|
-| Bit-exact | Life-like, Elementary, Cyclic, Wireworld, MergeLife (and its decoded rule table), fractal iteration counts (with or without BLA), their status, and Newton root indices, colormap LUTs and per-family frame indexing, patterns (RLE, transforms, stamp/extract), PNG grid I/O (decoded grids), evolve (objective statistics, operators, whole runs); pow10, turns and floatexp via the known-answer bit patterns on their pages; the T2 loop on crafted states; navigation (moved centers, pixel deltas); discovery (box periods, Newton's nucleus: its verdict, stop, counts and printed center); the iteration policy; zoom movies (schedule, frame zooms and speeds, movie budgets, the survey's stations and patience rule, whole surveys at the pinned probe); fractal color given its inputs (stretch, depth phase, frequency, distance shading) and the phase lookup with its dither and cyclic palettes | byte-for-byte equality with the vector: states at each checkpoint step, or the one-shot output (float64 outputs by value, every NaN equal to every NaN) |
+| Bit-exact | Life-like, HashLife (cells, populations and bounding boxes at any generation, and their canonical Macrocell text), Elementary, Cyclic, Wireworld, MergeLife (and its decoded rule table), fractal iteration counts (with or without BLA), their status, and Newton root indices, colormap LUTs and per-family frame indexing, patterns (RLE, transforms, stamp/extract), PNG grid I/O (decoded grids), evolve (objective statistics, operators, whole runs); pow10, turns and floatexp via the known-answer bit patterns on their pages; the T2 loop on crafted states; navigation (moved centers, pixel deltas); discovery (box periods, Newton's nucleus: its verdict, stop, counts and printed center); the iteration policy; zoom movies (schedule, frame zooms and speeds, movie budgets, the survey's stations and patience rule, whole surveys at the pinned probe); fractal color given its inputs (stretch, depth phase, frequency, distance shading) and the phase lookup with its dither and cyclic palettes | byte-for-byte equality with the vector: states at each checkpoint step, or the one-shot output (float64 outputs by value, every NaN equal to every NaN) |
 | ε-tolerance | Lenia ×3, Gray-Scott, Boids, smooth fractal coloring (the fractal render), the fractal distance estimate (relative: ε·|value|, its NaN, 0 and ±∞ exact), location framing (the zoom an imported location converts to, compared relatively: ε·max(1, |value|); its centers are exact), the atom size estimate (relative, its NaN exact) | max abs deviation ≤ the `epsilon` in the case's `params.json` (1e-6 for Lenia and boids, 1e-9 for Gray-Scott and the fractal render), or the output's `relative_epsilon` (1e-12 for the distance estimate and the atom size) |
 
 ## Conventions
@@ -40,6 +40,7 @@ Each family gets one page structured as:
 - [turns.md](turns.md) — pinned cos and sin of a rational number of turns (Newton's roots; bit-exact tier, no libm)
 - [floatexp.md](floatexp.md) — a float64 mantissa with an unbounded exponent: T2's numbers, every operation correctly rounded (bit-exact tier)
 - [lifelike.md](lifelike.md) — Life-like CA (bit-exact tier)
+- [hashlife.md](hashlife.md) — HashLife: Life-like rules on an unbounded plane — any generation count, editing within ±10⁹, a memory budget that never changes results (bit-exact tier)
 - [elementary.md](elementary.md) — Wolfram elementary CA (bit-exact tier)
 - [cyclic.md](cyclic.md) — cyclic CA (bit-exact tier)
 - [wireworld.md](wireworld.md) — Wireworld (bit-exact tier)
@@ -57,6 +58,7 @@ Each family gets one page structured as:
 - [fractal-color.md](fractal-color.md) — fractal color that holds still: stretch (and a frozen stretch), depth phase, frequency, distance shading (bit-exact given its inputs)
 - [self-check.md](self-check.md) — the platform self-check: embedded known answers a host runs on its own runtime (IL2CPP, Mono, a phone) to learn whether it reproduces the bit-exact contract, and what each failure invalidates
 - [zoom.md](zoom.md) — zoom movies: Heaton Fractal's schedule with its end pinned, each frame's zoom, the movie iteration budget and the survey that measures it (bit-exact tier); the frame renderer (Python presentation)
+- [macrocell.md](macrocell.md) — Macrocell, Golly's HashLife format: Golly's reader and placement, and a canonical writer (bit-exact tier)
 - [patterns.md](patterns.md) — pattern model, RLE dialects, transforms, extract/stamp, family-bound compatibility
 - [png-io.md](png-io.md) — MergeLife PNG import/export at integer scale; grid-level bit-exact contract (PNG bytes are per-encoder)
 - Every family in the library has a page above. A new family adds its page here (the index and the tier table) before it merges; see [python/DEVELOPMENT.md, "Adding or changing a family"](../python/DEVELOPMENT.md#adding-or-changing-a-family).

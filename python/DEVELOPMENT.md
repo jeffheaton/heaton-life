@@ -169,6 +169,9 @@ Some floating-point rules are not obvious and are easy to "clean up" by mistake:
   `../dotnet/src/HeatonLife.Core/PaletteTables.cs`. Those bytes are normative data,
   pinned by `../vectors/render/lut-<name>/`; the script is not re-run casually, and if
   it is, both table files and the LUT vectors must come back unchanged.
+- `tools/bench_hashlife.py` measures HashLife throughput (`../spec/hashlife.md`): load
+  time, then generations per second at fixed step sizes 2^e, with nodes, store memory,
+  and collections, for the built-in set or any `.rle`/`.mc`/`.mc.gz` files given.
 - `tools/score_rules.py` scores MergeLife rule strings with the paper objective
   (`../spec/evolve.md`).
 

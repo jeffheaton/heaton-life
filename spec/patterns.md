@@ -70,6 +70,37 @@ wrap at 70 characters. Encoding then decoding reproduces the grid exactly.
 MergeLife, Lenia, and Gray-Scott patterns are **not RLE-representable**; they
 travel as raw cell payloads (the catalog/zoo container format, app-level).
 
+## RLE in the unbounded universe
+
+The [HashLife](hashlife.md) universe has no grid, so RLE there carries a position and
+never becomes a dense array. Extended RLE (Golly's) puts the position on the file's
+**first line**:
+
+```
+#CXRLE Pos=<x>,<y> Gen=<n>
+```
+
+Space-separated `key=value` fields: `Pos` is the top-left cell of the pattern's
+rectangle (y down); `Gen` is the generation, a non-negative integer of any size. Either
+may be missing; unknown keys are ignored. The `#C` prefix makes other readers skip the
+line as a comment. Anywhere but the first line, `#CXRLE` is an ordinary comment.
+
+**Reading into the universe.** The dialect rules above apply, and the file must be
+two-state (an extended file, or a state above 1, is an error). The pattern's top-left
+cell lands at `Pos`, or at (0, 0) without it — never centered, since the plane has no
+center to speak of. Cells are placed as decoded; the header's `x`/`y` declare nothing the
+universe needs. The rule is the header's, or `B3/S23` without one. The generation is
+`Gen`, or 0. Every cell must lie in the [editing box](hashlife.md#editing), or the file
+is refused.
+
+**Writing from the universe.** The first line is `#CXRLE Pos=<x0>,<y0>`, with
+` Gen=<n>` appended when the generation is above 0, where (x0, y0) is the top-left of
+the bounding box. Then comes the canonical encoding above of the bounding box's cells,
+the header naming the universe's rule: the same tokens and line breaks `rle_encode`
+produces for that rectangle. An empty universe writes `#CXRLE Pos=0,0`, then
+`x = 0, y = 0, rule = <rule>`, then `!`. A pattern that reaches outside the editing box
+is refused; [Macrocell](macrocell.md) carries it.
+
 ## Transforms
 
 `rotate90` (clockwise), `flip_h` (mirror left-right), `flip_v` (mirror
@@ -140,4 +171,5 @@ RLE decode cases (both dialects, comments/whitespace/no-header variants) with
 expected grids, canonical encode strings, transform results, and stamp results
 (wrap, clip, and transparent cases), all encoded with the families' vector
 codecs. Round-trip (encode∘decode = identity) is additionally property-tested
-in every implementation.
+in every implementation. RLE in the unbounded universe is pinned by the `rle-*` cases of
+[`../vectors/hashlife/`](../vectors/hashlife/).

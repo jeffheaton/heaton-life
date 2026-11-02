@@ -1,0 +1,78 @@
+{
+  "bounding_box": [
+    "999999998",
+    "0",
+    "1000000000",
+    "0"
+  ],
+  "family": "hashlife",
+  "generation": "2",
+  "kind": "edit",
+  "ops": [
+    {
+      "alive": true,
+      "op": "set_cell",
+      "x": 1000000000,
+      "y": -1000000000
+    },
+    {
+      "alive": true,
+      "op": "set_cell",
+      "x": -1000000000,
+      "y": 1000000000
+    },
+    {
+      "cells": [
+        "***"
+      ],
+      "mode": "copy",
+      "op": "set_rect",
+      "x": 999999998,
+      "y": 0
+    },
+    {
+      "alive": true,
+      "error": true,
+      "op": "set_cell",
+      "x": 1000000001,
+      "y": 0
+    },
+    {
+      "cells": [
+        "**"
+      ],
+      "error": true,
+      "mode": "or",
+      "op": "set_rect",
+      "x": 1000000000,
+      "y": 5
+    },
+    {
+      "error": true,
+      "op": "clear_rect",
+      "x0": 0,
+      "x1": 1,
+      "y0": -1000000001,
+      "y1": 0
+    },
+    {
+      "density": 0.5,
+      "error": true,
+      "op": "fill_random",
+      "seed": 1,
+      "x0": -1000000001,
+      "x1": 0,
+      "y0": 0,
+      "y1": 0
+    },
+    {
+      "n": "2",
+      "op": "step"
+    }
+  ],
+  "population": "3",
+  "rule": "B3/S23",
+  "spec_version": "0.14.0",
+  "state": "final.mc",
+  "tier": "bit-exact"
+}

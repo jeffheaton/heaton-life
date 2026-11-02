@@ -1,0 +1,17 @@
+{
+  "bounding_box": [
+    "-4",
+    "-3",
+    "-3",
+    "-2"
+  ],
+  "family": "hashlife",
+  "generation": "0",
+  "input": "input.mc",
+  "kind": "macrocell",
+  "population": "4",
+  "rle": "canonical.rle",
+  "spec_version": "0.14.0",
+  "state": "canonical.mc",
+  "tier": "bit-exact"
+}

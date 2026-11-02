@@ -1,0 +1,17 @@
+{
+  "bounding_box": [
+    "590295810358705651704",
+    "590295810358705651705",
+    "590295810358705651704",
+    "590295810358705651705"
+  ],
+  "family": "hashlife",
+  "generation": "0",
+  "input": "input.mc",
+  "kind": "macrocell",
+  "population": "1",
+  "rle_error": true,
+  "spec_version": "0.14.0",
+  "state": "canonical.mc",
+  "tier": "bit-exact"
+}

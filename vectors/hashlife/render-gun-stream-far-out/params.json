@@ -1,0 +1,62 @@
+{
+  "family": "hashlife",
+  "frames": [
+    {
+      "file": "frame-0.png",
+      "mode": "any",
+      "size": [
+        128,
+        96
+      ],
+      "view": [
+        "-33",
+        "-17",
+        -40
+      ]
+    },
+    {
+      "file": "frame-1.png",
+      "mode": "density",
+      "size": [
+        128,
+        96
+      ],
+      "view": [
+        "-33",
+        "-17",
+        -40
+      ]
+    },
+    {
+      "file": "frame-2.png",
+      "mode": "density",
+      "size": [
+        96,
+        64
+      ],
+      "view": [
+        "33554384",
+        "33554399",
+        -20
+      ]
+    },
+    {
+      "file": "frame-3.png",
+      "mode": "any",
+      "size": [
+        32,
+        32
+      ],
+      "view": [
+        "-1000000016",
+        "999999983",
+        0
+      ]
+    }
+  ],
+  "generation": "281474976710656",
+  "input": "input.rle",
+  "kind": "render",
+  "spec_version": "0.14.0",
+  "tier": "bit-exact"
+}

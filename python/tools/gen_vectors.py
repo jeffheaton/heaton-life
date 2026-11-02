@@ -583,6 +583,9 @@ def main() -> None:
     write_turns_cases()
     write_zoom_cases()
 
+    # -- HashLife: the unbounded universe (spec/hashlife.md, macrocell.md) ------------
+    write_hashlife_cases()
+
     print("done")
 
 
@@ -3836,6 +3839,452 @@ def write_zoom_cases() -> None:
             }
         )
     save("surveys", {"probe_size": [192, 108], "surveys": surveys})
+
+
+HASHLIFE_SPEC_VERSION = "0.14.0"
+_HASHLIFE_INLINE_BYTES = 4096  # larger states are pinned by SHA-256 instead of a file
+
+
+def write_hashlife_cases() -> None:
+    """HashLife conformance (spec/hashlife.md, spec/macrocell.md, spec/patterns.md "RLE in
+    the unbounded universe"): evolve, Macrocell, RLE, and edit cases. Every state is pinned
+    by its canonical Macrocell text, so a case checks cells, generation, and rule at once.
+    All cases live under vectors/hashlife/ — other families' runners auto-discover their
+    own directories, and a port without HashLife must not trip on these."""
+    from heaton_life.ca.hashlife import HashLife
+    from heaton_life.init import BUILTIN_PATTERNS
+
+    root = VECTOR_ROOT / "hashlife"
+
+    def builtin(name: str) -> np.ndarray:
+        return next(p for p in BUILTIN_PATTERNS if p.name == name).cells()
+
+    def case(name: str) -> Path:
+        d = root / name
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def save(d: Path, meta: dict[str, Any]) -> None:
+        full = {"spec_version": HASHLIFE_SPEC_VERSION, "family": "hashlife", "tier": "bit-exact"}
+        full.update(meta)
+        (d / "params.json").write_text(
+            json.dumps(full, indent=2, sort_keys=True) + "\n", newline="\n"
+        )
+        print(f"wrote {d.relative_to(REPO_ROOT)}")
+
+    def state(d: Path, u: HashLife, label: str) -> dict[str, Any]:
+        text = u.to_macrocell()
+        box = u.bounding_box()
+        entry: dict[str, Any] = {
+            "generation": str(u.generation),
+            "population": str(u.population),
+            "bounding_box": None if box is None else [str(v) for v in box],
+        }
+        if len(text) <= _HASHLIFE_INLINE_BYTES:
+            (d / f"{label}.mc").write_text(text, newline="\n")
+            entry["state"] = f"{label}.mc"
+        else:
+            entry["state_sha256"] = hashlib.sha256(text.encode("ascii")).hexdigest()
+            entry["state_lines"] = text.count("\n")
+        return entry
+
+    def placed(rule: str, x: int, y: int, cells: np.ndarray) -> str:
+        u = HashLife(rule)
+        u.set_rect(x, y, cells)
+        return u.to_rle()
+
+    # -- evolve: an input file, then (generation, population, box, state) checkpoints ----
+    def evolve(name: str, input_name: str, text: str, generations: list[int]) -> None:
+        d = case(f"evolve-{name}")
+        (d / input_name).write_text(text, newline="\n")
+        u = HashLife.from_file(d / input_name)
+        checkpoints = []
+        for i, gen in enumerate(generations):
+            u.step(gen - u.generation)
+            checkpoints.append(state(d, u, f"state-{i}"))
+        save(d, {"kind": "evolve", "input": input_name, "checkpoints": checkpoints})
+
+    evolve(
+        "glider",
+        "input.rle",
+        "#CXRLE Pos=0,0\nx = 3, y = 3, rule = B3/S23\nbo$2bo$3o!\n",
+        [0, 4, 1024, 2**64 + 3],
+    )
+    evolve(
+        "r-pentomino",
+        "input.rle",
+        placed("B3/S23", -1, -1, builtin("R-pentomino")),
+        [0, 1, 100, 1103, 2**20],
+    )
+    evolve("acorn", "input.rle", placed("B3/S23", -3, -1, builtin("Acorn")), [0, 5206])
+    evolve(
+        "gosper-gun",
+        "input.rle",
+        placed("B3/S23", -18, -4, builtin("Gosper glider gun")),
+        [0, 2**10, 10**18, 2**200, 10**100],
+    )
+    soup64 = HashLife()
+    soup64.fill_random(-32, -32, 31, 31, density=0.35, seed=3)
+    evolve("soup-64", "input.rle", soup64.to_rle(), [0, 1, 10, 100, 1000, 30000])
+    evolve(
+        "highlife-replicator",
+        "input.rle",
+        placed("B36/S23", -2, -2, builtin("Replicator (HighLife)")),
+        [0, 12, 96, 1024],
+    )
+    evolve("seeds", "input.rle", "x = 3, y = 2, rule = B2/S\n2o$bo!\n", [0, 1, 10, 50])
+    daynight = HashLife("B3678/S34678")
+    daynight.fill_random(0, 0, 31, 31, density=0.5, seed=5)
+    evolve("daynight", "input.rle", daynight.to_rle(), [0, 1, 100, 1000])
+    gun = HashLife()
+    gun.set_rect(-18, -4, builtin("Gosper glider gun"))
+    gun.step(1000)
+    saved_gun = gun.to_macrocell().replace(
+        "[M2] (heaton-life)\n", "[M2] (example 1.0)\n#C A Gosper gun at generation 1000.\n"
+    )
+    evolve("from-macrocell", "input.mc", saved_gun, [1000, 1100, 2**30])
+
+    # -- macrocell: third-party input -> canonical text, or an error ----------------------
+    def macrocell(name: str, text: str, *, rle: bool = True) -> None:
+        d = case(f"macrocell-{name}")
+        (d / "input.mc").write_text(text, newline="\n")
+        try:
+            u = HashLife.from_macrocell(text)
+        except ValueError:
+            save(d, {"kind": "macrocell", "input": "input.mc", "error": True})
+            return
+        meta: dict[str, Any] = {"kind": "macrocell", "input": "input.mc"}
+        meta.update(state(d, u, "canonical"))
+        try:
+            (d / "canonical.rle").write_text(u.to_rle(), newline="\n")
+            meta["rle"] = "canonical.rle"
+        except ValueError:
+            meta["rle_error"] = True
+        save(d, meta)
+
+    macrocell(
+        "non-minimal-root",
+        "[M2] (example 1.0)\n#C A block under a non-minimal level-7 root.\n#R B3/S23\n"
+        "$$$$....**$....**$\n4 0 0 0 1\n5 0 0 0 2\n6 0 0 0 3\n7 4 0 0 0\n",
+    )
+    macrocell(
+        "multistate-syntax",
+        "[M2] (example 1.0)\n#R B3/S23\n1 0 1 0 0\n1 1 1 1 1\n2 1 0 0 2\n3 0 0 0 3\n4 3 0 0 4\n",
+    )
+    macrocell(
+        "generation-and-timeline",
+        "[M2] (example 1.0)\n#R B36/S23\n#G 123456789012345678901234567890\n#FRAMES 2 0 2^3\n"
+        "*$.*$\n.**\n4 1 2 0 0\n#FRAME 1 3\n",
+    )
+    macrocell("leaf-root", "[M2] (example 1.0)\n#R B3/S23\n**$**$\n")
+    macrocell("two-by-two-root", "[M2]\n1 1 0 0 1\n")
+    far = "[M2] (example 1.0)\n#R B3/S23\n*$\n4 0 0 0 1\n" + "".join(
+        f"{k} 0 0 0 {k - 3}\n" for k in range(5, 71)
+    )
+    macrocell("far-beyond-the-box", far)
+    macrocell("error-no-header", "x = 3, y = 3, rule = B3/S23\nbo$2bo$3o!\n")
+    macrocell("error-forward-reference", "[M2]\n4 0 0 0 2\n**$\n")
+    macrocell("error-wrong-level", "[M2]\n**$\n5 0 0 0 1\n")
+    macrocell("error-b0-rule", "[M2]\n#R B03/S23\n**$\n")
+    macrocell("error-state-2", "[M2]\n1 0 2 0 0\n")
+    macrocell("error-wide-row", "[M2]\n*********$\n")
+    macrocell("error-no-nodes", "[M2] (example 1.0)\n#R B3/S23\n")
+
+    # -- rle: input -> canonical Macrocell and canonical RLE, or an error -----------------
+    def rle(name: str, text: str) -> None:
+        d = case(f"rle-{name}")
+        (d / "input.rle").write_text(text, newline="\n")
+        try:
+            u = HashLife.from_rle(text)
+        except ValueError:
+            save(d, {"kind": "rle", "input": "input.rle", "error": True})
+            return
+        meta: dict[str, Any] = {"kind": "rle", "input": "input.rle", "rle": "canonical.rle"}
+        meta.update(state(d, u, "canonical"))
+        (d / "canonical.rle").write_text(u.to_rle(), newline="\n")
+        save(d, meta)
+
+    rle("cxrle-position", "#CXRLE Pos=-17,23 Gen=99\nx = 3, y = 3, rule = B3/S23\nbo$2bo$3o!\n")
+    rle(
+        "comments-and-rows",
+        "#N Two gliders\n#C rows skipped with counts, runs split across lines\n"
+        "x = 12, y = 9, rule = B36/S23\nbo$2bo$3o5$\n9bo$10b\nbo$9b3o!\n",
+    )
+    rle("cxrle-later-line-is-a-comment", "#C first\n#CXRLE Pos=5,5\nx = 2, y = 2\n2o$2o!\n")
+    rle("empty", "x = 0, y = 0, rule = B3/S23\n!\n")
+    rle("error-extended", "x = 2, y = 1, rule = B3/S23\n.A!\n")
+    rle("error-outside-the-box", "#CXRLE Pos=999999999,0\nx = 3, y = 1\n3o!\n")
+
+    # -- edit: operations in order -> final canonical text; errors change nothing ---------
+    def edit(name: str, rule: str, ops: list[dict[str, Any]]) -> None:
+        d = case(f"edit-{name}")
+        u = HashLife(rule)
+        for op in ops:
+            kind = op["op"]
+            try:
+                if kind == "set_cell":
+                    u.set_cell(op["x"], op["y"], op["alive"])
+                elif kind == "set_rect":
+                    cells = np.array([[c == "*" for c in row] for row in op["cells"]], np.uint8)
+                    u.set_rect(op["x"], op["y"], cells, op["mode"])
+                elif kind == "clear_rect":
+                    u.clear_rect(op["x0"], op["y0"], op["x1"], op["y1"])
+                elif kind == "fill_random":
+                    u.fill_random(op["x0"], op["y0"], op["x1"], op["y1"], op["density"], op["seed"])
+                elif kind == "step":
+                    u.step(int(op["n"]))
+                elif kind == "clear":
+                    u.clear()
+                else:
+                    raise AssertionError(kind)
+            except ValueError:
+                assert op.get("error"), op
+            else:
+                assert not op.get("error"), op
+        meta: dict[str, Any] = {"kind": "edit", "rule": rule, "ops": ops}
+        meta.update(state(d, u, "final"))
+        save(d, meta)
+
+    edit(
+        "cells-and-rects",
+        "B3/S23",
+        [
+            {"op": "set_cell", "x": 5, "y": -9, "alive": True},
+            {"op": "set_cell", "x": -1_000_000, "y": 777_777, "alive": True},
+            {
+                "op": "set_rect",
+                "x": -3,
+                "y": 2,
+                "mode": "copy",
+                "cells": [".**..*", "*..*.*", "..***.", "*....*"],
+            },
+            {"op": "set_rect", "x": -1, "y": 3, "mode": "or", "cells": ["****", "*..*"]},
+            {
+                "op": "set_rect",
+                "x": -4,
+                "y": 1,
+                "mode": "xor",
+                "cells": ["*.*.*.*.", ".*.*.*.*", "********"],
+            },
+            {"op": "clear_rect", "x0": -2, "y0": 3, "x1": 0, "y1": 4},
+            {"op": "set_cell", "x": 5, "y": -9, "alive": False},
+            {"op": "step", "n": "37"},
+        ],
+    )
+    edit(
+        "fill-random-and-clear",
+        "B36/S23",
+        [
+            {
+                "op": "fill_random",
+                "x0": -20,
+                "y0": -10,
+                "x1": 19,
+                "y1": 9,
+                "density": 0.4,
+                "seed": 7,
+            },
+            {"op": "clear_rect", "x0": -5, "y0": -5, "x1": 4, "y1": 4},
+            {"op": "step", "n": "100"},
+            {
+                "op": "fill_random",
+                "x0": 30,
+                "y0": 30,
+                "x1": 45,
+                "y1": 37,
+                "density": 0.25,
+                "seed": 1,
+            },
+        ],
+    )
+    # -- view: the exact navigation arithmetic ------------------------------------------
+    from heaton_life.ca.hashlife import LifeView, cell_at, center_cell, centered, fit, pan, zoom_at
+
+    def v(view: LifeView) -> list[Any]:
+        return [str(view.x), str(view.y), view.mag]
+
+    big = 3**60  # past 64 bits, odd, so every floor matters
+    views = [
+        LifeView(-7, 13, 0),
+        LifeView(-1001, -3, 3),
+        LifeView(big, -big, -17),
+        LifeView(5, 5, 5),
+    ]
+    ops: list[dict[str, Any]] = []
+    for view in views:
+        ops.append(
+            {"op": "pan", "view": v(view), "dx": 37, "dy": -11, "expect": v(pan(view, 37, -11))}
+        )
+        for i, j, steps in ((0, 0, 1), (17, 9, 3), (-5, 640, -2), (311, 7, -9), (2, 3, 7)):
+            ops.append(
+                {
+                    "op": "zoom_at",
+                    "view": v(view),
+                    "i": i,
+                    "j": j,
+                    "steps": steps,
+                    "expect": v(zoom_at(view, i, j, steps)),
+                }
+            )
+        for i, j in ((0, 0), (13, 101), (639, 479)):
+            cx, cy = cell_at(view, i, j)
+            ops.append(
+                {"op": "cell_at", "view": v(view), "i": i, "j": j, "expect": [str(cx), str(cy)]}
+            )
+        cx, cy = center_cell(view, (640, 480))
+        ops.append(
+            {"op": "center_cell", "view": v(view), "size": [640, 480], "expect": [str(cx), str(cy)]}
+        )
+    for cell, mag, size in (
+        ((0, 0), 0, (640, 480)),
+        ((-17, 23), 4, (101, 77)),
+        ((big, -big), -30, (512, 384)),
+        ((-5, -5), -1, (3, 3)),
+    ):
+        ops.append(
+            {
+                "op": "centered",
+                "cell": [str(cell[0]), str(cell[1])],
+                "mag": mag,
+                "size": list(size),
+                "expect": v(centered(cell[0], cell[1], mag, size)),
+            }
+        )
+    for box, size in (
+        ((0, 0, 2, 2), (640, 480)),
+        ((-1000, -20, 1000, 20), (640, 480)),
+        ((-big, 7, big, 3**40), (512, 384)),
+        (None, (64, 64)),
+        ((5, -9, 5, -9), (1, 1)),
+        ((-3, -3, 60, 40), (64, 44)),
+    ):
+        ops.append(
+            {
+                "op": "fit",
+                "box": None if box is None else [str(c) for c in box],
+                "size": list(size),
+                "expect": v(fit(box, size)),
+            }
+        )
+    d = case("view-arithmetic")
+    save(d, {"kind": "view", "operations": ops})
+
+    # -- render: frames of a state at several views and both modes -------------------------
+    import io
+
+    from PIL import Image
+
+    def render_case(
+        name: str,
+        input_name: str,
+        text: str,
+        generation: int,
+        frames: list[tuple[LifeView, tuple[int, int], str]],
+    ) -> None:
+        d = case(f"render-{name}")
+        (d / input_name).write_text(text, newline="\n")
+        u = HashLife.from_file(d / input_name)
+        u.step(generation - u.generation)
+        entries = []
+        for i, (view, size, mode) in enumerate(frames):
+            frame = u.render(view, size, mode)  # type: ignore[arg-type]
+            buf = io.BytesIO()
+            Image.fromarray(frame, mode="L").save(buf, format="PNG")
+            (d / f"frame-{i}.png").write_bytes(buf.getvalue())
+            entries.append(
+                {"view": v(view), "size": list(size), "mode": mode, "file": f"frame-{i}.png"}
+            )
+        save(
+            d,
+            {
+                "kind": "render",
+                "input": input_name,
+                "generation": str(generation),
+                "frames": entries,
+            },
+        )
+
+    glider_rle = "#CXRLE Pos=0,0\nx = 3, y = 3, rule = B3/S23\nbo$2bo$3o!\n"
+    render_case(
+        "glider-zoomed-in",
+        "input.rle",
+        glider_rle,
+        6,
+        [
+            (centered(2, 2, 2, (64, 48)), (64, 48), "any"),
+            (centered(2, 3, 5, (160, 120)), (160, 120), "any"),
+            (LifeView(-3, -2, 1), (13, 9), "density"),
+        ],
+    )
+    render_case(
+        "soup-scales",
+        "input.rle",
+        soup64.to_rle(),
+        100,
+        [
+            (LifeView(-50, -49, 0), (101, 97), "any"),
+            (LifeView(-25, -25, -1), (51, 49), "any"),
+            (LifeView(-25, -25, -1), (51, 49), "density"),
+            (LifeView(-13, -13, -2), (27, 25), "density"),
+            (LifeView(-7, 5, -3), (9, 11), "density"),
+        ],
+    )
+    gun_rle = placed("B3/S23", -18, -4, builtin("Gosper glider gun"))
+    gun_box = (-18, -4, 2**48 // 4 + 40, 2**48 // 4 + 40)
+    render_case(
+        "gun-stream-far-out",
+        "input.rle",
+        gun_rle,
+        2**48,
+        [
+            (fit(gun_box, (128, 96)), (128, 96), "any"),
+            (fit(gun_box, (128, 96)), (128, 96), "density"),
+            (centered(2**45, 2**45, -20, (96, 64)), (96, 64), "density"),
+            (centered(-(10**9), 10**9, 0, (32, 32)), (32, 32), "any"),
+        ],
+    )
+    render_case(
+        "far-beyond-the-box",
+        "input.mc",
+        far,
+        0,
+        [
+            (centered(2**69 - 8, 2**69 - 7, 0, (24, 24)), (24, 24), "any"),
+            (centered(2**69, 2**69, -60, (16, 16)), (16, 16), "density"),
+            (LifeView(0, 0, -75), (4, 4), "any"),
+        ],
+    )
+
+    edit(
+        "box-limits",
+        "B3/S23",
+        [
+            {"op": "set_cell", "x": 1_000_000_000, "y": -1_000_000_000, "alive": True},
+            {"op": "set_cell", "x": -1_000_000_000, "y": 1_000_000_000, "alive": True},
+            {"op": "set_rect", "x": 999_999_998, "y": 0, "mode": "copy", "cells": ["***"]},
+            {"op": "set_cell", "x": 1_000_000_001, "y": 0, "alive": True, "error": True},
+            {
+                "op": "set_rect",
+                "x": 1_000_000_000,
+                "y": 5,
+                "mode": "or",
+                "cells": ["**"],
+                "error": True,
+            },
+            {"op": "clear_rect", "x0": 0, "y0": -1_000_000_001, "x1": 1, "y1": 0, "error": True},
+            {
+                "op": "fill_random",
+                "x0": -1_000_000_001,
+                "y0": 0,
+                "x1": 0,
+                "y1": 0,
+                "density": 0.5,
+                "seed": 1,
+                "error": True,
+            },
+            {"op": "step", "n": "2"},
+        ],
+    )
 
 
 if __name__ == "__main__":

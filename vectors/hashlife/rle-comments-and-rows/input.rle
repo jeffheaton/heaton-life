@@ -1,0 +1,6 @@
+#N Two gliders
+#C rows skipped with counts, runs split across lines
+x = 12, y = 9, rule = B36/S23
+bo$2bo$3o5$
+9bo$10b
+bo$9b3o!

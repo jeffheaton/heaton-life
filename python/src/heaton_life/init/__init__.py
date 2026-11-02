@@ -3,12 +3,13 @@
 from heaton_life.init.builtins import BUILTIN_PATTERNS, BuiltinPattern
 from heaton_life.init.patterns import clear, compatible, extract, flip_h, flip_v, rotate90, stamp
 from heaton_life.init.png_io import mergelife_from_png, mergelife_to_png
-from heaton_life.init.rle import place, rle_decode, rle_encode
+from heaton_life.init.rle import RleInfo, place, rle_decode, rle_encode, rle_runs
 from heaton_life.init.seeding import blob, single, soup
 
 __all__ = [
     "BUILTIN_PATTERNS",
     "BuiltinPattern",
+    "RleInfo",
     "blob",
     "clear",
     "compatible",
@@ -20,6 +21,7 @@ __all__ = [
     "place",
     "rle_decode",
     "rle_encode",
+    "rle_runs",
     "rotate90",
     "single",
     "soup",
