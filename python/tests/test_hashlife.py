@@ -294,8 +294,10 @@ def test_a_universe_too_big_for_its_budget_refuses_to_step_unchanged() -> None:
     u = HashLife(max_memory_mb=10)
     u.set_rect(0, 0, _noise(2000, 2000, 9))  # ~83k nodes; loading never fails for budget
     before = (u.generation, _cells(u))
-    with pytest.raises(HashLifeMemoryError, match="max_memory_mb=10"):
+    with pytest.raises(HashLifeMemoryError, match="max_memory_mb=10") as raised:
         u.step(1)
+    # The message sizes the live tree: the abandoned attempts were collected first.
+    assert f"takes about {u.memory_used >> 20} MB of it" in str(raised.value)
     assert (u.generation, _cells(u)) == before
     u.max_memory_mb = 2000
     u.step(1)

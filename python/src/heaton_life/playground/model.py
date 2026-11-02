@@ -25,8 +25,10 @@ class FieldSpec:
     step: float
     choices: tuple[str, ...]
     role: str | None
-    """"seed" fields get a randomize button; more roles later."""
+    """"seed" fields get a randomize button; "file" fields a Browse… button."""
     decimals: int = 3
+    file_filter: str = ""
+    """The Browse… dialog's name filter for a "file" field (Qt syntax)."""
 
 
 def field_specs(params_cls: type[Params]) -> list[FieldSpec]:
@@ -63,6 +65,7 @@ def field_specs(params_cls: type[Params]) -> list[FieldSpec]:
                 choices=choices,
                 role=meta.get("role"),
                 decimals=int(meta.get("decimals", 3)),
+                file_filter=str(meta.get("filter", "")),
             )
         )
     return specs

@@ -15,6 +15,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6.QtWidgets import QApplication
 
 from heaton_life.playground.app import MainWindow
+from heaton_life.playground.engine import SimEngine
 
 
 @pytest.fixture(scope="module")
@@ -109,6 +110,7 @@ def test_switch_family_loads_engine_and_form(window: MainWindow) -> None:
         ("lenia-flow", (128, 128), True),
         ("newton", (384, 384), True),  # fractal step = autozoom
         ("boids", (256, 256), True),
+        ("hashlife", (512, 768), True),
         ("lifelike", (256, 256), True),
     ]:
         window.select_family(key)
@@ -139,7 +141,8 @@ def test_fractal_click_recenters_without_zooming(window: MainWindow) -> None:
     assert window._form is not None
     # the spinbox displays 3 decimals, so the synced value is rounded
     assert window._form.values()["zoom_log10"] == pytest.approx(
-        engine._params.zoom_log10, abs=2e-3  # type: ignore[attr-defined]
+        engine._params.zoom_log10,  # type: ignore[attr-defined]
+        abs=2e-3,
     )
 
 
@@ -259,3 +262,149 @@ def test_512_grid_tick_budget(window: MainWindow) -> None:
     per_tick = (time.perf_counter() - t0) / 30
     window._bridge.sig_run.emit(False)
     assert per_tick < 1 / 60, f"tick took {per_tick * 1000:.2f} ms; budget is 16.7 ms"
+
+
+# -- HashLife ---------------------------------------------------------------------------
+
+
+def _hashlife(window: MainWindow) -> SimEngine:
+    window.select_family("hashlife")
+    assert window._engine._sim is not None
+    return window._engine
+
+
+def test_hashlife_load_fits_the_view_and_echoes_it_to_the_form(window: MainWindow) -> None:
+    from heaton_life.ca.hashlife import fit
+
+    engine = _hashlife(window)
+    assert engine._params is not None and window._form is not None
+    p = engine._params
+    view = fit(engine._sim.universe.bounding_box(), (768, 512))  # type: ignore[union-attr]
+    assert (int(p.x), int(p.y), p.mag) == (view.x, view.y, view.mag)  # type: ignore[attr-defined]
+    assert {k: window._form.values()[k] for k in ("x", "y", "mag")} == {
+        "x": p.x,  # type: ignore[attr-defined]
+        "y": p.y,  # type: ignore[attr-defined]
+        "mag": p.mag,  # type: ignore[attr-defined]
+    }
+    assert window._status_readout.text().startswith("pop 36 · step 2^0 · center (")
+    assert window.transport._pattern.isEnabled()
+    window.select_family("lifelike")
+    assert not window.transport._pattern.isEnabled()
+
+
+def test_hashlife_hot_edits_then_reset_restore_generation_zero(window: MainWindow) -> None:
+    """Audit finding 10-01: step, hot-edit, step, Reset — Reset must restore the start,
+    keep the edited params, and not rebuild from params a hot edit replaced."""
+    engine = _hashlife(window)
+    sim = engine._sim
+    start = sim.universe.to_macrocell()  # type: ignore[union-attr]
+    window._bridge.sig_step.emit()
+    window._bridge.sig_step.emit()
+    values = {**window._form.values(), "rule": "B36/S23", "step_exponent": 3}  # type: ignore[union-attr]
+    window._on_params_edited(values)
+    assert engine._sim is sim, "hot fields must change the sim in place"
+    assert engine.generation == 2
+    window._bridge.sig_step.emit()
+    assert engine.generation == 10
+    edited = engine._params
+    window._bridge.sig_reset.emit()
+    assert engine._sim is sim and engine.generation == 0
+    assert engine._params == edited == sim.params  # type: ignore[union-attr]
+    assert sim.universe.to_macrocell().replace("B36/S23", "B3/S23") == start  # type: ignore[union-attr]
+    window._bridge.sig_step.emit()
+    assert engine.generation == 8
+
+
+def test_hashlife_generations_past_int64_reach_the_status_bar(window: MainWindow) -> None:
+    engine = _hashlife(window)
+    window._on_params_edited({**window._form.values(), "step_exponent": 70})  # type: ignore[union-attr]
+    window._bridge.sig_step.emit()
+    assert engine.generation == 1 << 70
+    assert window._status_gen.text() == f"gen {1 << 70:,}"
+    assert window.canvas.generation == 1 << 70
+
+
+def test_hashlife_wheel_zoom_and_recenter_sync_the_form(window: MainWindow) -> None:
+    engine = _hashlife(window)
+    assert engine._params is not None
+    mag = engine._params.mag  # type: ignore[attr-defined]
+    window._bridge.sig_paint.emit(100, 100, 5)
+    assert engine._params.mag == mag - 1  # type: ignore[attr-defined]
+    window._bridge.sig_paint.emit(10, 10, 3)
+    assert window._form is not None
+    assert window._form.values()["x"] == engine._params.x  # type: ignore[attr-defined]
+    assert window._form.values()["mag"] == mag - 1
+
+
+def test_hashlife_edit_outside_the_box_shows_the_engines_message(window: MainWindow) -> None:
+    engine = _hashlife(window)
+    window._on_params_edited(
+        {**window._form.values(), "x": "1000000001", "y": "0", "mag": 0}  # type: ignore[union-attr]
+    )
+    before = engine._sim.universe.to_macrocell()  # type: ignore[union-attr]
+    window._bridge.sig_paint.emit(0, 0, 1)
+    bar = window.statusBar()
+    assert bar is not None
+    assert "editing box" in bar.currentMessage()
+    assert engine._sim.universe.to_macrocell() == before  # type: ignore[union-attr]
+
+
+def test_hashlife_failed_step_halts_play_with_its_message(window: MainWindow) -> None:
+    from heaton_life.ca.hashlife import HashLifeMemoryError
+
+    engine = _hashlife(window)
+
+    def full(_n: int = 1) -> None:
+        raise HashLifeMemoryError("one generation does not fit in max_memory_mb=10")
+
+    engine._sim.step = full  # type: ignore[method-assign, union-attr]
+    window.transport.set_playing(True)
+    assert engine._running
+    engine._tick()
+    assert not engine._running
+    assert not window.transport._play.isChecked(), "Play must pop back up"
+    bar = window.statusBar()
+    assert bar is not None and "does not fit" in bar.currentMessage()
+
+
+def test_hashlife_save_pattern_offers_a_name_and_writes_the_file(
+    window: MainWindow, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from PyQt6.QtWidgets import QFileDialog
+
+    from heaton_life.ca.hashlife import HashLife
+
+    engine = _hashlife(window)
+    window._bridge.sig_step.emit()
+    offered: list[tuple[str, str]] = []
+
+    def save_dialog(*args: object) -> tuple[str, str]:
+        offered.append((str(args[2]), str(args[4])))
+        return str(tmp_path / "gun"), ""
+
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", save_dialog)
+    window.transport._pattern.trigger()
+    assert offered == [("Gosper-glider-gun-gen1.rle", "RLE (*.rle)")]
+    saved = HashLife.from_file(tmp_path / "gun.rle")
+    assert saved.to_macrocell() == engine._sim.universe.to_macrocell()  # type: ignore[union-attr]
+    bar = window.statusBar()
+    assert bar is not None and bar.currentMessage().startswith("Saved ")
+
+
+def test_file_role_gets_a_browse_button(
+    window: MainWindow, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from PyQt6.QtWidgets import QFileDialog, QToolButton
+
+    engine = _hashlife(window)
+    source = tmp_path / "glider.rle"
+    source.write_text("#CXRLE Pos=5,7\nx = 3, y = 3, rule = B3/S23\nbo$2bo$3o!\n")
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_args: (str(source), ""))
+    assert window._form is not None
+    browse = [b for b in window._form.findChildren(QToolButton) if b.text() == "Browse…"]
+    assert len(browse) == 1
+    browse[0].click()
+    assert window._form.values()["pattern"] == str(source)
+    window._form._emit()  # the debounce timer's job
+    assert engine._sim is not None
+    assert engine._sim.universe.bounding_box() == (5, 7, 7, 9)  # type: ignore[attr-defined]

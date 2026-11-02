@@ -12,6 +12,8 @@ venv/
 .mypy_cache/
 .coverage
 htmlcov/
+# Giant test patterns (python/tools/fetch_patterns.py): no stated license, never committed
+python/.patterns/
 
 # .NET
 bin/

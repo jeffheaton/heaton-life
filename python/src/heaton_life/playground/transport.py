@@ -1,4 +1,4 @@
-"""Transport bar: play/pause, single step, reset, speed, colormap, snapshot."""
+"""Transport bar: play/pause, single step, reset, speed, colormap, snapshot, pattern save."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ class Transport(QToolBar):
     cmap_changed = pyqtSignal(str)
     cell_scale_changed = pyqtSignal(int)  # displayed pixels per grid cell; 0 = fit
     snapshot_clicked = pyqtSignal()
+    pattern_save_clicked = pyqtSignal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__("Transport", parent)
@@ -38,16 +39,12 @@ class Transport(QToolBar):
         play.toggled.connect(self._on_play)
         self._play = play
 
-        step = self.addAction(
-            style.standardIcon(QStyle.StandardPixmap.SP_MediaSeekForward), "Step"
-        )
+        step = self.addAction(style.standardIcon(QStyle.StandardPixmap.SP_MediaSeekForward), "Step")
         assert step is not None
         step.setShortcut("N")
         step.triggered.connect(self.step_clicked.emit)
 
-        reset = self.addAction(
-            style.standardIcon(QStyle.StandardPixmap.SP_BrowserReload), "Reset"
-        )
+        reset = self.addAction(style.standardIcon(QStyle.StandardPixmap.SP_BrowserReload), "Reset")
         assert reset is not None
         reset.setShortcut("R")
         reset.triggered.connect(self.reset_clicked.emit)
@@ -87,6 +84,16 @@ class Transport(QToolBar):
         snapshot.setShortcut("Ctrl+S")
         snapshot.triggered.connect(self.snapshot_clicked.emit)
 
+        pattern = self.addAction(
+            style.standardIcon(QStyle.StandardPixmap.SP_FileIcon), "Save pattern…"
+        )
+        assert pattern is not None
+        pattern.setShortcut("Ctrl+Shift+S")
+        pattern.setToolTip("Save pattern… (RLE inside the editing box, else Macrocell)")
+        pattern.setEnabled(False)
+        pattern.triggered.connect(self.pattern_save_clicked.emit)
+        self._pattern = pattern
+
     @property
     def speed(self) -> int:
         return slider_to_speed(self._slider.value())
@@ -98,6 +105,10 @@ class Transport(QToolBar):
 
     def set_playing(self, playing: bool) -> None:
         self._play.setChecked(playing)
+
+    def set_pattern_files(self, enabled: bool) -> None:
+        """Offer Save pattern only for families whose sims write pattern files."""
+        self._pattern.setEnabled(enabled)
 
     def _on_play(self, checked: bool) -> None:
         style = self.style()

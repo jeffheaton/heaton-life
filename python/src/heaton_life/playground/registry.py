@@ -7,7 +7,9 @@ by registering here — there is no per-family widget code.
 from __future__ import annotations
 
 import dataclasses
+import os
 from collections.abc import Callable
+from pathlib import Path
 
 import numpy as np
 
@@ -50,11 +52,14 @@ from heaton_life.playground.fractal_sim import (
     make_newton,
     zoom_paint,
 )
+from heaton_life.playground.hashlife_sim import HashLifeSim, HashLifeSimParams
+from heaton_life.playground.hashlife_sim import validate as _validate_hashlife
 from heaton_life.rd import GRAY_SCOTT_PRESETS, GrayScott, GrayScottParams
 
 # Paint buttons: 1 = left, 2 = right, 3 = modifier+left, 4/5 = wheel in/out.
-# A paint fn may mutate in place (return None) or return a replacement Simulation
-# (fractal zoom); the engine swaps it in and echoes the new params to the form.
+# A paint fn may mutate in place (return None) or return the Simulation to adopt — a
+# replacement (fractal zoom) or the same one with new params (HashLife navigation); the
+# engine swaps it in and echoes its params to the form.
 PaintFn = Callable[[Simulation, int, int, int], Simulation | None]
 
 
@@ -75,6 +80,11 @@ class Family:
     paint: PaintFn | None = None
     wheel_zoom: bool = False
     """Route wheel events (buttons 4/5) to paint; only navigation-style families want this."""
+    reset_in_place: bool = False
+    """Reset calls the sim's own reset() — HashLife restores its starting snapshot — instead
+    of rebuilding from params, which would reload the pattern and refit the view."""
+    pattern_files: bool = False
+    """The sim saves its cells as a pattern file (HashLife): enables Save pattern…"""
 
 
 FAMILIES: dict[str, Family] = {}
@@ -144,6 +154,66 @@ register(
             "Diamoeba": {"rule": "B35678/S5678", "init": "soup", "density": 0.48},
         },
         paint=_paint_binary,
+    )
+)
+
+
+# -- HashLife -----------------------------------------------------------------------------
+
+
+def _hot_hashlife(sim: Simulation, params: Params) -> Simulation:
+    assert isinstance(sim, HashLifeSim) and isinstance(params, HashLifeSimParams)
+    sim.apply(params)
+    return sim
+
+
+def _paint_hashlife(sim: Simulation, x: int, y: int, button: int) -> Simulation | None:
+    assert isinstance(sim, HashLifeSim)
+    return sim if sim.paint(x, y, button) else None
+
+
+def _hashlife_presets() -> dict[str, dict[str, object]]:
+    presets: dict[str, dict[str, object]] = {
+        "Gosper glider gun": {"pattern": "Gosper glider gun", "step_exponent": 4},
+        "R-pentomino": {"pattern": "R-pentomino", "step_exponent": 6},
+        "Acorn": {"pattern": "Acorn", "step_exponent": 6},
+        "Replicator (HighLife)": {"pattern": "Replicator (HighLife)", "step_exponent": 4},
+    }
+    # The giants, when tools/fetch_patterns.py's cache is where HEATON_LIFE_PATTERNS says,
+    # with budgets they run well at in Python (python/DEVELOPMENT.md, "HashLife giants").
+    cache = os.environ.get("HEATON_LIFE_PATTERNS")
+    if cache:
+        giants = (
+            ("The Caterpillar (17c/45)", "caterpillar.mc", 4000),
+            ("Annelid ((28,3)c/84)", "annelid.mc.gz", 8000),
+        )
+        for label, name, budget in giants:
+            path = Path(cache) / name
+            if path.is_file():
+                presets[label] = {
+                    "pattern": str(path),
+                    "step_exponent": 8,
+                    "max_memory_mb": budget,
+                }
+    return presets
+
+
+register(
+    Family(
+        key="hashlife",
+        label="HashLife",
+        category="Cellular Automata",
+        params_cls=HashLifeSimParams,
+        build=HashLifeSim.build,
+        hot_fields=frozenset(f.name for f in dataclasses.fields(HashLifeSimParams)) - {"pattern"},
+        hot_apply=_hot_hashlife,
+        validate=_validate_hashlife,
+        default_cmap="phosphor",
+        presets=_hashlife_presets(),
+        paint=_paint_hashlife,
+        wheel_zoom=True,
+        reset_in_place=True,
+        pattern_files=True,
     )
 )
 

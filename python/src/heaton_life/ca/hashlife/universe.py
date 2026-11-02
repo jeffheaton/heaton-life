@@ -297,9 +297,10 @@ class HashLife:
             else:
                 return
         if j == 0:
+            self._collect()  # the abandoned attempts are garbage; the cells are unchanged
             raise HashLifeMemoryError(
                 f"one generation does not fit in max_memory_mb={self._max_memory_mb} "
-                f"(the pattern alone needs about {store.memory_used() >> 20} MB); "
+                f"(the pattern itself takes about {store.memory_used() >> 20} MB of it); "
                 "raise the budget"
             )
         self._advance(j - 1)

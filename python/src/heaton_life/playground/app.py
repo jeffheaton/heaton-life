@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
 from heaton_life.core.params import Params
 from heaton_life.playground.canvas import Canvas
 from heaton_life.playground.engine import SimEngine
+from heaton_life.playground.hashlife_sim import SAVE_FILTER, save_filter_for
 from heaton_life.playground.model import field_specs
 from heaton_life.playground.param_form import ParamForm
 from heaton_life.playground.registry import FAMILIES, Family
@@ -45,6 +46,8 @@ class EngineBridge(QObject):
     sig_speed = pyqtSignal(int)
     sig_cmap = pyqtSignal(str)
     sig_paint = pyqtSignal(int, int, int)
+    sig_offer_save = pyqtSignal()  # ask the engine to suggest a pattern file name
+    sig_save_pattern = pyqtSignal(str)  # path
     sig_shutdown = pyqtSignal()
 
 
@@ -77,6 +80,8 @@ class MainWindow(QMainWindow):
         self._bridge.sig_speed.connect(self._engine.set_speed)
         self._bridge.sig_cmap.connect(self._engine.set_cmap)
         self._bridge.sig_paint.connect(self._engine.paint)
+        self._bridge.sig_offer_save.connect(self._engine.offer_pattern_save)
+        self._bridge.sig_save_pattern.connect(self._engine.save_pattern)
         self._bridge.sig_shutdown.connect(self._engine.shutdown)
 
         # Canvas (center)
@@ -88,19 +93,23 @@ class MainWindow(QMainWindow):
         self.canvas.cell_pressed.connect(self._bridge.sig_paint.emit)
         self._engine.frame_ready.connect(self._on_frame)
         self._engine.stats.connect(self._on_stats)
-        self._engine.error.connect(self._on_engine_error)
+        self._engine.error.connect(self._on_engine_message)
+        self._engine.message.connect(self._on_engine_message)
         self._engine.params_updated.connect(self._on_engine_params)
+        self._engine.pattern_save_offered.connect(self._save_pattern_dialog)
 
         # Transport (top)
         self.transport = Transport(self)
         self.addToolBar(self.transport)
-        self.transport.play_toggled.connect(self._bridge.sig_run.emit)
+        self.transport.play_toggled.connect(self._on_play)
         self.transport.step_clicked.connect(self._bridge.sig_step.emit)
-        self.transport.reset_clicked.connect(self._bridge.sig_reset.emit)
+        self.transport.reset_clicked.connect(self._on_reset)
         self.transport.speed_changed.connect(self._bridge.sig_speed.emit)
         self.transport.cmap_changed.connect(self._bridge.sig_cmap.emit)
         self.transport.cell_scale_changed.connect(self.canvas.set_display_scale)
         self.transport.snapshot_clicked.connect(self._snapshot_dialog)
+        self.transport.pattern_save_clicked.connect(self._on_pattern_save)
+        self._engine.halted.connect(lambda: self.transport.set_playing(False))
 
         # Family tree (left dock)
         self._tree = QTreeWidget()
@@ -131,11 +140,14 @@ class MainWindow(QMainWindow):
 
         # Status bar
         self._status_gen = QLabel("gen 0")
+        self._status_readout = QLabel("")  # the sim's own readout (HashLife: pop, memory)
         self._status_sps = QLabel("")
         bar = self.statusBar()
         assert bar is not None
         bar.addPermanentWidget(self._status_sps)
         bar.addWidget(self._status_gen)
+        bar.addWidget(self._status_readout)
+        self._engine.readout_ready.connect(self._status_readout.setText)
 
         # Start on the first registered family
         first = next(iter(FAMILIES))
@@ -145,6 +157,7 @@ class MainWindow(QMainWindow):
 
     def select_family(self, key: str) -> None:
         family = FAMILIES[key]
+        self._engine.interrupt()  # a long step of the old family shouldn't hold up the new
         self._family = family
         params = family.params_cls()
 
@@ -163,6 +176,7 @@ class MainWindow(QMainWindow):
         self._presets.blockSignals(False)
 
         self.transport.set_cmap(family.default_cmap)
+        self.transport.set_pattern_files(family.pattern_files)
         self._bridge.sig_load.emit(key, params, family.default_cmap)
         self._bridge.sig_speed.emit(self.transport.speed)
 
@@ -200,6 +214,17 @@ class MainWindow(QMainWindow):
         params = family.params_cls.from_dict(merged)
         self._bridge.sig_params_reset.emit(params)  # presets always start a fresh grid
 
+    # -- transport -----------------------------------------------------------------------
+
+    def _on_play(self, playing: bool) -> None:
+        if not playing:
+            self._engine.interrupt()  # pause now, not when a long step finishes
+        self._bridge.sig_run.emit(playing)
+
+    def _on_reset(self) -> None:
+        self._engine.interrupt()
+        self._bridge.sig_reset.emit()
+
     # -- engine feedback -----------------------------------------------------------------
 
     def _on_frame(self, _rgb: object, generation: int) -> None:
@@ -207,9 +232,10 @@ class MainWindow(QMainWindow):
 
     def _on_stats(self, generation: int, sps: float) -> None:
         self._status_gen.setText(f"gen {generation:,}")
-        self._status_sps.setText(f"{sps:,.0f} steps/s")
+        rate = f"{sps:,.0f}" if sps >= 10 else f"{sps:.2g}"  # HashLife's big steps run < 1/s
+        self._status_sps.setText(f"{rate} steps/s")
 
-    def _on_engine_error(self, message: str) -> None:
+    def _on_engine_message(self, message: str) -> None:
         bar = self.statusBar()
         if bar is not None:
             bar.showMessage(message, 5000)
@@ -235,6 +261,19 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, "Save snapshot", suggested, "PNG (*.png)")
         if path and not self.save_png(path):
             QMessageBox.warning(self, "Snapshot", "No frame to save yet.")
+
+    # -- pattern files -------------------------------------------------------------------
+
+    def _on_pattern_save(self) -> None:
+        self.transport.set_playing(False)  # save the generation the dialog names
+        self._bridge.sig_offer_save.emit()
+
+    def _save_pattern_dialog(self, name: str) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save pattern", name, SAVE_FILTER, save_filter_for(name)
+        )
+        if path:
+            self._bridge.sig_save_pattern.emit(path)
 
     # -- plumbing --------------------------------------------------------------------------
 
@@ -262,6 +301,7 @@ class MainWindow(QMainWindow):
             self.select_family(key)
 
     def closeEvent(self, event: QCloseEvent | None) -> None:
+        self._engine.interrupt()
         self._bridge.sig_run.emit(False)
         self._bridge.sig_shutdown.emit()
         if self._thread is not None:

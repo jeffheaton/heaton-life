@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from PyQt6.QtCore import QTimer, pyqtSignal
@@ -11,6 +12,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
+    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QLineEdit,
@@ -52,6 +54,17 @@ class ParamForm(QWidget):
                 dice.setToolTip("Randomize seed")
                 dice.clicked.connect(self._randomize_seed(spec.name, spec.maximum))
                 box.addWidget(dice)
+                layout.addRow(spec.label, row)
+            elif spec.role == "file":
+                row = QWidget()
+                box = QHBoxLayout(row)
+                box.setContentsMargins(0, 0, 0, 0)
+                box.addWidget(widget, 1)
+                browse = QToolButton()
+                browse.setText("Browse…")
+                browse.setToolTip("Choose a file")
+                browse.clicked.connect(self._browse_file(spec.name, spec.label, spec.file_filter))
+                box.addWidget(browse)
                 layout.addRow(spec.label, row)
             else:
                 layout.addRow(spec.label, widget)
@@ -95,6 +108,21 @@ class ParamForm(QWidget):
             widget.setValue(random.randrange(int(min(maximum, 2_147_483_647)) + 1))
 
         return apply
+
+    def _browse_file(self, name: str, label: str, file_filter: str) -> Callable[[], None]:
+        def browse() -> None:
+            widget = self._widgets[name]
+            assert isinstance(widget, QLineEdit)
+            current = Path(widget.text()).expanduser()
+            start = str(current.parent) if current.is_absolute() else ""
+            path, _ = QFileDialog.getOpenFileName(
+                self, f"Choose {label.lower()}", start, file_filter
+            )
+            if path:
+                widget.setText(path)
+                self._touch()
+
+        return browse
 
     # -- values -------------------------------------------------------------------------
 

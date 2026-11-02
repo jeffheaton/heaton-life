@@ -48,7 +48,8 @@ python/
 ├── pyproject.toml      # packaging, ruff, pytest, and mypy configuration
 ├── src/heaton_life/    # the package (src layout; installed editable above)
 │   ├── core/           # protocols, Viewport, params, PCG32, buffers, kernels, integrators
-│   ├── ca/             # lifelike, elementary, cyclic, wireworld, mergelife (+ the rule gallery)
+│   ├── ca/             # lifelike, elementary, cyclic, wireworld, mergelife (+ the rule gallery),
+│   │                   #   hashlife/ (the unbounded universe, Macrocell, views, frames)
 │   ├── lenia/          # kernels, classic, asymptotic, flow
 │   ├── fractal/        # escape-time engine, perturbation engine, mandelbrot, julia, burning_ship, newton
 │   ├── boids/          # reynolds (O(N²) neighbors, capped at 2k boids; a spatial hash is future work)
@@ -59,7 +60,8 @@ python/
 │   ├── playground/     # PyQt6 app (optional extra)
 │   └── version.py      # build stamp (see Releasing)
 ├── tests/              # pytest suite; replays ../vectors and drives the playground offscreen
-├── tools/              # gen_vectors.py, gen_gallery.py, gen_palettes.py, score_rules.py
+├── tools/              # gen_vectors.py, gen_gallery.py, gen_palettes.py, score_rules.py,
+│                       #   bench_hashlife.py, fetch_patterns.py
 └── examples/           # the intro notebook (runs in Colab)
 ```
 
@@ -170,10 +172,98 @@ Some floating-point rules are not obvious and are easy to "clean up" by mistake:
   pinned by `../vectors/render/lut-<name>/`; the script is not re-run casually, and if
   it is, both table files and the LUT vectors must come back unchanged.
 - `tools/bench_hashlife.py` measures HashLife throughput (`../spec/hashlife.md`): load
-  time, then generations per second at fixed step sizes 2^e, with nodes, store memory,
-  and collections, for the built-in set or any `.rle`/`.mc`/`.mc.gz` files given.
+  time, then generations per second at fixed step sizes 2^e, with nodes, store memory
+  (and its peak), collections, and the process's peak RSS, for the built-in set or any
+  `.rle`/`.mc`/`.mc.gz` files given. See "HashLife giants" below.
+- `tools/fetch_patterns.py` downloads the giant HashLife patterns (the Caterpillar and
+  Annelid) into the git-ignored `.patterns/` and checks each against its pinned size and
+  SHA-256. See "HashLife giants" below.
 - `tools/score_rules.py` scores MergeLife rule strings with the paper objective
   (`../spec/evolve.md`).
+
+## HashLife giants
+
+Two engineered spaceships are the HashLife engine's stress tests: **the Caterpillar**
+(Nivasch, Summers and Bell, 2004; 17c/45, 11,967,399 cells, an 8 MB Macrocell file) and
+**Annelid** (Brithos, 2026; (28,3)c/84, 168,807,151 cells, 5.5 MB of gzip Macrocell).
+Neither file states a license, so neither is committed. `tools/fetch_patterns.py` fetches
+pinned Wayback Machine copies (conwaylife.com refuses scripts) into the git-ignored
+`.patterns/`, checking each file's size and SHA-256:
+
+```
+.venv/bin/python tools/fetch_patterns.py
+export HEATON_LIFE_PATTERNS="$PWD/.patterns"
+.venv/bin/pytest -q tests/test_hashlife_giants.py
+.venv/bin/python tools/bench_hashlife.py .patterns/caterpillar.mc \
+    --budget 4000 --exponents 0,4,8 --seconds 30 --min-steps 2
+```
+
+`tests/test_hashlife_giants.py` skips unless `HEATON_LIFE_PATTERNS` names the cache
+(and is marked `slow`). It checks the Macrocell placement (the Caterpillar's top-left cell
+lands on (0, 0); Annelid's box) and one period of each ship:
+
+- The Caterpillar after 270 generations equals generation 0 moved 102 cells up, compared
+  row for row with `get_rect` in strips, once under an 8 GB budget and once under 1.5 GB,
+  where the 2^8 sub-step overflows the store and takes the abandon, collect, and halve
+  path ("Memory" in `../spec/hashlife.md`).
+- Annelid after 252 generations has moved (−9, −84) with the same population, the same
+  128 × 128 grid of `population_in` regions relative to its box, and identical 512 × 512
+  windows around a live cell of each occupied region on the grid's diagonals. The whole
+  state is too big to compare cell by cell.
+
+It takes about five minutes and 4 to 6 GB of memory.
+
+**Measurements** (2026-11-02, Apple silicon, CPython 3.12; one process per budget, five
+at a time; `--exponents 0,4,8 --seconds 30 --min-steps 2`, so each size runs at least 30 s
+and two steps, starting where the previous size stopped). Peak store is the budget's own
+estimate, sampled between steps; RSS is the process's peak; collections are cumulative.
+
+The Caterpillar loads in 0.7 s (336,720 nodes, 41 MiB of store):
+
+| Budget (MiB) | 2^0 gen/s | 2^4 gen/s | 2^8 gen/s (512 gens) | Peak store (MiB) | Collections | Peak RSS (MiB) |
+|---:|---:|---:|---:|---:|---:|---:|
+| 500 | 0.20 | 1.5 | 0.95 (537 s) | 477 | 49 | 1,314 |
+| 1,000 | 0.22 | 2.7 | 1.1 (471 s) | 880 | 19 | 2,262 |
+| 2,000 | 0.27 | 3.0 | 5.7 (89 s) | 1,970 | 2 | 4,405 |
+| 4,000 | 0.27 | 3.6 | 6.0 (85 s) | 3,096 | 1 | 5,397 |
+| 8,000 | 0.26 | 3.6 | 8.2 (62 s) | 3,836 | 0 | 6,444 |
+
+Annelid loads in 1.6 s (778,484 nodes, 101 MiB of store). One generation rebuilds about
+2.8 million nodes, so single generations cost 19 s; at 2^8 a generation costs 0.13 s:
+
+| Budget (MiB) | 2^0 gen/s | 2^4 gen/s | 2^8 gen/s (512 gens) | Peak store (MiB) | Collections | Peak RSS (MiB) |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1,000 | 0.05 | 0.41 | 0.59 (862 s) | 994 | 21 | 2,328 |
+| 2,000 | 0.05 | 0.64 | 4.6 (112 s) | 1,855 | 2 | 3,060 |
+| 4,000 | 0.05 | 0.64 | 7.4 (69 s) | 3,645 | 0 | 5,915 |
+| 8,000 | 0.05 | 0.64 | 7.5 (69 s) | 3,645 | 0 | 5,908 |
+
+At 500 MiB the first generation raises `HashLifeMemoryError`: one generation's new nodes
+don't fit beside the pattern.
+
+**The speed gate.** Neither giant stalls at the budgets Python needs for it, 2 to 8 GB:
+from 2 GB up a 2^8 step costs 31 to 45 s on the Caterpillar and 34 to 56 s on Annelid,
+with at most a couple of collections. Below that the budget, not the algorithm, sets the
+pace. A sub-step whose new nodes overflow the store is abandoned, collected, and split in
+half ("Memory" in `../spec/hashlife.md`), so at 500 MiB to 1 GB the Caterpillar's 2^8
+steps run about 8 times slower (Annelid's 13 times, at 1 GB), and at the default 500 MiB
+Annelid can't take a single generation (`step` says so and asks for a bigger budget).
+Results are identical at every budget: the tight-budget Caterpillar test above, and
+`tests/test_hashlife.py` at 10 and 500 MiB.
+
+So `store.py` is unchanged. In-flight collection (a saved-node stack, so a step
+collects midway instead of starting over) would cut the waste below 2 GB, but every
+recursion would pay for the stack, and a 2^8 Caterpillar step still makes about 8 million
+new nodes, a gigabyte of store, so a 500 MiB budget would collect over and over. A denser
+store has little room in pure Python: a node is a dict entry, a tuple, and an int, about
+130 bytes. The C# port's arena has both. Run the giants in Python at 2 to 8 GB; the
+playground's giant presets ask for 4 GB (the Caterpillar) and 8 GB (Annelid), and the
+giant tests run at 8 GB (the Caterpillar's period once more at 1.5 GB).
+
+The budget is the store's own estimate (about 130 bytes a node plus 45 to 100 per cached
+result, fitted with `tracemalloc`). The process's peak RSS runs 1.6 to 2.8 times the store's
+peak (the interpreter's own 100 MB or so, and memory freed by collections stays with the
+allocator), so leave headroom.
 
 ## Playground
 
@@ -184,6 +274,27 @@ heaton-life                          # or: python -m heaton_life.playground
 Space plays and pauses, N single-steps, R resets, Ctrl+S saves a PNG. The
 playground consumes only the public API; if it seems to need a hack, the API is
 what needs changing.
+
+The **HashLife** family (Cellular Automata) is the unbounded universe:
+
+- **Pattern** is a built-in name (the presets list them) or a `.rle`, `.mc`, or `.mc.gz`
+  file (Browse…). Loading adopts the file's rule and fits the view to the pattern.
+  With `HEATON_LIFE_PATTERNS` set, the presets include the two giants, with budgets
+  they run well at.
+- **Step (2^k gens)**: each step advances 2^k generations; the speed slider sets steps
+  per second. **Max memory (MB)** is the hash budget: it changes speed,
+  never results.
+- The view is the spec's three integers: **View x/y** (the frame's top-left pixel in the
+  pixel plane) and **Mag** (2^mag pixels per cell; negative zooms out, one quadtree node
+  per pixel). The wheel zooms about the cursor, Ctrl/Cmd+click recenters, left-click
+  draws and right-click erases (at one cell per pixel or closer, inside the ±10⁹
+  editing box; outside it the status bar says why nothing changed).
+- Every field but the pattern changes the universe in place, and Reset returns to the
+  starting snapshot (edits made at the start belong to it) without reloading the file.
+  Pause and Reset cut a long step short at a completed sub-step.
+- **Save pattern…** (Ctrl+Shift+S) writes RLE while the pattern lies inside the editing
+  box and Macrocell otherwise; the dialog also offers the other formats. The status bar
+  shows generation, population, step size, the center cell, nodes, and store memory.
 
 ## Versioning
 

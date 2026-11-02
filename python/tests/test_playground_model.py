@@ -47,3 +47,16 @@ def test_validate_flags_centers_outside_the_shared_grammar() -> None:
         problem = family.validate(params)
         assert problem is not None and problem[0] == "center_re", bad
     assert family.validate(family.params_cls.from_dict({"center_re": "-0.75e0"})) is None
+
+
+def test_field_specs_for_hashlife_carry_the_file_role() -> None:
+    from heaton_life.playground.hashlife_sim import PATTERN_FILTER, HashLifeSimParams
+
+    specs = {s.name: s for s in field_specs(HashLifeSimParams)}
+    assert specs["pattern"].role == "file" and specs["pattern"].file_filter == PATTERN_FILTER
+    assert specs["mode"].kind == "choice" and specs["mode"].choices == ("any", "density")
+    assert specs["x"].kind == "str" and specs["y"].kind == "str", "big integers as text"
+    assert specs["mag"].maximum == 5 and specs["mag"].minimum < 0
+    family = FAMILIES["hashlife"]
+    assert family.wheel_zoom and family.reset_in_place and family.pattern_files
+    assert family.hot_fields == set(specs) - {"pattern"}
