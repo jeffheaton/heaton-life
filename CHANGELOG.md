@@ -5,6 +5,50 @@ number, and from 1.1.0 on each release ships both from one commit. Every entry a
 both unless it names a port. The spec version (the `spec_version` field of the conformance
 vectors) moves on its own; each release lists the one it implements.
 
+## 1.2.0 (unreleased)
+
+Implements spec version 0.14.0 (1.1.0 implemented 0.13.0). Every conformance vector that
+existed at 1.1.0 is byte-identical; the new behavior comes with new vector cases. The
+public APIs of both packages are backward compatible: nothing was removed or renamed.
+One output changed form: canonical RLE (below).
+
+### Added
+
+- **HashLife: Life on an unbounded plane** (`heaton_life.ca.hashlife.HashLife`, .NET
+  `HashLife`; [spec/hashlife.md](spec/hashlife.md)). Any Life-like rule without B0 runs on
+  a hash-consed quadtree whose nodes memoize their own future, so regular patterns of
+  trillions of cells fit in memory and one step can jump any number of generations below
+  2⁵¹⁰. Generations, populations, and coordinates are big integers. Editing (cells,
+  rectangles pasted by copy, or, or xor, clearing, PCG32 random fill) reaches
+  |x|, |y| ≤ 10⁹; queries and rendering reach everywhere. Snapshots, cancellation at
+  sub-step boundaries, and a memory budget (`max_memory_mb`, default 500 MiB, minimum 10)
+  that changes speed, never results.
+- **Pattern files for the unbounded universe:** Macrocell (`.mc`, `.mc.gz`) reading and
+  canonical writing ([spec/macrocell.md](spec/macrocell.md)), and RLE whose `#CXRLE
+  Pos=x,y Gen=n` line places a pattern anywhere in the editing box.
+- **Views and frames** (`LifeView`): exact integer pan, zoom at a pixel, fit, and center
+  readouts, and frames from 32 pixels per cell to any distance out, in `any` or `density`
+  mode, at a cost that does not grow with the population. .NET: `Step` and `WriteFrame`
+  allocate nothing once warm.
+- **The giants:** the Caterpillar and Annelid (2026) load, run, and return to their own
+  shape after one period. .NET runs a period of either in about 5 seconds; the Python
+  reference needs a 2–8 GB budget and about a minute. `python/tools/fetch_patterns.py`
+  downloads pinned copies into a git-ignored cache; neither file states a license, so
+  neither ships.
+- Python playground: a HashLife view: open and save `.rle`, `.mc`, and `.mc.gz`, paint,
+  zoom at the cursor, step 2^k generations at a time, and set the memory budget.
+- Self-check: a `hashlife` check (22 checks now), the Gosper gun to 2²⁰⁰ generations, for
+  the 64-bit and big-integer arithmetic past 2⁶⁴.
+- Python: `rle_runs` and `RleInfo` stream an RLE file's runs, position, and generation
+  without building a grid.
+
+### Changed
+
+- **Canonical RLE writes a run of k ≥ 2 row ends as one `k$`** (`rle_encode`,
+  `Patterns.RleEncode`), so empty rows cost one token however many there are. Files read
+  back exactly as before, and no existing vector had such a run, but the text differs
+  wherever two `$` used to meet: `$$` is now `2$`.
+
 ## 1.1.0 (2026-09-25)
 
 Implements spec version 0.13.0 (1.0.0 implemented 0.2.0). Every conformance vector that

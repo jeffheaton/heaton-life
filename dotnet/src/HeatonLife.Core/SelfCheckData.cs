@@ -29,6 +29,7 @@ namespace HeatonLife
             "julia-t2",
             "zoom-plan",
             "color",
+            "hashlife",
         };
 
         internal static readonly (ulong A, ulong B, ulong C, ulong Expected)[] Fma =
@@ -223,6 +224,13 @@ namespace HeatonLife
         internal static readonly double GrayScottDt = D(0x3FF0000000000000UL);
         internal const int GrayScottSteps = 100;
         internal const ulong GrayScottDigest = 0xB1386F4E45D88B1CUL;
+
+        internal const string HashLifeInput = "#CXRLE Pos=-18,-4\nx = 36, y = 9, rule = B3/S23\n24bo$22bobo$12b2o6b2o12b2o$11bo3bo4b2o12b2o$2o8bo5bo3b2o$2o8bo3bob2o4b\nobo$10bo5bo7bo$11bo3bo$12b2o!\n";
+        internal static readonly (string Generation, string Population, string[] Box, ulong Digest)[] HashLifeCheckpoints =
+        {
+            ("1024", "221", new[] { "-18", "-4", "255", "256" }, 0xD8422570CC1FD279UL),
+            ("1606938044258990275541962092341162602522202993782792835301376", "267823007376498379256993682056860433753700498963798805883604", new[] { "-18", "-4", "401734511064747568885490523085290650630550748445698208825343", "401734511064747568885490523085290650630550748445698208825344" }, 0x77653535336AE989UL),
+        };
 
         internal static readonly (string Name, string Family, int MaxIter, double EscapeRadius, double CRe, double CIm, bool Bla, int Width, int Height, string Re, string Im, double Zoom, ulong Iterations, ulong Applications, ulong Table, int[] Entries)[] Renders =
         {

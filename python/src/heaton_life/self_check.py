@@ -310,6 +310,20 @@ def _mergelife() -> None:
     _expect(_fnv1a64(np.ascontiguousarray(sim.state).tobytes()), m["digest"], "digest")
 
 
+def _hashlife() -> None:
+    from heaton_life.ca.hashlife import HashLife
+
+    h = data.HASHLIFE
+    u = HashLife.from_rle(h["input"])
+    for c in h["checkpoints"]:
+        u.step(int(c["generation"]) - u.generation)
+        at = f"generation {c['generation']}"
+        _expect(str(u.population), c["population"], f"{at} population")
+        box = u.bounding_box()
+        _expect(None if box is None else [str(v) for v in box], c["bounding_box"], f"{at} box")
+        _expect(_fnv1a64(u.to_macrocell().encode("ascii")), c["digest"], f"{at} digest")
+
+
 def _grayscott() -> None:
     from heaton_life.rd.gray_scott import GrayScott
 
@@ -525,6 +539,7 @@ _CHECKS: list[tuple[str, Scope, Callable[[], None]]] = [
     ("julia-t2", _S.T2, _render("julia-t2")),
     ("zoom-plan", _S.MOVIES, _zoom_plan),
     ("color", _S.COLOR, _color),
+    ("hashlife", _S.SIMULATIONS, _hashlife),
 ]
 
 NAMES: tuple[str, ...] = tuple(name for name, _, _ in _CHECKS)

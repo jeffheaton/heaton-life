@@ -18,7 +18,7 @@ them:
 
 | Family | Systems |
 |---|---|
-| Cellular automata | MergeLife, Life-like (Conway's Life and every other B/S rule), Elementary, Cyclic, Wireworld |
+| Cellular automata | MergeLife, Life-like (Conway's Life and every other B/S rule), HashLife (Life-like rules on an unbounded plane: patterns of trillions of cells, any number of generations in one step), Elementary, Cyclic, Wireworld |
 | Lenia | Classic, Asymptotic, Flow |
 | Fractals | Newton's basins, and Mandelbrot, Julia, and Burning Ship with perturbation deep zoom far beyond float64 (Mandelbrot and Julia to 10⁹⁰⁰⁰) |
 | Boids | Reynolds flocking in 2D and 3D |

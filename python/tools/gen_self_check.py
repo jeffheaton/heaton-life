@@ -557,6 +557,45 @@ def color() -> dict[str, Any]:
     }
 
 
+def hashlife() -> dict[str, Any]:
+    """The Gosper gun of vectors/hashlife/evolve-gosper-gun stepped to 1024 generations,
+    then to 2^200: each checkpoint's population, bounding box, and the FNV-1a 64 of its
+    canonical Macrocell text, checked against the vector's file or SHA-256 (64-bit and
+    big-integer arithmetic: generations, coordinates, and populations past 2^64)."""
+    import hashlib
+
+    from heaton_life.ca.hashlife import HashLife
+
+    case = VECTORS / "hashlife" / "evolve-gosper-gun"
+    meta = json.loads((case / "params.json").read_text())
+    text = (case / meta["input"]).read_text()
+    u = HashLife.from_rle(text)
+    checkpoints = []
+    for entry in meta["checkpoints"]:
+        generation = int(entry["generation"])
+        if generation not in (1024, 2**200):
+            continue
+        u.step(generation - u.generation)
+        canonical = u.to_macrocell()
+        if "state" in entry:
+            assert canonical == (case / entry["state"]).read_text()
+        else:
+            assert hashlib.sha256(canonical.encode("ascii")).hexdigest() == entry["state_sha256"]
+        assert str(u.population) == entry["population"]
+        box = u.bounding_box()
+        assert box is not None and [str(v) for v in box] == entry["bounding_box"]
+        checkpoints.append(
+            {
+                "generation": entry["generation"],
+                "population": entry["population"],
+                "bounding_box": entry["bounding_box"],
+                "digest": fnv1a64(canonical.encode("ascii")),
+            }
+        )
+    assert len(checkpoints) == 2
+    return {"input": text, "checkpoints": checkpoints}
+
+
 # The checks both ports run, in order after fp-contract and each port's own platform
 # check (Python numpy-fma, C# fma): the names hosts gate on, append-only.
 SHARED_NAMES = [
@@ -579,6 +618,7 @@ SHARED_NAMES = [
     "julia-t2",
     "zoom-plan",
     "color",
+    "hashlife",
 ]
 
 
@@ -600,6 +640,7 @@ def build() -> dict[str, Any]:
         "T2_STEPS": t2_steps(),
         "ZOOM_PLANS": zoom_plans(),
         "COLOR": color(),
+        "HASHLIFE": hashlife(),
     }
 
 
@@ -806,6 +847,22 @@ def render_csharp(data: dict[str, Any]) -> str:
     w(f"        internal static readonly double GrayScottDt = {_d(gs['dt'])};")
     w(f"        internal const int GrayScottSteps = {gs['steps']};")
     w(f"        internal const ulong GrayScottDigest = {_u(gs['digest'])};")
+    w("")
+
+    hl = data["HASHLIFE"]
+    escaped = hl["input"].replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+    w(f"        internal const string HashLifeInput = {_s(escaped)};")
+    w(
+        "        internal static readonly (string Generation, string Population, string[] Box, ulong Digest)[] HashLifeCheckpoints ="
+    )
+    w("        {")
+    for c in hl["checkpoints"]:
+        box = ", ".join(_s(v) for v in c["bounding_box"])
+        w(
+            f"            ({_s(c['generation'])}, {_s(c['population'])}, new[] {{ {box} }}, "
+            f"{_u(c['digest'])}),"
+        )
+    w("        };")
     w("")
 
     w(

@@ -72,6 +72,7 @@ last tier that passed.
 | `julia-t2` | both | `julia/t2-julia-i-precision-zoom400-12` counts: Julia at T2 and its critical-orbit rebases | T2 |
 | `zoom-plan` | both | every frame zoom of every `zoom/plans` plan | Movies |
 | `color` | both | the `rainbow` LUT; `render/apply-half-rainbow` (round-to-nearest color indices; its one tie, 127.5, rounds to 128 either way); `phase-apply-halfway` (the phase lookup's half-even rounding) and `phase-apply-row-seam` (its antialias and dither), with each vector's own inputs and options; the depth phase on the first 256 values of `render/phase-flow` | Color |
+| `hashlife` | both | `hashlife/evolve-gosper-gun` from its input to generation 1024, then 2²⁰⁰: each checkpoint's population, bounding box, and the digest of its canonical Macrocell text — the 64-bit and big-integer arithmetic of generations, coordinates, and populations past 2⁶⁴. Answers: the vector's state file and SHA-256. | Simulations |
 
 The render checks' vectors were chosen by fault injection: each has escaping pixels with
 varied counts, and each fails when the arithmetic it names is broken (a collapsed
@@ -103,6 +104,7 @@ Not included: evolve (about 70 ms per objective; its ingredients are `pcg32`,
 
 Measured on an Apple M-series Mac, single-threaded, in a fresh process: C# about 200 ms
 with tiered JIT (about 105 ms with `TieredCompilation=0`; later runs in the same process
-40–160 ms), Python about 270 ms. `julia-t2` and `mandelbrot-t1-bla` are most of it. A phone
+40–160 ms), Python about 270 ms. `julia-t2` and `mandelbrot-t1-bla` are most of it. The
+`hashlife` check, added in 1.2.0, adds about 50 ms in C# and 130 ms in Python. A phone
 is several times slower: run it once per process, off the main thread, and keep the results
 for gating.

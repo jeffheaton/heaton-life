@@ -7,7 +7,8 @@
 
 HeatonLife.Core is a .NET library for exploring emergence: simple rules that give rise
 to complex, organic-looking behavior. It brings together cellular automata (MergeLife,
-Life-like, Elementary, Cyclic, and Wireworld), three flavors of Lenia, fractals
+Life-like, HashLife on an unbounded plane, Elementary, Cyclic, and Wireworld), three
+flavors of Lenia, fractals
 (Newton's basins, and Mandelbrot, Julia, and Burning Ship with deep zoom, to 10⁹⁰⁰⁰ for
 Mandelbrot and Julia), Reynolds boids, and Gray-Scott reaction-diffusion under one
 consistent API. Every system steps and
@@ -48,7 +49,7 @@ For Unity (2021.2 or newer, which supports .NET Standard 2.1), copy
 `HeatonLife.Core.dll` and the `HeatonLife.Core.xml` beside it (for IntelliSense) into
 your project's `Assets/Plugins` folder. There is no native code and nothing else to
 install. Each release also ships the DLL, the XML docs, and the PDB together as
-[`heaton-life-dotnet-1.1.0.zip`](https://data.heatonresearch.com/library/heaton-life-dotnet-1.1.0.zip).
+[`heaton-life-dotnet-1.2.0.zip`](https://data.heatonresearch.com/library/heaton-life-dotnet-1.2.0.zip).
 The NuGet package also carries a symbols package (`.snupkg`, a portable PDB with
 SourceLink to this repository), so a debugger configured for the NuGet.org symbol
 server can step into the library's source.

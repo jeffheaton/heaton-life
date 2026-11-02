@@ -10,7 +10,8 @@
 
 heaton-life is a Python library for exploring emergence: simple rules that give rise to
 complex, organic-looking behavior. It brings together cellular automata (MergeLife,
-Life-like, Elementary, Cyclic, and Wireworld), three flavors of Lenia, fractals
+Life-like, HashLife on an unbounded plane, Elementary, Cyclic, and Wireworld), three
+flavors of Lenia, fractals
 (Newton's basins, and Mandelbrot, Julia, and Burning Ship with deep zoom, to 10⁹⁰⁰⁰ for
 Mandelbrot and Julia), Reynolds boids, and Gray-Scott reaction-diffusion under one
 consistent API. Every system steps and

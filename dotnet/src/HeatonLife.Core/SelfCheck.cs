@@ -108,6 +108,7 @@ namespace HeatonLife
             ("julia-t2", SelfCheckScope.T2, () => Render("julia-t2")),
             ("zoom-plan", SelfCheckScope.Movies, CheckZoomPlan),
             ("color", SelfCheckScope.Color, CheckColor),
+            ("hashlife", SelfCheckScope.Simulations, CheckHashLife),
         };
 
         /// <summary>Every check's name, in run order (fp-contract first).</summary>
@@ -443,6 +444,33 @@ namespace HeatonLife
             sim.SetState(lattice);
             sim.Step(SelfCheckData.MergeLifeSteps);
             Expect(DigestBytes(sim.State), SelfCheckData.MergeLifeDigest, "digest");
+        }
+
+        private static void CheckHashLife()
+        {
+            HashLife u = HashLife.FromRle(SelfCheckData.HashLifeInput);
+            foreach (var c in SelfCheckData.HashLifeCheckpoints)
+            {
+                u.Step(BigInteger.Parse(c.Generation, CultureInfo.InvariantCulture) - u.Generation);
+                string at = "generation " + c.Generation;
+                string population = u.Population.ToString(CultureInfo.InvariantCulture);
+                if (population != c.Population)
+                    throw new Failed(at + " population: " + population + " != " + c.Population);
+                CellBox? found = u.BoundingBox;
+                string[] box = new string[0];
+                if (found != null)
+                {
+                    CellBox b = found.Value;
+                    box = new[]
+                    {
+                        b.X0.ToString(CultureInfo.InvariantCulture), b.Y0.ToString(CultureInfo.InvariantCulture),
+                        b.X1.ToString(CultureInfo.InvariantCulture), b.Y1.ToString(CultureInfo.InvariantCulture),
+                    };
+                }
+                if (string.Join(",", box) != string.Join(",", c.Box))
+                    throw new Failed(at + " box: " + string.Join(",", box) + " != " + string.Join(",", c.Box));
+                Expect(DigestBytes(Encoding.ASCII.GetBytes(u.ToMacrocell())), c.Digest, at + " digest");
+            }
         }
 
         private static void CheckGrayScott()

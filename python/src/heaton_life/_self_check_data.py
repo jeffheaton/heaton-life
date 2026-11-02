@@ -27,6 +27,7 @@ SHARED_NAMES: Any = [
     'julia-t2',
     'zoom-plan',
     'color',
+    'hashlife',
 ]
 
 NUMPY_FMA: Any = {
@@ -1891,4 +1892,32 @@ COLOR: Any = {
         'anchor': 0x4042800000000000,
         'digest': 0xe73df2bd55bf54d5,
     },
+}
+
+HASHLIFE: Any = {
+    'input': '#CXRLE Pos=-18,-4\nx = 36, y = 9, rule = B3/S23\n24bo$22bobo$12b2o6b2o12b2o$11bo3bo4b2o12b2o$2o8bo5bo3b2o$2o8bo3bob2o4b\nobo$10bo5bo7bo$11bo3bo$12b2o!\n',
+    'checkpoints': [
+        {
+            'generation': '1024',
+            'population': '221',
+            'bounding_box': [
+                '-18',
+                '-4',
+                '255',
+                '256',
+            ],
+            'digest': 0xd8422570cc1fd279,
+        },
+        {
+            'generation': '1606938044258990275541962092341162602522202993782792835301376',
+            'population': '267823007376498379256993682056860433753700498963798805883604',
+            'bounding_box': [
+                '-18',
+                '-4',
+                '401734511064747568885490523085290650630550748445698208825343',
+                '401734511064747568885490523085290650630550748445698208825344',
+            ],
+            'digest': 0x77653535336ae989,
+        },
+    ],
 }
