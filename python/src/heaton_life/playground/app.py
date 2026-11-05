@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from heaton_life.ca.hashlife import LifeView
 from heaton_life.core.params import Params
 from heaton_life.playground.canvas import Canvas
 from heaton_life.playground.engine import SimEngine
@@ -46,6 +47,7 @@ class EngineBridge(QObject):
     sig_speed = pyqtSignal(int)
     sig_cmap = pyqtSignal(str)
     sig_paint = pyqtSignal(int, int, int)
+    sig_view = pyqtSignal(object)  # Params whose view fields a canvas gesture moved
     sig_offer_save = pyqtSignal()  # ask the engine to suggest a pattern file name
     sig_save_pattern = pyqtSignal(str)  # path
     sig_shutdown = pyqtSignal()
@@ -80,6 +82,7 @@ class MainWindow(QMainWindow):
         self._bridge.sig_speed.connect(self._engine.set_speed)
         self._bridge.sig_cmap.connect(self._engine.set_cmap)
         self._bridge.sig_paint.connect(self._engine.paint)
+        self._bridge.sig_view.connect(self._engine.set_view_params)
         self._bridge.sig_offer_save.connect(self._engine.offer_pattern_save)
         self._bridge.sig_save_pattern.connect(self._engine.save_pattern)
         self._bridge.sig_shutdown.connect(self._engine.shutdown)
@@ -87,10 +90,12 @@ class MainWindow(QMainWindow):
         # Canvas (center)
         self.canvas = Canvas()
         self.setCentralWidget(self.canvas)
+        self._engine.frame_view_ready.connect(self.canvas.show_frame_view)
         self._engine.frame_ready.connect(self.canvas.show_frame)
         self._engine.overlay_ready.connect(self.canvas.show_overlay)
         self.canvas.frame_shown.connect(self._engine.frame_shown)
         self.canvas.cell_pressed.connect(self._bridge.sig_paint.emit)
+        self.canvas.view_requested.connect(self._on_view_requested)
         self._engine.frame_ready.connect(self._on_frame)
         self._engine.stats.connect(self._on_stats)
         self._engine.error.connect(self._on_engine_message)
@@ -160,6 +165,9 @@ class MainWindow(QMainWindow):
         self._engine.interrupt()  # a long step of the old family shouldn't hold up the new
         self._family = family
         params = family.params_cls()
+        if family.view_of is not None and family.with_view is not None:
+            # A live view's frames fill the canvas, so the first fit is to the canvas.
+            params = family.with_view(params, family.view_of(params), self.canvas.fill_size())
 
         if self._form is not None:
             self._form_layout.removeWidget(self._form)
@@ -175,6 +183,7 @@ class MainWindow(QMainWindow):
         self._presets.addItems(list(family.presets))
         self._presets.blockSignals(False)
 
+        self._sync_live_view(params)
         self.transport.set_cmap(family.default_cmap)
         self.transport.set_pattern_files(family.pattern_files)
         self._bridge.sig_load.emit(key, params, family.default_cmap)
@@ -199,6 +208,7 @@ class MainWindow(QMainWindow):
                 bar.showMessage(message, 4000)
             return
         form.clear_errors()
+        self._sync_live_view(params)
         self._bridge.sig_params.emit(params)
 
     def _on_preset(self, index: int) -> None:
@@ -241,9 +251,41 @@ class MainWindow(QMainWindow):
             bar.showMessage(message, 5000)
 
     def _on_engine_params(self, params: object) -> None:
-        """Engine-side param change (click/wheel zoom): sync the form silently."""
+        """Engine-side param change (a build's fitted view, click/wheel zoom): sync the
+        form silently, and the canvas's live view."""
         if self._form is not None and isinstance(params, Params):
             self._form.set_values(params.to_dict())
+            self._sync_live_view(params)
+
+    # -- live view -------------------------------------------------------------------------
+
+    def _sync_live_view(self, params: Params) -> None:
+        """Give a live-view family's view to the canvas, or take navigation back."""
+        family = self._family
+        if family is None or family.view_of is None or family.frame_size is None:
+            self.canvas.set_live_view(None)
+            return
+        try:
+            view = family.view_of(params)
+        except ValueError:
+            return  # an unparsable view field: validation marks it in the form
+        self.canvas.set_live_view(view, family.frame_size(params))
+
+    def _on_view_requested(self, view: object, size: object) -> None:
+        """A canvas gesture or resize moved the view: echo it to the form and send it to
+        the engine, which renders it between steps (the canvas previews it meanwhile)."""
+        family, form = self._family, self._form
+        if family is None or form is None or family.with_view is None:
+            return
+        if not isinstance(view, LifeView) or not isinstance(size, tuple):
+            return
+        try:
+            current = family.params_cls.from_dict(family.params_cls().to_dict() | form.values())
+        except (ValueError, TypeError):
+            return
+        params = family.with_view(current, view, size)
+        form.set_values(params.to_dict())
+        self._bridge.sig_view.emit(params)
 
     # -- snapshot ------------------------------------------------------------------------
 

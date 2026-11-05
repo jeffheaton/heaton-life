@@ -286,9 +286,17 @@ The **HashLife** family (Cellular Automata) is the unbounded universe:
   never results.
 - The view is the spec's three integers: **View x/y** (the frame's top-left pixel in the
   pixel plane) and **Mag** (2^mag pixels per cell; negative zooms out, one quadtree node
-  per pixel). The wheel zooms about the cursor, Ctrl/Cmd+click recenters, left-click
-  draws and right-click erases (at one cell per pixel or closer, inside the ±10⁹
-  editing box; outside it the status bar says why nothing changed).
+  per pixel). The wheel (2× a notch; a trackpad swipe's coasting is ignored) and a
+  trackpad pinch zoom about the pointer; a drag pans while zoomed out past one cell per
+  pixel, with Option/Alt held at any zoom, or with the middle button; Ctrl/Cmd+click
+  recenters. At one cell per pixel or closer, left-click draws and right-click erases,
+  inside the ±10⁹ editing box (outside it the status bar says why nothing changed).
+- Navigation answers at once, mid-step: the canvas keeps the view
+  (`playground/navigator.py`), draws the last frame where it lands in the new one, and
+  the engine renders the new view between steps, once per burst of gestures.
+- The frame fills the canvas: **Frame width/height** (read-only) follow the window, at
+  one frame pixel per canvas pixel or the **Cell** setting's square of them, and a resize
+  keeps the view's center in place. Loading a pattern fits it to the canvas.
 - Every field but the pattern changes the universe in place, and Reset returns to the
   starting snapshot (edits made at the start belong to it) without reloading the file.
   Pause and Reset cut a long step short at a completed sub-step.

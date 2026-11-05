@@ -26,6 +26,7 @@ from heaton_life.ca import (
     Wireworld,
     WireworldParams,
 )
+from heaton_life.ca.hashlife import LifeView
 from heaton_life.ca.mergelife import parse_rule_error
 from heaton_life.ca.rulestring import parse_rule
 from heaton_life.core import decimal_text
@@ -54,6 +55,8 @@ from heaton_life.playground.fractal_sim import (
 )
 from heaton_life.playground.hashlife_sim import HashLifeSim, HashLifeSimParams
 from heaton_life.playground.hashlife_sim import validate as _validate_hashlife
+from heaton_life.playground.hashlife_sim import view_of as _hashlife_view_of
+from heaton_life.playground.hashlife_sim import with_view as _hashlife_with_view
 from heaton_life.rd import GRAY_SCOTT_PRESETS, GrayScott, GrayScottParams
 
 # Paint buttons: 1 = left, 2 = right, 3 = modifier+left, 4/5 = wheel in/out.
@@ -85,6 +88,13 @@ class Family:
     of rebuilding from params, which would reload the pattern and refit the view."""
     pattern_files: bool = False
     """The sim saves its cells as a pattern file (HashLife): enables Save pattern…"""
+    view_of: Callable[[Params], LifeView] | None = None
+    """A live-view family (HashLife) keeps its view and frame size in its params: the
+    canvas zooms and pans the view at once, previewing the last frame there until the
+    engine renders anew, and sizes the frame to fill itself."""
+    frame_size: Callable[[Params], tuple[int, int]] | None = None
+    with_view: Callable[[Params, LifeView, tuple[int, int]], Params] | None = None
+    """The params showing a view in frames of a (width, height)."""
 
 
 FAMILIES: dict[str, Family] = {}
@@ -172,12 +182,29 @@ def _paint_hashlife(sim: Simulation, x: int, y: int, button: int) -> Simulation 
     return sim if sim.paint(x, y, button) else None
 
 
+def _hashlife_view(params: Params) -> LifeView:
+    assert isinstance(params, HashLifeSimParams)
+    return _hashlife_view_of(params)
+
+
+def _hashlife_set_view(params: Params, view: LifeView, size: tuple[int, int]) -> Params:
+    assert isinstance(params, HashLifeSimParams)
+    return _hashlife_with_view(params, view, size)
+
+
+def _hashlife_frame_size(params: Params) -> tuple[int, int]:
+    assert isinstance(params, HashLifeSimParams)
+    return params.width, params.height
+
+
 def _hashlife_presets() -> dict[str, dict[str, object]]:
     presets: dict[str, dict[str, object]] = {
-        "Gosper glider gun": {"pattern": "Gosper glider gun", "step_exponent": 4},
-        "R-pentomino": {"pattern": "R-pentomino", "step_exponent": 6},
-        "Acorn": {"pattern": "Acorn", "step_exponent": 6},
-        "Replicator (HighLife)": {"pattern": "Replicator (HighLife)", "step_exponent": 4},
+        # Every preset starts at one generation per step, so it plays in real time where
+        # the engine keeps up; raise Step (2^k gens) to jump ahead.
+        "Gosper glider gun": {"pattern": "Gosper glider gun", "step_exponent": 0},
+        "R-pentomino": {"pattern": "R-pentomino", "step_exponent": 0},
+        "Acorn": {"pattern": "Acorn", "step_exponent": 0},
+        "Replicator (HighLife)": {"pattern": "Replicator (HighLife)", "step_exponent": 0},
     }
     # The giants, when tools/fetch_patterns.py's cache is where HEATON_LIFE_PATTERNS says,
     # with budgets they run well at in Python (python/DEVELOPMENT.md, "HashLife giants").
@@ -192,7 +219,7 @@ def _hashlife_presets() -> dict[str, dict[str, object]]:
             if path.is_file():
                 presets[label] = {
                     "pattern": str(path),
-                    "step_exponent": 8,
+                    "step_exponent": 0,
                     "max_memory_mb": budget,
                 }
     return presets
@@ -213,6 +240,9 @@ register(
         paint=_paint_hashlife,
         wheel_zoom=True,
         reset_in_place=True,
+        view_of=_hashlife_view,
+        with_view=_hashlife_set_view,
+        frame_size=_hashlife_frame_size,
         pattern_files=True,
     )
 )

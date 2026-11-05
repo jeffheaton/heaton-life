@@ -25,7 +25,8 @@ class FieldSpec:
     step: float
     choices: tuple[str, ...]
     role: str | None
-    """"seed" fields get a randomize button; "file" fields a Browse… button."""
+    """"seed" fields get a randomize button; "file" fields a Browse… button; "readonly"
+    fields show a value the playground sets (HashLife's frame size) and can't be edited."""
     decimals: int = 3
     file_filter: str = ""
     """The Browse… dialog's name filter for a "file" field (Qt syntax)."""

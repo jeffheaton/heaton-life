@@ -3,10 +3,11 @@
 The universe lives in the sim; the view lives in the params — the frame's top-left pixel
 (x, y) in the pixel plane, as decimal strings, and the magnification exponent ``mag``
 (spec/hashlife.md "View and render") — so the auto-generated form edits it, as with
-FractalSim. Only ``pattern`` is cold: loading a pattern adopts its rule and fits the view
-to it. Every other field changes the sim in place, keeping the cells and the generation
-(audit finding 10-01), and Reset restores the starting snapshot instead of reloading the
-file. Each step advances 2^step_exponent generations.
+FractalSim. The frame size (width, height) is in the params too, set by the playground so
+the frame fills its canvas. Only ``pattern`` is cold: loading a pattern adopts its rule and
+fits the view to it. Every other field changes the sim in place, keeping the cells and the
+generation (audit finding 10-01), and Reset restores the starting snapshot instead of
+reloading the file. Each step advances 2^step_exponent generations.
 """
 
 from __future__ import annotations
@@ -49,6 +50,7 @@ _SAVE_FILTERS = {
 SAVE_FILTER = ";;".join(_SAVE_FILTERS.values())
 MAX_STEP_EXPONENT = MAX_LEVEL - 3  # 2^509, the largest sub-step (spec/hashlife.md "Depth")
 _STEP_LIMIT = 1 << (MAX_LEVEL - 2)  # one engine step takes fewer generations than this
+FRAME_LIMIT = 16384  # pixels a side, past any canvas the frame is fitted to
 
 
 @dataclasses.dataclass(frozen=True)
@@ -68,8 +70,15 @@ class HashLifeSimParams(Params):
     mode: str = dataclasses.field(
         default="any", metadata={"choices": RENDER_MODES, "label": "Zoomed-out pixels"}
     )
-    width: int = dataclasses.field(default=768, metadata={"min": 64, "max": 2048})
-    height: int = dataclasses.field(default=512, metadata={"min": 64, "max": 2048})
+    # The frame size: the playground sets it to fill the canvas, so the form only shows it.
+    width: int = dataclasses.field(
+        default=768,
+        metadata={"min": 1, "max": FRAME_LIMIT, "role": "readonly", "label": "Frame width (px)"},
+    )
+    height: int = dataclasses.field(
+        default=512,
+        metadata={"min": 1, "max": FRAME_LIMIT, "role": "readonly", "label": "Frame height (px)"},
+    )
     x: str = dataclasses.field(default="0", metadata={"label": "View x (px)"})
     y: str = dataclasses.field(default="0", metadata={"label": "View y (px)"})
     mag: int = dataclasses.field(
@@ -87,6 +96,14 @@ def _integer(text: str, name: str) -> int:
 
 def view_of(params: HashLifeSimParams) -> LifeView:
     return LifeView(_integer(params.x, "view x"), _integer(params.y, "view y"), params.mag)
+
+
+def with_view(
+    params: HashLifeSimParams, view: LifeView, size: tuple[int, int]
+) -> HashLifeSimParams:
+    """The params showing ``view`` in frames of ``size`` (width, height)."""
+    width, height = size
+    return params.replace(x=str(view.x), y=str(view.y), mag=view.mag, width=width, height=height)
 
 
 def _render_mode(params: HashLifeSimParams) -> RenderMode:
@@ -150,6 +167,7 @@ class HashLifeSim:
         self._view = view_of(params)
         self._start = universe.snapshot()
         self._frame: NDArray[np.uint8] | None = None
+        self._frame_view = self._view
         self._canceled = False
 
     @classmethod
@@ -219,7 +237,12 @@ class HashLifeSim:
         if self._frame is None:
             p = self.params
             self._frame = self.universe.render(self._view, (p.width, p.height), _render_mode(p))
+            self._frame_view = self._view
         return self._frame
+
+    def frame_view(self) -> LifeView:
+        """The view ``frame()`` was rendered at, which a canvas maps to the view it shows."""
+        return self._frame_view
 
     # -- interaction --------------------------------------------------------------------
 

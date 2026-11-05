@@ -110,13 +110,16 @@ def test_switch_family_loads_engine_and_form(window: MainWindow) -> None:
         ("lenia-flow", (128, 128), True),
         ("newton", (384, 384), True),  # fractal step = autozoom
         ("boids", (256, 256), True),
-        ("hashlife", (512, 768), True),
+        ("hashlife", None, True),  # its frame fills the canvas
         ("lifelike", (256, 256), True),
     ]:
         window.select_family(key)
         assert window._engine._sim is not None, key
         assert window.canvas.last_rgb is not None, key
         frame = window._engine._sim.frame()
+        if frame_shape is None:
+            width, height = window.canvas.fill_size()
+            frame_shape = (height, width)
         assert frame.shape == frame_shape, key
         window._bridge.sig_step.emit()
         assert window._engine.generation == (1 if steps else 0), key
@@ -279,7 +282,9 @@ def test_hashlife_load_fits_the_view_and_echoes_it_to_the_form(window: MainWindo
     engine = _hashlife(window)
     assert engine._params is not None and window._form is not None
     p = engine._params
-    view = fit(engine._sim.universe.bounding_box(), (768, 512))  # type: ignore[union-attr]
+    size = window.canvas.fill_size()  # the frame fills the canvas from the first fit
+    assert (p.width, p.height) == size  # type: ignore[attr-defined]
+    view = fit(engine._sim.universe.bounding_box(), size)  # type: ignore[union-attr]
     assert (int(p.x), int(p.y), p.mag) == (view.x, view.y, view.mag)  # type: ignore[attr-defined]
     assert {k: window._form.values()[k] for k in ("x", "y", "mag")} == {
         "x": p.x,  # type: ignore[attr-defined]
@@ -408,3 +413,213 @@ def test_file_role_gets_a_browse_button(
     window._form._emit()  # the debounce timer's job
     assert engine._sim is not None
     assert engine._sim.universe.bounding_box() == (5, 7, 7, 9)  # type: ignore[attr-defined]
+
+
+# -- HashLife live view: gestures move the view at once, the engine renders it after ---------
+
+
+def _live(window: MainWindow) -> SimEngine:
+    """HashLife in a shown window: the canvas laid out, the frame refitted to it, and
+    the engine's render of that drawn (a paint computes where frames land)."""
+    engine = _hashlife(window)
+    window.show()
+    QApplication.processEvents()
+    window.canvas.grab()
+    return engine
+
+
+def _wheel(window: MainWindow, dy: int, phase: object) -> None:
+    from PyQt6.QtCore import QPoint, QPointF, Qt
+    from PyQt6.QtGui import QWheelEvent
+
+    target = window.canvas._target
+    assert target is not None
+    pos = QPointF(target.center())
+    event = QWheelEvent(
+        pos,
+        pos,
+        QPoint(0, 0),
+        QPoint(0, dy),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        phase,  # type: ignore[arg-type]
+        False,
+    )
+    QApplication.sendEvent(window.canvas, event)
+
+
+def _pinch(window: MainWindow, kind: object, value: float = 0.0) -> None:
+    from PyQt6.QtCore import QPointF
+    from PyQt6.QtGui import QNativeGestureEvent, QPointingDevice
+
+    target = window.canvas._target
+    assert target is not None
+    pos = QPointF(target.center())
+    device = QPointingDevice.primaryPointingDevice()
+    event = QNativeGestureEvent(kind, device, 2, pos, pos, pos, value, QPointF(0, 0))  # type: ignore[arg-type]
+    QApplication.sendEvent(window.canvas, event)
+
+
+def _view(engine: SimEngine) -> tuple[int, int, int]:
+    p = engine._params
+    return int(p.x), int(p.y), p.mag  # type: ignore[union-attr]
+
+
+def _size(engine: SimEngine) -> tuple[int, int]:
+    p = engine._params
+    return p.width, p.height  # type: ignore[union-attr]
+
+
+def test_hashlife_canvas_navigates_and_other_families_do_not(window: MainWindow) -> None:
+    from heaton_life.ca.hashlife import LifeView
+
+    engine = _live(window)
+    nav = window.canvas._nav
+    assert nav is not None and nav.view == LifeView(*_view(engine))
+    assert window.canvas._frame_view == nav.view
+    window.select_family("lifelike")
+    assert window.canvas._nav is None
+
+
+def test_hashlife_wheel_zooms_at_once_and_ignores_momentum(window: MainWindow) -> None:
+    from PyQt6.QtCore import Qt
+
+    engine = _live(window)
+    x, y, mag = _view(engine)
+    _wheel(window, -240, Qt.ScrollPhase.ScrollMomentum)  # a swipe's coasting
+    assert _view(engine) == (x, y, mag)
+    _wheel(window, -120, Qt.ScrollPhase.ScrollUpdate)
+    assert window.canvas._nav is not None and window.canvas._nav.view.mag == mag - 1
+    assert _view(engine)[2] == mag - 1, "the engine has the view before it renders it"
+    assert window._form is not None and window._form.values()["mag"] == mag - 1
+    assert window.canvas._frame_view != window.canvas._nav.view, "previewing the old frame"
+    window.canvas.grab()  # the preview draws
+    QApplication.processEvents()  # the engine's batched render
+    assert window.canvas._frame_view == window.canvas._nav.view
+
+
+def test_hashlife_drag_pans_when_zoomed_out(window: MainWindow) -> None:
+    from PyQt6.QtCore import QPoint, Qt
+    from PyQt6.QtTest import QTest
+
+    from heaton_life.ca.hashlife import LifeView, pan
+
+    engine = _live(window)
+    for _ in range(8):
+        _wheel(window, -120, Qt.ScrollPhase.NoScrollPhase)
+    QApplication.processEvents()
+    canvas = window.canvas
+    assert canvas._nav is not None and canvas._nav.view.mag < 0
+    assert canvas.cursor().shape() == Qt.CursorShape.OpenHandCursor
+    before = LifeView(*_view(engine))
+    target = canvas._target
+    assert target is not None
+    assert canvas._nav is not None
+    k = target.width() / canvas._nav.size[0]  # widget pixels per frame pixel
+    start = target.center()
+    QTest.mousePress(canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start)
+    QTest.mouseMove(canvas, start + QPoint(80, -40))
+    QTest.mouseRelease(
+        canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start + QPoint(80, -40)
+    )
+    assert LifeView(*_view(engine)) == pan(before, int(80 / k), int(-40 / k))
+    assert canvas.cursor().shape() == Qt.CursorShape.OpenHandCursor
+    bar = window.statusBar()
+    assert bar is not None and "draw cells" not in bar.currentMessage()
+
+
+def test_hashlife_pinch_zooms_by_whole_steps(window: MainWindow) -> None:
+    from PyQt6.QtCore import Qt
+
+    engine = _live(window)
+    mag = _view(engine)[2]
+    kinds = Qt.NativeGestureType
+    _pinch(window, kinds.BeginNativeGesture)
+    _pinch(window, kinds.ZoomNativeGesture, -0.5)  # half the size: one step out
+    assert _view(engine)[2] == mag - 1
+    _pinch(window, kinds.ZoomNativeGesture, -0.2)  # a third of a step: stretched, not taken
+    assert _view(engine)[2] == mag - 1 and window.canvas._pinch < 0
+    window.canvas.grab()
+    _pinch(window, kinds.EndNativeGesture)
+    assert _view(engine)[2] == mag - 1 and window.canvas._pinch == 0
+    _pinch(window, kinds.BeginNativeGesture)
+    _pinch(window, kinds.ZoomNativeGesture, -0.3)  # past half a step: taken at the end
+    _pinch(window, kinds.EndNativeGesture)
+    assert _view(engine)[2] == mag - 2
+
+
+def test_hashlife_cmd_click_recenters_and_a_click_draws_when_zoomed_in(window: MainWindow) -> None:
+    from PyQt6.QtCore import QPoint, Qt
+    from PyQt6.QtTest import QTest
+
+    from heaton_life.ca.hashlife import LifeView, cell_at, pan
+
+    engine = _live(window)
+    canvas = window.canvas
+    before = LifeView(*_view(engine))
+    assert before.mag >= 0
+    target = canvas._target
+    assert target is not None
+    at = target.topLeft() + QPoint(30, 20)
+    pixel = canvas._frame_pixel(at.toPointF())
+    assert pixel is not None
+    QTest.mouseClick(canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ControlModifier, at)
+    after = LifeView(*_view(engine))
+    assert canvas._nav is not None
+    width, height = canvas._nav.size
+    assert after == pan(before, width // 2 - pixel[0], height // 2 - pixel[1])
+    QApplication.processEvents()
+    cell = cell_at(after, *pixel)
+    QTest.mouseClick(canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, at)
+    assert engine._sim.universe.get_cell(*cell) == 1  # type: ignore[union-attr]
+
+
+def test_hashlife_frame_fills_the_canvas_and_a_resize_keeps_the_center(window: MainWindow) -> None:
+    from PyQt6.QtWidgets import QSpinBox
+
+    from heaton_life.ca.hashlife import LifeView, center_cell
+
+    engine = _live(window)
+    canvas, form = window.canvas, window._form
+    nav = canvas._nav
+    assert nav is not None and form is not None
+    size = (canvas.width(), canvas.height())
+    assert nav.size == size == _size(engine)
+    assert canvas.last_rgb is not None and canvas.last_rgb.shape[:2] == (size[1], size[0])
+    assert canvas._target == canvas.rect(), "no bars: the frame is the canvas"
+    for name in ("width", "height"):
+        widget = form._widgets[name]
+        assert isinstance(widget, QSpinBox) and widget.isReadOnly(), "the canvas sets it"
+    center = center_cell(LifeView(*_view(engine)), size)
+
+    window.resize(1400, 900)
+    QApplication.processEvents()  # the resize, then the engine's render at the new size
+    bigger = (canvas.width(), canvas.height())
+    assert bigger != size and nav.size == bigger == _size(engine)
+    assert center_cell(LifeView(*_view(engine)), bigger) == center
+    assert (form.values()["width"], form.values()["height"]) == bigger
+    assert canvas.last_rgb.shape[:2] == (bigger[1], bigger[0])
+
+    canvas.set_display_scale(4)  # Cell 4 px: each frame pixel a 4 x 4 square
+    QApplication.processEvents()
+    quarter = (bigger[0] // 4, bigger[1] // 4)
+    assert nav.size == quarter == _size(engine)
+    assert center_cell(LifeView(*_view(engine)), quarter) == center
+    canvas.grab()
+    assert canvas._target is not None
+    assert (canvas._target.width(), canvas._target.height()) == (quarter[0] * 4, quarter[1] * 4)
+
+    stale = LifeView(*_view(engine))  # params from before a resize, for a 64 x 64 frame
+    canvas.set_live_view(stale, (64, 64))
+    assert nav.size == quarter == _size(engine)
+    assert center_cell(LifeView(*_view(engine)), quarter) == center_cell(stale, (64, 64))
+
+
+def test_a_view_meant_for_the_family_before_is_ignored(window: MainWindow) -> None:
+    from heaton_life.playground.hashlife_sim import HashLifeSimParams
+
+    engine = _hashlife(window)
+    window.select_family("lifelike")
+    before = engine._params
+    engine.set_view_params(HashLifeSimParams())  # queued behind the switch
+    assert engine._params is before

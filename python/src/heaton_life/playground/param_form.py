@@ -9,6 +9,7 @@ from typing import Any
 
 from PyQt6.QtCore import QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
+    QAbstractSpinBox,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -44,6 +45,8 @@ class ParamForm(QWidget):
         for spec in specs:
             widget = self._make_widget(spec, values.get(spec.name, spec.default))
             self._widgets[spec.name] = widget
+            if spec.role == "readonly":
+                self._make_read_only(widget)
             if spec.role == "seed":
                 row = QWidget()
                 box = QHBoxLayout(row)
@@ -100,6 +103,17 @@ class ParamForm(QWidget):
         edit = QLineEdit(str(value))
         edit.textEdited.connect(self._touch)
         return edit
+
+    @staticmethod
+    def _make_read_only(widget: QWidget) -> None:
+        """A "readonly" field shows what the playground sets; it can be read and copied."""
+        if isinstance(widget, QAbstractSpinBox):
+            widget.setReadOnly(True)
+            widget.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        elif isinstance(widget, QLineEdit):
+            widget.setReadOnly(True)
+        else:
+            widget.setEnabled(False)
 
     def _randomize_seed(self, name: str, maximum: float) -> Callable[[], None]:
         def apply() -> None:

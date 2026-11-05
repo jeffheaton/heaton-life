@@ -30,6 +30,7 @@ class SimEngine(QObject):
     message = pyqtSignal(str)  # a status-bar notice that is not an error
     params_updated = pyqtSignal(object)  # engine-side param change (e.g. click-zoom)
     overlay_ready = pyqtSignal(object)  # point-cloud overlay payload, or None
+    frame_view_ready = pyqtSignal(object)  # the LifeView of the next frame, or None
     readout_ready = pyqtSignal(str)  # the sim's status readout, or "" when it has none
     halted = pyqtSignal()  # play stopped on the engine's side (a step failed)
     pattern_save_offered = pyqtSignal(str)  # suggested file name for Save pattern
@@ -46,6 +47,7 @@ class SimEngine(QObject):
         self._pending = 0
         self._stat_steps = 0
         self._stat_t0 = time.perf_counter()
+        self._view_publish_due = False
 
     # -- lifecycle (must run in the engine's own thread) -------------------------------
 
@@ -96,6 +98,27 @@ class SimEngine(QObject):
         self._params = params
         if not hot:
             self._sync_params_from_sim()  # a build may settle fields (HashLife fits its view)
+        self._publish(force=True)
+
+    def set_view_params(self, params: Params) -> None:
+        """A live-view change from a gesture (only the view fields differ): applied at
+        once, rendered once per batch. A drag queued behind a long step arrives as many of
+        these, and only the last view needs a frame."""
+        family = self._family
+        if family is None or self._sim is None or not isinstance(params, family.params_cls):
+            return  # a view meant for the family loaded before this one
+        try:
+            self._sim = family.hot_apply(self._sim, params)
+        except (ValueError, TypeError) as exc:
+            self.error.emit(str(exc))
+            return
+        self._params = params
+        if not self._view_publish_due:
+            self._view_publish_due = True
+            QTimer.singleShot(0, self._publish_view)
+
+    def _publish_view(self) -> None:
+        self._view_publish_due = False
         self._publish(force=True)
 
     def set_params_reset(self, params: Params) -> None:
@@ -264,8 +287,11 @@ class SimEngine(QObject):
         overlay = overlay_fn() if callable(overlay_fn) else None
         readout_fn = getattr(self._sim, "readout", None)
         readout = readout_fn() if callable(readout_fn) else ""
+        view_fn = getattr(self._sim, "frame_view", None)
+        view = view_fn() if callable(view_fn) else None
         # Emitted back to back, so the GUI never shows a frame beside another's readout.
         self._pending += 1
+        self.frame_view_ready.emit(view)
         self.frame_ready.emit(rgb, self.generation)
         self.overlay_ready.emit(overlay)
         self.readout_ready.emit(readout)

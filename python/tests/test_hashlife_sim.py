@@ -15,6 +15,7 @@ from heaton_life.ca.hashlife import (
     EDIT_LIMIT,
     MAX_LEVEL,
     HashLife,
+    LifeView,
     cell_at,
     center_cell,
     fit,
@@ -26,6 +27,7 @@ from heaton_life.playground.hashlife_sim import (
     save_filter_for,
     validate,
     view_of,
+    with_view,
 )
 
 
@@ -100,6 +102,18 @@ def test_edits_made_at_the_start_belong_to_it() -> None:
     sim.reset()
     assert sim.generation == 0
     assert sim.universe.get_cell(*cell) == 1, "Reset keeps an edit made at generation 0"
+
+
+def test_the_frame_size_is_a_hot_field_with_the_view() -> None:
+    sim = _sim(pattern="Glider")
+    sim.step(2)
+    moved = with_view(sim.params, LifeView(-5, 12, 1), (1001, 333))
+    assert view_of(moved) == LifeView(-5, 12, 1)
+    assert (moved.width, moved.height) == (1001, 333)
+    sim.apply(moved)
+    assert sim.generation == 2
+    assert sim.frame().shape == (333, 1001)
+    assert sim.frame_view() == LifeView(-5, 12, 1)
 
 
 def test_paint_sets_and_erases_the_cell_under_the_pixel() -> None:
