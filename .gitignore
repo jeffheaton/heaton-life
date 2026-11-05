@@ -14,6 +14,8 @@ venv/
 htmlcov/
 # Giant test patterns (python/tools/fetch_patterns.py): no stated license, never committed
 python/.patterns/
+# Life in Life example: everything derived from the OTCA metapixel (no stated license)
+python/examples/life_in_life/out/
 
 # .NET
 bin/
