@@ -112,6 +112,13 @@ def _budget(max_memory_mb: int) -> int:
     return mb << 20
 
 
+def _ints(*values: int) -> tuple[int, ...]:
+    """Coordinates as Python ints. NumPy integers (any ``__index__`` type) then behave like
+    ints in the unbounded bit arithmetic below instead of overflowing at 64 bits; floats
+    and other non-integers raise TypeError."""
+    return tuple(operator.index(v) for v in values)
+
+
 def check_box(x0: int, y0: int, x1: int, y1: int) -> None:
     """Raise ValueError unless every corner lies in the editing box."""
     for v in (x0, y0, x1, y1):
@@ -225,12 +232,14 @@ class HashLife:
 
     def population_in(self, x0: int, y0: int, x1: int, y1: int) -> int:
         """Live cells in the inclusive rectangle; any coordinates."""
+        x0, y0, x1, y1 = _ints(x0, y0, x1, y1)
         if x1 < x0 or y1 < y0:
             return 0
         origin = -(1 << (self._level - 1))
         return self._count(self._root, self._level, origin, origin, (x0, y0 - 1, x1, y1 - 1))
 
     def get_cell(self, x: int, y: int) -> int:
+        x, y = _ints(x, y)
         check_box(x, y, x, y)
         k = self._level
         half = 1 << (k - 1)
@@ -254,6 +263,7 @@ class HashLife:
 
     def get_rect(self, x0: int, y0: int, x1: int, y1: int) -> NDArray[np.uint8]:
         """The inclusive rectangle as a (y1 − y0 + 1) × (x1 − x0 + 1) array of 0/1."""
+        x0, y0, x1, y1 = _ints(x0, y0, x1, y1)
         check_box(x0, y0, x1, y1)
         if x1 < x0 or y1 < y0:
             raise ValueError(f"empty rectangle ({x0}, {y0})..({x1}, {y1})")
@@ -373,6 +383,7 @@ class HashLife:
     # -- editing ------------------------------------------------------------------------
 
     def set_cell(self, x: int, y: int, alive: bool | int) -> None:
+        x, y = _ints(x, y)
         check_box(x, y, x, y)
         self._contain(x, y - 1, x, y - 1)
         half = 1 << (self._level - 1)
@@ -385,6 +396,7 @@ class HashLife:
         """Land ``cells`` (h × w, nonzero = alive) with its top-left cell at (x, y)."""
         if mode not in PASTE_MODES:
             raise ValueError(f"unknown paste mode {mode!r}; expected one of {PASTE_MODES}")
+        x, y = _ints(x, y)
         cells = np.asarray(cells)
         if cells.ndim != 2 or 0 in cells.shape:
             raise ValueError(f"cells must be a non-empty 2-D array, got shape {cells.shape}")
@@ -395,6 +407,7 @@ class HashLife:
 
     def clear_rect(self, x0: int, y0: int, x1: int, y1: int) -> None:
         """Every cell of the inclusive rectangle dies."""
+        x0, y0, x1, y1 = _ints(x0, y0, x1, y1)
         check_box(x0, y0, x1, y1)
         if x1 < x0 or y1 < y0:
             return
@@ -404,6 +417,7 @@ class HashLife:
 
     def fill_random(self, x0: int, y0: int, x1: int, y1: int, density: float, seed: int) -> None:
         """Replace the inclusive rectangle with lifelike's PCG32 soup of the same size."""
+        x0, y0, x1, y1, seed = _ints(x0, y0, x1, y1, seed)
         check_box(x0, y0, x1, y1)
         if x1 < x0 or y1 < y0:
             raise ValueError(f"empty rectangle ({x0}, {y0})..({x1}, {y1})")
@@ -434,7 +448,8 @@ class HashLife:
         self, view: LifeView, size: tuple[int, int], mode: RenderMode = "any"
     ) -> NDArray[np.uint8]:
         """The (height, width) uint8 frame of ``view``: 0/255, or block density zoomed out."""
-        return render_frame(self, view, size, mode)
+        width, height = _ints(*size)
+        return render_frame(self, view, (width, height), mode)
 
     def _tile_cache(self, s: int, mode: str) -> dict[int, NDArray[np.uint8]]:
         """Rendered tiles by node id; collection reuses ids, so it empties the cache."""

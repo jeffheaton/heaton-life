@@ -13,6 +13,7 @@ Everything here is integer arithmetic, so every port moves views identically.
 from __future__ import annotations
 
 import dataclasses
+import operator
 
 MAX_MAG = 5  # 32 pixels per cell, the deepest zoom
 
@@ -26,6 +27,9 @@ class LifeView:
     mag: int
 
     def __post_init__(self) -> None:
+        # Python ints, so NumPy integers can't overflow the pixel-plane bit arithmetic.
+        for name in ("x", "y", "mag"):
+            object.__setattr__(self, name, operator.index(getattr(self, name)))
         if self.mag > MAX_MAG:
             raise ValueError(f"mag {self.mag} is past the deepest zoom ({MAX_MAG}: 32 px per cell)")
 
@@ -33,13 +37,14 @@ class LifeView:
 def pan(view: LifeView, dx: int, dy: int) -> LifeView:
     """Drag the picture by (dx, dy) pixels: what was under pixel (i, j) is now under
     (i + dx, j + dy)."""
-    return LifeView(view.x - dx, view.y - dy, view.mag)
+    return LifeView(view.x - operator.index(dx), view.y - operator.index(dy), view.mag)
 
 
 def zoom_at(view: LifeView, i: int, j: int, steps: int) -> LifeView:
     """Zoom by 2^steps (steps > 0 in, < 0 out), one doubling at a time, keeping pixel (i, j)
     over the same point: in, the pixel plane doubles (x' = 2(x + i) − i); out, it halves,
     flooring (x' = ⌊(x + i) / 2⌋ − i). Zooming in stops at ``MAX_MAG``."""
+    i, j, steps = operator.index(i), operator.index(j), operator.index(steps)
     x, y, mag = view.x, view.y, view.mag
     for _ in range(abs(steps)):
         if steps > 0:
@@ -53,7 +58,7 @@ def zoom_at(view: LifeView, i: int, j: int, steps: int) -> LifeView:
 
 def cell_at(view: LifeView, i: int, j: int) -> tuple[int, int]:
     """The cell under pixel (i, j); zoomed out, the top-left cell of the pixel's block."""
-    px, py = view.x + i, view.y + j
+    px, py = view.x + operator.index(i), view.y + operator.index(j)
     if view.mag >= 0:
         return px >> view.mag, (py >> view.mag) + 1
     s = -view.mag
@@ -63,7 +68,8 @@ def cell_at(view: LifeView, i: int, j: int) -> tuple[int, int]:
 def centered(x: int, y: int, mag: int, size: tuple[int, int]) -> LifeView:
     """The view of ``size`` (width, height) pixels whose center pixel (width // 2,
     height // 2) shows cell (x, y) — or, zoomed out, the block holding it."""
-    width, height = size
+    x, y, mag = operator.index(x), operator.index(y), operator.index(mag)
+    width, height = (operator.index(v) for v in size)
     if mag >= 0:
         return LifeView((x << mag) - width // 2, ((y - 1) << mag) - height // 2, mag)
     s = -mag
@@ -72,7 +78,7 @@ def centered(x: int, y: int, mag: int, size: tuple[int, int]) -> LifeView:
 
 def center_cell(view: LifeView, size: tuple[int, int]) -> tuple[int, int]:
     """The cell under the frame's center pixel (the readout a viewer shows)."""
-    width, height = size
+    width, height = (operator.index(v) for v in size)
     return cell_at(view, width // 2, height // 2)
 
 
@@ -80,10 +86,10 @@ def fit(box: tuple[int, int, int, int] | None, size: tuple[int, int]) -> LifeVie
     """The deepest view (mag ≤ ``MAX_MAG``) whose frame holds the inclusive box, centered
     on it; an empty universe (``None``) gives the origin at 1:1. Raises ValueError when no
     view can hold the box (spec/hashlife.md "View and render")."""
-    width, height = size
+    width, height = (operator.index(v) for v in size)
     if box is None:
-        return centered(0, 0, 0, size)
-    x0, y0, x1, y1 = box
+        return centered(0, 0, 0, (width, height))
+    x0, y0, x1, y1 = (operator.index(v) for v in box)
     ty0, ty1 = y0 - 1, y1 - 1
     # From −mag = bits + 1 on every span is fixed (a negative v counts as −v − 1 = ~v), so
     # a box that doesn't fit there never will: a frame 0 pixels across, or 1 across while
@@ -102,5 +108,7 @@ def fit(box: tuple[int, int, int, int] | None, size: tuple[int, int]) -> LifeVie
                 (left + right) // 2 - width // 2, (top + bottom) // 2 - height // 2, mag
             )
         if -mag > bits + 1:
-            raise ValueError(f"no view of {width} × {height} pixels holds the box {box}")
+            raise ValueError(
+                f"no view of {width} × {height} pixels holds the box {(x0, y0, x1, y1)}"
+            )
         mag -= 1

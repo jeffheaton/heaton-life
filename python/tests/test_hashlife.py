@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -231,6 +233,55 @@ def test_editing_stops_at_the_box(call: object) -> None:
     with pytest.raises(ValueError, match="editing box"):
         call(u)  # type: ignore[operator]
     assert u.population == 1
+
+
+@pytest.mark.parametrize("np_int", [np.int64, np.int32])
+def test_numpy_integers_work_like_ints(np_int: Any) -> None:
+    """Coordinates from NumPy arithmetic give the answers Python ints give instead of
+    overflowing 64-bit scalars in the big-int bit arithmetic, and results stay ints."""
+
+    def edited(c: Callable[[int], Any]) -> HashLife:
+        u = HashLife()
+        u.set_rect(c(-37), c(21), _noise(48, 64, 11))
+        u.set_cell(c(7), c(-7), 1)
+        u.clear_rect(c(-30), c(25), c(-21), c(33))
+        u.fill_random(c(40), c(-60), c(71), c(-41), 0.4, c(9))
+        return u
+
+    a, b = edited(int), edited(np_int)
+    assert _cells(a) == _cells(b)
+    for rect in ((-35, 22, 18, 61), (3, -9, 9, -3), (-37, -60, 71, 68)):
+        n = b.population_in(*map(np_int, rect))
+        assert n == a.population_in(*rect) and type(n) is int
+    cell = b.get_cell(np_int(7), np_int(-7))
+    assert cell == 1 and type(cell) is int
+    rect = (-37, 21, 26, 68)
+    assert np.array_equal(b.get_rect(*map(np_int, rect)), a.get_rect(*rect))
+
+    plain = LifeView(-40, -30, -2)
+    view = LifeView(np_int(-40), np_int(-30), np_int(-2))
+    assert view == plain and all(type(v) is int for v in (view.x, view.y, view.mag))
+    size = (np_int(40), np_int(30))
+    assert np.array_equal(b.render(view, size, "density"), a.render(plain, (40, 30), "density"))
+    assert pan(plain, np_int(3), np_int(-4)) == pan(plain, 3, -4)
+    assert zoom_at(plain, np_int(10), np_int(20), np_int(2)) == zoom_at(plain, 10, 20, 2)
+    got = cell_at(plain, np_int(10), np_int(20))
+    assert got == cell_at(plain, 10, 20) and all(type(v) is int for v in got)
+    assert center_cell(plain, size) == center_cell(plain, (40, 30))
+    assert centered(np_int(5), np_int(-7), np_int(-3), size) == centered(5, -7, -3, (40, 30))
+    box = (-37, -60, 71, 68)
+    assert fit(tuple(map(np_int, box)), size) == fit(box, (40, 30))
+
+
+def test_coordinates_must_be_integers() -> None:
+    u = HashLife()
+    with pytest.raises(TypeError):
+        u.set_cell(1.5, 0, 1)  # type: ignore[arg-type]
+    with pytest.raises(TypeError):
+        u.population_in(0, 0, 2.0, 2)  # type: ignore[arg-type]
+    with pytest.raises(TypeError):
+        LifeView(0.0, 0, 0)  # type: ignore[arg-type]
+    assert u.population == 0
 
 
 def test_rules_and_budgets_are_validated() -> None:
