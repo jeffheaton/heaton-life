@@ -36,8 +36,8 @@ def test_data_files_are_what_the_generator_derives() -> None:
     built = generator.build()
     python_file = REPO / "python" / "src" / "heaton_life" / "_self_check_data.py"
     csharp_file = REPO / "dotnet" / "src" / "HeatonLife.Core" / "SelfCheckData.cs"
-    assert python_file.read_text() == generator.render_python(built)
-    assert csharp_file.read_text() == generator.render_csharp(built)
+    assert python_file.read_text(encoding="utf-8") == generator.render_python(built)
+    assert csharp_file.read_text(encoding="utf-8") == generator.render_csharp(built)
 
 
 def test_every_check_passes() -> None:

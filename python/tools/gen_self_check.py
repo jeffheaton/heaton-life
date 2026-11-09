@@ -80,7 +80,9 @@ def png_rgb_digest(path: Path) -> int:
 
 
 def meta(case: str) -> dict[str, Any]:
-    result: dict[str, Any] = json.loads((VECTORS / case / "params.json").read_text())
+    result: dict[str, Any] = json.loads(
+        (VECTORS / case / "params.json").read_text(encoding="utf-8")
+    )
     return result
 
 
@@ -195,7 +197,7 @@ def pow10() -> dict[str, Any]:
     from heaton_life.core.pow10 import pow10 as p10
     from heaton_life.core.pow10 import pow10x
 
-    page = (REPO_ROOT / "spec" / "pow10.md").read_text()
+    page = (REPO_ROOT / "spec" / "pow10.md").read_text(encoding="utf-8")
     table = [
         (float(x), int(bits, 16))
         for x, bits in re.findall(
@@ -323,7 +325,9 @@ def mergelife() -> dict[str, Any]:
     rows, cols, LCG seed, steps, FNV-1a 64 digest), checked against the reference."""
     from heaton_life.ca.mergelife import MergeLife
 
-    lines = (VECTORS / "mergelife-upstream" / "vectors.txt").read_text().splitlines()
+    lines = (
+        (VECTORS / "mergelife-upstream" / "vectors.txt").read_text(encoding="utf-8").splitlines()
+    )
     first = next(line for line in lines if line and not line.startswith("#"))
     rule, rows_text, cols_text, seed_text, steps_text, digest_text = first.split()
     rows, cols, seed, steps = int(rows_text), int(cols_text), int(seed_text), int(steps_text)
@@ -567,8 +571,8 @@ def hashlife() -> dict[str, Any]:
     from heaton_life.ca.hashlife import HashLife
 
     case = VECTORS / "hashlife" / "evolve-gosper-gun"
-    meta = json.loads((case / "params.json").read_text())
-    text = (case / meta["input"]).read_text()
+    meta = json.loads((case / "params.json").read_text(encoding="utf-8"))
+    text = (case / meta["input"]).read_text(encoding="utf-8")
     u = HashLife.from_rle(text)
     checkpoints = []
     for entry in meta["checkpoints"]:
@@ -578,7 +582,7 @@ def hashlife() -> dict[str, Any]:
         u.step(generation - u.generation)
         canonical = u.to_macrocell()
         if "state" in entry:
-            assert canonical == (case / entry["state"]).read_text()
+            assert canonical == (case / entry["state"]).read_text(encoding="utf-8")
         else:
             assert hashlib.sha256(canonical.encode("ascii")).hexdigest() == entry["state_sha256"]
         assert str(u.population) == entry["population"]
@@ -1048,8 +1052,8 @@ def render_csharp(data: dict[str, Any]) -> str:
 
 def main() -> int:
     data = build()
-    PY_OUT.write_text(render_python(data), newline="\n")
-    CS_OUT.write_text(render_csharp(data), newline="\n")
+    PY_OUT.write_text(render_python(data), encoding="utf-8", newline="\n")
+    CS_OUT.write_text(render_csharp(data), encoding="utf-8", newline="\n")
     print(f"wrote {PY_OUT.relative_to(REPO_ROOT)}")
     print(f"wrote {CS_OUT.relative_to(REPO_ROOT)}")
     return 0

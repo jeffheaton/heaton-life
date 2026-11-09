@@ -434,14 +434,15 @@ def test_mp4_target_problems_fail_before_the_survey(tmp_path: Path) -> None:
         calls.append(n)
         return _field(n)
 
-    locked = tmp_path / "locked"
-    locked.mkdir()
-    locked.chmod(0o555)
-    try:
-        with pytest.raises(PermissionError):
-            render_zoom_movie(counting, (8, 8), SEAHORSE, SHORT, locked / "m.mp4")
-    finally:
-        locked.chmod(0o755)
+    if os.name != "nt":  # Windows ignores a directory's POSIX mode: nothing to lock
+        locked = tmp_path / "locked"
+        locked.mkdir()
+        locked.chmod(0o555)
+        try:
+            with pytest.raises(PermissionError):
+                render_zoom_movie(counting, (8, 8), SEAHORSE, SHORT, locked / "m.mp4")
+        finally:
+            locked.chmod(0o755)
     with pytest.raises(ValueError, match="2 x 2"):
         render_zoom_movie(counting, (1, 8), SEAHORSE, SHORT, tmp_path / "thin.mp4")
     closed = MovieWriter(tmp_path / "closed.mp4", SHORT.fps)
@@ -506,6 +507,7 @@ def test_mp4_rewrites_in_place_and_expands_home(
     finally:
         folder.chmod(0o755)
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Windows' home; it ignores HOME
     with MovieWriter("~/home.mp4", 10) as writer:
         for i, rgb in enumerate(frames):
             writer.write(i, rgb)
@@ -540,6 +542,10 @@ def test_mp4_targets_resolve_once_and_survive_bad_frames(
     writer.close()
     assert imageio.get_reader(tmp_path / "moved.mp4").count_frames() == 2
     assert (elsewhere / "moved.mp4").read_bytes() == b"unrelated"
+    if os.name == "nt":
+        # On Windows, os.path.expanduser (and so imageio) reads "~draft" as the home of a
+        # user named draft.mp4, a sibling of this user's home; and there are no FIFOs.
+        return
     monkeypatch.chdir(tmp_path)
     Animation(good).save("~draft.mp4")
     assert imageio.get_reader(tmp_path / "~draft.mp4").count_frames() == 2
