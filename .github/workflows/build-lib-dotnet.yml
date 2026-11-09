@@ -1,32 +1,29 @@
 name: Build Library (.NET)
 
-# The .NET library build, the same shape as dynaface's build-lib-dotnet.yml: a version
-# agreement check, formatting gate, vulnerability report (advisory), a regenerated build stamp,
-# Release build, the xunit suite (it replays the conformance vectors), then the
-# DLL zip → workflow artifact → S3, and the NuGet package → NuGet.org through
-# Trusted Publishing. Re-running at an already-published version is a no-op on
-# NuGet.org (--skip-duplicate), but NOT on S3: every run overwrites the public
-# heaton-life-dotnet-<version>.zip with a fresh build of the current commit. Bump the
-# version before dispatching anything new (dotnet/DEVELOPMENT.md, "Releasing").
+# Builds the C# library for a release, by hand, under the release convention
+# (~/.claude/CLAUDE.md): a check that the version agrees everywhere it ships,
+# the formatting gate, a vulnerable-packages report, a version file stamped
+# with this build's date and number, the Release build and the xunit suite over
+# it (it replays the conformance vectors), then the DLL zip and the NuGet
+# package with its symbols, staged as artifacts and on S3 beside a build record
+# naming the commit. Rerun it at the same version as often as needed; each run
+# replaces what is staged. Publishing to NuGet.org is a separate, manual step:
+# Deploy Library to NuGet (.NET) (deploy-lib-dotnet.yml). RELEASING.md has the
+# whole sequence.
 #
 # Secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION.
-# NuGet.org: the Trusted Publishing policy "heaton-life-dotnet" under the jeffheaton
-# account, bound to jeffheaton/heaton-life and this file name, build-lib-dotnet.yml
-# (renaming the file breaks the binding; see dotnet/DEVELOPMENT.md, "Releasing").
-
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
+  # The test reporter publishes the xunit results as a check.
   checks: write
-  # Required for NuGet Trusted Publishing: lets the NuGet/login action request a
-  # short-lived OIDC token from GitHub to exchange for a temporary NuGet API key.
-  id-token: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v7
@@ -36,26 +33,27 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      # The README (with its zip link) is frozen into the immutable .nupkg, and this
-      # workflow runs no Python, so python/tests/test_release_version.py never sees a
-      # NuGet-only dispatch: check the places it can drift here, before anything builds.
+      # The README (with its zip link) is frozen into the immutable .nupkg, and
+      # this workflow runs no Python, so python/tests/test_release_version.py
+      # never sees a NuGet-only build: check the places it can drift here,
+      # before anything builds.
       - name: Check the version agrees with pyproject and the README
         run: |
-          VERSION=$(grep -oPm1 '(?<=<Version>)[^<]+' dotnet/src/HeatonLife.Core/HeatonLife.Core.csproj)
-          PYTHON=$(grep -oPm1 '^version = "\K[^"]+' python/pyproject.toml)
+          VERSION=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' dotnet/src/HeatonLife.Core/HeatonLife.Core.csproj | head -1)
+          PYTHON=$(sed -n 's/^version = "\(.*\)"$/\1/p' python/pyproject.toml | head -1)
           LINKS=$(grep -o "heaton-life-dotnet-${VERSION}\.zip" dotnet/README.md | wc -l)
           if [ "$PYTHON" != "$VERSION" ] || [ "$LINKS" -ne 2 ]; then
             echo "::error::csproj says $VERSION, pyproject.toml says $PYTHON, and dotnet/README.md names heaton-life-dotnet-$VERSION.zip $LINKS times (want 2)"
             exit 1
           fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Building HeatonLife.Core $VERSION"
 
       - name: Restore
-        working-directory: dotnet
-        run: dotnet restore HeatonLife.slnx
+        run: dotnet restore dotnet/HeatonLife.slnx
 
       - name: Check formatting
-        working-directory: dotnet
-        run: dotnet format HeatonLife.slnx --verify-no-changes --report format-report
+        run: dotnet format dotnet/HeatonLife.slnx --verify-no-changes --report format-report
 
       - name: Upload formatting report
         if: always()
@@ -63,15 +61,14 @@ jobs:
         with:
           name: format-report
           retention-days: 7
-          path: dotnet/format-report
+          path: format-report
           if-no-files-found: ignore
 
       # HeatonLife.Core itself has zero package dependencies; the test project
       # (xunit and friends) is the only place a vulnerable package could enter.
       - name: Check for vulnerable packages
-        working-directory: dotnet
         continue-on-error: true
-        run: dotnet list tests/HeatonLife.Core.Tests/HeatonLife.Core.Tests.csproj package --vulnerable --include-transitive | tee vulnerable-packages-report.txt
+        run: dotnet list dotnet/tests/HeatonLife.Core.Tests/HeatonLife.Core.Tests.csproj package --vulnerable --include-transitive | tee vulnerable-packages-report.txt
 
       - name: Upload vulnerability report
         if: always()
@@ -79,19 +76,17 @@ jobs:
         with:
           name: vulnerability-report
           retention-days: 7
-          path: dotnet/vulnerable-packages-report.txt
+          path: vulnerable-packages-report.txt
           if-no-files-found: ignore
 
-      # <Version> in the csproj is the source of truth. Version.cs is tracked as a
-      # baseline (Build 0 = local build) so the class always exists; CI overwrites it.
+      # The tracked Version.cs is the baseline (Build 0 means a local build);
+      # this run's stamp goes into the DLL.
       - name: Generate version file
-        working-directory: dotnet
         run: |
-          VERSION=$(grep -oPm1 '(?<=<Version>)[^<]+' src/HeatonLife.Core/HeatonLife.Core.csproj)
-          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%S%z")
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           BUILD="${{ github.run_number }}"
 
-          cat <<EOF > src/HeatonLife.Core/Version.cs
+          cat <<EOF > dotnet/src/HeatonLife.Core/Version.cs
           // Build stamp — regenerated by the Build Library (.NET) workflow; Build 0 means a local build.
           namespace HeatonLife
           {
@@ -105,18 +100,17 @@ jobs:
           }
           EOF
 
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "Generated src/HeatonLife.Core/Version.cs:"
-          cat src/HeatonLife.Core/Version.cs
+          echo "Generated dotnet/src/HeatonLife.Core/Version.cs:"
+          cat dotnet/src/HeatonLife.Core/Version.cs
 
+      # ContinuousIntegrationBuild maps the PDB's source paths to /_/ and Source
+      # Link points them at this commit on GitHub, for a reproducible package.
       - name: Build (Release)
-        working-directory: dotnet
-        run: dotnet build HeatonLife.slnx -c Release --no-restore -p:Version=$VERSION -p:ContinuousIntegrationBuild=true
+        run: dotnet build dotnet/HeatonLife.slnx -c Release --no-restore -p:Version="$VERSION" -p:ContinuousIntegrationBuild=true
 
       - name: Run tests
-        working-directory: dotnet
         run: |
-          dotnet test tests/HeatonLife.Core.Tests/HeatonLife.Core.Tests.csproj -c Release --no-build \
+          dotnet test dotnet/tests/HeatonLife.Core.Tests/HeatonLife.Core.Tests.csproj -c Release --no-build \
             --logger "trx;LogFileName=test_results.trx" \
             --results-directory TestResults
 
@@ -125,16 +119,15 @@ jobs:
         uses: dorny/test-reporter@v3
         with:
           name: .NET Test Results
-          path: dotnet/TestResults/*.trx
+          path: TestResults/*.trx
           reporter: dotnet-trx
 
       - name: Package library artifact
-        working-directory: dotnet
         run: |
           mkdir -p dist
-          cp src/HeatonLife.Core/bin/Release/netstandard2.1/HeatonLife.Core.dll dist/
-          cp src/HeatonLife.Core/bin/Release/netstandard2.1/HeatonLife.Core.xml dist/
-          cp src/HeatonLife.Core/bin/Release/netstandard2.1/HeatonLife.Core.pdb dist/ 2>/dev/null || true
+          out=dotnet/src/HeatonLife.Core/bin/Release/netstandard2.1
+          cp "$out/HeatonLife.Core.dll" "$out/HeatonLife.Core.pdb" "$out/HeatonLife.Core.xml" dist/
+          cp LICENSE dist/
           cd dist && zip -r "../heaton-life-dotnet-${VERSION}.zip" .
 
       - name: Upload library artifact
@@ -142,58 +135,58 @@ jobs:
         with:
           name: heaton-life-dotnet-dll
           retention-days: 7
-          path: dotnet/heaton-life-dotnet-*.zip
+          path: heaton-life-dotnet-*.zip
 
+      # dotnet/README.md links this zip, so it is public from here on: the
+      # bucket grants public read itself. Never treat a staged build as secret.
       - name: Upload to S3
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-        run: |
-          aws s3 cp dotnet/heaton-life-dotnet-${VERSION}.zip s3://data.heatonresearch.com/library/ --acl public-read
+        run: aws s3 cp "heaton-life-dotnet-${VERSION}.zip" s3://data.heatonresearch.com/library/ --acl public-read
 
-      - name: Pack NuGet package (HeatonLife.Core)
-        working-directory: dotnet
+      # The .nupkg (DLL, IntelliSense XML, README, icon) and its .snupkg of
+      # symbols, Source Link pointing them at this commit on GitHub.
+      - name: Pack NuGet package
         run: |
-          dotnet pack src/HeatonLife.Core/HeatonLife.Core.csproj -c Release --no-build \
-            -p:Version=$VERSION -o nupkgs
+          dotnet pack dotnet/src/HeatonLife.Core/HeatonLife.Core.csproj -c Release --no-build \
+            -p:Version="$VERSION" -p:ContinuousIntegrationBuild=true -o nupkgs
           ls -l nupkgs
 
-      - name: Upload NuGet package artifact
+      # What deploy-lib-dotnet.yml tags: the commit this package was built from.
+      - name: Record the build
+        run: |
+          cat > "nupkgs/HeatonLife.Core-$VERSION-build.json" <<EOF
+          {
+            "name": "HeatonLife.Core",
+            "version": "$VERSION",
+            "commit": "$GITHUB_SHA",
+            "run_id": $GITHUB_RUN_ID,
+            "run_number": $GITHUB_RUN_NUMBER,
+            "built": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          cat "nupkgs/HeatonLife.Core-$VERSION-build.json"
+
+      - name: Upload NuGet packages artifact
         uses: actions/upload-artifact@v7
         with:
           name: heaton-life-nupkgs
           retention-days: 7
-          path: |
-            dotnet/nupkgs/*.nupkg
-            dotnet/nupkgs/*.snupkg
+          path: nupkgs/*
 
-      # Trusted Publishing: exchange GitHub's OIDC token for a short-lived NuGet
-      # API key (no long-lived secret stored in the repo). Requires a matching
-      # trusted-publishing policy on NuGet.org — see dotnet/DEVELOPMENT.md, "Releasing".
-      - name: NuGet login (Trusted Publishing / OIDC)
-        id: nuget-login
-        uses: NuGet/login@v1
-        with:
-          user: jeffheaton
-
-      # The .nupkg push carries the .snupkg along only when the main push succeeds,
-      # so the symbols package is pushed explicitly as well: a rerun then recovers
-      # symbols even if the main package already exists (both pushes are no-ops at
-      # an already-published version thanks to --skip-duplicate).
-      - name: Push to NuGet.org
-        working-directory: dotnet
+      # Staged where Deploy Library to NuGet (.NET) looks for them, by version.
+      - name: Upload NuGet packages to S3
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
         run: |
-          dotnet nuget push "nupkgs/*.nupkg" \
-            --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
-            --source https://api.nuget.org/v3/index.json \
-            --skip-duplicate
-          dotnet nuget push "nupkgs/*.snupkg" \
-            --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
-            --source https://api.nuget.org/v3/index.json \
-            --skip-duplicate
+          for f in nupkgs/*; do
+            aws s3 cp "$f" s3://data.heatonresearch.com/library/ --acl public-read
+          done
 
       - name: Clean up build artifacts
         if: always()
-        working-directory: dotnet
-        run: rm -rf dist nupkgs TestResults format-report src/HeatonLife.Core/bin src/HeatonLife.Core/obj tests/HeatonLife.Core.Tests/bin tests/HeatonLife.Core.Tests/obj
+        run: rm -rf dist nupkgs TestResults format-report dotnet/src/HeatonLife.Core/bin dotnet/src/HeatonLife.Core/obj dotnet/tests/HeatonLife.Core.Tests/bin dotnet/tests/HeatonLife.Core.Tests/obj

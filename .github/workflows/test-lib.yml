@@ -1,0 +1,107 @@
+name: Test Library
+
+# Runs the Python package's test suite on Linux, macOS and Windows, with every
+# Python version the package supports, on every push and pull request that can
+# change its result. One of those runs measures coverage for Codecov. Releases
+# are built and published by hand: Build Library (build-lib.yml), then Deploy
+# Library to PyPI (deploy-lib.yml). RELEASING.md has the whole sequence.
+#
+# The release convention (~/.claude/CLAUDE.md) tests Python 3.10 to 3.14. The
+# package needs 3.11 or later (it uses typing.Self, and the tests tomllib), so
+# this runs 3.11 to 3.14: requires-python in python/pyproject.toml is the floor.
+on:
+  push:
+    paths:
+      - 'python/**'
+      # The conformance vectors the suite replays, and the specs it cites.
+      - 'vectors/**'
+      - 'spec/**'
+      # tests/test_release_version.py holds the .NET version places to pyproject's.
+      - 'dotnet/README.md'
+      - 'dotnet/src/HeatonLife.Core/HeatonLife.Core.csproj'
+      - 'dotnet/src/HeatonLife.Core/Version.cs'
+      - '.gitattributes'
+      - '.github/workflows/test-lib.yml'
+  pull_request:
+    paths:
+      - 'python/**'
+      - 'vectors/**'
+      - 'spec/**'
+      - 'dotnet/README.md'
+      - 'dotnet/src/HeatonLife.Core/HeatonLife.Core.csproj'
+      - 'dotnet/src/HeatonLife.Core/Version.cs'
+      - '.gitattributes'
+      - '.github/workflows/test-lib.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Lets the Codecov upload authenticate with GitHub's OIDC token, so no Codecov
+  # token is stored in the repo.
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      # Finish every combination, so one failure doesn't hide another.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ['3.11', '3.12', '3.13', '3.14']
+    env:
+      # One run measures coverage, so the badge stays comparable from run to
+      # run: Linux on Python 3.11, as in every repo under the release
+      # convention. The others run the suite plain, which is faster.
+      MEASURE: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11' }}
+      # The playground tests drive the Qt app with no display.
+      QT_QPA_PLATFORM: offscreen
+    defaults:
+      run:
+        shell: bash
+        working-directory: python
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Qt system libraries (the playground tests run offscreen)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0
+
+      # dev brings pytest, pytest-cov and the high-precision oracles (gmpy2,
+      # mpmath); playground and video bring PyQt6 and imageio-ffmpeg, whose
+      # tests would otherwise skip.
+      - name: Install the package and its test extras
+        run: python -m pip install -e ".[dev,playground,video]"
+
+      - name: Run tests
+        run: |
+          if [ "$MEASURE" = true ]; then
+            python -m pytest tests -p no:cacheprovider \
+              --cov=heaton_life --cov-branch \
+              --cov-report=xml:coverage.xml --cov-report=term
+          else
+            python -m pytest tests -p no:cacheprovider
+          fi
+
+      - name: Upload coverage to Codecov
+        if: env.MEASURE == 'true'
+        uses: codecov/codecov-action@v7
+        with:
+          use_oidc: true
+          files: python/coverage.xml
+          disable_search: true
+          flags: python
+          # A Codecov outage shouldn't turn the tests badge red.
+          fail_ci_if_error: false

@@ -1,55 +1,77 @@
 name: Build Library
 
-# The Python library build, the same shape as dynaface's build-lib.yml: lint and
-# type reports (advisory), the test suite (fatal; it replays the conformance
-# vectors and drives the playground offscreen), a regenerated build stamp, then
-# the wheel → twine check → workflow artifact → S3. Publishing to PyPI is the
-# separate, manually dispatched deploy-lib.yml, fed from that S3 copy.
+# Builds the Python package for a release, by hand, under the release
+# convention (~/.claude/CLAUDE.md): static analysis reports, the suite with
+# JUnit and coverage reports, a version file stamped with this build's date and
+# number, then the wheel and sdist, checked by twine, smoke-installed into a
+# clean venv, and staged as an artifact and on S3 beside a build record naming
+# the commit. Rerun it at the same version as often as needed; each run
+# replaces what is staged. Publishing is a separate, manual step: Deploy
+# Library to PyPI (deploy-lib.yml), which takes what this staged. RELEASING.md
+# has the whole sequence.
 #
 # Secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION.
-
 on:
   workflow_dispatch:
 
 permissions:
+  contents: read
+  # The JUnit report action publishes the test results as a check.
   checks: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: python
+    env:
+      # The playground tests drive the Qt app with no display.
+      QT_QPA_PLATFORM: offscreen
 
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v6
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
         with:
-          python-version: '3.11'
-
-      - name: Install build tools
-        run: pip install build wheel
+          python-version: '3.12'
 
       - name: Qt system libraries (the playground tests run offscreen)
         run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0
 
-      - name: Install dependencies
-        working-directory: python
-        # video: the MP4 writer's tests skip without imageio, so the build that ships it
-        # would never exercise it (imageio-ffmpeg's wheel bundles ffmpeg; no apt step).
-        run: pip install -e ".[dev,playground,video]"
-
-      - name: Static code analysis
-        working-directory: python
+      # The package and its test extras (dev: pytest, pytest-cov, ruff, mypy and
+      # the high-precision oracles; playground: PyQt6; video: imageio-ffmpeg,
+      # whose tests would otherwise skip), then the build's own tools.
+      - name: Install the package and the build and analysis tools
         run: |
+          python -m pip install -e ".[dev,playground,video]"
+          python -m pip install build twine flake8 bandit black isort
 
-          echo "Running ruff (lint)..."
-          ruff check src tests tools --output-format=full > ruff-report.txt || true
-
-          echo "Checking formatting with ruff..."
-          ruff format --check src tests tools > ruff-format-report.txt 2>&1 || true
+      # Reports, not gates: each is uploaded for reading. ruff is this repo's
+      # own linter and formatter (CLAUDE.md), reported beside the convention's
+      # five.
+      - name: Static code analysis
+        run: |
+          echo "Running flake8..."
+          flake8 src --max-line-length=100 --output-file=flake8-report.txt || true
 
           echo "Running mypy..."
           mypy --show-error-codes --no-color-output --no-error-summary > mypy-report.txt || true
+
+          echo "Running bandit..."
+          bandit -r src/heaton_life -f txt -o bandit-report.txt || true
+
+          echo "Checking formatting with black..."
+          black --check --line-length 100 src > black-report.txt 2>&1 || true
+
+          echo "Checking imports with isort..."
+          isort src --profile black --line-length 100 --check-only > isort-report.txt 2>&1 || true
+
+          echo "Running ruff..."
+          ruff check src tests tools --output-format=full > ruff-report.txt || true
+          ruff format --check src tests tools > ruff-format-report.txt 2>&1 || true
 
       - name: Upload static analysis reports
         if: always()
@@ -57,27 +79,33 @@ jobs:
         with:
           name: static-analysis-reports
           retention-days: 7
-          path: python/*.txt
+          path: python/*-report.txt
           if-no-files-found: ignore
 
-      - name: Run tests
-        working-directory: python
-        env:
-          QT_QPA_PLATFORM: offscreen
+      # pyproject.toml is the version's source of truth, and __version__ must
+      # agree; tests/test_release_version.py, run below, holds all six places
+      # to it.
+      - name: Read the version
         run: |
-          python3.11 -m pytest tests \
-            --junitxml=unit_test_results.xml \
-            --cov=heaton_life \
-            --cov-report=xml:coverage.xml \
-            --cov-report=html
+          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          INIT_VERSION=$(python -c "import heaton_life; print(heaton_life.__version__)")
+          if [ "$VERSION" != "$INIT_VERSION" ]; then
+            echo "::error::pyproject.toml says $VERSION but heaton_life.__version__ is $INIT_VERSION."
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Building heaton-life $VERSION"
 
-      - name: Check coverage thresholds
-        working-directory: python
-        continue-on-error: true
-        env:
-          QT_QPA_PLATFORM: offscreen
+      - name: Run tests
         run: |
-          python3.11 -m pytest tests --cov=heaton_life --cov-fail-under=60 -q --no-header 2>&1 | tail -5
+          python -m pytest tests -p no:cacheprovider \
+            --junitxml=unit_test_results.xml \
+            --cov=heaton_life --cov-branch \
+            --cov-report=xml:coverage.xml --cov-report=html --cov-report=term
+
+      - name: Check coverage threshold
+        continue-on-error: true
+        run: python -m coverage report --fail-under=60 > /dev/null
 
       - name: Publish test results
         if: always()
@@ -96,19 +124,11 @@ jobs:
             python/htmlcov/
           if-no-files-found: ignore
 
-      # pyproject.toml is the version's source of truth; __version__ must agree
-      # (the literal is what users read at runtime), and version.py carries the
-      # build stamp into the wheel. A tracked baseline (BUILD 0) means "local build".
+      # The tracked baseline (BUILD 0) means "local build"; this run's stamp
+      # goes into the wheel.
       - name: Generate version file
-        working-directory: python
         run: |
-          VERSION=$(python3.11 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
-          INIT_VERSION=$(python3.11 -c "import heaton_life; print(heaton_life.__version__)")
-          if [ "$VERSION" != "$INIT_VERSION" ]; then
-            echo "pyproject.toml says $VERSION but heaton_life.__version__ is $INIT_VERSION — bump both."
-            exit 1
-          fi
-          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%S%z")
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           BUILD="${{ github.run_number }}"
 
           cat <<EOF > src/heaton_life/version.py
@@ -122,37 +142,67 @@ jobs:
           echo "Generated src/heaton_life/version.py:"
           cat src/heaton_life/version.py
 
-      - name: Build wheel
-        working-directory: python
+      - name: Build the wheel and sdist
         run: |
-          rm -rf dist/*
-          python3.11 -m build --wheel
+          rm -rf dist
+          python -m build
+          ls -l dist
 
       - name: Validate with twine
-        working-directory: python
-        run: |
-          # packaging>=24.2: the wheel carries Metadata-Version 2.4 (PEP 639
-          # License-File), which the runner's system packaging does not recognize.
-          pip install --upgrade twine "packaging>=24.2"
-          twine check dist/*
+        run: python -m twine check --strict dist/*
 
-      - name: Upload wheel artifact
+      # The wheel installs into an empty venv and the stamped version reads
+      # back, from outside the checkout, so nothing is read from the source
+      # tree by accident. A Life step runs on what it installed (numpy and
+      # pillow only; the playground's PyQt6 is an extra).
+      - name: Install the wheel and try it
+        run: |
+          python -m venv "$RUNNER_TEMP/smoke"
+          "$RUNNER_TEMP/smoke/bin/pip" install dist/*.whl
+          cd "$RUNNER_TEMP"
+          smoke/bin/python - <<'PY'
+          import heaton_life
+          from heaton_life import version
+          print(heaton_life.__version__, version.VERSION, version.BUILD_DATE, version.BUILD)
+          assert version.BUILD > 0, "the wheel carries the checkout's baseline, not this build's stamp"
+          assert heaton_life.__file__.startswith(__import__("sys").prefix), heaton_life.__file__
+          PY
+
+      # What deploy-lib.yml tags: the commit these files were built from.
+      - name: Record the build
+        run: |
+          python - <<EOF > "dist/heaton-life-$VERSION-build.json"
+          import json, os
+          print(json.dumps({
+              "name": "heaton-life", "version": os.environ["VERSION"],
+              "commit": os.environ["GITHUB_SHA"],
+              "run_id": int(os.environ["GITHUB_RUN_ID"]),
+              "run_number": int(os.environ["GITHUB_RUN_NUMBER"]),
+              "built": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+          }, indent=2))
+          EOF
+          cat "dist/heaton-life-$VERSION-build.json"
+
+      - name: Upload the distributions
         uses: actions/upload-artifact@v7
         with:
-          name: heaton-life-wheel
+          name: heaton-life-dist
           retention-days: 7
-          path: python/dist/*.whl
+          path: python/dist/*
 
+      # Staged where Deploy Library to PyPI looks for them, by version. The
+      # bucket grants public read itself, so a staged build is unlisted but
+      # downloadable by anyone with its URL; never treat one as secret.
       - name: Upload to S3
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
         run: |
-          cd python/dist
-          aws s3 cp *.whl s3://data.heatonresearch.com/library/ --acl public-read
+          for f in dist/heaton_life-"$VERSION"-py3-none-any.whl dist/heaton_life-"$VERSION".tar.gz dist/heaton-life-"$VERSION"-build.json; do
+            aws s3 cp "$f" s3://data.heatonresearch.com/library/ --acl public-read
+          done
 
       - name: Clean up build artifacts
         if: always()
-        working-directory: python
-        run: rm -rf build dist src/*.egg-info
+        run: rm -rf build dist src/*.egg-info htmlcov

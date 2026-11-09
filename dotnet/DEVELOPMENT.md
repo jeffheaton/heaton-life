@@ -203,74 +203,25 @@ workflow regenerates it with the run number and date before building.
 
 ## Releasing
 
-One manually dispatched GitHub workflow, **Build Library (.NET)**
-(`.github/workflows/build-lib-dotnet.yml`), the same shape as the workflows in the
-maintainer's [dynaface](https://github.com/jeffheaton/dynaface) project. Nothing
-runs on push. In order: a check that the csproj version agrees with `pyproject.toml`
-and with the zip link in `README.md`, restore, the `dotnet format` gate, the vulnerable-package
-report (advisory), the regenerated `Version.cs`, the Release build, the xunit suite
-(published as a test report), then `heaton-life-dotnet-<version>.zip` (DLL + XML
-docs + PDB) as the `heaton-life-dotnet-dll` workflow artifact and a public copy on
-`s3://data.heatonresearch.com/library/`, then `dotnet pack`, whose
-`HeatonLife.Core.<version>.nupkg` and `.snupkg` (the symbols package, with SourceLink
-back to this repository at the packed commit for every file but the CI-regenerated
-`Version.cs`) are uploaded as the `heaton-life-nupkgs` artifact, and finally the push
-of both to NuGet.org, the symbols package explicitly as well as alongside the main
-package. Pushes use `--skip-duplicate`, so re-running at an already-published version
-is a no-op on NuGet.org rather than an error, and a rerun still pushes the symbols
-if an earlier run published the main package without them. The S3 copy is not a
-no-op: every run overwrites the public `heaton-life-dotnet-<version>.zip` with a
-fresh build whose `HeatonLifeVersion.Build` and `BuildDate` differ from the assembly
-on NuGet.org, and which picks up any source change since the original run. Rerun a
-published version only when that is acceptable; otherwise bump the version.
+[`../RELEASING.md`](../RELEASING.md) is the whole sequence, for both packages: the
+release convention's two manual steps, **Build Library (.NET)**
+(`.github/workflows/build-lib-dotnet.yml`), which tests, stamps `Version.cs`, packs and
+stages `heaton-life-dotnet-<version>.zip`, `HeatonLife.Core.<version>.nupkg` and
+`.snupkg` and a build record on `s3://data.heatonresearch.com/library/`, then **Deploy
+Library to NuGet (.NET)** (`.github/workflows/deploy-lib-dotnet.yml`), which pushes
+what was staged to NuGet.org by Trusted Publishing and tags `v<version>` at the built
+commit. **Test Library (.NET)** (`test-lib-dotnet.yml`) runs the suite on Linux, macOS
+and Windows on every push that touches `dotnet/` or `vectors/`.
 
-The push uses **Trusted Publishing**, so there is no long-lived API key stored in
-the repository: the `NuGet/login` action exchanges the job's short-lived GitHub OIDC
-token (the workflow grants `id-token: write`) for a temporary NuGet.org API key.
-Its `user:` input is the NuGet.org account that *created* the policy. That policy
-already exists: on the `jeffheaton` NuGet.org account (Account → Trusted Publishing)
-the policy named `heaton-life-dotnet` (created 2026-08-22) is bound to the GitHub
-repository owner `jeffheaton`, the repository `heaton-life`, and the workflow file
-`build-lib-dotnet.yml`, and the 1.0.0 release was pushed through it, so nothing needs
-to be set up for the next release. Renaming the workflow file breaks the binding
-until the policy is edited to match. To recreate it (a new account, or a renamed
-file): add a policy with those three values (the file name, not the workflow's
-display name). Without a matching policy the login step fails with
-`No matching trust policy owned by user '…' was found`; if NuGet.org lists a newly
-created policy as pending, running the workflow activates it.
+The build checks, before it builds anything, that the csproj `<Version>` agrees with
+`pyproject.toml` and with the zip link under "Install" in `README.md`: that README is
+frozen into the immutable package and this workflow runs no Python, so
+`../python/tests/test_release_version.py` never sees a .NET-only build. The package's
+README and icon are frozen into each version, so update `README.md` first if the API or
+the sample changed.
 
-Repository secrets for the S3 copy: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-`AWS_DEFAULT_REGION`.
-
-Release checklist:
-
-1. Bump `<Version>` in the csproj (in step with the Python version), the `Version`
-   constant in the tracked `src/HeatonLife.Core/Version.cs` baseline (CI regenerates
-   the file, but local builds report the baseline), and the version in the
-   `heaton-life-dotnet-<version>.zip` link under "Install" in `README.md`
-   (`../python/tests/test_release_version.py` fails unless these three agree with the
-   three Python places, and the workflow refuses, before it builds anything, a README
-   zip link or a `pyproject.toml` version that disagrees with the csproj). Add the release's entry to `../CHANGELOG.md`, which the
-   package's release notes link to. The package README and icon are frozen into each
-   version, so also update `README.md` first if the API or the sample changed.
-2. Run the checks locally, commit, and push.
-3. Dispatch the workflow:
-
-   ```
-   gh workflow run build-lib-dotnet.yml -R jeffheaton/heaton-life
-   ```
-
-   The same run builds, tests, and publishes. To try a package before it goes
-   public, pack it locally (see "The checks") and install it from that folder into
-   a fresh project.
-4. Check the run; its `heaton-life-nupkgs` artifact holds the exact `.nupkg` and
-   `.snupkg` that were pushed. NuGet versions are immutable: anything that needs
-   changing after the push becomes the next version.
-5. A few minutes later, once NuGet.org has validated and indexed the push, verify it
-   landed: the package page (`https://www.nuget.org/packages/HeatonLife.Core/<version>`)
-   lists the version, renders the README, and offers "Download symbols" (the
-   `.snupkg`; its push is separate from the main one, so check it explicitly), and
-   `https://data.heatonresearch.com/library/heaton-life-dotnet-<version>.zip` resolves
-   and contains the DLL, XML, and PDB. Then record the release in `../ROADMAP.md` and
-   tag the commit once the Python package is out too, after confirming both workflow
-   runs built the same commit (see `../python/DEVELOPMENT.md`, "Releasing").
+The NuGet.org Trusted Publishing policy is `heaton-life-dotnet` on the `jeffheaton`
+account (Account → Trusted Publishing). It published 1.0.0 and 1.1.0 from the old
+`build-lib-dotnet.yml`; it must name `deploy-lib-dotnet.yml` now (RELEASING.md,
+"One-time setup"). Without a matching policy the login step fails with
+`No matching trust policy owned by user '…' was found`.

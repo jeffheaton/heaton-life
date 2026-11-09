@@ -1,43 +1,110 @@
 name: Deploy Library to PyPI
 
-# Second half of the Python release (dynaface's deploy-lib.yml): take a wheel
-# that Build Library already put on S3 and upload it to PyPI. Separating the two
-# means a build can be inspected before anything irreversible happens.
+# Publishes the wheel and sdist that a Build Library run staged on S3, by
+# version, and tags v<version> at the commit they were built from. Nothing is
+# rebuilt: what is published is exactly what was built and tested. Mirrors
+# deploy-lib-dotnet.yml (the NuGet package to NuGet.org), which tags the same
+# v<version>, so the two packages of one version must come from one commit.
 #
-# Secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION, PYPI_API_TOKEN.
-
+# PyPI is reached by Trusted Publishing, as NuGet.org is: GitHub's OIDC token is
+# exchanged for a short-lived one, so no PyPI credential is kept in the repo. It
+# needs a trusted publisher on the heaton-life PyPI project bound to this
+# workflow file -- see RELEASING.md.
+#
+# Secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION (to read
+# the staged files).
 on:
   workflow_dispatch:
     inputs:
-      whl_file:
-        description: 'Wheel file name to deploy (e.g., heaton_life-1.0.0-py3-none-any.whl)'
+      version:
+        description: 'Package version to deploy (e.g., 1.2.0); deploys heaton_life-<version>-py3-none-any.whl and heaton_life-<version>.tar.gz'
         required: true
+
+permissions:
+  # Creates the release tag.
+  contents: write
+  # Trusted Publishing: PyPI accepts this workflow's OIDC token.
+  id-token: write
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
-      - name: Download artifact from S3
+      - name: Download the distributions from S3
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          VERSION: ${{ github.event.inputs.version }}
         run: |
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+((a|b|rc)[0-9]+)?$ ]]; then
+            echo "::error::'$VERSION' is not a package version (e.g., 1.2.0)."
+            exit 1
+          fi
           mkdir -p dist
-
-          echo "Downloading ${{ github.event.inputs.whl_file }} from S3..."
-          aws s3 cp s3://data.heatonresearch.com/library/${{ github.event.inputs.whl_file }} dist/ || {
-            echo "Error: File ${{ github.event.inputs.whl_file }} does not exist in S3."
+          for file in "heaton_life-$VERSION-py3-none-any.whl" "heaton_life-$VERSION.tar.gz"; do
+            echo "Downloading $file from S3..."
+            aws s3 cp "s3://data.heatonresearch.com/library/$file" dist/ || {
+              echo "::error::$file is not staged. Run Build Library at this version first."
+              exit 1
+            }
+          done
+          ls -l dist
+          mkdir -p record
+          aws s3 cp "s3://data.heatonresearch.com/library/heaton-life-$VERSION-build.json" record/ || {
+            echo "::error::No build record for $VERSION is staged. Run Build Library at this version first."
             exit 1
           }
 
-      - name: Deploy to PyPI
+      # The tag records what was released: the commit these files were built
+      # from, read from the build record. A tag already standing elsewhere is
+      # refused before anything is published. gh api prints a 404's body to
+      # stdout even with --jq, so a missing tag is told by its exit status and
+      # "HTTP 404" on stderr, and any other failure stops the deploy.
+      - name: Check the tag
         env:
-          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ github.event.inputs.version }}
+          RECORD: record/heaton-life-${{ github.event.inputs.version }}-build.json
         run: |
-          # Upgrade packaging too: the wheel uses Metadata-Version 2.4 (PEP 639
-          # License-File), which the runner's system packaging (24.0) doesn't
-          # recognize, causing twine to reject a valid field. packaging>=24.2 fixes it.
-          pip install --upgrade twine "packaging>=24.2"
-          twine upload --non-interactive -u __token__ -p "$PYPI_API_TOKEN" dist/*
+          COMMIT=$(jq -er .commit "$RECORD")
+          if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The build record names no commit: '$COMMIT'."
+            exit 1
+          fi
+          echo "COMMIT=$COMMIT" >> "$GITHUB_ENV"
+          if ref=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$VERSION" \
+                     --jq '.object.type + " " + .object.sha' 2> gh-error.txt); then
+            sha=${ref#* }
+            # An annotated tag points at a tag object; peel it to the commit.
+            if [ "${ref% *}" = tag ]; then
+              sha=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$sha" --jq .object.sha)
+            fi
+            if [ "$sha" != "$COMMIT" ]; then
+              echo "::error::v$VERSION already points at $sha, not $COMMIT, the commit this build came from."
+              exit 1
+            fi
+            echo "v$VERSION is already at $COMMIT"
+            echo "TAGGED=true" >> "$GITHUB_ENV"
+          elif grep -q "HTTP 404" gh-error.txt; then
+            echo "v$VERSION is not tagged yet; it will be, at $COMMIT"
+            echo "TAGGED=false" >> "$GITHUB_ENV"
+          else
+            cat gh-error.txt
+            echo "::error::Could not read the tag v$VERSION."
+            exit 1
+          fi
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Tag the release
+        if: env.TAGGED != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/v$VERSION" -f sha="$COMMIT" > /dev/null
+          echo "Tagged v$VERSION at $COMMIT"

@@ -1,0 +1,103 @@
+name: Test Library (.NET)
+
+# Runs the C# library's xunit suite, which replays the shared conformance
+# vectors, on Linux, macOS and Windows on every push and pull request that can
+# change its result. The Linux run measures the library's coverage for Codecov.
+# Releases are built and published by hand: Build Library (.NET)
+# (build-lib-dotnet.yml), then Deploy Library to NuGet (.NET)
+# (deploy-lib-dotnet.yml). RELEASING.md has the whole sequence.
+on:
+  push:
+    paths:
+      - 'dotnet/**'
+      # The conformance vectors the suite replays.
+      - 'vectors/**'
+      # Packed into the NuGet package.
+      - 'docs/heaton_life_icon.png'
+      - '.gitattributes'
+      - '.github/workflows/test-lib-dotnet.yml'
+  pull_request:
+    paths:
+      - 'dotnet/**'
+      - 'vectors/**'
+      - 'docs/heaton_life_icon.png'
+      - '.gitattributes'
+      - '.github/workflows/test-lib-dotnet.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Lets the Codecov upload authenticate with GitHub's OIDC token, so no Codecov
+  # token is stored in the repo.
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: .NET on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      # Finish every platform, so one failure doesn't hide another.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # The library targets netstandard2.1 (what Unity takes); the tests are a
+      # net10.0 project.
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      # ContinuousIntegrationBuild maps every source path in the PDB to /_/ for
+      # a reproducible package, and coverlet, finding no file behind those
+      # paths, then reports nothing. This build only tests, so it keeps the
+      # real paths; Build Library (.NET), which ships, sets the mapping.
+      - name: Build (Release)
+        run: dotnet build dotnet/HeatonLife.slnx -c Release -p:ContinuousIntegrationBuild=false
+
+      # Build Library (.NET) refuses unformatted code, so drift is caught here,
+      # on the push that made it, not at release time.
+      - name: Check formatting
+        if: runner.os == 'Linux'
+        run: dotnet format dotnet/HeatonLife.slnx --verify-no-changes
+
+      - name: Run tests
+        if: runner.os != 'Linux'
+        run: dotnet test dotnet/tests/HeatonLife.Core.Tests/HeatonLife.Core.Tests.csproj -c Release --no-build
+
+      # coverlet.collector (the test project's only addition for this) measures
+      # HeatonLife.Core under the suite; the test assembly itself is left out.
+      - name: Run tests with coverage
+        if: runner.os == 'Linux'
+        run: |
+          dotnet test dotnet/tests/HeatonLife.Core.Tests/HeatonLife.Core.Tests.csproj -c Release --no-build \
+            --collect:"XPlat Code Coverage" --results-directory "$RUNNER_TEMP/coverage"
+          cp "$RUNNER_TEMP"/coverage/*/coverage.cobertura.xml coverage.cobertura.xml
+
+      # One upload keeps the badge comparable from run to run.
+      - name: Upload coverage to Codecov
+        if: runner.os == 'Linux'
+        uses: codecov/codecov-action@v7
+        with:
+          use_oidc: true
+          files: coverage.cobertura.xml
+          disable_search: true
+          flags: dotnet
+          # A Codecov outage shouldn't turn the tests badge red.
+          fail_ci_if_error: false
+
+      # What a release would publish: the package must pack, README and icon
+      # included, on every platform it is built on.
+      - name: Pack
+        run: dotnet pack dotnet/src/HeatonLife.Core/HeatonLife.Core.csproj -c Release --no-build -o "$RUNNER_TEMP/nupkgs"

@@ -323,72 +323,24 @@ run number and date before packaging.
 
 ## Releasing
 
-Two manually dispatched GitHub workflows (the same build-then-deploy shape as the
-maintainer's [dynaface](https://github.com/jeffheaton/dynaface) project). Nothing
-runs on push.
+[`../RELEASING.md`](../RELEASING.md) is the whole sequence, for both packages: the
+release convention's two manual steps, **Build Library**
+(`.github/workflows/build-lib.yml`), which tests, stamps `version.py`, builds the wheel
+and sdist and stages them with a build record on `s3://data.heatonresearch.com/library/`,
+then **Deploy Library to PyPI** (`.github/workflows/deploy-lib.yml`), which uploads
+what was staged by Trusted Publishing and tags `v<version>` at the built commit.
+**Test Library** (`test-lib.yml`) runs the suite on Linux, macOS and Windows with
+Python 3.11 to 3.14 on every push that touches `python/`, `vectors/` or `spec/`.
 
-1. **Build Library** (`.github/workflows/build-lib.yml`): ruff and mypy reports
-   (advisory), the test suite (fatal), the regenerated `version.py`, then the
-   wheel, `twine check`, a workflow artifact named `heaton-life-wheel`, and a copy
-   at `s3://data.heatonresearch.com/library/`. The S3 copy is public, for example
-   `https://data.heatonresearch.com/library/heaton_life-1.0.0-py3-none-any.whl`,
-   which lets a build be tried before it is deployed to PyPI (the intro notebook
-   installed from that URL until 1.0.0; it now installs from PyPI).
-2. **Deploy Library to PyPI** (`.github/workflows/deploy-lib.yml`): takes a wheel
-   file name, downloads it from that S3 prefix, and uploads it to PyPI with twine.
-   Splitting build from deploy means a build can be inspected before the
-   irreversible step.
-
-Repository secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-`AWS_DEFAULT_REGION` (`us-east-1`), and `PYPI_API_TOKEN`, which should be a token
-scoped to the `heaton-life` project (PyPI → Your projects → heaton-life → Settings →
-API tokens). The first upload, 1.0.0, needed an account-scoped token because the
-project did not exist yet; if that token is still the one stored, replace it with a
-project-scoped one and update the repository secret.
-
-Release checklist:
-
-1. Bump the version in `pyproject.toml`, `__version__` in `src/heaton_life/__init__.py`,
-   and the `VERSION` baseline in `src/heaton_life/version.py` (the baseline is what local
-   and editable builds report), in step with the .NET csproj, its `Version.cs` baseline,
-   and the zip link in `dotnet/README.md` (see `../dotnet/DEVELOPMENT.md`, "Releasing");
-   `tests/test_release_version.py` checks all six, and each build workflow checks the
-   places it ships. Add the release's entry to
-   `../CHANGELOG.md` (what changed, and every behavior a user of the previous version
-   would notice). `README.md` is frozen into the wheel as the PyPI project page, so
-   finish README edits first.
-2. Run the four checks locally, commit, and push.
-3. Dispatch Build Library:
-
-   ```
-   gh workflow run build-lib.yml -R jeffheaton/heaton-life
-   ```
-
-   Check the run, then download the `heaton-life-wheel` artifact and try it in a
-   fresh environment (or point the intro notebook's install cell at the S3 wheel URL).
-4. Dispatch the deploy with the wheel's file name:
-
-   ```
-   gh workflow run deploy-lib.yml -R jeffheaton/heaton-life -f whl_file=heaton_life-<version>-py3-none-any.whl
-   ```
-
-   PyPI versions are immutable: anything that needs changing after the upload
-   becomes the next version.
-5. The intro notebook (`examples/heaton_life_intro.ipynb`) installs the latest
-   release with an unpinned `!pip install --upgrade heaton-life` and is committed
-   with its outputs cleared, so nothing in it changes per release. If you pointed
-   its install cell at the S3 wheel URL in step 3, revert that. After the upload,
-   run the notebook end to end (Colab, or a fresh venv) against the new version to
-   confirm every sample still runs; if the API changed, update the cells and
-   clear the outputs before committing.
-6. Once both packages are out, tag the released commit (one tag serves both,
-   since the versions move together) and push it:
-   `git tag -a v<version> -m "heaton-life <version>" && git push origin v<version>`.
-   One tag is only true if both builds ran on the same commit, so first confirm that
-   the Build Library and Build Library (.NET) runs report the same head commit
-   (`gh run list -R jeffheaton/heaton-life --limit 5 --json workflowName,headSha`).
-   The two 1.0.0 packages did not: the wheel was built at `59da437` and the NuGet
-   package at `234075b` (the Python sources are identical at both).
+The staged wheel is public at
+`https://data.heatonresearch.com/library/heaton_life-<version>-py3-none-any.whl`, so a
+build can be tried before it is deployed: point the intro notebook's install cell
+there for a trial, and revert it before committing. The notebook
+(`examples/heaton_life_intro.ipynb`) installs the latest release with an unpinned
+`!pip install --upgrade heaton-life` and is committed with its outputs cleared; after a
+release, run it end to end against the new version, and if the API changed, update the
+cells and clear the outputs. `README.md` is frozen into the wheel as the PyPI project
+page, so finish README edits first.
 
 ## Code style
 

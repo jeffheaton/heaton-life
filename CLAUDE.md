@@ -86,20 +86,34 @@ dotnet pack dotnet/src/HeatonLife.Core -c Release -o dotnet/nupkgs -p:Version=1.
 ```
 
 
-## CI / releases (manually dispatched, the dynaface shape)
+## CI / releases (the release convention: build, then deploy)
 
-Nothing runs on push. Three `workflow_dispatch` workflows in `.github/workflows/`:
+The release follows the convention in `~/.claude/CLAUDE.md` that dynaface and
+heaton-voxel follow too; [RELEASING.md](RELEASING.md) is the whole sequence and the
+one-time setup. Six workflows in `.github/workflows/`:
 
-- **Build Library** (`build-lib.yml`, Python): ruff/mypy reports (advisory), pytest
-  with JUnit + coverage (fatal; the 60% coverage-threshold step is advisory), a regenerated `src/heaton_life/version.py` build
-  stamp, the wheel → `twine check` → artifact → `s3://data.heatonresearch.com/library/`.
-- **Deploy Library to PyPI** (`deploy-lib.yml`): takes a wheel file name, pulls it
-  from that S3 prefix, uploads to PyPI.
-- **Build Library (.NET)** (`build-lib-dotnet.yml`): a check that the csproj version agrees with
-  `pyproject.toml` and the README's zip link, the `dotnet format` gate, vulnerable
-  package report (advisory), a regenerated `src/HeatonLife.Core/Version.cs`, Release
-  build, xunit with TRX, the DLL zip → artifact → S3, and `dotnet pack` (package + `.snupkg` symbols) → NuGet.org via
-  Trusted Publishing (OIDC; no stored API key).
+- **Test Library** (`test-lib.yml`) and **Test Library (.NET)** (`test-lib-dotnet.yml`)
+  run on every push and pull request that can change their result (path-filtered):
+  pytest on Linux, macOS and Windows × Python 3.11–3.14 (the package's floor; the
+  convention's 3.10 is below it), and the xunit suite on the three systems. Linux
+  on Python 3.11, and the Linux .NET run, upload coverage to Codecov over OIDC
+  (flags `python` and `dotnet`; `codecov.yml` carries both forward and keeps them
+  informational). The .NET test build passes `-p:ContinuousIntegrationBuild=false`,
+  or the PDB paths map to `/_/` and coverlet finds no source.
+- **Build Library** (`build-lib.yml`) and **Build Library (.NET)**
+  (`build-lib-dotnet.yml`), dispatched by hand, make exactly what ships: reports
+  (flake8, mypy, bandit, black, isort and ruff; not gates), the suite (fatal),
+  the stamped `version.py`, the wheel and sdist through `twine check --strict` and a
+  clean-venv install; or the version check, the `dotnet format` gate, the stamped
+  `Version.cs`, xunit, the DLL zip and the `.nupkg`/`.snupkg`. Each stages its
+  files on `s3://data.heatonresearch.com/library/` beside
+  `<name>-<version>-build.json` (the commit and the run), and can be rerun at the
+  same version; each run replaces what is staged.
+- **Deploy Library to PyPI** (`deploy-lib.yml`) and **Deploy Library to NuGet
+  (.NET)** (`deploy-lib-dotnet.yml`) take a `version`, publish what was staged
+  without rebuilding, and tag `v<version>` at the recorded commit, refusing if the
+  tag already points elsewhere. Both registries use Trusted Publishing; no
+  registry token is stored.
 
 Versions live in six places that move together: `python/pyproject.toml` ↔
 `heaton_life.__version__` (the build fails if they disagree), the tracked
@@ -107,20 +121,11 @@ Versions live in six places that move together: `python/pyproject.toml` ↔
 `Version.cs` baseline, and the `heaton-life-dotnet-<version>.zip` link under "Install" in
 `dotnet/README.md` (that README is packed into every NuGet package);
 `python/tests/test_release_version.py` fails unless all six agree, and each release adds
-its entry to `CHANGELOG.md`. The baselines (BUILD 0)
-exist so the stamp always exists in local builds; CI overwrites them. The step-by-step
-release checklists (`gh workflow run build-lib.yml` → `gh workflow run deploy-lib.yml -f
-whl_file=…`; `gh workflow run build-lib-dotnet.yml`) are in `python/DEVELOPMENT.md` and
-`dotnet/DEVELOPMENT.md`, "Releasing". Secrets on the repo: `AWS_ACCESS_KEY_ID`,
-`AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `PYPI_API_TOKEN` (should be scoped to
-the `heaton-life` PyPI project; 1.0.0 was uploaded with an account-scoped token, see
-python/DEVELOPMENT.md, "Releasing"). NuGet pushes through the existing Trusted Publishing policy
-`heaton-life-dotnet` on the `jeffheaton` NuGet.org account (bound to `jeffheaton/heaton-life`
-and the workflow file `build-lib-dotnet.yml`; policies are account-level, not per package;
-used for 1.0.0) — if `NuGet/login` fails with `No matching trust policy`, check that policy
-before creating another (see dotnet/DEVELOPMENT.md, "Releasing"). `python/LICENSE` is a
-copy of the root `LICENSE` (hatchling cannot embed `../LICENSE` into the wheel); change both
-together.
+its entry to `CHANGELOG.md`. The baselines (BUILD 0) exist so the stamp always exists in
+local builds; CI overwrites them. The only repository secrets the release needs are
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_DEFAULT_REGION`. `python/LICENSE`
+is a copy of the root `LICENSE` (hatchling cannot embed `../LICENSE` into the wheel);
+change both together.
 
 ## Code Style
 
