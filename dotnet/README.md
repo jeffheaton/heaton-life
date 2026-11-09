@@ -3,6 +3,8 @@
 # HeatonLife.Core
 
 [![NuGet](https://img.shields.io/nuget/v/HeatonLife.Core?style=flat-square)](https://www.nuget.org/packages/HeatonLife.Core/)
+[![.NET tests](https://img.shields.io/github/actions/workflow/status/jeffheaton/heaton-life/test-lib-dotnet.yml?branch=main&label=.NET%20tests&style=flat-square)](https://github.com/jeffheaton/heaton-life/actions/workflows/test-lib-dotnet.yml)
+[![.NET coverage](https://img.shields.io/codecov/c/github/jeffheaton/heaton-life/main?flag=dotnet&label=.NET%20coverage&style=flat-square)](https://app.codecov.io/gh/jeffheaton/heaton-life)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](https://github.com/jeffheaton/heaton-life/blob/main/LICENSE)
 
 HeatonLife.Core is a .NET library for exploring emergence: simple rules that give rise

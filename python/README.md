@@ -5,6 +5,9 @@
 # heaton-life
 
 [![PyPI version](https://img.shields.io/pypi/v/heaton-life?style=flat-square)](https://pypi.org/project/heaton-life/)
+[![Python versions](https://img.shields.io/pypi/pyversions/heaton-life?style=flat-square)](https://pypi.org/project/heaton-life/)
+[![Python tests](https://img.shields.io/github/actions/workflow/status/jeffheaton/heaton-life/test-lib.yml?branch=main&label=Python%20tests&style=flat-square)](https://github.com/jeffheaton/heaton-life/actions/workflows/test-lib.yml)
+[![Python coverage](https://img.shields.io/codecov/c/github/jeffheaton/heaton-life/main?flag=python&label=Python%20coverage&style=flat-square)](https://app.codecov.io/gh/jeffheaton/heaton-life)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](https://github.com/jeffheaton/heaton-life/blob/main/LICENSE)
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jeffheaton/heaton-life/blob/main/python/examples/heaton_life_intro.ipynb)
 

@@ -6,6 +6,11 @@
 
 [![PyPI](https://img.shields.io/pypi/v/heaton-life?style=flat-square&label=PyPI)](https://pypi.org/project/heaton-life/)
 [![NuGet](https://img.shields.io/nuget/v/HeatonLife.Core?style=flat-square&label=NuGet)](https://www.nuget.org/packages/HeatonLife.Core/)
+[![Python versions](https://img.shields.io/pypi/pyversions/heaton-life?style=flat-square)](https://pypi.org/project/heaton-life/)
+[![Python tests](https://img.shields.io/github/actions/workflow/status/jeffheaton/heaton-life/test-lib.yml?branch=main&label=Python%20tests&style=flat-square)](https://github.com/jeffheaton/heaton-life/actions/workflows/test-lib.yml)
+[![Python coverage](https://img.shields.io/codecov/c/github/jeffheaton/heaton-life/main?flag=python&label=Python%20coverage&style=flat-square)](https://app.codecov.io/gh/jeffheaton/heaton-life)
+[![.NET tests](https://img.shields.io/github/actions/workflow/status/jeffheaton/heaton-life/test-lib-dotnet.yml?branch=main&label=.NET%20tests&style=flat-square)](https://github.com/jeffheaton/heaton-life/actions/workflows/test-lib-dotnet.yml)
+[![.NET coverage](https://img.shields.io/codecov/c/github/jeffheaton/heaton-life/main?flag=dotnet&label=.NET%20coverage&style=flat-square)](https://app.codecov.io/gh/jeffheaton/heaton-life)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](LICENSE)
 
 ![Gallery: one tile per system](docs/gallery.png)
