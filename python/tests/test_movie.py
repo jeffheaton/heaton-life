@@ -449,7 +449,9 @@ def test_mp4_target_problems_fail_before_the_survey(tmp_path: Path) -> None:
     closed.close()
     with pytest.raises(ValueError, match="closed"):
         render_zoom_movie(counting, (8, 8), SEAHORSE, SHORT, closed)
-    assert calls == [1, 1, 1]  # the family check only: no probe, no frame
+    # The family check only, once per refused call (the locked one is POSIX-only): no
+    # probe, no frame.
+    assert calls == [1] * (3 if os.name != "nt" else 2)
     with MovieWriter(tmp_path / "a.mp4", SHORT.fps) as writer:
         writer.write(0, np.zeros((8, 8, 3), dtype=np.uint8))
         with pytest.raises(ValueError, match="expected frame 1"):
