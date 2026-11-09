@@ -434,7 +434,9 @@ def test_mp4_target_problems_fail_before_the_survey(tmp_path: Path) -> None:
         calls.append(n)
         return _field(n)
 
-    if os.name != "nt":  # Windows ignores a directory's POSIX mode: nothing to lock
+    # Windows ignores a directory's POSIX mode, so there is nothing to lock there.
+    lockable = int(os.name != "nt")
+    if lockable:
         locked = tmp_path / "locked"
         locked.mkdir()
         locked.chmod(0o555)
@@ -449,14 +451,12 @@ def test_mp4_target_problems_fail_before_the_survey(tmp_path: Path) -> None:
     closed.close()
     with pytest.raises(ValueError, match="closed"):
         render_zoom_movie(counting, (8, 8), SEAHORSE, SHORT, closed)
-    # The family check only, once per refused call (the locked one is POSIX-only): no
-    # probe, no frame.
-    assert calls == [1] * (3 if os.name != "nt" else 2)
+    assert calls == [1] * (2 + lockable)  # the family check only: no probe, no frame
     with MovieWriter(tmp_path / "a.mp4", SHORT.fps) as writer:
         writer.write(0, np.zeros((8, 8, 3), dtype=np.uint8))
         with pytest.raises(ValueError, match="expected frame 1"):
             render_zoom_movie(counting, (8, 8), SEAHORSE, SHORT, writer, frames=range(3, 4))
-    assert calls == [1, 1, 1, 1]
+    assert calls == [1] * (3 + lockable)
     with pytest.raises(ValueError, match="2 x 2"):
         even_crop(np.zeros((9, 1, 3), dtype=np.uint8))
 
