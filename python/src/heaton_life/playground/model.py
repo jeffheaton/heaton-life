@@ -30,6 +30,9 @@ class FieldSpec:
     decimals: int = 3
     file_filter: str = ""
     """The Browse… dialog's name filter for a "file" field (Qt syntax)."""
+    selects: tuple[tuple[str, str], ...] = ()
+    """(field, value) pairs: editing this field sets those too. Life-like's pattern sets
+    ``init`` to ``pattern``, so choosing a file is choosing to start from it."""
 
 
 def field_specs(params_cls: type[Params]) -> list[FieldSpec]:
@@ -67,6 +70,7 @@ def field_specs(params_cls: type[Params]) -> list[FieldSpec]:
                 role=meta.get("role"),
                 decimals=int(meta.get("decimals", 3)),
                 file_filter=str(meta.get("filter", "")),
+                selects=tuple((str(k), str(v)) for k, v in meta.get("selects", {}).items()),
             )
         )
     return specs

@@ -291,9 +291,12 @@ The **HashLife** family (Cellular Automata) is the unbounded universe:
   pixel, with Option/Alt held at any zoom, or with the middle button; Ctrl/Cmd+click
   recenters. At one cell per pixel or closer, left-click draws and right-click erases,
   inside the ±10⁹ editing box (outside it the status bar says why nothing changed).
-- Navigation answers at once, mid-step: the canvas keeps the view
-  (`playground/navigator.py`), draws the last frame where it lands in the new one, and
-  the engine renders the new view between steps, once per burst of gestures.
+- Navigation answers at once, even while a giant plays: the canvas keeps the view
+  (`playground/navigator.py`) and draws the last frame where it lands in the new one. Each
+  gesture (a zoom, a pan, an edit) cuts a running step short; the engine renders the new
+  view once per burst of gestures, then the step picks up where it stopped (HashLife keeps
+  the work cached until memory nears the budget). A Caterpillar generation takes about 5 s
+  in Python; a zoom waiting for it would show only the old frame, stretched.
 - The frame fills the canvas: **Frame width/height** (read-only) follow the window, at
   one frame pixel per canvas pixel or the **Cell** setting's square of them, and a resize
   keeps the view's center in place. Loading a pattern fits it to the canvas.
@@ -303,6 +306,26 @@ The **HashLife** family (Cellular Automata) is the unbounded universe:
 - **Save pattern…** (Ctrl+Shift+S) writes RLE while the pattern lies inside the editing
   box and Macrocell otherwise; the dialog also offers the other formats. The status bar
   shows generation, population, step size, the center cell, nodes, and store memory.
+
+**Life-like** starts from a pattern too: set **Init** to `pattern`, or just choose a
+**Pattern** (a built-in name, or a `.rle`, `.mc`, or `.mc.gz` file with Browse…), which
+sets it. The live cells are centered on the grid, the grid grows to twice their size
+(2,048 a side at most), and the pattern's rule is adopted. **Save pattern…** writes the
+live cells' bounding box as RLE.
+
+A grid holds every one of its cells, and a pattern file can describe far more than memory
+holds, so a file is measured before any grid is made of it (`playground/lifelike_sim.py`):
+
+- wider or taller than the largest grid (the Caterpillar would take 1.4 GB for its cells
+  alone): it can only go to HashLife. The dialog offers **Load in HashLife** or
+  **Don't Load**;
+- within the largest grid but more than half its width or height, or a Macrocell file
+  (whose place on the plane and generation a grid drops): HashLife is the better place,
+  and the dialog adds **Load in Life-like**. That answer is remembered for the file;
+- anything else loads without a question.
+
+HashLife opens the handed-over file at its own defaults: a giant still needs **Max
+memory (MB)** raised there.
 
 ## Versioning
 

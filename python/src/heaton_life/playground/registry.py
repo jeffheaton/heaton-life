@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import numpy as np
@@ -19,8 +19,6 @@ from heaton_life.ca import (
     CyclicParams,
     Elementary,
     ElementaryParams,
-    LifeLike,
-    LifeLikeParams,
     MergeLife,
     MergeLifeParams,
     Wireworld,
@@ -28,7 +26,6 @@ from heaton_life.ca import (
 )
 from heaton_life.ca.hashlife import LifeView
 from heaton_life.ca.mergelife import parse_rule_error
-from heaton_life.ca.rulestring import parse_rule
 from heaton_life.core import decimal_text
 from heaton_life.core.neighbors import Boundary
 from heaton_life.core.params import Params
@@ -53,10 +50,18 @@ from heaton_life.playground.fractal_sim import (
     make_newton,
     zoom_paint,
 )
-from heaton_life.playground.hashlife_sim import HashLifeSim, HashLifeSimParams
+from heaton_life.playground.hashlife_sim import (
+    RLE_FILTER,
+    SAVE_FILTER,
+    HashLifeSim,
+    HashLifeSimParams,
+)
 from heaton_life.playground.hashlife_sim import validate as _validate_hashlife
 from heaton_life.playground.hashlife_sim import view_of as _hashlife_view_of
 from heaton_life.playground.hashlife_sim import with_view as _hashlife_with_view
+from heaton_life.playground.lifelike_sim import LifeLikeSim, LifeLikeSimParams
+from heaton_life.playground.lifelike_sim import advise as _lifelike_advice
+from heaton_life.playground.lifelike_sim import validate as _validate_lifelike
 from heaton_life.rd import GRAY_SCOTT_PRESETS, GrayScott, GrayScottParams
 
 # Paint buttons: 1 = left, 2 = right, 3 = modifier+left, 4/5 = wheel in/out.
@@ -64,6 +69,27 @@ from heaton_life.rd import GRAY_SCOTT_PRESETS, GrayScott, GrayScottParams
 # replacement (fractal zoom) or the same one with new params (HashLife navigation); the
 # engine swaps it in and echoes its params to the form.
 PaintFn = Callable[[Simulation, int, int, int], Simulation | None]
+
+
+@dataclasses.dataclass(frozen=True)
+class Redirect:
+    """A family's advice that some params belong in another family: the engine offers it
+    in place of building them, and the user chooses."""
+
+    key: str
+    """What the advice is about (a file): a go-ahead to build here anyway is kept by it."""
+    family: str
+    """The family to build in instead…"""
+    changes: Mapping[str, object]
+    """…with these of its params; the rest are its defaults."""
+    required: bool
+    """This family can't build them at all: it is the other family, or nothing."""
+    title: str
+    """The dialog's headline (macOS shows no window title on an alert)."""
+    text: str
+    """What was found, in a sentence or two."""
+    detail: str
+    """What the other family would do with it."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -87,7 +113,13 @@ class Family:
     """Reset calls the sim's own reset() — HashLife restores its starting snapshot — instead
     of rebuilding from params, which would reload the pattern and refit the view."""
     pattern_files: bool = False
-    """The sim saves its cells as a pattern file (HashLife): enables Save pattern…"""
+    """The sim saves its cells as a pattern file: enables Save pattern…"""
+    save_filter: str = ""
+    """…whose dialog offers these formats (Qt filter syntax)."""
+    advise: Callable[[Params], Redirect | None] | None = None
+    """Asked before each build: a Redirect for params another family should build (a
+    pattern file too large for a Life-like grid), or None. May raise ValueError, as
+    ``build`` may."""
     view_of: Callable[[Params], LifeView] | None = None
     """A live-view family (HashLife) keeps its view and frame size in its params: the
     canvas zooms and pans the view at once, previewing the last frame there until the
@@ -115,29 +147,35 @@ def _no_hot(sim: Simulation, _params: Params) -> Simulation:
 # -- Life-like ---------------------------------------------------------------------------
 
 
-def _build_lifelike(params: Params) -> Simulation:
-    assert isinstance(params, LifeLikeParams)
-    return LifeLike.from_params(params)
-
-
 def _hot_lifelike(sim: Simulation, params: Params) -> Simulation:
-    assert isinstance(params, LifeLikeParams)
-    boundary: Boundary = "dead" if params.boundary == "dead" else "torus"
-    return LifeLike(
-        params.rule,
-        size=(params.width, params.height),
-        init=np.asarray(sim.state, dtype=np.uint8),
-        boundary=boundary,
+    assert isinstance(sim, LifeLikeSim) and isinstance(params, LifeLikeSimParams)
+    sim.apply(params)
+    return sim
+
+
+def _advise_lifelike(params: Params) -> Redirect | None:
+    """A pattern file that belongs in HashLife: too large for any grid, or just better
+    off there (playground/lifelike_sim.py has the measuring)."""
+    advice = _lifelike_advice(params)
+    if advice is None:
+        return None
+    assert isinstance(params, LifeLikeSimParams)
+    name = Path(params.pattern).name
+    if advice.required:
+        title = f"{name} is too large for Life-like"
+        detail = "HashLife runs a pattern of any size, on a plane with no edges."
+    else:
+        title = f"{name} may be better in HashLife"
+        detail = "HashLife has no edges, and opens the file as it was written."
+    return Redirect(
+        key=params.pattern,
+        family="hashlife",
+        changes={"pattern": params.pattern},
+        required=advice.required,
+        title=title,
+        text=advice.reason,
+        detail=detail,
     )
-
-
-def _validate_lifelike(params: Params) -> tuple[str, str] | None:
-    assert isinstance(params, LifeLikeParams)
-    try:
-        parse_rule(params.rule)
-    except ValueError as exc:
-        return ("rule", str(exc))
-    return None
 
 
 def _paint_binary(sim: Simulation, x: int, y: int, button: int) -> None:
@@ -149,8 +187,8 @@ register(
         key="lifelike",
         label="Life-like",
         category="Cellular Automata",
-        params_cls=LifeLikeParams,
-        build=_build_lifelike,
+        params_cls=LifeLikeSimParams,
+        build=LifeLikeSim.build,
         hot_fields=frozenset({"rule", "boundary"}),
         hot_apply=_hot_lifelike,
         validate=_validate_lifelike,
@@ -162,8 +200,20 @@ register(
             "Day & Night": {"rule": "B3678/S34678", "init": "soup", "density": 0.5},
             "Maze": {"rule": "B3/S12345", "init": "blob", "density": 0.3},
             "Diamoeba": {"rule": "B35678/S5678", "init": "soup", "density": 0.48},
+            # Patterns: any built-in name, or a file (Browse…). The gun's gliders leave by
+            # a dead edge; around a torus they would come back and wreck it.
+            "R-pentomino": {"rule": "B3/S23", "init": "pattern", "pattern": "R-pentomino"},
+            "Gosper glider gun": {
+                "rule": "B3/S23",
+                "init": "pattern",
+                "pattern": "Gosper glider gun",
+                "boundary": "dead",
+            },
         },
         paint=_paint_binary,
+        pattern_files=True,
+        save_filter=RLE_FILTER,
+        advise=_advise_lifelike,
     )
 )
 
@@ -244,6 +294,7 @@ register(
         with_view=_hashlife_set_view,
         frame_size=_hashlife_frame_size,
         pattern_files=True,
+        save_filter=SAVE_FILTER,
     )
 )
 

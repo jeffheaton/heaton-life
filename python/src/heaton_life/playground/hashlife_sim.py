@@ -42,8 +42,9 @@ from heaton_life.init import BUILTIN_PATTERNS
 BUILTIN_NAMES = tuple(p.name for p in BUILTIN_PATTERNS if p.family == "lifelike")
 PATTERN_SUFFIXES = (".rle", ".mc", ".mc.gz")
 PATTERN_FILTER = "Patterns (*.rle *.mc *.gz);;All files (*)"
+RLE_FILTER = "RLE (*.rle)"
 _SAVE_FILTERS = {
-    ".rle": "RLE (*.rle)",
+    ".rle": RLE_FILTER,
     ".mc": "Macrocell (*.mc)",
     ".mc.gz": "Gzipped Macrocell (*.mc.gz)",
 }
@@ -169,6 +170,7 @@ class HashLifeSim:
         self._frame: NDArray[np.uint8] | None = None
         self._frame_view = self._view
         self._canceled = False
+        self.cut_short = False  # the last step stopped before it was done (cancel())
 
     @classmethod
     def build(cls, params: Params) -> HashLifeSim:
@@ -195,10 +197,13 @@ class HashLifeSim:
 
     def step(self, n: int = 1) -> None:
         """Advance n steps of 2^step_exponent generations; ``cancel()`` cuts it short at a
-        completed sub-step. A batch that would reach 2^510 generations, past what one
-        engine step takes, goes in parts. A step that can't fit one generation into the
-        budget raises HashLifeMemoryError, and a pattern spread past the deepest tree
-        raises ValueError (the engine stops playing and shows either)."""
+        completed sub-step, and ``cut_short`` says so. What the cut step had computed
+        stays in the universe's caches, so running it again picks up where it stopped
+        (unless memory passes three-quarters of the budget first: the collection that
+        triggers clears them). A batch that would reach 2^510 generations, past what one engine step takes, goes in
+        parts. A step that can't fit one generation into the budget raises
+        HashLifeMemoryError, and a pattern spread past the deepest tree raises ValueError
+        (the engine stops playing and shows either)."""
         universe = self.universe
         if universe.generation == self._start.generation:
             self._start = universe.snapshot()  # edits made at the start belong to it
@@ -214,6 +219,7 @@ class HashLifeSim:
             pass  # the universe holds the last completed sub-step
         finally:
             self._frame = None
+            self.cut_short = n > 0
 
     def reset(self, seed: int | None = None) -> None:
         """Back to the starting cells and generation; rule, budget, and view stay."""

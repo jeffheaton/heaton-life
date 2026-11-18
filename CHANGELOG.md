@@ -37,6 +37,10 @@ One output changed form: canonical RLE (below).
   neither ships.
 - Python playground: a HashLife view: open and save `.rle`, `.mc`, and `.mc.gz`, paint,
   zoom at the cursor, step 2^k generations at a time, and set the memory budget.
+- Python playground: Life-like starts from a pattern (a built-in, or a `.rle`, `.mc`, or
+  `.mc.gz` file) and saves its cells as RLE. A file too large for a grid is offered to
+  HashLife instead of being loaded, and one that merely suits HashLife better is the
+  user's choice.
 - Self-check: a `hashlife` check (22 checks now), the Gosper gun to 2²⁰⁰ generations, for
   the 64-bit and big-integer arithmetic past 2⁶⁴.
 - Python: `rle_runs` and `RleInfo` stream an RLE file's runs, position, and generation

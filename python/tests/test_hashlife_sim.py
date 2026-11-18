@@ -35,6 +35,27 @@ def _sim(**changes: object) -> HashLifeSim:
     return HashLifeSim.build(HashLifeSimParams().replace(**changes))
 
 
+def test_a_step_cut_short_says_so_and_keeps_the_generation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from heaton_life.ca.hashlife import StepCanceled
+
+    sim = _sim()
+    sim.step(1)
+    assert not sim.cut_short and sim.generation == 1
+
+    def canceled(n: int) -> None:
+        raise StepCanceled("canceled")  # what cancel() makes a running step do
+
+    monkeypatch.setattr(sim.universe, "step", canceled)
+    sim.step(1)
+    assert sim.cut_short and sim.generation == 1
+    monkeypatch.undo()
+    sim.cancel()  # with no step running: it doesn't stop the next one
+    sim.step(1)
+    assert not sim.cut_short and sim.generation == 2
+
+
 def test_build_fits_the_view_and_adopts_the_patterns_rule() -> None:
     sim = _sim(pattern="Replicator (HighLife)", rule="B3/S23")
     p = sim.params

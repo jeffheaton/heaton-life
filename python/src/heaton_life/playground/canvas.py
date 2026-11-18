@@ -82,6 +82,12 @@ class Canvas(QWidget):
         self.update()
         self._fit_frame()
 
+    def resend_view(self) -> None:
+        """Emit the live view being shown again (``view_requested``), so it wins over
+        gestures that were made against a view it has since replaced."""
+        if self._nav is not None:
+            self.view_requested.emit(self._nav.view, self._nav.size)
+
     def fill_size(self) -> tuple[int, int]:
         """The frame size, in frame pixels, that fills the canvas: one frame pixel per canvas
         pixel, or a fixed Cell scale's square of them."""

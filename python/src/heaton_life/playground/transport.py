@@ -58,6 +58,9 @@ class Transport(QToolBar):
         self._slider.valueChanged.connect(self._on_speed)
         self.addWidget(self._slider)
         self._speed_label = QLabel(f" {slider_to_speed(60)} st/s ")
+        # Its widest text, so what follows it doesn't shift as the slider moves.
+        metrics = self._speed_label.fontMetrics()
+        self._speed_label.setMinimumWidth(metrics.horizontalAdvance(f" {_SPEED_MAX} st/s "))
         self.addWidget(self._speed_label)
 
         self.addSeparator()
@@ -89,7 +92,7 @@ class Transport(QToolBar):
         )
         assert pattern is not None
         pattern.setShortcut("Ctrl+Shift+S")
-        pattern.setToolTip("Save pattern… (RLE inside the editing box, else Macrocell)")
+        pattern.setToolTip("Save pattern… (the cells, as a pattern file)")
         pattern.setEnabled(False)
         pattern.triggered.connect(self.pattern_save_clicked.emit)
         self._pattern = pattern
@@ -107,7 +110,8 @@ class Transport(QToolBar):
         self._play.setChecked(playing)
 
     def set_pattern_files(self, enabled: bool) -> None:
-        """Offer Save pattern only for families whose sims write pattern files."""
+        """Offer Save pattern only for families whose sims write pattern files (HashLife:
+        RLE inside the editing box, else Macrocell; Life-like: RLE)."""
         self._pattern.setEnabled(enabled)
 
     def _on_play(self, checked: bool) -> None:
