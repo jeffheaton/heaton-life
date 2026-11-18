@@ -730,10 +730,18 @@ def test_a_value_too_long_for_its_field_shows_its_start_and_a_tooltip(
 
 
 def test_the_family_tree_is_as_wide_as_its_names(window: MainWindow, app: QApplication) -> None:
+    """A tree view's own hint is 256 px whatever it holds. Ours follows the names, whose
+    width is the platform font's: more than 256 on Windows, less on macOS."""
+    from heaton_life.playground.app import TREE_PADDING
+    from heaton_life.playground.param_form import scroll_bar_width
+
     _shown(window, app)
     tree = window._tree
     names = tree.sizeHintForColumn(0)
-    assert 0 < names <= tree.viewport().width() < 256  # the tree view's stock hint
+    assert names > 0
+    hint = names + scroll_bar_width(tree) + 2 * tree.frameWidth() + TREE_PADDING
+    assert tree.sizeHint().width() == hint
+    assert tree.viewport().width() >= names  # every name shows whole
 
 
 # -- HashLife live view: gestures move the view at once, the engine renders it after ---------
