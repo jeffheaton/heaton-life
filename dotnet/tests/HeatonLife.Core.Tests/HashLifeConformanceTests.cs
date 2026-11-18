@@ -20,7 +20,7 @@ namespace HeatonLife.Tests
     /// </summary>
     public class HashLifeConformanceTests
     {
-        private static readonly string[] SpecVersions = { "0.14.0" };
+        private static readonly string[] SpecVersions = { "0.14.0", "0.15.0" };
 
         private static readonly Dictionary<string, HashSet<string>> Keys = BuildKeys();
 
@@ -303,6 +303,20 @@ namespace HeatonLife.Tests
                             ? (CellBox?)null
                             : new CellBox(Big(box[0]), Big(box[1]), Big(box[2]), Big(box[3]));
                         got = Parts(LifeView.Fit(b, size[0].GetInt64(), size[1].GetInt64()));
+                        break;
+                    }
+                case "resized":
+                    {
+                        JsonElement old = op.GetProperty("old"), size = op.GetProperty("new");
+                        got = Parts(LifeView.Resized(
+                            View(op.GetProperty("view")), old[0].GetInt64(), old[1].GetInt64(),
+                            size[0].GetInt64(), size[1].GetInt64()));
+                        break;
+                    }
+                case "frame_map":
+                    {
+                        var (steps, dx, dy) = LifeView.FrameMap(View(op.GetProperty("frame")), View(op.GetProperty("view")));
+                        got = new[] { new BigInteger(steps), dx, dy };
                         break;
                     }
                 default:

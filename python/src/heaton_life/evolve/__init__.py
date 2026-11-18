@@ -5,7 +5,7 @@ Faithful port of the reference objective statistics and GA operators
 flows through PCG32, so scoring and whole evolution runs replay from a seed.
 """
 
-from heaton_life.evolve.ga import Evolver, crossover, mutate, tournament_select
+from heaton_life.evolve.ga import Evolver, RestartSeeds, crossover, mutate, tournament_select
 from heaton_life.evolve.objective import (
     PAPER_OBJECTIVE,
     ObjectiveRule,
@@ -17,6 +17,7 @@ __all__ = [
     "PAPER_OBJECTIVE",
     "Evolver",
     "ObjectiveRule",
+    "RestartSeeds",
     "crossover",
     "largest_rectangle_area",
     "mutate",

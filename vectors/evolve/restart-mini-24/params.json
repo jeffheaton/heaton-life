@@ -1,0 +1,45 @@
+{
+  "expected": {
+    "best_scores": {
+      "file": "best.f64",
+      "shape": [
+        3
+      ]
+    },
+    "runs": [
+      {
+        "best_genome": "75f6-9a96-f442-05ee-f65c-cbec-23ee-de46",
+        "evals": 27,
+        "seed": "123"
+      },
+      {
+        "best_genome": "4055-b93f-e324-bc88-5320-3e27-2550-2536",
+        "evals": 23,
+        "seed": "14481918992638261953"
+      },
+      {
+        "best_genome": "90b5-4987-966b-5ebb-6d54-b214-e99f-28fd",
+        "evals": 44,
+        "seed": "15039081964781261398"
+      }
+    ]
+  },
+  "family": "evolve",
+  "kind": "restart",
+  "params": {
+    "crossover_rate": 0.75,
+    "eval_cycles": 1,
+    "height": 24,
+    "max_evals": 10000,
+    "max_steps": 120,
+    "objective": "paper",
+    "patience": 20,
+    "population_size": 8,
+    "runs": 3,
+    "seed": 123,
+    "tournament_rounds": 3,
+    "width": 24
+  },
+  "spec_version": "0.15.0",
+  "tier": "bit-exact"
+}

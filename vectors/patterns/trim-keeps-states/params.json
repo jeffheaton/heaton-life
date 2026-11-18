@@ -1,0 +1,16 @@
+{
+  "family": "patterns",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      1,
+      4
+    ]
+  },
+  "input": "input.rle",
+  "kind": "rle-trim",
+  "limit": "default",
+  "rule": "WireWorld",
+  "spec_version": "0.15.0",
+  "tier": "bit-exact"
+}

@@ -26,7 +26,9 @@ from heaton_life.ca.hashlife.view import (
     center_cell,
     centered,
     fit,
+    frame_map,
     pan,
+    resized,
     zoom_at,
 )
 
@@ -50,6 +52,8 @@ __all__ = [
     "center_cell",
     "centered",
     "fit",
+    "frame_map",
     "pan",
+    "resized",
     "zoom_at",
 ]

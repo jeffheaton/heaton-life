@@ -1,0 +1,13 @@
+{
+  "family": "patterns",
+  "input": "input.rle",
+  "kind": "rle-limit",
+  "limit": 9,
+  "population": 5,
+  "shape": [
+    3,
+    3
+  ],
+  "spec_version": "0.15.0",
+  "tier": "bit-exact"
+}

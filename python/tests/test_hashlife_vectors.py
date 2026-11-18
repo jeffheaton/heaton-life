@@ -21,13 +21,15 @@ from heaton_life.ca.hashlife import (
     center_cell,
     centered,
     fit,
+    frame_map,
     pan,
+    resized,
     zoom_at,
 )
 
 VECTOR_ROOT = Path(__file__).resolve().parents[2] / "vectors" / "hashlife"
 CASES = sorted(VECTOR_ROOT.glob("*/params.json"))
-SPEC_VERSIONS = {"0.14.0"}
+SPEC_VERSIONS = {"0.14.0", "0.15.0"}
 _COMMON = {"spec_version", "family", "tier", "kind"}
 _STATE = {"generation", "population", "bounding_box"}
 _KEYS = {
@@ -94,6 +96,10 @@ def _view_result(op: dict[str, Any]) -> tuple[Any, ...]:
     if kind == "fit":
         box = None if op["box"] is None else tuple(int(c) for c in op["box"])
         return tuple(vars(fit(box, tuple(op["size"]))).values())  # type: ignore[arg-type]
+    if kind == "resized":
+        return tuple(vars(resized(_view(op["view"]), tuple(op["old"]), tuple(op["new"]))).values())
+    if kind == "frame_map":
+        return frame_map(_view(op["frame"]), _view(op["view"]))
     raise AssertionError(f"unknown view op {kind!r}")
 
 

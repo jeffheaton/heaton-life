@@ -82,6 +82,35 @@ def center_cell(view: LifeView, size: tuple[int, int]) -> tuple[int, int]:
     return cell_at(view, width // 2, height // 2)
 
 
+def resized(view: LifeView, old: tuple[int, int], new: tuple[int, int]) -> LifeView:
+    """The view for frames of ``new`` (width, height) where they were ``old``, the center
+    pixel (width // 2, height // 2) still over the same point: a resized window keeps its
+    middle in place."""
+    (old_w, old_h), (new_w, new_h) = (
+        tuple(operator.index(v) for v in old),
+        tuple(operator.index(v) for v in new),
+    )
+    return pan(view, new_w // 2 - old_w // 2, new_h // 2 - old_h // 2)
+
+
+def frame_map(frame: LifeView, view: LifeView) -> tuple[int, int, int]:
+    """Where the pixels of a frame rendered at ``frame`` lie in ``view``, as
+    ``(steps, dx, dy)`` with ``steps = view.mag − frame.mag``.
+
+    ``steps ≥ 0`` (the view is the finer): frame pixel (u, v) covers the 2^steps × 2^steps
+    square of view pixels whose top-left is (u · 2^steps + dx, v · 2^steps + dy).
+    ``steps < 0`` (the frame is the finer, s = −steps): frame pixel (u, v) lies in view
+    pixel (⌊(u + dx) / 2^s⌋, ⌊(v + dy) / 2^s⌋).
+
+    A viewer asked for a new view draws the frame it has through this map until the new
+    one is rendered, so a pan or a zoom answers at once however long a frame takes."""
+    steps = view.mag - frame.mag
+    if steps >= 0:
+        return steps, (frame.x << steps) - view.x, (frame.y << steps) - view.y
+    s = -steps
+    return steps, frame.x - (view.x << s), frame.y - (view.y << s)
+
+
 def fit(box: tuple[int, int, int, int] | None, size: tuple[int, int]) -> LifeView:
     """The deepest view (mag ≤ ``MAX_MAG``) whose frame holds the inclusive box, centered
     on it; an empty universe (``None``) gives the origin at 1:1. Raises ValueError when no

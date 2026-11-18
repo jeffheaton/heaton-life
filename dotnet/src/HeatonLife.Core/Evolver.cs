@@ -84,6 +84,57 @@ namespace HeatonLife
     }
 
     /// <summary>
+    /// The seeds of a restart search's runs, in run order (spec/evolve.md "Restart search").
+    /// One population converges, so a search breeds run after run, each from a fresh random
+    /// population: when an <see cref="Evolver"/> is <see cref="Evolver.Converged"/>, start
+    /// another with the next seed. Run 1 uses the search's seed itself; run n ≥ 2 uses the
+    /// (n − 1)-th 64-bit value of <c>Pcg32(seed, 2)</c>, two 32-bit draws each, the high half
+    /// first. A run depends on nothing but the trainer's parameters, the search's seed, and
+    /// its number, so a find replays anywhere from those three, and a host may breed several
+    /// runs at once: draw the seeds in run order, on one thread.
+    /// </summary>
+    public sealed class RestartSeeds
+    {
+        /// <summary>The restart search's PCG32 sequence (spec/rng.md "Streams").</summary>
+        public const ulong Sequence = 2;
+
+        private readonly Pcg32 _rng;
+
+        public RestartSeeds(ulong seed)
+        {
+            Seed = seed;
+            _rng = new Pcg32(seed, Sequence);
+        }
+
+        /// <summary>The search's own seed, which is also run 1's.</summary>
+        public ulong Seed { get; }
+
+        /// <summary>The number of the run <see cref="Next"/> last gave a seed for; 0 before the first.</summary>
+        public int Run { get; private set; }
+
+        /// <summary>The next run's seed.</summary>
+        public ulong Next()
+        {
+            Run++;
+            if (Run == 1)
+                return Seed;
+            ulong high = _rng.NextU32();
+            return (high << 32) | _rng.NextU32();
+        }
+
+        /// <summary>The seed of run number <paramref name="run"/> (from 1) of the search seeded <paramref name="seed"/>.</summary>
+        public static ulong ForRun(ulong seed, int run)
+        {
+            if (run < 1)
+                throw new ArgumentOutOfRangeException(nameof(run), $"runs are numbered from 1; got {run}");
+            var seeds = new RestartSeeds(seed);
+            for (int i = 1; i < run; i++)
+                seeds.Next();
+            return seeds.Next();
+        }
+    }
+
+    /// <summary>
     /// Steady-state GA over MergeLife genomes, deterministic from its seed
     /// (spec/evolve.md): every random decision draws from one PCG32 stream
     /// (sequence 1 — distinct from lattice seeding), so a run replays exactly,
@@ -112,6 +163,13 @@ namespace HeatonLife
         public int Workers { get; }
         public int Evals { get; private set; }
         public int NoImprovement { get; private set; }
+
+        /// <summary>
+        /// The run is over: more than <see cref="Patience"/> evaluations have passed without a
+        /// new best, and <see cref="Run"/> will breed no further (spec/evolve.md "Restart
+        /// search").
+        /// </summary>
+        public bool Converged => NoImprovement > Patience;
 
         public Evolver(
             int width = 100,

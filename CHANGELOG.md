@@ -7,10 +7,11 @@ vectors) moves on its own; each release lists the one it implements.
 
 ## 1.2.0 (unreleased)
 
-Implements spec version 0.14.0 (1.1.0 implemented 0.13.0). Every conformance vector that
+Implements spec version 0.15.0 (1.1.0 implemented 0.13.0). Every conformance vector that
 existed at 1.1.0 is byte-identical; the new behavior comes with new vector cases. The
 public APIs of both packages are backward compatible: nothing was removed or renamed.
-One output changed form: canonical RLE (below).
+Two behaviors changed (below): canonical RLE's form, and RLE decoding now has a size
+limit.
 
 ### Added
 
@@ -45,6 +46,22 @@ One output changed form: canonical RLE (below).
   the 64-bit and big-integer arithmetic past 2⁶⁴.
 - Python: `rle_runs` and `RleInfo` stream an RLE file's runs, position, and generation
   without building a grid.
+- **Measuring a pattern before decoding it** (`rle_measure`, `Patterns.RleMeasure`;
+  [spec/patterns.md](spec/patterns.md) "Extent"): the size a decode would give, the live
+  cells' box, and their count, as exact integers and without a grid. A few bytes of RLE
+  can describe more cells than memory holds, so measure a file that came from outside.
+- **Trimmed decoding** (`rle_decode(..., trim=True)`, `Patterns.RleDecode(text, limit,
+  trim: true)`): only the live cells' bounding box, the header's size and dead margins
+  dropped. It is the decode for loading a pattern file into a world.
+- **HashLife view helpers** (`resized`, `frame_map`; `LifeView.Resized`,
+  `LifeView.FrameMap`): the view that keeps its center when the frame is resized, and
+  where one view's frame lies in another, in exact integers. A viewer draws the frame it
+  has through the map until the new one is rendered, so a pan or zoom answers at once.
+- **The evolver's restart search** (`RestartSeeds`, `Evolver.converged` /
+  `Evolver.Converged`; [spec/evolve.md](spec/evolve.md) "Restart search"): a search
+  breeds run after run, each from a fresh population, and run n's seed comes from PCG32
+  stream 2, so any run replays on either implementation from the search's seed and its
+  number. [spec/rng.md](spec/rng.md) now lists the streams in use.
 
 ### Changed
 
@@ -52,6 +69,14 @@ One output changed form: canonical RLE (below).
   `Patterns.RleEncode`), so empty rows cost one token however many there are. Files read
   back exactly as before, and no existing vector had such a run, but the text differs
   wherever two `$` used to meet: `$$` is now `2$`.
+
+- **RLE decoding refuses a grid past 2²⁶ cells by default** (8192 × 8192; `max_cells`,
+  `Patterns.DefaultMaxCells`), before allocating anything. It used to try: a header
+  declaring `x = 1000000000, y = 1000000000`, or one run of a billion dead cells, asked
+  for memory no machine has, and .NET overflowed its `int` sizes on the way. Pass a
+  larger limit, or `None` / `null` to lift it, to decode a bigger grid on purpose.
+- Python: `rle_runs` reads its tokens one at a time. It used to list every token of the
+  file first, which held a large file in memory several times over.
 
 ## 1.1.0 (2026-09-25)
 

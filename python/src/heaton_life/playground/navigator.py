@@ -10,9 +10,8 @@ The frame size follows the canvas too (``resize``), keeping the view's center in
 from __future__ import annotations
 
 import dataclasses
-from fractions import Fraction
 
-from heaton_life.ca.hashlife import LifeView, pan, zoom_at
+from heaton_life.ca.hashlife import LifeView, frame_map, pan, resized, zoom_at
 
 MIN_MAG = -4096  # the Mag field's own floor
 _MAX_PREVIEW_STEPS = 12  # past 4096× either way a stale frame shows nothing useful
@@ -69,22 +68,23 @@ class ViewNavigator:
         place. False when the size stayed."""
         if size == self.size:
             return False
-        (old_w, old_h), (new_w, new_h) = self.size, size
-        self.view = pan(self.view, new_w // 2 - old_w // 2, new_h // 2 - old_h // 2)
+        self.view = resized(self.view, self.size, size)
         self.size = size
         return True
 
     def frame_map(self, frame_view: LifeView, frame_size: tuple[int, int]) -> FrameMap | None:
         """Where a frame of ``frame_size`` rendered at ``frame_view`` lands in this view, or
         None when it misses the view entirely or would be scaled past 4096× either way."""
-        steps = self.view.mag - frame_view.mag
+        steps, dx, dy = frame_map(frame_view, self.view)  # spec/hashlife.md: exact integers
         if abs(steps) > _MAX_PREVIEW_STEPS:
             return None
-        scale = Fraction(2) ** steps
-        dx = frame_view.x * scale - self.view.x
-        dy = frame_view.y * scale - self.view.y
         width, height = self.size
         fw, fh = frame_size
-        if dx >= width or dy >= height or dx + fw * scale <= 0 or dy + fh * scale <= 0:
+        if steps >= 0:  # each frame pixel is a 2^steps square of ours, from (dx, dy)
+            if dx >= width or dy >= height or dx + (fw << steps) <= 0 or dy + (fh << steps) <= 0:
+                return None
+            return FrameMap(float(1 << steps), float(dx), float(dy))
+        unit = 1 << -steps  # frame pixels to one of ours; (dx, dy) is in the frame's
+        if dx >= width * unit or dy >= height * unit or dx + fw <= 0 or dy + fh <= 0:
             return None
-        return FrameMap(float(scale), float(dx), float(dy))
+        return FrameMap(1 / unit, dx / unit, dy / unit)

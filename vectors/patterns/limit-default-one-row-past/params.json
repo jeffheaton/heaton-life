@@ -1,0 +1,9 @@
+{
+  "error": true,
+  "family": "patterns",
+  "input": "input.rle",
+  "kind": "rle-limit",
+  "limit": "default",
+  "spec_version": "0.15.0",
+  "tier": "bit-exact"
+}

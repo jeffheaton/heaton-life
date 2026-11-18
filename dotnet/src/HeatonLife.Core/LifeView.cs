@@ -95,6 +95,32 @@ namespace HeatonLife
         }
 
         /// <summary>
+        /// The view for frames of the new size where they were the old, the center pixel
+        /// (width / 2, height / 2) still over the same point: a resized window keeps its middle
+        /// in place.
+        /// </summary>
+        public static LifeView Resized(LifeView view, long oldWidth, long oldHeight, long newWidth, long newHeight)
+            => Pan(view, FloorHalf(newWidth) - FloorHalf(oldWidth), FloorHalf(newHeight) - FloorHalf(oldHeight));
+
+        /// <summary>
+        /// Where the pixels of a frame rendered at <paramref name="frame"/> lie in
+        /// <paramref name="view"/>, with Steps = view.Mag − frame.Mag (spec/hashlife.md "View and
+        /// render"). Steps ≥ 0 (the view is the finer): frame pixel (u, v) covers the
+        /// 2^Steps × 2^Steps square of view pixels whose top-left is (u · 2^Steps + Dx,
+        /// v · 2^Steps + Dy). Steps &lt; 0 (the frame is the finer, s = −Steps): frame pixel
+        /// (u, v) lies in view pixel (⌊(u + Dx) / 2^s⌋, ⌊(v + Dy) / 2^s⌋). A viewer asked for a
+        /// new view draws the frame it has through this map until the new one is rendered.
+        /// </summary>
+        public static (int Steps, BigInteger Dx, BigInteger Dy) FrameMap(LifeView frame, LifeView view)
+        {
+            int steps = view.Mag - frame.Mag;
+            if (steps >= 0)
+                return (steps, ShiftUp(frame.X, steps) - view.X, ShiftUp(frame.Y, steps) - view.Y);
+            int s = -steps;
+            return (steps, frame.X - ShiftUp(view.X, s), frame.Y - ShiftUp(view.Y, s));
+        }
+
+        /// <summary>
         /// The deepest view (mag ≤ <see cref="MaxMag"/>) whose frame holds the inclusive box,
         /// centered on it; an empty universe (null) gives the origin at 1:1.
         /// </summary>

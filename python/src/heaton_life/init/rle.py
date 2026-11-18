@@ -86,7 +86,8 @@ def _cxrle_int(text: str, *, signed: bool) -> int:
 
 def _scan(body: str, extended: bool) -> Iterator[tuple[int, int, int, int]]:
     x = y = 0
-    for count_text, tag in _TOKEN.findall(body):
+    for token in _TOKEN.finditer(body):  # one at a time: a giant file's tokens never pile up
+        count_text, tag = token.groups()
         count = int(count_text) if count_text else 1
         if tag == "b" or tag == "." or (not extended and tag == "B"):
             x += count
@@ -105,13 +106,33 @@ def _scan(body: str, extended: bool) -> Iterator[tuple[int, int, int, int]]:
             raise ValueError(f"unsupported RLE tag: {tag!r}")
 
 
-def rle_decode(text: str) -> tuple[NDArray[np.uint8], str | None]:
-    """Decode RLE text; returns (grid, rule) where rule is None if the header omitted it."""
+DEFAULT_MAX_CELLS = 1 << 26
+"""The decode limit's default (spec/patterns.md "The decode limit"): 67,108,864 cells, an
+8192 × 8192 grid."""
+
+
+@dataclasses.dataclass(frozen=True)
+class RleExtent:
+    """What decoding an RLE text would give, found without making a grid (spec/patterns.md
+    "Extent"). Every number is exact, however large the file's run counts are."""
+
+    width: int
+    """The decoded grid's size: the larger of what the header declares and the body holds."""
+    height: int
+    live: tuple[int, int, int, int] | None
+    """(x0, y0, x1, y1): the inclusive extremes of the non-zero cells, or None without any."""
+    population: int
+    """How many cells are non-zero."""
+    rule: str | None
+    extended: bool
+
+
+def _parse(text: str) -> tuple[int, int, str | None, str, bool]:
+    """An RLE text as (declared width, declared height, rule, body, extended)."""
     lines = [ln.strip() for ln in text.splitlines()]
     lines = [ln for ln in lines if ln and not ln.startswith("#")]
     if not lines:
         raise ValueError("empty RLE input")
-
     rule: str | None = None
     header = _HEADER.match(lines[0])
     if header:
@@ -121,43 +142,98 @@ def rle_decode(text: str) -> tuple[NDArray[np.uint8], str | None]:
     else:
         declared_w = declared_h = 0
         body = "".join(lines)
+    return declared_w, declared_h, rule, body, _is_extended(body, rule)
 
-    extended = _is_extended(body, rule)
 
-    rows: list[list[int]] = [[]]
-    count = 0
+def _walk(body: str, extended: bool) -> Iterator[tuple[int, int, int, int]]:
+    """The body as runs ``(x, y, length, state)`` in file order, dead runs (state 0)
+    included, and last of all ``(0, rows, 0, -1)``: how many rows it has. Measuring and
+    decoding both read this, so they can't disagree, and neither holds more than a run."""
+    x = y = count = 0
     for ch in body:
         if ch.isdigit():
             count = count * 10 + int(ch)
         elif ch == "b" or ch == "." or (not extended and ch == "B"):
-            rows[-1].extend([0] * max(count, 1))
-            count = 0
+            length = max(count, 1)
+            yield x, y, length, 0
+            x, count = x + length, 0
         elif ch == "o" or (not extended and ch == "O"):
-            rows[-1].extend([1] * max(count, 1))
-            count = 0
+            length = max(count, 1)
+            yield x, y, length, 1
+            x, count = x + length, 0
         elif extended and "A" <= ch <= "X":  # states 1..24 (B = 2, O = 15)
-            rows[-1].extend([ord(ch) - ord("A") + 1] * max(count, 1))
-            count = 0
+            length = max(count, 1)
+            yield x, y, length, ord(ch) - ord("A") + 1
+            x, count = x + length, 0
         elif ch == "$":
-            rows.extend([] for _ in range(max(count, 1)))
-            count = 0
+            x, y, count = 0, y + max(count, 1), 0
         elif ch == "!":
             break
         elif ch.isspace():
             continue
         else:
             raise ValueError(f"unsupported RLE tag: {ch!r}")
+    yield 0, y + 1, 0, -1
 
-    width = max((len(r) for r in rows), default=0)
-    width = max(width, declared_w)
-    height = max(len(rows), declared_h)
-    if width == 0 or height == 0:
+
+def _measure(
+    declared_w: int, declared_h: int, rule: str | None, body: str, extended: bool
+) -> RleExtent:
+    longest = rows = population = 0
+    live: tuple[int, int, int, int] | None = None
+    for x, y, length, state in _walk(body, extended):
+        if state < 0:
+            rows = y
+            break
+        longest = max(longest, x + length)
+        if state:
+            population += length
+            last = x + length - 1
+            if live is None:
+                live = (x, y, last, y)
+            else:
+                live = (min(live[0], x), live[1], max(live[2], last), y)  # rows only go down
+    width, height = max(declared_w, longest), max(declared_h, rows)
+    return RleExtent(width, height, live, population, rule, extended)
+
+
+def rle_measure(text: str) -> RleExtent:
+    """What ``rle_decode`` would give, without making it: the grid's size, the non-zero
+    cells' box, and how many there are. A few bytes of RLE can describe more cells than
+    memory holds (a run of a billion, a header that declares one), so measure a file that
+    came from outside before decoding it."""
+    return _measure(*_parse(text))
+
+
+def rle_decode(
+    text: str, *, max_cells: int | None = DEFAULT_MAX_CELLS, trim: bool = False
+) -> tuple[NDArray[np.uint8], str | None]:
+    """Decode RLE text; returns (grid, rule) where rule is None if the header omitted it.
+
+    The extent is found first, and a grid past ``max_cells`` (width × height) is refused
+    before any memory is asked for; ``None`` lifts the limit. With ``trim`` the grid is
+    only the non-zero cells' bounding box: the header's size and any dead margin are
+    dropped, the limit applies to that box, and a pattern with no such cell is an error.
+    """
+    declared_w, declared_h, rule, body, extended = _parse(text)
+    extent = _measure(declared_w, declared_h, rule, body, extended)
+    left = top = 0
+    width, height = extent.width, extent.height
+    if trim:
+        if extent.live is None:
+            raise ValueError("RLE pattern has no live cells")
+        left, top, right, bottom = extent.live
+        width, height = right - left + 1, bottom - top + 1
+    elif width == 0 or height == 0:
         raise ValueError("RLE pattern has no cells")
-
+    if max_cells is not None and width * height > max_cells:
+        raise ValueError(
+            f"RLE pattern is {width:,} × {height:,} cells, past the limit of {max_cells:,}"
+        )
     grid = np.zeros((height, width), dtype=np.uint8)
-    for y, row in enumerate(rows):
-        if row:
-            grid[y, : len(row)] = row
+    for x, y, length, state in _walk(body, extended):
+        if state > 0:
+            grid[y - top, x - left : x - left + length] = state
     return grid, rule
 
 

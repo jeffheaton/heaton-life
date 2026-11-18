@@ -8,7 +8,7 @@ form allows), and the rule the pattern names is adopted.
 
 A grid holds every one of its cells, and a pattern file can describe more of them than
 memory holds, so a file is measured before any grid is made of it (``measure``): RLE
-through the library's streaming scan, Macrocell through a HashLife universe. ``advise``
+through the library's ``rle_measure``, Macrocell through a HashLife universe. ``advise``
 turns the size into advice:
 
 - past the largest grid (``GRID_LIMIT`` a side): only HashLife can run it;
@@ -35,7 +35,7 @@ from heaton_life.ca.hashlife import DEFAULT_MEMORY_MB, HashLife, HashLifeMemoryE
 from heaton_life.ca.rulestring import parse_rule
 from heaton_life.core.neighbors import Boundary
 from heaton_life.core.params import Params
-from heaton_life.init import BUILTIN_PATTERNS, place, rle_encode, rle_runs
+from heaton_life.init import BUILTIN_PATTERNS, place, rle_decode, rle_encode, rle_measure
 from heaton_life.playground.hashlife_sim import BUILTIN_NAMES, PATTERN_FILTER, PATTERN_SUFFIXES
 
 _LIBRARY = {f.name: f for f in dataclasses.fields(LifeLikeParams)}
@@ -49,7 +49,7 @@ HEAVY = 100_000_000
 that stepping and drawing make."""
 RLE_SIZE_LIMIT = 8 * 2**20
 """Bytes of RLE read at most: about twice what the fullest GRID_LIMIT² pattern takes (one
-character a cell). The scan holds every token at once, so a larger file isn't scanned."""
+character a cell). A larger file can't fit, and reading it would only take time."""
 
 
 def _library_field(name: str, **metadata: object) -> Any:
@@ -151,28 +151,22 @@ def _measure_macrocell(path: Path) -> Measured:
 
 
 def _measure_rle(name: str, text: str) -> Measured:
-    """The live cells' box from the runs alone: a row of a billion dead cells, or a header
-    that declares one, never becomes memory."""
+    """The live cells' box from the library's measure (spec/patterns.md "Extent"): a row
+    of a billion dead cells, or a header that declares one, never becomes memory."""
     try:
-        info, runs = rle_runs(text)
-        if info.extended:
-            raise ValueError("a multi-state RLE; a Life-like cell is dead or alive")
-        left = top = right = bottom = -1
-        for x, y, length, _state in runs:
-            left = x if left < 0 else min(left, x)
-            top = y if top < 0 else top  # rows only go down
-            right, bottom = max(right, x + length - 1), y
+        extent = rle_measure(text)
     except ValueError as exc:
         raise ValueError(f"{name}: {exc}") from exc  # the reader's words, and whose
-    if left < 0:
+    if extent.extended:
+        raise ValueError(f"{name}: a multi-state RLE; a Life-like cell is dead or alive")
+    if extent.live is None:
         raise ValueError(f"{name} has no live cells")
-    width, height = right - left + 1, bottom - top + 1
+    x0, y0, x1, y1 = extent.live
+    width, height = x1 - x0 + 1, y1 - y0 + 1
     cells: NDArray[np.uint8] | None = None
     if width <= GRID_LIMIT and height <= GRID_LIMIT:
-        cells = np.zeros((height, width), dtype=np.uint8)
-        for x, y, length, _state in rle_runs(text)[1]:
-            cells[y - top, x - left : x - left + length] = 1
-    return Measured(name, False, width, height, info.rule, cells)
+        cells, _ = rle_decode(text, trim=True, max_cells=GRID_LIMIT * GRID_LIMIT)
+    return Measured(name, False, width, height, extent.rule, cells)
 
 
 # -- advice ---------------------------------------------------------------------------------

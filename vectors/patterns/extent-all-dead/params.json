@@ -1,0 +1,15 @@
+{
+  "extent": {
+    "extended": false,
+    "height": "2",
+    "live": null,
+    "population": "0",
+    "rule": null,
+    "width": "3"
+  },
+  "family": "patterns",
+  "input": "input.rle",
+  "kind": "rle-extent",
+  "spec_version": "0.15.0",
+  "tier": "bit-exact"
+}

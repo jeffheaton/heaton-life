@@ -8,7 +8,8 @@ namespace HeatonLife.Tests
 {
     /// <summary>
     /// Evolve conformance: replay vectors/evolve/ — objective stats per seeded run,
-    /// GA operator sequences, and one end-to-end mini evolution run. Bit-exact tier;
+    /// GA operator sequences, one end-to-end mini evolution run, and the restart search's
+    /// run seeds and first runs. Bit-exact tier;
     /// the same files the Python suite replays (spec/evolve.md).
     /// </summary>
     public class EvolveConformanceTests
@@ -39,6 +40,12 @@ namespace HeatonLife.Tests
                     break;
                 case "run":
                     RunMiniEvolution(caseDir, root, p);
+                    break;
+                case "restart-seeds":
+                    RunRestartSeeds(root, p);
+                    break;
+                case "restart":
+                    RunRestartSearch(caseDir, root, p);
                     break;
                 default:
                     throw new InvalidDataException($"unknown evolve kind '{kind}'");
@@ -121,6 +128,63 @@ namespace HeatonLife.Tests
             foreach (var winner in expected.GetProperty("winners_worst").EnumerateArray())
                 Assert.Equal(
                     winner.GetInt32(), GaOperators.TournamentSelect(scores, rounds, rng, worst: true));
+        }
+
+        private static void RunRestartSeeds(JsonElement root, JsonElement p)
+        {
+            int runs = p.GetProperty("runs").GetInt32();
+            var seeds = p.GetProperty("seeds");
+            var expected = root.GetProperty("expected").GetProperty("run_seeds");
+            Assert.Equal(seeds.GetArrayLength(), expected.GetArrayLength());
+            for (int s = 0; s < seeds.GetArrayLength(); s++)
+            {
+                ulong seed = ulong.Parse(seeds[s].GetString()!);
+                var sequence = new RestartSeeds(seed);
+                Assert.Equal(runs, expected[s].GetArrayLength());
+                for (int run = 1; run <= runs; run++)
+                {
+                    ulong want = ulong.Parse(expected[s][run - 1].GetString()!);
+                    Assert.Equal(want, sequence.Next());
+                    Assert.Equal(run, sequence.Run);
+                    Assert.Equal(want, RestartSeeds.ForRun(seed, run));
+                }
+            }
+        }
+
+        private static void RunRestartSearch(string caseDir, JsonElement root, JsonElement p)
+        {
+            Assert.Equal("paper", p.GetProperty("objective").GetString());
+            var expected = root.GetProperty("expected");
+            var runs = expected.GetProperty("runs");
+            Assert.Equal(p.GetProperty("runs").GetInt32(), runs.GetArrayLength());
+            double[] scores = ReadF64(
+                Path.Combine(caseDir, expected.GetProperty("best_scores").GetProperty("file").GetString()!));
+            // Serial and parallel evaluation must both match (spec/evolve.md "Parallel evaluation").
+            foreach (int workers in new[] { 1, 5 })
+            {
+                var seeds = new RestartSeeds(p.GetProperty("seed").GetUInt64());
+                for (int run = 0; run < runs.GetArrayLength(); run++)
+                {
+                    ulong runSeed = seeds.Next();
+                    Assert.Equal(ulong.Parse(runs[run].GetProperty("seed").GetString()!), runSeed);
+                    var evolver = new Evolver(
+                        p.GetProperty("width").GetInt32(),
+                        p.GetProperty("height").GetInt32(),
+                        p.GetProperty("population_size").GetInt32(),
+                        p.GetProperty("crossover_rate").GetDouble(),
+                        p.GetProperty("tournament_rounds").GetInt32(),
+                        p.GetProperty("eval_cycles").GetInt32(),
+                        p.GetProperty("patience").GetInt32(),
+                        p.GetProperty("max_steps").GetInt32(),
+                        runSeed,
+                        workers: workers);
+                    var best = evolver.Run(p.GetProperty("max_evals").GetInt32());
+                    Assert.True(evolver.Converged);
+                    Assert.Equal(runs[run].GetProperty("evals").GetInt32(), evolver.Evals);
+                    Assert.Equal(runs[run].GetProperty("best_genome").GetString(), best.Genome);
+                    Assert.Equal(scores[run], best.Score);
+                }
+            }
         }
 
         private static void RunMiniEvolution(string caseDir, JsonElement root, JsonElement p)

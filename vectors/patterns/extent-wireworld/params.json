@@ -1,0 +1,20 @@
+{
+  "extent": {
+    "extended": true,
+    "height": "3",
+    "live": [
+      "0",
+      "0",
+      "3",
+      "2"
+    ],
+    "population": "8",
+    "rule": "WireWorld",
+    "width": "4"
+  },
+  "family": "patterns",
+  "input": "input.rle",
+  "kind": "rle-extent",
+  "spec_version": "0.15.0",
+  "tier": "bit-exact"
+}

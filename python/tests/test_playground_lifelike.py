@@ -167,13 +167,13 @@ def test_a_file_is_measured_once_until_it_changes(
 ) -> None:
     path = _file(tmp_path, "glider.rle", GLIDER_RLE)
     scans = []
-    scan = lifelike_sim.rle_runs
-    monkeypatch.setattr(lifelike_sim, "rle_runs", lambda text: scans.append(1) or scan(text))
+    scan = lifelike_sim.rle_measure
+    monkeypatch.setattr(lifelike_sim, "rle_measure", lambda text: scans.append(1) or scan(text))
     first = measure(path)
-    assert measure(path) is first and len(scans) == 2  # one measure: the box, then the cells
+    assert measure(path) is first and len(scans) == 1
     Path(path).write_text("x = 2, y = 2\n2o$2o!\n", encoding="ascii", newline="\n")
     os.utime(path, ns=(10**18, 10**18))  # a modified time it can't have had
-    assert measure(path).width == 2 and len(scans) == 4
+    assert measure(path).width == 2 and len(scans) == 2
 
 
 # -- advice -------------------------------------------------------------------------------------

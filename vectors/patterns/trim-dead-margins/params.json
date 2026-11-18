@@ -1,0 +1,16 @@
+{
+  "family": "patterns",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      2,
+      2
+    ]
+  },
+  "input": "input.rle",
+  "kind": "rle-trim",
+  "limit": "default",
+  "rule": "B36/S23",
+  "spec_version": "0.15.0",
+  "tier": "bit-exact"
+}

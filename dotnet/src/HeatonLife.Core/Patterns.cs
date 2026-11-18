@@ -25,6 +25,34 @@ namespace HeatonLife
     }
 
     /// <summary>
+    /// What decoding an RLE text would give, found without making a grid (spec/patterns.md
+    /// "Extent"). Every number is exact, however large the file's run counts are.
+    /// </summary>
+    public sealed class RleExtent
+    {
+        public RleExtent(
+            BigInteger width, BigInteger height, CellBox? live, BigInteger population, string? rule, bool extended)
+        {
+            Width = width;
+            Height = height;
+            Live = live;
+            Population = population;
+            Rule = rule;
+            Extended = extended;
+        }
+
+        /// <summary>The decoded grid's width: the larger of what the header declares and the body holds.</summary>
+        public BigInteger Width { get; }
+        public BigInteger Height { get; }
+        /// <summary>The inclusive extremes of the non-zero cells, or null without any.</summary>
+        public CellBox? Live { get; }
+        /// <summary>How many cells are non-zero.</summary>
+        public BigInteger Population { get; }
+        public string? Rule { get; }
+        public bool Extended { get; }
+    }
+
+    /// <summary>
     /// Pattern operations (spec/patterns.md): Golly-compatible RLE in both dialects,
     /// transforms, and extract/stamp with the spec'd wrap/clip/transparency semantics.
     /// Patterns are family-bound artifacts — see <see cref="Compatible"/> — and every
@@ -34,7 +62,81 @@ namespace HeatonLife
     {
         // ---- RLE ----------------------------------------------------------------
 
-        public static RlePattern RleDecode(string text)
+        /// <summary>
+        /// The decode limit's default (spec/patterns.md "The decode limit"): 67,108,864 cells,
+        /// an 8192 × 8192 grid.
+        /// </summary>
+        public const long DefaultMaxCells = 1L << 26;
+
+        /// <summary>
+        /// What <see cref="RleDecode(string)"/> would give, without making it: the grid's size,
+        /// the non-zero cells' box, and how many there are. A few bytes of RLE can describe more
+        /// cells than memory holds (a run of a billion, a header that declares one), so measure
+        /// a file that came from outside before decoding it.
+        /// </summary>
+        public static RleExtent RleMeasure(string text)
+        {
+            ParseRle(text, out BigInteger declaredW, out BigInteger declaredH, out string? rule,
+                out string body, out bool extended);
+            return Measure(declaredW, declaredH, rule, body, extended);
+        }
+
+        /// <summary>Decodes under the default limit, <see cref="DefaultMaxCells"/>.</summary>
+        public static RlePattern RleDecode(string text) => RleDecode(text, DefaultMaxCells);
+
+        /// <summary>
+        /// Decodes RLE text. The extent is found first, and a grid past
+        /// <paramref name="maxCells"/> (width × height) is refused before any memory is asked
+        /// for; null lifts the limit (an array still holds at most 2^31 − 1 cells). With
+        /// <paramref name="trim"/> the grid is only the non-zero cells' bounding box: the
+        /// header's size and any dead margin are dropped, the limit applies to that box, and a
+        /// pattern with no such cell is an error.
+        /// </summary>
+        public static RlePattern RleDecode(string text, long? maxCells, bool trim = false)
+        {
+            ParseRle(text, out BigInteger declaredW, out BigInteger declaredH, out string? rule,
+                out string body, out bool extended);
+            RleExtent extent = Measure(declaredW, declaredH, rule, body, extended);
+            BigInteger left = BigInteger.Zero, top = BigInteger.Zero;
+            BigInteger width = extent.Width, height = extent.Height;
+            if (trim)
+            {
+                if (extent.Live == null)
+                    throw new ArgumentException("RLE pattern has no live cells");
+                CellBox live = extent.Live.Value;
+                left = live.X0;
+                top = live.Y0;
+                width = live.X1 - live.X0 + 1;
+                height = live.Y1 - live.Y0 + 1;
+            }
+            else if (width.IsZero || height.IsZero)
+            {
+                throw new ArgumentException("RLE pattern has no cells");
+            }
+            BigInteger area = width * height;
+            if (maxCells != null && area > maxCells.Value)
+                throw new ArgumentException(
+                    $"RLE pattern is {width} x {height} cells, past the limit of {maxCells.Value}");
+            if (area > int.MaxValue)
+                throw new ArgumentException(
+                    $"RLE pattern is {width} x {height} cells, more than one array holds");
+
+            int w = (int)width;
+            var cells = new byte[(int)area];
+            foreach (RleRun run in Walk(body, extended))
+            {
+                if (run.State <= 0)
+                    continue;
+                int at = (int)(run.Y - top) * w + (int)(run.X - left);
+                cells.AsSpan(at, (int)run.Length).Fill((byte)run.State);
+            }
+            return new RlePattern(cells, w, (int)height, rule);
+        }
+
+        /// <summary>An RLE text as (declared width, declared height, rule, body, dialect).</summary>
+        private static void ParseRle(
+            string text, out BigInteger declaredW, out BigInteger declaredH, out string? rule,
+            out string body, out bool extended)
         {
             var lines = new List<string>();
             foreach (string raw in text.Split('\n'))
@@ -46,9 +148,6 @@ namespace HeatonLife
             if (lines.Count == 0)
                 throw new ArgumentException("empty RLE input");
 
-            string? rule = null;
-            int declaredW = 0, declaredH = 0;
-            string body;
             if (TryParseHeader(lines[0], out declaredW, out declaredH, out rule))
                 body = string.Concat(lines.GetRange(1, lines.Count - 1));
             else
@@ -56,7 +155,7 @@ namespace HeatonLife
 
             // Dialect detection (spec/patterns.md): uppercase B/O are dead/alive in
             // two-state files but states 2/15 in extended RLE.
-            bool extended = rule != null && !IsLifelikeRule(rule);
+            extended = rule != null && !IsLifelikeRule(rule);
             foreach (char c in body)
             {
                 if (c == '.' || (c >= 'A' && c <= 'X' && c != 'B' && c != 'O'))
@@ -65,9 +164,33 @@ namespace HeatonLife
                     break;
                 }
             }
+        }
 
-            var rows = new List<List<byte>> { new List<byte>() };
-            int count = 0;
+        /// <summary>One run of an RLE body; State −1 is the walk's last word: Y is the row count.</summary>
+        private readonly struct RleRun
+        {
+            public RleRun(BigInteger x, BigInteger y, BigInteger length, int state)
+            {
+                X = x;
+                Y = y;
+                Length = length;
+                State = state;
+            }
+
+            public readonly BigInteger X;
+            public readonly BigInteger Y;
+            public readonly BigInteger Length;
+            public readonly int State;
+        }
+
+        /// <summary>
+        /// The body as runs in file order, dead runs (State 0) included, and last of all a run
+        /// of State −1 whose Y is how many rows it has. Measuring and decoding both read this,
+        /// so they can't disagree, and neither holds more than a run.
+        /// </summary>
+        private static IEnumerable<RleRun> Walk(string body, bool extended)
+        {
+            BigInteger x = BigInteger.Zero, y = BigInteger.Zero, count = BigInteger.Zero;
             foreach (char c in body)
             {
                 if (c >= '0' && c <= '9')
@@ -76,22 +199,30 @@ namespace HeatonLife
                 }
                 else if (c == 'b' || c == '.' || (!extended && c == 'B'))
                 {
-                    AppendRun(rows, 0, ref count);
+                    BigInteger length = BigInteger.Max(count, BigInteger.One);
+                    yield return new RleRun(x, y, length, 0);
+                    x += length;
+                    count = BigInteger.Zero;
                 }
                 else if (c == 'o' || (!extended && c == 'O'))
                 {
-                    AppendRun(rows, 1, ref count);
+                    BigInteger length = BigInteger.Max(count, BigInteger.One);
+                    yield return new RleRun(x, y, length, 1);
+                    x += length;
+                    count = BigInteger.Zero;
                 }
                 else if (extended && c >= 'A' && c <= 'X')
                 {
-                    AppendRun(rows, (byte)(c - 'A' + 1), ref count);
+                    BigInteger length = BigInteger.Max(count, BigInteger.One);
+                    yield return new RleRun(x, y, length, c - 'A' + 1); // states 1..24 (B = 2, O = 15)
+                    x += length;
+                    count = BigInteger.Zero;
                 }
                 else if (c == '$')
                 {
-                    int repeat = Math.Max(count, 1);
-                    for (int i = 0; i < repeat; i++)
-                        rows.Add(new List<byte>());
-                    count = 0;
+                    x = BigInteger.Zero;
+                    y += BigInteger.Max(count, BigInteger.One);
+                    count = BigInteger.Zero;
                 }
                 else if (c == '!')
                 {
@@ -106,19 +237,44 @@ namespace HeatonLife
                     throw new ArgumentException($"unsupported RLE tag: '{c}'");
                 }
             }
+            yield return new RleRun(BigInteger.Zero, y + 1, BigInteger.Zero, -1);
+        }
 
-            int width = declaredW;
-            foreach (var row in rows)
-                width = Math.Max(width, row.Count);
-            int height = Math.Max(rows.Count, declaredH);
-            if (width == 0 || height == 0)
-                throw new ArgumentException("RLE pattern has no cells");
-
-            var cells = new byte[width * height];
-            for (int y = 0; y < rows.Count; y++)
-                for (int x = 0; x < rows[y].Count; x++)
-                    cells[y * width + x] = rows[y][x];
-            return new RlePattern(cells, width, height, rule);
+        private static RleExtent Measure(
+            BigInteger declaredW, BigInteger declaredH, string? rule, string body, bool extended)
+        {
+            BigInteger longest = BigInteger.Zero, rows = BigInteger.Zero, population = BigInteger.Zero;
+            bool any = false;
+            BigInteger x0 = BigInteger.Zero, y0 = BigInteger.Zero, x1 = BigInteger.Zero, y1 = BigInteger.Zero;
+            foreach (RleRun run in Walk(body, extended))
+            {
+                if (run.State < 0)
+                {
+                    rows = run.Y;
+                    break;
+                }
+                longest = BigInteger.Max(longest, run.X + run.Length);
+                if (run.State == 0)
+                    continue;
+                population += run.Length;
+                BigInteger last = run.X + run.Length - 1;
+                if (!any)
+                {
+                    any = true;
+                    x0 = run.X;
+                    y0 = run.Y;
+                    x1 = last;
+                }
+                else
+                {
+                    x0 = BigInteger.Min(x0, run.X);
+                    x1 = BigInteger.Max(x1, last);
+                }
+                y1 = run.Y; // rows only go down
+            }
+            return new RleExtent(
+                BigInteger.Max(declaredW, longest), BigInteger.Max(declaredH, rows),
+                any ? new CellBox(x0, y0, x1, y1) : (CellBox?)null, population, rule, extended);
         }
 
         /// <summary>Canonical RLE; dialect chosen by content (cells above 24 are unencodable).</summary>
@@ -734,15 +890,6 @@ namespace HeatonLife
 
         // ---- helpers -------------------------------------------------------------
 
-        private static void AppendRun(List<List<byte>> rows, byte value, ref int count)
-        {
-            int repeat = Math.Max(count, 1);
-            List<byte> row = rows[rows.Count - 1];
-            for (int i = 0; i < repeat; i++)
-                row.Add(value);
-            count = 0;
-        }
-
         private static string Run(int length, int value, bool multistate)
         {
             string tag = multistate
@@ -751,9 +898,10 @@ namespace HeatonLife
             return length == 1 ? tag : length.ToString() + tag;
         }
 
-        private static bool TryParseHeader(string line, out int width, out int height, out string? rule)
+        private static bool TryParseHeader(
+            string line, out BigInteger width, out BigInteger height, out string? rule)
         {
-            width = height = 0;
+            width = height = BigInteger.Zero;
             rule = null;
             int pos = 0;
             if (!ExpectKey(line, ref pos, 'x') || !ExpectNumber(line, ref pos, out width))
@@ -809,10 +957,10 @@ namespace HeatonLife
             return true;
         }
 
-        private static bool ExpectNumber(string line, ref int pos, out int value)
+        private static bool ExpectNumber(string line, ref int pos, out BigInteger value)
         {
             SkipWs(line, ref pos);
-            value = 0;
+            value = BigInteger.Zero; // a header may declare more than an int holds
             int start = pos;
             while (pos < line.Length && line[pos] >= '0' && line[pos] <= '9')
             {

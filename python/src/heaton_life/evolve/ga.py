@@ -17,6 +17,8 @@ from heaton_life.core.rng import Pcg32
 from heaton_life.evolve.objective import PAPER_OBJECTIVE, ObjectiveRule, score_genome
 
 CUT_LENGTH = 5  # paper Sec. 5.2: one 4-digit sub-rule plus a dash
+RESTART_SEQ = 2  # spec/rng.md "Streams": 0 seeds simulations, 1 is a trainer's own
+_MASK64 = (1 << 64) - 1
 
 
 def mutate(genome: str, rng: Pcg32) -> str:
@@ -28,9 +30,7 @@ def mutate(genome: str, rng: Pcg32) -> str:
         j = rng.next_u32() % len(genome)
         if genome[i] != "-" and genome[j] != "-" and genome[i] != genome[j]:
             lo, hi = (i, j) if i < j else (j, i)
-            return (
-                genome[:lo] + genome[hi] + genome[lo + 1 : hi] + genome[lo] + genome[hi + 1 :]
-            )
+            return genome[:lo] + genome[hi] + genome[lo + 1 : hi] + genome[lo] + genome[hi + 1 :]
 
 
 def crossover(genome1: str, genome2: str, rng: Pcg32, cut_length: int = CUT_LENGTH) -> list[str]:
@@ -67,6 +67,48 @@ class Candidate:
     score: float
 
 
+class RestartSeeds:
+    """The seeds of a restart search's runs, in run order (spec/evolve.md "Restart
+    search").
+
+    One population converges, so a search breeds run after run, each from a fresh random
+    population: when an ``Evolver`` is ``converged``, start another with the next seed.
+    Run 1 uses the search's seed itself; run n ≥ 2 uses the (n − 1)-th 64-bit value of
+    ``Pcg32(seed, 2)``, two 32-bit draws each, the high half first. A run depends on
+    nothing but the trainer's parameters, the search's seed, and its number, so a find
+    replays anywhere from those three: ``Evolver(seed=RestartSeeds.for_run(seed, n))``.
+    """
+
+    def __init__(self, seed: int) -> None:
+        self.seed = seed & _MASK64
+        self.run = 0
+        """The number of the run ``next`` last gave a seed for; 0 before the first."""
+        self._rng = Pcg32(self.seed, RESTART_SEQ)
+
+    def next(self) -> int:
+        """The next run's seed."""
+        self.run += 1
+        if self.run == 1:
+            return self.seed
+        return (self._rng.next_u32() << 32) | self._rng.next_u32()
+
+    def __iter__(self) -> RestartSeeds:
+        return self
+
+    def __next__(self) -> int:
+        return self.next()
+
+    @classmethod
+    def for_run(cls, seed: int, run: int) -> int:
+        """The seed of run number ``run`` (from 1) of the search seeded ``seed``."""
+        if run < 1:
+            raise ValueError(f"runs are numbered from 1; got {run}")
+        seeds = cls(seed)
+        for _ in range(run - 1):
+            seeds.next()
+        return seeds.next()
+
+
 class Evolver:
     """Steady-state GA over MergeLife genomes, deterministic from `seed`."""
 
@@ -99,6 +141,12 @@ class Evolver:
         self.best: Candidate | None = None
         self.evals = 0
         self.no_improvement = 0
+
+    @property
+    def converged(self) -> bool:
+        """The run is over: more than ``patience`` evaluations have passed without a new
+        best, and ``run`` will breed no further (spec/evolve.md "Restart search")."""
+        return self.no_improvement > self.patience
 
     def _score(self, genome: str) -> Candidate:
         result = score_genome(

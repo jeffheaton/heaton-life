@@ -203,6 +203,21 @@ integers), so ports move views identically and an app keeps no copy of the math:
   never will and `fit` raises an error. That happens only for a frame 0 pixels across, or
   1 pixel across while the box spans tree position 0 in that direction (x0 < 0 ≤ x1, or
   y0 ≤ 0 < y1): no aligned block straddles it.
+- `resized(view, (w, h), (w′, h′))` = `pan(view, w′ div 2 − w div 2, h′ div 2 − h div 2)`:
+  the view for frames of a new size whose center pixel is still over the same point, so a
+  resized window keeps its middle in place.
+- `frame_map(frame, view)` = `(steps, dx, dy)`: where the pixels of a frame rendered at the
+  view `frame` lie in `view`, with `steps = view.mag − frame.mag`.
+  - `steps ≥ 0` (the view is the finer): `dx = frame.x · 2^steps − view.x`, and `dy`
+    likewise from the y's. Frame pixel (u, v) covers the 2^steps × 2^steps square of view
+    pixels whose top-left is (u · 2^steps + dx, v · 2^steps + dy).
+  - `steps < 0` (the frame is the finer; s = −steps): `dx = frame.x − view.x · 2^s`, and
+    `dy` likewise. Frame pixel (u, v) lies in view pixel
+    (⌊(u + dx) / 2^s⌋, ⌊(v + dy) / 2^s⌋).
+
+  A frame can take seconds to render and a gesture should answer at once: a viewer asked
+  for a new view draws the frame it already has through this map until the new one
+  arrives. Both forms are integers, so the picture never drifts by a rounding.
 
 ## Parameters
 

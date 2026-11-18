@@ -1742,6 +1742,112 @@ def write_pattern_cases() -> None:
             },
         )
 
+    # Extent, the decode limit, and trimmed decoding (spec 0.15.0): files no decoder could
+    # hold are measured, refused, or trimmed to their live cells. The extent's numbers
+    # are decimal strings, since some pass 2^64.
+    from heaton_life.init import rle_measure
+
+    glider = "bo$2bo$3o!\n"
+    giant_header = "x = 1000000000, y = 1000000000, rule = B3/S23\n" + glider
+    dead_run_giant = "o999999999b$2b3o!\n"
+    wireworld = "x = 4, y = 3, rule = WireWorld\n.2C$AC.C$.2CB!\n"
+    all_dead = "x = 3, y = 2\n3b$3b!\n"
+    far = "123456789012345678901234567890"
+
+    def new_case(name: str, text: str, meta: dict[str, Any]) -> Path:
+        case_dir = VECTOR_ROOT / "patterns" / name
+        case_dir.mkdir(parents=True, exist_ok=True)
+        (case_dir / "input.rle").write_text(text, newline="\n")
+        write_meta(
+            case_dir,
+            {
+                "spec_version": "0.15.0",
+                "family": "patterns",
+                "tier": "bit-exact",
+                "input": "input.rle",
+                **meta,
+            },
+        )
+        return case_dir
+
+    extent_cases = [
+        (
+            "extent-glider-comments",
+            "#C the classic glider, comments and all\nx = 3, y = 3, rule = B3/S23\nbob$2bo$3o!\n",
+        ),
+        ("extent-declared-larger", "x = 10, y = 6, rule = B36/S23\n2bo$o!\n"),
+        ("extent-dead-run-giant", dead_run_giant),
+        ("extent-declared-giant", giant_header),
+        ("extent-empty-rows-giant", "o1000000000$o!\n"),
+        ("extent-past-64-bits", f"{far}bo$o{far}$2o!\n"),
+        ("extent-all-dead", all_dead),
+        ("extent-wireworld", wireworld),
+        ("extent-trailing-row-end", "3o$!\n"),  # the row end before ! opens a second row
+    ]
+    for name, text in extent_cases:
+        extent = rle_measure(text)
+        new_case(
+            name,
+            text,
+            {
+                "kind": "rle-extent",
+                "extent": {
+                    "width": str(extent.width),
+                    "height": str(extent.height),
+                    "live": None if extent.live is None else [str(v) for v in extent.live],
+                    "population": str(extent.population),
+                    "rule": extent.rule,
+                    "extended": extent.extended,
+                },
+            },
+        )
+
+    # "limit": "default" (2^26 cells), a number, or null (lifted). A refusal is an error;
+    # a decode is pinned by its shape and population (the grids here are mostly empty).
+    limit_cases: list[tuple[str, str, Any]] = [
+        ("limit-default-declared-giant", giant_header, "default"),
+        ("limit-default-dead-run-giant", dead_run_giant, "default"),
+        ("limit-default-exactly", "x = 8192, y = 8192, rule = B3/S23\n" + glider, "default"),
+        ("limit-default-one-row-past", "x = 8192, y = 8193, rule = B3/S23\n" + glider, "default"),
+        ("limit-given-exactly", glider, 9),
+        ("limit-given-one-short", glider, 8),
+        ("limit-lifted", "x = 9000, y = 9000, rule = B3/S23\n" + glider, None),
+    ]
+    for name, text, limit in limit_cases:
+        meta: dict[str, Any] = {"kind": "rle-limit", "limit": limit}
+        try:
+            grid, _ = rle_decode(text) if limit == "default" else rle_decode(text, max_cells=limit)
+        except ValueError:
+            meta["error"] = True
+        else:
+            meta["shape"] = list(grid.shape)
+            meta["population"] = int(np.count_nonzero(grid))
+        new_case(name, text, meta)
+
+    trim_cases: list[tuple[str, str, Any]] = [
+        ("trim-declared-giant", giant_header, "default"),
+        ("trim-dead-margins", "x = 9, y = 7, rule = B36/S23\n3$3b2o$4bo3b!\n", "default"),
+        ("trim-far-out", f"{far}b2o${far}bo!\n", "default"),
+        ("trim-keeps-states", "x = 6, y = 3, rule = WireWorld\n6.$.AC.B.$6.!\n", "default"),
+        ("trim-limit-is-the-boxs", giant_header, 9),
+        ("trim-limit-one-short", glider, 8),
+        ("trim-error-all-dead", all_dead, "default"),
+    ]
+    for name, text, limit in trim_cases:
+        meta = {"kind": "rle-trim", "limit": limit}
+        try:
+            if limit == "default":
+                grid, rule = rle_decode(text, trim=True)
+            else:
+                grid, rule = rle_decode(text, trim=True, max_cells=limit)
+        except ValueError:
+            meta["error"] = True
+            new_case(name, text, meta)
+        else:
+            meta["rule"] = rule
+            meta["grid"] = {"file": "grid.png", "shape": list(grid.shape)}
+            (new_case(name, text, meta) / "grid.png").write_bytes(gray_png(grid))
+
 
 def write_evolve_cases() -> None:
     """Evolve conformance: per-run objective stats, GA operator replays, one mini run.
@@ -1893,6 +1999,79 @@ def write_evolve_cases() -> None:
                 "evals": evolver.evals,
                 "population": [c.genome for c in evolver.population],
                 "best_score": {"file": "best.f64", "shape": [1]},
+            },
+        },
+    )
+
+    # The restart search (spec 0.15.0): run seeds, then the first runs of a small search,
+    # each bred until its patience runs out. Seeds are 64-bit: decimal strings.
+    from heaton_life.evolve import RestartSeeds
+
+    search_seeds = [0, 123, 2**32, 2**64 - 1]
+    write_meta(
+        VECTOR_ROOT / "evolve" / "restart-seeds",
+        {
+            "spec_version": "0.15.0",
+            "family": "evolve",
+            "tier": "bit-exact",
+            "kind": "restart-seeds",
+            "params": {"seeds": [str(s) for s in search_seeds], "runs": 8},
+            "expected": {
+                "run_seeds": [
+                    [str(RestartSeeds.for_run(s, run)) for run in range(1, 9)] for s in search_seeds
+                ]
+            },
+        },
+    )
+
+    restart = {
+        "width": 24,
+        "height": 24,
+        "population_size": 8,
+        "crossover_rate": 0.75,
+        "tournament_rounds": 3,
+        "eval_cycles": 1,
+        "patience": 20,  # past the population, so every run breeds before it stalls
+        "max_steps": 120,
+        "seed": 123,
+        "runs": 3,
+        "max_evals": 10_000,  # far past where any of these runs converges
+        "objective": "paper",
+    }
+    case_dir = VECTOR_ROOT / "evolve" / "restart-mini-24"
+    case_dir.mkdir(parents=True, exist_ok=True)
+    seeds = RestartSeeds(restart["seed"])
+    runs: list[dict[str, Any]] = []
+    scores: list[float] = []
+    for _ in range(restart["runs"]):
+        run_seed = seeds.next()
+        evolver = Evolver(
+            size=(restart["width"], restart["height"]),
+            population_size=restart["population_size"],
+            crossover_rate=restart["crossover_rate"],
+            tournament_rounds=restart["tournament_rounds"],
+            eval_cycles=restart["eval_cycles"],
+            patience=restart["patience"],
+            max_steps=restart["max_steps"],
+            seed=run_seed,
+        )
+        best = evolver.run(max_evals=restart["max_evals"])
+        assert evolver.converged, "the case pins runs that end by patience"
+        assert evolver.evals > restart["population_size"], "and that bred first"
+        runs.append({"seed": str(run_seed), "best_genome": best.genome, "evals": evolver.evals})
+        scores.append(best.score)
+    (case_dir / "best.f64").write_bytes(np.array(scores, dtype="<f8").tobytes())
+    write_meta(
+        case_dir,
+        {
+            "spec_version": "0.15.0",
+            "family": "evolve",
+            "tier": "bit-exact",
+            "kind": "restart",
+            "params": restart,
+            "expected": {
+                "runs": runs,
+                "best_scores": {"file": "best.f64", "shape": [len(scores)]},
             },
         },
     )
@@ -4200,6 +4379,44 @@ def write_hashlife_cases() -> None:
         fits.append(op)
     d = case("view-fit-impossible")
     save(d, {"kind": "view", "operations": fits})
+
+    # Resizing and the frame map (spec 0.15.0): where one view's frame lies in another.
+    from heaton_life.ca.hashlife import frame_map, resized
+
+    moves: list[dict[str, Any]] = []
+    for view in views:
+        for old, new in (((640, 480), (641, 479)), ((1, 1), (1024, 768)), ((511, 0), (0, 511))):
+            moves.append(
+                {
+                    "op": "resized",
+                    "view": v(view),
+                    "old": list(old),
+                    "new": list(new),
+                    "expect": v(resized(view, old, new)),
+                }
+            )
+        others = [
+            view,
+            pan(view, 37, -11),
+            zoom_at(view, 17, 9, 1),
+            zoom_at(view, 17, 9, 3),
+            zoom_at(view, 311, 7, -1),
+            zoom_at(view, 311, 7, -9),
+            LifeView(-big, 3**40, -40),
+            LifeView(0, 0, 5),
+        ]
+        for other in others:
+            steps, dx, dy = frame_map(view, other)
+            moves.append(
+                {
+                    "op": "frame_map",
+                    "frame": v(view),
+                    "view": v(other),
+                    "expect": [steps, str(dx), str(dy)],
+                }
+            )
+    d = case("view-frame-map")
+    save(d, {"spec_version": "0.15.0", "kind": "view", "operations": moves})
 
     # -- render: frames of a state at several views and both modes -------------------------
     import io

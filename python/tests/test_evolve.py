@@ -116,3 +116,30 @@ def test_evolver_runs_and_is_deterministic() -> None:
     best2 = small().run(max_evals=10)
     assert best1.genome == best2.genome
     assert best1.score == best2.score
+
+
+def test_restart_seeds_number_runs_from_one_and_wrap_the_seed() -> None:
+    from heaton_life.core.rng import Pcg32
+    from heaton_life.evolve import RestartSeeds
+
+    seeds = RestartSeeds(123)
+    assert seeds.run == 0 and seeds.next() == 123 and seeds.run == 1  # run 1: the seed itself
+    stream = Pcg32(123, 2)
+    assert seeds.next() == (stream.next_u32() << 32) | stream.next_u32()
+    assert RestartSeeds.for_run(123, 2) == RestartSeeds.for_run(123 + 2**64, 2)  # mod 2^64
+    assert RestartSeeds(2**64 + 5).next() == 5
+    with pytest.raises(ValueError, match="numbered from 1"):
+        RestartSeeds.for_run(123, 0)
+
+
+def test_converged_is_the_trainers_own_stop() -> None:
+    from heaton_life.evolve import Evolver
+
+    evolver = Evolver(size=(24, 24), population_size=4, eval_cycles=1, patience=3, max_steps=60)
+    assert not evolver.converged
+    evolver.run(max_evals=10_000)
+    # A crossover admits two children, so the count can pass patience by more than one.
+    assert evolver.converged and evolver.no_improvement > evolver.patience
+    evals = evolver.evals
+    evolver.run(max_evals=10_000)
+    assert evolver.evals == evals  # nothing more to breed

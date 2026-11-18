@@ -35,7 +35,7 @@ Each family gets one page structured as:
 
 ## Index
 
-- [rng.md](rng.md) — pinned PCG32 algorithm, known-answer test, draw-order convention
+- [rng.md](rng.md) — pinned PCG32 algorithm, known-answer test, the streams in use, draw-order convention
 - [pow10.md](pow10.md) — pinned deterministic 10^x (the fractal pixel scale's power; libm `pow` is forbidden on bit-exact paths)
 - [turns.md](turns.md) — pinned cos and sin of a rational number of turns (Newton's roots; bit-exact tier, no libm)
 - [floatexp.md](floatexp.md) — a float64 mantissa with an unbounded exponent: T2's numbers, every operation correctly rounded (bit-exact tier)
@@ -48,7 +48,7 @@ Each family gets one page structured as:
 - [grayscott.md](grayscott.md) — Gray-Scott reaction-diffusion (ε tier)
 - [lenia.md](lenia.md) — Lenia classic / asymptotic / flow (ε tier)
 - [boids.md](boids.md) — Reynolds flocking (ε tier, point-cloud state)
-- [evolve.md](evolve.md) — the MergeLife GA and paper objective (bit-exact tier: objective statistics, GA operators, and whole seeded runs replay across languages; vectors in `../vectors/evolve/`)
+- [evolve.md](evolve.md) — the MergeLife GA and paper objective (bit-exact tier: objective statistics, GA operators, whole seeded runs, and the restart search's run seeds replay across languages; vectors in `../vectors/evolve/`)
 - [fractals.md](fractals.md) — escape-time + Newton conventions, pixel mapping, vector schema
 - [deep-zoom.md](deep-zoom.md) — fractal precision architecture (perturbation + rebasing; T2 past 1e290 and its platform contract)
 - [locations.md](locations.md) — the framing conventions of heaton-life, Heaton Fractal, Kalles Fraktaler and Fraktaler-3, the conversions between them, and the importers for their files

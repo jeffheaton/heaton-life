@@ -83,6 +83,20 @@ namespace HeatonLife.Tests
         }
 
         [Fact]
+        public void DecodeRefusesWhatItCannotHold()
+        {
+            // The limit lifted, a grid still has to fit one array.
+            var lifted = Assert.Throws<ArgumentException>(
+                () => Patterns.RleDecode("x = 100000, y = 100000\no!", null));
+            Assert.Contains("more than one array holds", lifted.Message);
+            // A declared size past an int used to wrap around; now it is just past the limit.
+            var declared = Assert.Throws<ArgumentException>(
+                () => Patterns.RleDecode("x = 99999999999999999999, y = 1\no!"));
+            Assert.Contains("past the limit of 67108864", declared.Message);
+            Assert.Equal(1L << 26, Patterns.DefaultMaxCells);
+        }
+
+        [Fact]
         public void TransparentRejectedForChannelPayloads()
         {
             var rgbGrid = new byte[4 * 4 * 3];

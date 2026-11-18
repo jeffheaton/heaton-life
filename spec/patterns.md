@@ -61,6 +61,31 @@ tags are `B`/`O` is indistinguishable from a two-state file and decodes as
 two-state — canonical encodings always carry a header, so this never round-trips
 wrong from a conforming encoder.)
 
+**Extent.** What a decode would give is found by a scan that keeps only counters, so
+a pattern is measured without a grid being made of it:
+
+- `width`, `height` — the decoded size above: the larger of the header's `W`, `H` and
+  the body's own extents, where a row is as long as its runs add up to (dead runs
+  included) and the rows are one more than the row ends before `!`;
+- `live` — the inclusive box `(x0, y0, x1, y1)` of the non-zero cells, or none;
+- `population` — how many cells are non-zero;
+- `rule` and the dialect, as decoding finds them.
+
+A run count is any number of digits and every one of these is an exact integer, since a
+few bytes of RLE can describe more cells than any memory holds: `o999999999b!` is a
+billion cells wide, and `x = 1000000000, y = 1000000000` declares 10¹⁸ of them around
+whatever follows. Measure a file that came from outside before decoding it.
+
+**The decode limit.** A decoder finds the extent first and refuses (an error) a pattern
+whose `width × height` is past its cell limit, before any grid is made. The limit
+defaults to 2²⁶ = 67,108,864 cells, an 8192 × 8192 grid, and the caller may set another
+or lift it.
+
+**Trimmed decoding** gives only the `live` box: the header's size and any dead margin are
+dropped, the limit applies to that box, and a pattern with no non-zero cell is an error.
+It is the decode for loading a pattern file into a world, where what matters is the
+pattern and not the rectangle its author saved around it.
+
 **Encoding** (canonical): header `x = W, y = H, rule = R`; two-state grids
 (max cell ≤ 1) use `b`/`o`; grids with any cell ≥ 2 use `.`/`A`..`X` (cells
 above 24 are unencodable — an error). Runs of length 1 omit the count; trailing
@@ -175,6 +200,8 @@ Bit-exact tier. Vectors in [`../vectors/patterns/`](../vectors/patterns/):
 RLE decode cases (both dialects, comments/whitespace/no-header variants) with
 expected grids, canonical encode strings, transform results, and stamp results
 (wrap, clip, and transparent cases), all encoded with the families' vector
-codecs. Round-trip (encode∘decode = identity) is additionally property-tested
-in every implementation. RLE in the unbounded universe is pinned by the `rle-*` cases of
+codecs. `extent-*` pin the measured extent of files no decoder could hold (the numbers
+are decimal strings: some pass 2⁶⁴), `limit-*` the decode limit, default and given, and
+`trim-*` trimmed decoding. Round-trip (encode∘decode = identity) is additionally
+property-tested in every implementation. RLE in the unbounded universe is pinned by the `rle-*` cases of
 [`../vectors/hashlife/`](../vectors/hashlife/).

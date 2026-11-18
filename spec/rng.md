@@ -33,6 +33,18 @@ Every implementation must assert: `seed(42, 54)` produces, in order:
 0xA15C02B7  0x7B47F409  0xBA1D3330  0x83D2F293  0xBFA4784B  0xCBED606E
 ```
 
+## Streams
+
+`initseq` selects one of 2⁶³ independent streams from the same seed. A stream is
+allocated here before anything draws from it, so that two features given one seed can
+never share draws:
+
+| seq | used by |
+|---|---|
+| 0 | simulation state: lattices, soups, particle starts (every family's seeding) |
+| 1 | the MergeLife trainer's own decisions ([evolve.md](evolve.md) "Determinism") |
+| 2 | the restart search's run seeds ([evolve.md](evolve.md) "Restart search") |
+
 ## Draw-order convention
 
 Grid fills consume exactly `width * height` draws in row-major order (y outer, x inner),

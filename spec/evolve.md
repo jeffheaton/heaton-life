@@ -66,6 +66,31 @@ The trainer's own stream is `Pcg32(seed, seq=1)` (sequence 1, distinct from the
 lattice-seeding stream); evaluation `i` scores with lattice seed
 `seed + i * eval_cycles`, and cycle `j` of a scoring call runs from `seed + j`.
 
+## Restart search
+
+One population converges: tournament pressure collapses its diversity and its best score
+plateaus, which is what `patience` measures. So a search does not breed one population
+forever. A run that has gone more than `patience` evaluations without a new best is over
+(the trainer's own stop, `no_improvement > patience`), and the search starts another from
+a fresh random population — the reference application's outer loop (mergelife pyqt,
+`tab_evolve.py`).
+
+Runs are numbered from 1. Run *n* is an ordinary trainer run with the search's
+parameters and its own seed:
+
+- run 1: the search's `seed` itself;
+- run *n* ≥ 2: the (*n* − 1)-th 64-bit value of `Pcg32(seed, seq=2)`, each made of two
+  successive 32-bit draws, the first one the high half.
+
+Seeds are 64-bit; a seed given outside that range counts mod 2⁶⁴, as PCG32 takes it.
+Sequence 2 belongs to the restart search (see [rng.md](rng.md) "Streams").
+
+Run *n* therefore depends on nothing but the parameters, the search's seed, and *n*, so
+any single run replays exactly, on any implementation, without the runs before it. A
+host may breed several runs at once on separate threads: every run is the same as it
+would be alone, and only the order their results arrive in varies. The search has no end
+of its own (a host stops it), and its product is each run's best genome.
+
 ## Conformance
 
 Bit-exact tier (integer statistics; plain-double scoring). Vectors in
@@ -78,6 +103,10 @@ Bit-exact tier (integer statistics; plain-double scoring). Vectors in
   results from fixed PCG32 seeds (strings and indices in `params.json`).
 - `mini-run-24` — a complete small `Evolver` run: best genome, its score, the
   evaluation count, and the final population, all pinned.
+- `restart-seeds` — the first run seeds of several searches (decimal strings: they are
+  64-bit).
+- `restart-mini-24` — the first runs of a small restart search, each bred until its
+  patience runs out: every run's seed, best genome, score, and evaluation count.
 
 `objective-*` and `mini-run-24` were regenerated 2026-08-19 when the evaluation
 layer returned to the 2018 trainer semantics (above); `operators-seeded` scores

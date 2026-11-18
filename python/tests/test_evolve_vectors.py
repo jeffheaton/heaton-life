@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from heaton_life.core.rng import Pcg32
-from heaton_life.evolve import Evolver, crossover, mutate, tournament_select
+from heaton_life.evolve import Evolver, RestartSeeds, crossover, mutate, tournament_select
 from heaton_life.evolve.objective import PAPER_OBJECTIVE, _run_once, _score_stats
 
 VECTOR_ROOT = Path(__file__).resolve().parents[2] / "vectors" / "evolve"
@@ -23,7 +23,7 @@ def _f64(path: Path) -> np.ndarray:
 
 def test_evolve_vectors_exist() -> None:
     kinds = {json.loads(c.read_text())["kind"] for c in CASES}
-    assert kinds == {"objective", "operators", "run"}
+    assert kinds == {"objective", "operators", "run", "restart-seeds", "restart"}
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda p: p.parent.name)
@@ -38,18 +38,18 @@ def test_evolve_vector(case: Path) -> None:
         )
         runs = np.empty_like(expected_runs)
         for i in range(p["cycles"]):
-            stats = _run_once(
-                p["genome"], (p["width"], p["height"]), p["seed"] + i, p["max_steps"]
-            )
+            stats = _run_once(p["genome"], (p["width"], p["height"]), p["seed"] + i, p["max_steps"])
             runs[i] = [
-                stats["steps"], stats["foreground"], stats["active"],
-                stats["rect"], stats["mage"], _score_stats(stats, PAPER_OBJECTIVE),
+                stats["steps"],
+                stats["foreground"],
+                stats["active"],
+                stats["rect"],
+                stats["mage"],
+                _score_stats(stats, PAPER_OBJECTIVE),
             ]
         assert np.array_equal(runs, expected_runs)
         expected_score = _f64(case.parent / meta["outputs"]["score"]["file"])
-        assert np.array_equal(
-            np.array([runs[:, 5].max(), runs[:, 0].sum()]), expected_score
-        )
+        assert np.array_equal(np.array([runs[:, 5].max(), runs[:, 0].sum()]), expected_score)
     elif meta["kind"] == "operators":
         rng = Pcg32(p["mutate_seed"])
         genome = p["genome"]
@@ -66,6 +66,32 @@ def test_evolve_vector(case: Path) -> None:
             assert tournament_select(scores, rounds, rng) == expected_idx
         for expected_idx in meta["expected"]["winners_worst"]:
             assert tournament_select(scores, rounds, rng, worst=True) == expected_idx
+    elif meta["kind"] == "restart-seeds":
+        for seed, expected in zip(p["seeds"], meta["expected"]["run_seeds"], strict=True):
+            seeds = RestartSeeds(int(seed))
+            assert [str(seeds.next()) for _ in range(p["runs"])] == expected
+            assert seeds.run == p["runs"]
+            assert str(RestartSeeds.for_run(int(seed), p["runs"])) == expected[-1]
+    elif meta["kind"] == "restart":
+        assert p["objective"] == "paper"
+        scores = _f64(case.parent / meta["expected"]["best_scores"]["file"])
+        seeds = RestartSeeds(p["seed"])
+        for expected, score in zip(meta["expected"]["runs"], scores, strict=True):
+            run_seed = seeds.next()
+            assert str(run_seed) == expected["seed"]
+            evolver = Evolver(
+                size=(p["width"], p["height"]),
+                population_size=p["population_size"],
+                crossover_rate=p["crossover_rate"],
+                tournament_rounds=p["tournament_rounds"],
+                eval_cycles=p["eval_cycles"],
+                patience=p["patience"],
+                max_steps=p["max_steps"],
+                seed=run_seed,
+            )
+            best = evolver.run(max_evals=p["max_evals"])
+            assert evolver.converged and evolver.evals == expected["evals"]
+            assert best.genome == expected["best_genome"] and best.score == score
     else:  # run
         evolver = Evolver(
             size=(p["width"], p["height"]),

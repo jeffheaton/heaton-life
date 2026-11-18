@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Numerics;
 using System.Text.Json;
 using Xunit;
 
@@ -8,7 +9,8 @@ namespace HeatonLife.Tests
 {
     /// <summary>
     /// Pattern conformance: replay vectors/patterns/ — RLE dialects with canonical
-    /// re-encodes, transforms, extract and stamp semantics (spec/patterns.md).
+    /// re-encodes, the extent, the decode limit, trimmed decoding, transforms, extract
+    /// and stamp semantics (spec/patterns.md).
     /// Bit-exact; the same files the Python suite replays.
     /// </summary>
     public class PatternConformanceTests
@@ -106,9 +108,92 @@ namespace HeatonLife.Tests
                             region);
                         break;
                     }
+                case "rle-extent":
+                    {
+                        string input = File.ReadAllText(Path.Combine(caseDir, root.GetProperty("input").GetString()!));
+                        RleExtent extent = Patterns.RleMeasure(input);
+                        var want = root.GetProperty("extent");
+                        Assert.Equal(Big(want.GetProperty("width")), extent.Width);
+                        Assert.Equal(Big(want.GetProperty("height")), extent.Height);
+                        Assert.Equal(Big(want.GetProperty("population")), extent.Population);
+                        var live = want.GetProperty("live");
+                        CellBox? expectedLive = live.ValueKind == JsonValueKind.Null
+                            ? (CellBox?)null
+                            : new CellBox(Big(live[0]), Big(live[1]), Big(live[2]), Big(live[3]));
+                        Assert.Equal(expectedLive, extent.Live);
+                        Assert.Equal(
+                            want.GetProperty("rule").ValueKind == JsonValueKind.Null
+                                ? null
+                                : want.GetProperty("rule").GetString(),
+                            extent.Rule);
+                        Assert.Equal(want.GetProperty("extended").GetBoolean(), extent.Extended);
+                        break;
+                    }
+                case "rle-limit":
+                    {
+                        string input = File.ReadAllText(Path.Combine(caseDir, root.GetProperty("input").GetString()!));
+                        var limit = root.GetProperty("limit");
+                        if (IsError(root))
+                        {
+                            Assert.ThrowsAny<ArgumentException>(() => Decode(input, limit, trim: false));
+                            break;
+                        }
+                        RlePattern decoded = Decode(input, limit, trim: false);
+                        var shape = root.GetProperty("shape");
+                        Assert.Equal(shape[0].GetInt32(), decoded.Height);
+                        Assert.Equal(shape[1].GetInt32(), decoded.Width);
+                        int population = 0;
+                        foreach (byte cell in decoded.Cells)
+                        {
+                            if (cell != 0)
+                                population++;
+                        }
+                        Assert.Equal(root.GetProperty("population").GetInt32(), population);
+                        break;
+                    }
+                case "rle-trim":
+                    {
+                        string input = File.ReadAllText(Path.Combine(caseDir, root.GetProperty("input").GetString()!));
+                        var limit = root.GetProperty("limit");
+                        if (IsError(root))
+                        {
+                            Assert.ThrowsAny<ArgumentException>(() => Decode(input, limit, trim: true));
+                            break;
+                        }
+                        RlePattern decoded = Decode(input, limit, trim: true);
+                        Assert.Equal(
+                            root.GetProperty("rule").ValueKind == JsonValueKind.Null
+                                ? null
+                                : root.GetProperty("rule").GetString(),
+                            decoded.Rule);
+                        var shape = root.GetProperty("grid").GetProperty("shape");
+                        Assert.Equal(shape[0].GetInt32(), decoded.Height);
+                        Assert.Equal(shape[1].GetInt32(), decoded.Width);
+                        Assert.Equal(
+                            ReadGray(Path.Combine(caseDir, root.GetProperty("grid").GetProperty("file").GetString()!)),
+                            decoded.Cells);
+                        break;
+                    }
                 default:
                     throw new InvalidDataException($"unknown pattern kind in {caseName}");
             }
+        }
+
+        private static BigInteger Big(JsonElement text) => BigInteger.Parse(text.GetString()!);
+
+        private static bool IsError(JsonElement root) =>
+            root.TryGetProperty("error", out JsonElement error) && error.GetBoolean();
+
+        /// <summary>Decode under the case's limit: "default" (the spec's), a number, or null (lifted).</summary>
+        private static RlePattern Decode(string input, JsonElement limit, bool trim)
+        {
+            if (limit.ValueKind == JsonValueKind.Null)
+                return Patterns.RleDecode(input, null, trim);
+            if (limit.ValueKind == JsonValueKind.Number)
+                return Patterns.RleDecode(input, limit.GetInt64(), trim);
+            Assert.Equal("default", limit.GetString());
+            // The one-argument decode is the default limit's; trimming names it.
+            return trim ? Patterns.RleDecode(input, Patterns.DefaultMaxCells, true) : Patterns.RleDecode(input);
         }
 
         private static byte[] ReadGray(string path)
