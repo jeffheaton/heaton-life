@@ -53,7 +53,7 @@ namespace HeatonLife
     }
 
     /// <summary>
-    /// Pattern operations (spec/patterns.md): Golly-compatible RLE in both dialects,
+    /// Pattern operations (spec/patterns.md): RLE in both common dialects,
     /// transforms, and extract/stamp with the spec'd wrap/clip/transparency semantics.
     /// Patterns are family-bound artifacts — see <see cref="Compatible"/> — and every
     /// operation here is bit-exact against vectors/patterns/.

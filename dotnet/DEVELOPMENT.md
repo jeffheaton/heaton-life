@@ -130,7 +130,7 @@ meets.
 | Colormaps / render (`../spec/render.md`) | ✅ byte-identical LUTs, frame indexing, per-family `WriteFrame` (incl. boids rasterizer + fractal smooth coloring), RGB/RGBA32 output |
 | `ISimulation` + frame-source interfaces | ✅ the C# side of Python's `Simulation` protocol; the polymorphic surface a host (e.g. a Unity adapter) drives |
 | Evolve: paper objective + GA (`../spec/evolve.md`) | ✅ bit-exact, incl. a replayed end-to-end mini evolution run |
-| Patterns: RLE (both dialects), transforms, extract/stamp (`../spec/patterns.md`) | ✅ bit-exact, Golly-compatible |
+| Patterns: RLE (both dialects), transforms, extract/stamp (`../spec/patterns.md`) | ✅ bit-exact; reads and writes the Life community's RLE dialects |
 | HashLife: the unbounded universe, Macrocell, sparse `#CXRLE` RLE, views and frames (`../spec/hashlife.md`, `../spec/macrocell.md`) | ✅ bit-exact against `../vectors/hashlife/`; the giant patterns behind `HEATON_LIFE_PATTERNS` |
 
 The port landed in the order RNG → Life-like → remaining discrete CAs → continuous

@@ -38,7 +38,7 @@ A pattern is `(family, width, height, cells, rule)`:
 
 ## RLE text encoding (life-like, wireworld, cyclic)
 
-The Life community's interchange format, Golly-compatible.
+The Life community's interchange format, in both of its common dialects.
 
 **Decoding** (liberal): `#`-prefixed comment lines are skipped; an optional
 header `x = W, y = H[, rule = R]` may declare size and rule; the body uses run
@@ -100,8 +100,8 @@ travel as raw cell payloads (the catalog/zoo container format, app-level).
 ## RLE in the unbounded universe
 
 The [HashLife](hashlife.md) universe has no grid, so RLE there carries a position and
-never becomes a dense array. Extended RLE (Golly's) puts the position on the file's
-**first line**:
+never becomes a dense array. The position goes on the file's **first line**, in extended
+RLE's `#CXRLE` comment:
 
 ```
 #CXRLE Pos=<x>,<y> Gen=<n>

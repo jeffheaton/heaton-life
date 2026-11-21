@@ -96,7 +96,7 @@ namespace HeatonLife
     /// whose nodes memoize their own future, so regular patterns of trillions of cells fit in
     /// memory and a step can be any number of generations. Coordinates, generations, and
     /// populations are <see cref="BigInteger"/>s at this edge; x grows right and y grows down, and
-    /// cells sit where Golly puts them (cell (x, y) is tree position (x, y − 1)).
+    /// cells sit where Macrocell files put them (cell (x, y) is tree position (x, y − 1)).
     ///
     /// Editing reaches |x|, |y| ≤ <see cref="EditLimit"/>; queries and rendering
     /// reach everywhere. <see cref="Step"/> allocates nothing on the managed heap once warm, and
@@ -701,7 +701,7 @@ namespace HeatonLife
         public static HashLife FromRle(string text, int maxMemoryMb = DefaultMaxMemoryMb)
             => Patterns.RleToHashLife(text, maxMemoryMb);
 
-        /// <summary>Macrocell text, placed as Golly places it (spec/macrocell.md).</summary>
+        /// <summary>Macrocell text, placed by tree coordinates (spec/macrocell.md).</summary>
         public static HashLife FromMacrocell(string text, int maxMemoryMb = DefaultMaxMemoryMb)
             => Macrocell.Read(text, maxMemoryMb);
 

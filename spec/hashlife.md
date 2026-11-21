@@ -11,7 +11,7 @@ engine (torus or dead edges); this page is its unbounded counterpart.
 ## State
 
 - **Cells.** Every point (x, y) of the integer plane is dead (0) or alive (1); finitely
-  many are alive. x grows to the right and y grows downward, as in RLE and Golly.
+  many are alive. x grows to the right and y grows downward, as in RLE.
 - **Generation.** A non-negative integer.
 - **Rule.** A Life-like rulestring in canonical form ([lifelike.md](lifelike.md),
   "Respond + Integrate"). A rule with `0 ∈ B` (B0) is rejected: births with no live
@@ -36,10 +36,11 @@ level-k root covers tree positions [−2^(k−1), 2^(k−1))² — that is, cell
 - x ∈ [−2^(k−1), 2^(k−1) − 1]
 - y ∈ [−2^(k−1) + 1, 2^(k−1)].
 
-This is Golly's placement. Golly keeps y pointing up internally and negates it at the
-edge, which shifts rows by one: the upper-left cell of the root's SE child is (0, 1). A
-[Macrocell](macrocell.md) file therefore lands on the same cells here as in Golly (the
-Caterpillar's file puts its top-left cell at (0, 0) in both).
+This is the placement [Macrocell](macrocell.md) files assume. Their convention keeps y
+pointing up internally and negates it at the edge, which shifts rows by one: the
+upper-left cell of the root's SE child is (0, 1). A Macrocell file therefore lands on the
+same cells here as in any other reader that places the root this way (the Caterpillar's
+file puts its top-left cell at (0, 0) in both).
 
 **Depth.** A tree is at most level 512 (`MAX_LEVEL`), so every live cell lies within
 ±2^511, and a port that recurses once per level never goes deeper than 512 calls. A
@@ -231,7 +232,8 @@ integers), so ports move views identically and an app keeps no copy of the math:
 ## Pattern I/O
 
 - **[Macrocell](macrocell.md)** (`.mc`, `.mc.gz`) carries any state, of any size, and its
-  canonical text is how vectors pin a state. Reading places the root as Golly does.
+  canonical text is how vectors pin a state. Reading places the root by the tree
+  coordinates above.
 - **[RLE](patterns.md#rle-in-the-unbounded-universe)** carries patterns inside the editing
   box: `#CXRLE Pos=x,y Gen=n` places the pattern and sets the generation; writing puts that
   line before the canonical RLE of the bounding box.

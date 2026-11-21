@@ -9,10 +9,10 @@ using System.Text;
 namespace HeatonLife
 {
     /// <summary>
-    /// Macrocell (<c>.mc</c>, <c>.mc.gz</c>) — Golly's native HashLife format (spec/macrocell.md).
+    /// Macrocell (<c>.mc</c>, <c>.mc.gz</c>) — HashLife's native file format (spec/macrocell.md).
     /// A file lists a pattern's distinct quadtree nodes, children before parents, so a regular
-    /// pattern of trillions of cells fits in a few lines. Reading follows Golly's two-state
-    /// reader (and its multistate syntax when every state is 0 or 1); writing is canonical, so
+    /// pattern of trillions of cells fits in a few lines. Reading covers two-state files (and
+    /// the multistate syntax when every state is 0 or 1); writing is canonical, so
     /// conforming ports write the same bytes for the same cells. The Python reference's
     /// heaton_life.ca.hashlife.macrocell.
     /// </summary>
@@ -38,7 +38,7 @@ namespace HeatonLife
         }
 
         /// <summary>
-        /// A universe from Macrocell text, placed as Golly places it: a level-k root covers x in
+        /// A universe from Macrocell text, placed by tree coordinates: a level-k root covers x in
         /// [−2^(k−1), 2^(k−1) − 1] and y in [−2^(k−1) + 1, 2^(k−1)]. <c>#R</c> sets the rule,
         /// <c>#G</c> the generation; other <c>#</c> lines (comments, timeline frames) are skipped.
         /// Malformed text throws <see cref="FormatException"/>.
@@ -239,7 +239,7 @@ namespace HeatonLife
         /// <summary>
         /// The canonical Macrocell text of the universe (spec/macrocell.md "Writing"): the header,
         /// <c>#R</c>, <c>#G</c> when the generation is above 0, then the minimal root's distinct
-        /// nodes in Golly's order — depth-first, children NW, NE, SW, SE before their parent,
+        /// nodes in post-order — depth-first, children NW, NE, SW, SE before their parent,
         /// each once — with LF line ends.
         /// </summary>
         public static string Write(HashLife universe)
@@ -299,7 +299,7 @@ namespace HeatonLife
             return text.ToString();
         }
 
-        /// <summary>A leaf line as Golly writes it: rows through the last live one, each without
+        /// <summary>A leaf line in its compact form: rows through the last live one, each without
         /// its trailing '.' and ended by '$'; the empty leaf is "$".</summary>
         private static void AppendLeaf(StringBuilder text, ulong bits)
         {

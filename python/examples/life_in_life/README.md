@@ -10,12 +10,12 @@ video loops. Everything runs on heaton-life's HashLife.
 ## Running it
 
 Needs the `playground` (Qt, for the overlay text) and `video` (ffmpeg) extras, about 2 GB
-of memory, and a network connection the first time. From `python/` with the repository's
-venv:
+of memory, and Dave Greene's metafier script saved as `out/metafier.py` (see below). From
+`python/` with the repository's venv:
 
 ```bash
 cd examples/life_in_life
-../../.venv/bin/python tiles.py        # download the metapixel source, build out/tiles.npz
+../../.venv/bin/python tiles.py        # read out/metafier.py, build out/tiles.npz
 ../../.venv/bin/python board.py        # lay out the 6×6 board → out/board.mc
 ../../.venv/bin/python verify.py       # check the metapixels compute Life (prints PASS)
 ../../.venv/bin/python render.py       # out/life_in_life_60s.mp4, about 7 minutes
@@ -36,9 +36,12 @@ saves a still every second.
 | `render.py` | The schedule, camera, rendering, overlay and encoding |
 
 `tiles.py` takes the tiles from Dave Greene's metafier script, which assembles them from
-about a hundred RLE fragments. It downloads the script once from Golly's source repository
-(pinned by commit and SHA-256) and reads it as data: Python's `ast` parses it and only an
-allow-list of pattern operations is evaluated, so none of the downloaded code runs.
+about a hundred RLE fragments. The script is neither bundled nor downloaded: save your
+copy as `out/metafier.py` (or pass `--metafier PATH`). `tiles.py` accepts only the exact
+file it was written against, 42,866 bytes with SHA-256
+`3f424bb67b5381a30a8c6695dc2aa168e490fda18f0242396260be75071440f0`, and reads it as data:
+Python's `ast` parses it and only an allow-list of pattern operations is evaluated, so
+none of the script's code runs.
 
 ## How the video works
 
@@ -63,6 +66,6 @@ allow-list of pattern operations is evaluated, so none of the downloaded code ru
 
 The OTCA metapixel is by Brice Due (2006); the metafier script that assembles it is by
 Dave Greene. The metapixel carries no stated license, so like the giant test patterns
-(`tools/fetch_patterns.py`) nothing derived from it is committed: `out/` (the downloaded
-script, the tiles, the board, and the videos) is git-ignored. If you publish a video made
+(`tools/fetch_patterns.py`) nothing derived from it is committed: `out/` (the script, the
+tiles, the board, and the videos) is git-ignored. If you publish a video made
 with this, please credit Brice Due for the metapixel.

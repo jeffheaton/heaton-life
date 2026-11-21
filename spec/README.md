@@ -58,7 +58,7 @@ Each family gets one page structured as:
 - [fractal-color.md](fractal-color.md) — fractal color that holds still: stretch (and a frozen stretch), depth phase, frequency, distance shading (bit-exact given its inputs)
 - [self-check.md](self-check.md) — the platform self-check: embedded known answers a host runs on its own runtime (IL2CPP, Mono, a phone) to learn whether it reproduces the bit-exact contract, and what each failure invalidates
 - [zoom.md](zoom.md) — zoom movies: Heaton Fractal's schedule with its end pinned, each frame's zoom, the movie iteration budget and the survey that measures it (bit-exact tier); the frame renderer (Python presentation)
-- [macrocell.md](macrocell.md) — Macrocell, Golly's HashLife format: Golly's reader and placement, and a canonical writer (bit-exact tier)
+- [macrocell.md](macrocell.md) — Macrocell, HashLife's native file format: reading, root placement, and a canonical writer (bit-exact tier)
 - [patterns.md](patterns.md) — pattern model, RLE dialects, transforms, extract/stamp, family-bound compatibility
 - [png-io.md](png-io.md) — MergeLife PNG import/export at integer scale; grid-level bit-exact contract (PNG bytes are per-encoder)
 - Every family in the library has a page above. A new family adds its page here (the index and the tier table) before it merges; see [python/DEVELOPMENT.md, "Adding or changing a family"](../python/DEVELOPMENT.md#adding-or-changing-a-family).

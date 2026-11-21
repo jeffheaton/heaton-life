@@ -1,6 +1,6 @@
 """Run Length Encoded pattern files — the interchange format of the Life community.
 
-Golly-compatible, both dialects (spec/patterns.md): two-state ``b``/``o`` and
+Both dialects in common use (spec/patterns.md): two-state ``b``/``o`` and
 extended multi-state ``.``/``A``–``X`` (states 1–24), ``$`` end of row, ``!`` end,
 optional run counts, ``#`` comment lines, and the ``x = …, y = …[, rule = …]``
 header. Encoding is canonical: two-state grids emit ``b``/``o``; grids with any
@@ -50,8 +50,8 @@ def rle_runs(text: str) -> tuple[RleInfo, Iterator[tuple[int, int, int, int]]]:
     """Scan RLE text as runs of non-zero cells: ``(x, y, length, state)`` relative to the
     pattern's top-left, in file order. Streams, so a giant file never becomes a grid.
 
-    Extended RLE's ``#CXRLE Pos=x,y Gen=n`` counts only on the first line (Golly reads it
-    nowhere else); every other ``#`` line is a comment.
+    Extended RLE's ``#CXRLE Pos=x,y Gen=n`` counts only on the first line; anywhere else it,
+    like every other ``#`` line, is a comment.
     """
     lines = [ln.strip() for ln in text.splitlines()]
     lines = [ln for ln in lines if ln]

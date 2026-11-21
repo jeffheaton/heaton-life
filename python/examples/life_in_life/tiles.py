@@ -1,11 +1,11 @@
 """The OTCA metapixel tiles (Brice Due, 2006), OFF and ON, programmed for B3/S23.
 
 The tiles are assembled exactly as Dave Greene's metafier.py assembles them: about a
-hundred RLE fragments placed, rotated, unioned and pre-run. That script lives in Golly's
-source repository; this tool downloads it once (pinned by commit and SHA-256) and reads
-its construction section as a layout description, never as code: the source is parsed
-with ``ast`` and only an allow-list is evaluated (see ``Layout``). heaton-life's HashLife
-does every pre-run.
+hundred RLE fragments placed, rotated, unioned and pre-run. This tool reads that script
+from a local copy (``out/metafier.py``, or ``--metafier PATH``) and accepts only the exact
+file it was written against, pinned by size and SHA-256. It reads the construction section
+as a layout description, never as code: the source is parsed with ``ast`` and only an
+allow-list is evaluated (see ``Layout``). heaton-life's HashLife does every pre-run.
 
 Usage: python tiles.py [--metafier PATH] [--out out/tiles.npz]
 """
@@ -18,7 +18,6 @@ import hashlib
 import re
 import textwrap
 import time
-import urllib.request
 from pathlib import Path
 
 import numpy as np
@@ -26,10 +25,6 @@ import numpy as np
 from heaton_life.ca.hashlife import HashLife
 
 OUT = Path(__file__).resolve().parent / "out"
-METAFIER_URL = (
-    "https://sourceforge.net/p/golly/code/ci/0df88ec6a8ef3f800fbf41e255d8b1405a6ee549"
-    "/tree/Scripts/Python/metafier.py?format=raw"
-)
 METAFIER_SIZE = 42866
 METAFIER_SHA256 = "3f424bb67b5381a30a8c6695dc2aa168e490fda18f0242396260be75071440f0"
 RULE_B, RULE_S = "3", "23"
@@ -51,21 +46,19 @@ TRANSFORMS: dict[str, Transform] = {
 _TOKEN = re.compile(r"(\d*)([bo$!])")
 
 
-def fetch(dest: Path) -> bytes:
-    """The pinned metafier.py: from ``dest`` when it is already there, else downloaded."""
-    if not dest.exists():
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        req = urllib.request.Request(
-            METAFIER_URL, headers={"User-Agent": "heaton-life life_in_life example"}
+def load(path: Path) -> bytes:
+    """The pinned metafier.py, read from ``path`` and checked against its size and SHA-256."""
+    if not path.is_file():
+        raise SystemExit(
+            f"{path}: not found. Save Dave Greene's metafier.py there, or pass --metafier PATH; "
+            f"the pinned copy is {METAFIER_SIZE} bytes, SHA-256 {METAFIER_SHA256}."
         )
-        with urllib.request.urlopen(req, timeout=60) as r:
-            dest.write_bytes(r.read())
-    data = dest.read_bytes()
+    data = path.read_bytes()
     digest = hashlib.sha256(data).hexdigest()
     if len(data) != METAFIER_SIZE or digest != METAFIER_SHA256:
         raise SystemExit(
-            f"{dest}: {len(data)} bytes, SHA-256 {digest}; expected {METAFIER_SIZE} bytes, "
-            f"{METAFIER_SHA256}. Delete it to download again."
+            f"{path}: {len(data)} bytes, SHA-256 {digest}; expected {METAFIER_SIZE} bytes, "
+            f"{METAFIER_SHA256}."
         )
     return data
 
@@ -304,7 +297,7 @@ def main() -> None:
     ap.add_argument("--metafier", type=Path, default=OUT / "metafier.py")
     ap.add_argument("--out", type=Path, default=OUT / "tiles.npz")
     args = ap.parse_args()
-    source = fetch(args.metafier).decode()
+    source = load(args.metafier).decode()
     t0 = time.perf_counter()
     off, on = build(source)
     print(f"built in {time.perf_counter() - t0:.1f} s")

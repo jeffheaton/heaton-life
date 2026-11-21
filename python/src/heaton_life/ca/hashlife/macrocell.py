@@ -1,7 +1,7 @@
-"""Macrocell (``.mc``) files — Golly's native HashLife format (spec/macrocell.md).
+"""Macrocell (``.mc``) files — HashLife's native file format (spec/macrocell.md).
 
 A Macrocell file lists a pattern's distinct quadtree nodes, children before parents, so a
-regular pattern of trillions of cells fits in a few lines. Reading follows Golly's reader
+regular pattern of trillions of cells fits in a few lines. Reading covers two-state files
 (two-state leaves, the multistate syntax with states 0 and 1, gzip); writing is canonical,
 so two conforming ports write the same bytes for the same cells.
 """
@@ -58,9 +58,9 @@ def _leaf_line(bits: int) -> str:
 def read_macrocell(source: str | bytes, *, max_memory_mb: int = DEFAULT_MEMORY_MB) -> HashLife:
     """Build a universe from Macrocell text or bytes (gzip-compressed bytes are fine).
 
-    Golly's placement: a level-k root covers x in [−2^(k−1), 2^(k−1) − 1] and y in
-    [−2^(k−1) + 1, 2^(k−1)]. ``#R`` sets the rule, ``#G`` the generation; other ``#``
-    lines (comments, timeline frames) are skipped.
+    The root is placed by tree coordinates: a level-k root covers x in [−2^(k−1), 2^(k−1) − 1]
+    and y in [−2^(k−1) + 1, 2^(k−1)]. ``#R`` sets the rule, ``#G`` the generation; other
+    ``#`` lines (comments, timeline frames) are skipped.
     """
     lines = _text(source).splitlines()
     if not lines or not lines[0].lstrip().startswith("[M2]"):

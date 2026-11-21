@@ -1,8 +1,9 @@
 """The HashLife universe (spec/hashlife.md): a Life-like rule on an unbounded plane.
 
 Cells live in a hash-consed quadtree whose root is centered on the origin. Cell (x, y)
-sits at tree position (x, y − 1) — Golly's placement, so Macrocell files land on the same
-cells as in Golly — and every coordinate, generation, and population is a Python int.
+sits at tree position (x, y − 1) — the placement Macrocell files use, so they land on the
+same cells here as in other readers — and every coordinate, generation, and population is
+a Python int.
 """
 
 from __future__ import annotations
@@ -472,7 +473,7 @@ class HashLife:
     def from_macrocell(
         cls, source: str | bytes, *, max_memory_mb: int = DEFAULT_MEMORY_MB
     ) -> HashLife:
-        """Macrocell text or bytes (gzip-compressed bytes too), placed as Golly places it."""
+        """Macrocell text or bytes (gzip-compressed bytes too), placed by tree coordinates."""
         from heaton_life.ca.hashlife.macrocell import read_macrocell
 
         return read_macrocell(source, max_memory_mb=max_memory_mb)
