@@ -13,10 +13,11 @@ engine (torus or dead edges); this page is its unbounded counterpart.
 - **Cells.** Every point (x, y) of the integer plane is dead (0) or alive (1); finitely
   many are alive. x grows to the right and y grows downward, as in RLE.
 - **Generation.** A non-negative integer.
-- **Rule.** A Life-like rulestring in canonical form ([lifelike.md](lifelike.md),
-  "Respond + Integrate"). A rule with `0 ∈ B` (B0) is rejected: births with no live
-  neighbors would light the infinite background. (A B0 rule that also has S8 can be run
-  as its complement rule; that is a possible later extension.)
+- **Rule.** A Life-like rule in canonical form ([rules.md](rules.md)): any notation, any
+  of its three neighborhoods. A rule with B0 (`table[0] = 1`) is rejected: births with no
+  live neighbors would light the infinite background. (A B0 rule whose table also keeps
+  a cell alive among eight live neighbors, `table[511] = 1`, can be run as its complement
+  rule; that is a possible later extension.)
 - Coordinates, generations, and populations are unbounded integers wherever the API takes
   or returns them. Ports use big integers at their public edges and whatever they like
   inside.
@@ -69,7 +70,8 @@ N alone: a 3 × 3 neighborhood moves information at most one cell per generation
 - **Fixed step**, j < k − 2. The same, except that the first phase takes the nine squares'
   centers with no time advance, and the second phase recurses with `result_j`.
 - **Leaves.** A leaf's center 4 × 4 after one or two generations is computed directly from
-  the rule.
+  the rule's table ([rules.md](rules.md#the-transition-table)), so every rule runs through
+  the same machinery and no other part of the engine sees the rule.
 
 **Sub-steps.** Write n in binary. For each set bit j, advance 2^j generations:
 

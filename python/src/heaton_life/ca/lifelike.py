@@ -1,4 +1,4 @@
-"""Life-like cellular automata (spec/lifelike.md): binary state, Moore neighborhood, B/S rules."""
+"""Life-like cellular automata (spec/lifelike.md): binary state, any rule of spec/rules.md."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ import numpy as np
 from numpy.typing import NDArray
 
 from heaton_life.ca._advance import AdvanceRegion
-from heaton_life.ca.rulestring import canonical_rule, parse_rule
-from heaton_life.core.neighbors import Boundary, moore_sum
+from heaton_life.ca.rulestring import compile_rule
+from heaton_life.core.neighbors import Boundary, moore_index
 from heaton_life.core.params import Params
 from heaton_life.init import blob, single, soup
 from heaton_life.init.patterns import clear, fill_random
@@ -22,15 +22,11 @@ class LifeLikeParams(Params):
     rule: str = dataclasses.field(default="B3/S23", metadata={"label": "Rule (B/S)"})
     width: int = dataclasses.field(default=256, metadata={"min": 8, "max": 2048})
     height: int = dataclasses.field(default=256, metadata={"min": 8, "max": 2048})
-    init: str = dataclasses.field(
-        default="soup", metadata={"choices": ["soup", "blob", "single"]}
-    )
+    init: str = dataclasses.field(default="soup", metadata={"choices": ["soup", "blob", "single"]})
     density: float = dataclasses.field(
         default=0.35, metadata={"min": 0.0, "max": 1.0, "step": 0.01}
     )
-    seed: int = dataclasses.field(
-        default=0, metadata={"min": 0, "max": 4294967295, "role": "seed"}
-    )
+    seed: int = dataclasses.field(default=0, metadata={"min": 0, "max": 4294967295, "role": "seed"})
     boundary: str = dataclasses.field(default="torus", metadata={"choices": ["torus", "dead"]})
 
 
@@ -58,8 +54,9 @@ class LifeLike(AdvanceRegion):
             init_name = "array"
         else:
             init_name = init
+        compiled = compile_rule(rule)
         self.params = LifeLikeParams(
-            rule=canonical_rule(rule),
+            rule=compiled.canonical,
             width=width,
             height=height,
             init=init_name,
@@ -67,10 +64,8 @@ class LifeLike(AdvanceRegion):
             seed=seed,
             boundary=boundary,
         )
-        birth, survive = parse_rule(self.params.rule)
-        self._lut = np.zeros((2, 9), dtype=np.uint8)
-        self._lut[0, sorted(birth)] = 1
-        self._lut[1, sorted(survive)] = 1
+        # The rule's transition table, indexed by each cell's 3×3 neighborhood (spec/rules.md).
+        self._table = np.frombuffer(compiled.table, dtype=np.uint8)
         self._generation = 0
         self._state: NDArray[np.uint8]
         self.reset()
@@ -78,7 +73,9 @@ class LifeLike(AdvanceRegion):
     @classmethod
     def from_params(cls, params: LifeLikeParams) -> LifeLike:
         if params.init == "array":
-            raise ValueError("params with init='array' cannot be reconstructed; pass the array to LifeLike(init=...)")
+            raise ValueError(
+                "params with init='array' cannot be reconstructed; pass the array to LifeLike(init=...)"
+            )
         return cls(
             params.rule,
             size=(params.width, params.height),
@@ -110,8 +107,7 @@ class LifeLike(AdvanceRegion):
     def step(self, n: int = 1) -> None:
         boundary = cast(Boundary, self.params.boundary)
         for _ in range(n):
-            counts = moore_sum(self._state, boundary)
-            self._state = self._lut[self._state, counts]
+            self._state = self._table[moore_index(self._state, boundary)]
         self._generation += n
 
     @property

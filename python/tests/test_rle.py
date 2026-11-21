@@ -123,3 +123,14 @@ def test_runs_come_one_at_a_time() -> None:
     _, runs = rle_runs("o$" * 200_000 + "o!")
     assert next(runs) == (0, 0, 1, 1) and next(runs) == (0, 1, 1, 1)
     assert sum(1 for _ in runs) == 199_999
+
+
+def test_a_header_naming_any_life_like_rule_is_two_state() -> None:
+    """spec/patterns.md "Dialect detection": uppercase B and O are dead and alive."""
+    for rule in ("B2-a/S12", "B2/S34H", "B1/SV", "MAP" + "A" * 86):
+        grid, header = rle_decode(f"x = 2, y = 2, rule = {rule}\nOB$BO!")
+        assert header == rule
+        assert grid.tolist() == [[1, 0], [0, 1]]
+    # A preset name is not a rule in a file, so this one reads as extended: O 15, B 2.
+    grid, _ = rle_decode("x = 2, y = 2, rule = life\nOB$BO!")
+    assert grid.tolist() == [[15, 2], [2, 15]]

@@ -223,7 +223,7 @@ none), the generation, and the metadata.
 | format | grid | x, y | rule | generation |
 |---|---|---|---|---|
 | `rle` | the RLE decode of [patterns.md](patterns.md#rle-text-encoding-life-like-wireworld-cyclic): the declared size, either dialect, states up to 24 | `#CXRLE Pos`, or (0, 0) | the header's, as written, or none | `#CXRLE Gen`, or 0 |
-| `macrocell` | the live cells' bounding box | the box's top-left | `#R` in canonical form, or `B3/S23` | `#G`, or 0 |
+| `macrocell` | the live cells' bounding box | the box's top-left | `#R` in [canonical form](rules.md#canonical-form), or `B3/S23` | `#G`, or 0 |
 | `plaintext` | the rows: the longest row's width × the number of rows | (0, 0) | none | 0 |
 | `life-1.05`, `life-1.06` | the live cells' bounding box | the box's top-left | from `#N` or `#R`, or none | 0 |
 | `png`, `bmp` | the image | (0, 0) | none | 0 |
@@ -253,8 +253,9 @@ universe.
   its own coordinates.
 - **Editing box.** Every live cell must lie in the [editing box](hashlife.md#editing),
   |x|, |y| ≤ 10⁹, or the file is refused — except Macrocell, which carries anything.
-- **Rule.** The format's rule, or `B3/S23` without one. A rule the universe can't run
-  (not a Life-like rulestring, or one with B0) is an error.
+- **Rule.** The format's rule, or `B3/S23` without one, in any notation of
+  [rules.md](rules.md). A rule the universe can't run (not a Life-like rule, or one with
+  B0) is an error.
 - **Generation.** RLE's `Gen`, Macrocell's `#G`, otherwise 0.
 
 An empty pattern gives an empty universe. Macrocell timelines have their own reader and

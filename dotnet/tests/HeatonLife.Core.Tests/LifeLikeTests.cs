@@ -1,3 +1,4 @@
+using System;
 using Xunit;
 
 namespace HeatonLife.Tests
@@ -99,6 +100,84 @@ namespace HeatonLife.Tests
                     Assert.Equal(expected, sim.State[y * 8 + x]);
                 }
             Assert.Equal(7, sim.Generation); // clearing preserves the generation
+        }
+
+        // -- every rule runs through its table (spec/lifelike.md, spec/rules.md) --------------
+
+        private static string NoiseMap(ulong seed)
+        {
+            const string Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            var rng = new Pcg32(seed);
+            var bits = new int[516];
+            for (int i = 0; i < 512; i++)
+                bits[i] = (int)(rng.NextU32() >> 31);
+            var sb = new System.Text.StringBuilder("MAP");
+            for (int i = 0; i < 516; i += 6)
+                sb.Append(Alphabet[(bits[i] << 5) | (bits[i + 1] << 4) | (bits[i + 2] << 3)
+                    | (bits[i + 3] << 2) | (bits[i + 4] << 1) | bits[i + 5]]);
+            return sb.ToString();
+        }
+
+        /// <summary>Against a direct evaluation of an arbitrary table: a mirrored or rotated
+        /// weight order would pass an isotropic rule but not this one.</summary>
+        [Theory]
+        [InlineData(Boundary.Torus)]
+        [InlineData(Boundary.Dead)]
+        public void EachCellTakesTheTableEntryAtItsIndex(Boundary boundary)
+        {
+            string rule = NoiseMap(11);
+            ReadOnlySpan<byte> table = RuleString.Compile(rule).Table;
+            const int W = 13, H = 9;
+            var sim = new LifeLike(rule, W, H, boundary);
+            sim.SeedSoup(0.5, 3);
+            byte[] state = sim.State.ToArray();
+            sim.Step();
+            int[,] weight = { { 256, 128, 64 }, { 32, 16, 8 }, { 4, 2, 1 } };
+            for (int y = 0; y < H; y++)
+            {
+                for (int x = 0; x < W; x++)
+                {
+                    int index = 0;
+                    for (int dy = -1; dy <= 1; dy++)
+                    {
+                        for (int dx = -1; dx <= 1; dx++)
+                        {
+                            int yy = y + dy, xx = x + dx;
+                            if (boundary == Boundary.Torus)
+                            {
+                                yy = (yy + H) % H;
+                                xx = (xx + W) % W;
+                            }
+                            else if (yy < 0 || yy >= H || xx < 0 || xx >= W)
+                            {
+                                continue;
+                            }
+                            index += weight[dy + 1, dx + 1] * state[yy * W + xx];
+                        }
+                    }
+                    Assert.Equal(table[index], sim.State[y * W + x]);
+                }
+            }
+        }
+
+        [Fact]
+        public void RulesAreCarriedCanonicalInAnyNotation()
+        {
+            Assert.Equal("B2-a/S12", new LifeLike("b2cekin/s12", 8, 8).Rule);
+            Assert.Equal("B2/S34H", new LifeLike("b2/s34h", 8, 8).Rule);
+            Assert.Equal(NoiseMap(2), new LifeLike(NoiseMap(2) + "==", 8, 8).Rule);
+        }
+
+        /// <summary>B0 on a torus: every dead cell without live neighbors is born at once.</summary>
+        [Fact]
+        public void B0RulesRunAsWritten()
+        {
+            var sim = new LifeLike("B0/S", 8, 8);
+            sim.SetState(new byte[64]);
+            sim.Step();
+            Assert.All(sim.State.ToArray(), c => Assert.Equal(1, c));
+            sim.Step(); // B0/S has no survival: everything dies
+            Assert.All(sim.State.ToArray(), c => Assert.Equal(0, c));
         }
     }
 }

@@ -1,0 +1,54 @@
+{
+  "checkpoints": [
+    {
+      "bounding_box": [
+        "-16",
+        "-16",
+        "15",
+        "15"
+      ],
+      "generation": "0",
+      "population": "384",
+      "state": "state-0.mc"
+    },
+    {
+      "bounding_box": [
+        "-17",
+        "-17",
+        "15",
+        "16"
+      ],
+      "generation": "1",
+      "population": "402",
+      "state": "state-1.mc"
+    },
+    {
+      "bounding_box": [
+        "-40",
+        "-31",
+        "25",
+        "47"
+      ],
+      "generation": "100",
+      "population": "862",
+      "state": "state-2.mc"
+    },
+    {
+      "bounding_box": [
+        "-134",
+        "-50",
+        "95",
+        "176"
+      ],
+      "generation": "500",
+      "population": "6867",
+      "state_lines": 672,
+      "state_sha256": "4877319b71b5db49acfce8922f228b97e4f9bbf26313066139c747414bac089a"
+    }
+  ],
+  "family": "hashlife",
+  "input": "input.rle",
+  "kind": "evolve",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

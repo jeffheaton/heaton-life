@@ -1,0 +1,151 @@
+{
+  "cases": [
+    {
+      "canonical": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAA",
+      "input": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAA",
+      "neighborhood": "moore",
+      "table": "0116177e16687ee816687ee86880e88016687ee86880e8806880e8808000800016687ee86880e8806880e880800080006880e880800080008000800000000000"
+    },
+    {
+      "canonical": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAA",
+      "input": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAA==",
+      "neighborhood": "moore",
+      "table": "0116177e16687ee816687ee86880e88016687ee86880e8806880e8808000800016687ee86880e8806880e880800080006880e880800080008000800000000000"
+    },
+    {
+      "canonical": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAA",
+      "input": "mapARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAA",
+      "neighborhood": "moore",
+      "table": "0116177e16687ee816687ee86880e88016687ee86880e8806880e8808000800016687ee86880e8806880e880800080006880e880800080008000800000000000"
+    },
+    {
+      "canonical": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAA",
+      "input": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAP",
+      "neighborhood": "moore",
+      "table": "0116177e16687ee816687ee86880e88016687ee86880e8806880e8808000800016687ee86880e8806880e880800080006880e880800080008000800000000000"
+    },
+    {
+      "canonical": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiA6IDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAA",
+      "input": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiA6IDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAA",
+      "neighborhood": "moore",
+      "table": "0116177e16687ee816687ee86880e88016687ee86880e880e880e8808000800016687ee86880e8806880e880800080006880e880800080008000800000000000"
+    },
+    {
+      "canonical": "MAPpC3+D1zP+MoWtQUbo5CiBk1Bto4CIEEDXtF/Q7Kp0zi4Bo5xg1lqnODeTsBGBQaAdPAy5tMlVMeWLyto4Ce6gw",
+      "input": "MAPpC3+D1zP+MoWtQUbo5CiBk1Bto4CIEEDXtF/Q7Kp0zi4Bo5xg1lqnODeTsBGBQaAdPAy5tMlVMeWLyto4Ce6gw",
+      "neighborhood": "moore",
+      "table": "a42dfe0f5ccff8ca16b5051ba390a2064d41b68e022041035ed17f43b2a9d338b8068e7183596a9ce0de4ec04605068074f032e6d32554c7962f2b68e027ba83"
+    },
+    {
+      "canonical": "MAPpC3+D1zP+MoWtQUbo5CiBk1Bto4CIEEDXtF/Q7Kp0zi4Bo5xg1lqnODeTsBGBQaAdPAy5tMlVMeWLyto4Ce6gw",
+      "input": " MAPpC3+D1zP+MoWtQUbo5CiBk1Bto4CIEEDXtF/Q7Kp0zi4Bo5xg1lqnODeTsBGBQaAdPAy5tMlVMeWLyto4Ce6gw== ",
+      "neighborhood": "moore",
+      "table": "a42dfe0f5ccff8ca16b5051ba390a2064d41b68e022041035ed17f43b2a9d338b8068e7183596a9ce0de4ec04605068074f032e6d32554c7962f2b68e027ba83"
+    },
+    {
+      "canonical": "MAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "input": "MAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "neighborhood": "moore",
+      "table": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "canonical": "MAPgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "input": "MAPgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "neighborhood": "moore",
+      "table": "80000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "canonical": "MAPFgFoF2gXgH5oF4B+AH4A6A",
+      "input": "MAPFgFoF2gXgH5oF4B+AH4A6A",
+      "neighborhood": "hexagonal",
+      "table": "1166001166881177116600116688117766881177880077ee66881177880077ee66881177880077ee66881177880077ee000077ee0000ee88000077ee0000ee88"
+    },
+    {
+      "canonical": "MAPFgFoF2gXgH5oF4B+AH4A6A",
+      "input": "MAPFgFoF2gXgH5oF4B+AH4A6A==",
+      "neighborhood": "hexagonal",
+      "table": "1166001166881177116600116688117766881177880077ee66881177880077ee66881177880077ee66881177880077ee000077ee0000ee88000077ee0000ee88"
+    },
+    {
+      "canonical": "MAPFgFoF2gXgH5oF4B+AH4A6A",
+      "input": "MAPFgFoF2gXgH5oF4B+AH4A6B",
+      "neighborhood": "hexagonal",
+      "table": "1166001166881177116600116688117766881177880077ee66881177880077ee66881177880077ee66881177880077ee000077ee0000ee88000077ee0000ee88"
+    },
+    {
+      "canonical": "MAPHmkphg",
+      "input": "MAPHmkphg",
+      "neighborhood": "vonneumann",
+      "table": "0033ffcc33cccc330033ffcc33cccc3300cccc33cc0033cc00cccc33cc0033cc0033ffcc33cccc330033ffcc33cccc3300cccc33cc0033cc00cccc33cc0033cc"
+    },
+    {
+      "canonical": "MAPHmkphg",
+      "input": "MAPHmkphg==",
+      "neighborhood": "vonneumann",
+      "table": "0033ffcc33cccc330033ffcc33cccc3300cccc33cc0033cc00cccc33cc0033cc0033ffcc33cccc330033ffcc33cccc3300cccc33cc0033cc00cccc33cc0033cc"
+    },
+    {
+      "canonical": "MAPpC3+D1zP+MoWtQUbo5CiBg",
+      "input": "MAPpC3+D1zP+MoWtQUbo5CiBg",
+      "neighborhood": "hexagonal",
+      "table": "aa4422ddffee00ffaa4422ddffee00ff55ccccffff88ccaa55ccccffff88ccaa1166bb55005511bb1166bb55005511bbaa339900aa220066aa339900aa220066"
+    },
+    {
+      "canonical": "MAPpC3+Dw",
+      "input": "MAPpC3+Dw",
+      "neighborhood": "vonneumann",
+      "table": "cccc330000ccff33cccc330000ccff33ffffffcc0000ffffffffffcc0000ffffcccc330000ccff33cccc330000ccff33ffffffcc0000ffffffffffcc0000ffff"
+    },
+    {
+      "error": true,
+      "input": "MAP"
+    },
+    {
+      "error": true,
+      "input": "MAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    {
+      "error": true,
+      "input": "MAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    {
+      "error": true,
+      "input": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAA="
+    },
+    {
+      "error": true,
+      "input": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAA==="
+    },
+    {
+      "error": true,
+      "input": "MAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+    },
+    {
+      "error": true,
+      "input": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAA!"
+    },
+    {
+      "error": true,
+      "input": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAA==x"
+    },
+    {
+      "error": true,
+      "input": "MA PARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAA"
+    },
+    {
+      "error": true,
+      "input": "MAPFgFoF2gXgH5oF4B+AH4A6AH"
+    },
+    {
+      "error": true,
+      "input": "MAPHmkphgV"
+    },
+    {
+      "error": true,
+      "input": "MAP=ARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAA"
+    }
+  ],
+  "family": "rules",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

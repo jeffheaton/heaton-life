@@ -96,3 +96,69 @@ def test_state_shape_and_frame() -> None:
     f = sim.frame()
     assert f.dtype == np.uint8
     assert set(np.unique(f)).issubset({0, 255})
+
+
+# -- every rule runs through its table (spec/lifelike.md, spec/rules.md) ------------------------
+
+_WEIGHT = {
+    (-1, -1): 256,
+    (0, -1): 128,
+    (1, -1): 64,
+    (-1, 0): 32,
+    (0, 0): 16,
+    (1, 0): 8,
+    (-1, 1): 4,
+    (0, 1): 2,
+    (1, 1): 1,
+}
+
+
+def _noise_map(seed: int) -> str:
+    from heaton_life.core.rng import Pcg32
+
+    rng = Pcg32(seed, 0)
+    bits = "".join(str(rng.next_u32() >> 31) for _ in range(512)) + "0000"
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    return "MAP" + "".join(alphabet[int(bits[i : i + 6], 2)] for i in range(0, 516, 6))
+
+
+@pytest.mark.parametrize("boundary", ["torus", "dead"])
+def test_each_cell_takes_the_table_entry_at_its_index(boundary: str) -> None:
+    """Against a direct evaluation of an arbitrary table: a mirrored or rotated weight
+    order would pass an isotropic rule but not this one."""
+    from heaton_life.ca.rulestring import compile_rule
+
+    rule = _noise_map(11)
+    table = compile_rule(rule).table
+    sim = LifeLike(rule, size=(13, 9), density=0.5, seed=3, boundary=boundary)  # type: ignore[arg-type]
+    state = sim.state.copy()
+    sim.step()
+    h, w = state.shape
+    expected = np.zeros_like(state)
+    for y in range(h):
+        for x in range(w):
+            index = 0
+            for (dx, dy), weight in _WEIGHT.items():
+                yy, xx = y + dy, x + dx
+                if boundary == "torus":
+                    yy, xx = yy % h, xx % w
+                elif not (0 <= yy < h and 0 <= xx < w):
+                    continue
+                index += weight * int(state[yy, xx])
+            expected[y, x] = table[index]
+    assert np.array_equal(sim.state, expected)
+
+
+def test_rules_are_carried_canonical_in_any_notation() -> None:
+    assert LifeLike("b2cekin/s12", size=(8, 8)).params.rule == "B2-a/S12"
+    assert LifeLike("b2/s34h", size=(8, 8)).params.rule == "B2/S34H"
+    assert LifeLike(_noise_map(2) + "==", size=(8, 8)).params.rule == _noise_map(2)
+
+
+def test_b0_rules_run_as_written() -> None:
+    """B0 on a torus: every dead cell without live neighbors is born at once."""
+    sim = LifeLike("B0/S", size=(8, 8), init=np.zeros((8, 8), np.uint8))
+    sim.step()
+    assert sim.state.all()
+    sim.step()  # B0/S has no survival: everything dies
+    assert not sim.state.any()

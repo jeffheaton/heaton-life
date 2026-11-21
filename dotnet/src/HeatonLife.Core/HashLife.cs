@@ -177,7 +177,8 @@ namespace HeatonLife
 
         // -- configuration ----------------------------------------------------------------------
 
-        /// <summary>The canonical rulestring. Setting it keeps the cells and drops cached results.</summary>
+        /// <summary>The canonical rule (spec/rules.md): any Life-like rule without B0. Setting it keeps
+        /// the cells and drops cached results.</summary>
         public string Rule
         {
             get => _rule;
@@ -216,12 +217,12 @@ namespace HeatonLife
         {
             if (rule == null)
                 throw new ArgumentNullException(nameof(rule));
-            string canonical = RuleString.Canonical(rule);
-            if (canonical.Length > 1 && canonical[1] == '0')
+            LifeRule compiled = RuleString.Compile(rule);
+            if (compiled.HasB0)
                 throw new ArgumentException(
-                    $"HashLife cannot run B0 rules ({canonical}): births with no live neighbors "
+                    $"HashLife cannot run B0 rules ({compiled.Canonical}): births with no live neighbors "
                     + "would fill the infinite background (spec/hashlife.md)", nameof(rule));
-            return canonical;
+            return compiled.Canonical;
         }
 
         private static int MaxNodesFor(int maxMemoryMb)

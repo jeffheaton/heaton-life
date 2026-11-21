@@ -11,12 +11,12 @@ namespace HeatonLife
     /// <summary>
     /// Life-like cellular automaton (spec/lifelike.md). State is a flat row-major
     /// byte grid (0/1), index = y * Width + x — the same memory layout as the
-    /// Python implementation and the conformance vectors. Bit-exact tier.
+    /// Python implementation and the conformance vectors. Bit-exact tier. The rule is any
+    /// Life-like rule (spec/rules.md), run through its 512-entry table.
     /// </summary>
     public sealed class LifeLike : IIndexedFrameSource
     {
-        private readonly bool[] _birth;
-        private readonly bool[] _survive;
+        private readonly byte[] _table; // next state by 3×3 neighborhood index (spec/rules.md)
         private byte[] _cells;
         private byte[] _scratch;
 
@@ -34,8 +34,9 @@ namespace HeatonLife
             int height,
             Boundary boundary = Boundary.Torus)
         {
-            Rule = RuleString.Canonical(rule);
-            (_birth, _survive) = RuleString.Parse(rule);
+            LifeRule compiled = RuleString.Compile(rule);
+            Rule = compiled.Canonical;
+            _table = compiled.Table.ToArray();
             Width = width;
             Height = height;
             Boundary = boundary;
@@ -211,13 +212,12 @@ namespace HeatonLife
                         left = (left + w) % w;
                         right = right % w;
                     }
-                    int count = 0;
-                    count += Cell(left, up) + Cell(x, up) + Cell(right, up);
-                    count += Cell(left, y) + Cell(right, y);
-                    count += Cell(left, down) + Cell(x, down) + Cell(right, down);
-                    byte current = _cells[y * w + x];
-                    bool alive = current == 1 ? _survive[count] : _birth[count];
-                    _scratch[y * w + x] = (byte)(alive ? 1 : 0);
+                    // The neighborhood index (spec/rules.md): NW 256, N 128, NE 64, W 32,
+                    // the cell 16, E 8, SW 4, S 2, SE 1.
+                    int index = (Cell(left, up) << 8) | (Cell(x, up) << 7) | (Cell(right, up) << 6)
+                        | (Cell(left, y) << 5) | (_cells[y * w + x] << 4) | (Cell(right, y) << 3)
+                        | (Cell(left, down) << 2) | (Cell(x, down) << 1) | Cell(right, down);
+                    _scratch[y * w + x] = _table[index];
                 }
             }
             (_cells, _scratch) = (_scratch, _cells);

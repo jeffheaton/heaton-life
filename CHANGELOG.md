@@ -10,8 +10,9 @@ vectors) moves on its own; each release lists the one it implements.
 Implements spec version 0.16.0 (1.1.0 implemented 0.13.0). Every conformance vector that
 existed at 1.1.0 is byte-identical; the new behavior comes with new vector cases. The
 public APIs of both packages are backward compatible: nothing was removed or renamed.
-Two behaviors changed (below): canonical RLE's form, and RLE decoding now has a size
-limit.
+Three behaviors changed (below): canonical RLE's form (its row ends and its rule's
+spelling), RLE decoding now has a size limit, and an RLE header naming any Life-like rule
+makes the file two-state.
 
 ### Added
 
@@ -114,6 +115,17 @@ limit.
     area or population; and `set_generation` / `SetGeneration`, which changes only the
     counter.
 
+- **Every two-state rule over the 3×3 neighborhood** (`compile_rule` and `LifeRule` in
+  `heaton_life.ca.rulestring`, .NET `RuleString.Compile` and `LifeRule`;
+  [spec/rules.md](spec/rules.md)). A Life-like rule is now one 512-entry transition table,
+  compiled from outer-totalistic `B…/S…` rules, isotropic non-totalistic rules in Hensel
+  notation (`B3/S2-i34q`, `B2-a/S12`), `MAP` strings (any table), and hexagonal (`H`) and
+  von Neumann (`V`) rules. Life-like grids and HashLife both run the table, so every rule
+  runs on a grid and, without B0, on the unbounded plane. Each rule has one canonical
+  spelling: letters in alphabetical order, the shorter of the plain and `-` forms, a full
+  letter set as the bare digit, and MAP strings without padding and with their unused bits
+  zero. B0 rules still run as written on grids and are still refused by HashLife.
+
 ### Changed
 
 - **Canonical RLE writes a run of k ≥ 2 row ends as one `k$`** (`rle_encode`,
@@ -126,6 +138,17 @@ limit.
   declaring `x = 1000000000, y = 1000000000`, or one run of a billion dead cells, asked
   for memory no machine has, and .NET overflowed its `int` sizes on the way. Pass a
   larger limit, or `None` / `null` to lift it, to decode a bigger grid on purpose.
+- **An RLE header naming any Life-like rule makes the file two-state**, in any of the
+  notations above, so uppercase `B` and `O` are dead and alive there as in a `B…/S…` file.
+  Such a header used to mark the file extended, which HashLife refuses. Preset names such
+  as `life` are not rules in a file and still read as extended.
+- **Canonical RLE names a Life-like rule in its canonical form** (`rle_encode`,
+  `Patterns.RleEncode`), so the header reads back as the same rule however it was spelled:
+  `b3 / s32` is written `B3/S23`. It used to be written as given, and a rule spelled with
+  spaces read back as `B3` in the extended dialect. Any other rule is written as given.
+- `parse_rule` (.NET `RuleString.Parse`) still gives the birth and survival counts of an
+  outer-totalistic Moore rule; for a rule that has none, such as an isotropic or hexagonal
+  one, it raises (throws) and points to `compile_rule` (`RuleString.Compile`).
 - Python: `rle_runs` reads its tokens one at a time. It used to list every token of the
   file first, which held a large file in memory several times over.
 - **`HashLife.from_file` / `HashLife.Load` read every two-state format** by content, not

@@ -113,6 +113,13 @@ def test_gun_population_grows_without_bound() -> None:
 
 # -- the dense engine as oracle ---------------------------------------------------------------
 
+
+def _life(index: int) -> bool:
+    """B3/S23's entry at a neighborhood index (spec/rules.md)."""
+    count = (index & 0x1EF).bit_count()
+    return count == 3 or (bool(index & 16) and count == 2)
+
+
 DENSE_CASES = [
     ("B3/S23", 40, [1, 2, 5, 10, 33, 100, 211]),
     ("B36/S23", 40, [1, 3, 17, 64, 150]),
@@ -123,8 +130,32 @@ DENSE_CASES = [
 ]
 
 
+# Every rule class of spec/rules.md runs through the same base case: isotropic letters,
+# MAP strings (anisotropic ones too, where a mirrored bit order would show), and the
+# hexagonal and von Neumann neighborhoods.
+_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+_LIFE_PLUS_ONE_BIRTH = (
+    "MAP"
+    + "".join(  # Life, plus birth on N and NE alone
+        _ALPHABET[int(bits, 2)]
+        for table in ["".join(str(int(i == 192 or _life(i))) for i in range(512)) + "0000"]
+        for bits in (table[k : k + 6] for k in range(0, 516, 6))
+    )
+)
+DENSE_CASES += [
+    ("B3/S2-i34q", 40, [1, 2, 9, 40, 120]),
+    ("B2-a/S12", 24, [1, 3, 17, 50]),
+    ("B2ci3ai4c8/S02ae3eijkq4iz5ar6i7e", 40, [1, 4, 23, 80]),
+    (_LIFE_PLUS_ONE_BIRTH, 24, [1, 2, 9, 30]),
+    ("MAPFgFoF2gXgH5oF4B+AH4A6A", 40, [1, 5, 30, 90]),
+    ("MAPHmkphg", 40, [1, 5, 30, 90]),
+    ("B2/S34H", 40, [1, 4, 23, 80]),
+    ("B2/S013V", 40, [1, 5, 30, 90]),
+]
+
+
 @pytest.mark.parametrize(
-    ("rule", "start", "checkpoints"), DENSE_CASES, ids=[c[0] for c in DENSE_CASES]
+    ("rule", "start", "checkpoints"), DENSE_CASES, ids=[c[0][:24] for c in DENSE_CASES]
 )
 def test_agrees_with_the_dense_engine(rule: str, start: int, checkpoints: list[int]) -> None:
     """Mixed step sizes against LifeLike on a dead-boundary grid the pattern never reaches."""
@@ -287,6 +318,8 @@ def test_coordinates_must_be_integers() -> None:
 def test_rules_and_budgets_are_validated() -> None:
     with pytest.raises(ValueError, match="B0"):
         HashLife("B03/S23")
+    with pytest.raises(ValueError, match="B0"):
+        HashLife("MAPg" + "A" * 85)  # a MAP string with entry 0 set is B0 too
     with pytest.raises(ValueError, match="at least 10"):
         HashLife(max_memory_mb=9)
     u = HashLife.from_params(HashLifeParams(rule="b36 / s32", max_memory_mb=64))

@@ -67,7 +67,9 @@ def _vector_params(family: str, params: dict[str, Any]) -> dict[str, Any]:
     return params
 
 
-def write_case(family: str, name: str, sim: Simulation, steps: list[int]) -> None:
+def write_case(
+    family: str, name: str, sim: Simulation, steps: list[int], *, spec_version: str = SPEC_VERSION
+) -> None:
     codec = CODECS[family]
     tier, epsilon = TIERS[family]
     case_dir = VECTOR_ROOT / family / name
@@ -85,7 +87,7 @@ def write_case(family: str, name: str, sim: Simulation, steps: list[int]) -> Non
             entry["shape"] = list(state.shape)
         checkpoints.append(entry)
     meta: dict[str, Any] = {
-        "spec_version": SPEC_VERSION,
+        "spec_version": spec_version,
         "family": family,
         "tier": tier,
         "params": _vector_params(family, sim.params.to_dict()),  # type: ignore[attr-defined]
@@ -127,6 +129,379 @@ def gen_mergelife_decode() -> None:
             json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n"
         )
         print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
+
+
+RULES_SPEC_VERSION = "0.16.0"
+
+
+def write_rule_cases() -> None:
+    """Life-like rules (spec/rules.md), new in spec 0.16.0: rule text to canonical string
+    and table (vectors/rules/), every rule class run on a grid (vectors/lifelike/) and on
+    HashLife (vectors/hashlife/), and the dialect a rule header gives an RLE file
+    (vectors/patterns/)."""
+    import io
+
+    from PIL import Image
+
+    from heaton_life.ca.hashlife import HashLife
+    from heaton_life.ca.rulestring import compile_rule
+    from heaton_life.core.rng import Pcg32
+    from heaton_life.init import rle_encode
+
+    def table_hex(table: bytes) -> str:  # spec/rules.md "Vector encoding"
+        return int("".join(map(str, table)), 2).to_bytes(64, "big").hex()
+
+    def payload(entries: list[int]) -> str:  # a MAP payload, six bits a character
+        bits = "".join(map(str, entries)).ljust(-(-len(entries) // 6) * 6, "0")
+        b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+        return "".join(b64[int(bits[i : i + 6], 2)] for i in range(0, len(bits), 6))
+
+    def entries(rule: str, cells: int) -> list[int]:
+        """A rule's own-neighborhood MAP entries: its table at the index whose missing
+        cells are dead (Moore 9 cells, hexagonal 7, von Neumann 5)."""
+        weights = {9: (256, 128, 64, 32, 16, 8, 4, 2, 1), 7: (256, 128, 32, 16, 8, 2, 1)}
+        weights[5] = (128, 32, 16, 8, 2)
+        table = compile_rule(rule).table
+        out = []
+        for i in range(1 << cells):
+            index = sum(w for b, w in enumerate(weights[cells]) if i >> (cells - 1 - b) & 1)
+            out.append(table[index])
+        return out
+
+    life = entries("B3/S23", 9)
+    aniso = life.copy()
+    aniso[128 | 64] = 1  # Life, plus birth on N and NE alone: one orientation of 2a
+    hexagonal = entries("B2/S34H", 7)
+    hexagonal[64 | 32] = 0  # B2/S34H without birth on NW and N alone
+    vonneumann = entries("B2/S013V", 5)
+    vonneumann[16 | 1] = 0  # B2/S013V without birth on N and S alone
+    rng = Pcg32(20261121, 0)
+    noise = [rng.next_u32() >> 31 for _ in range(512)]
+    map_life, map_aniso = "MAP" + payload(life), "MAP" + payload(aniso)
+    map_hex, map_vn = "MAP" + payload(hexagonal), "MAP" + payload(vonneumann)
+    map_noise = "MAP" + payload(noise)
+    snowflakes = "B2ci3ai4c8/S02ae3eijkq4iz5ar6i7e"
+
+    # -- rules: text -> canonical string, neighborhood, table; or an error -------------
+    def rules(name: str, valid: list[str], invalid: list[str]) -> None:
+        cases: list[dict[str, Any]] = []
+        for text in valid:
+            rule = compile_rule(text, presets=False)
+            cases.append(
+                {
+                    "input": text,
+                    "canonical": rule.canonical,
+                    "neighborhood": rule.neighborhood,
+                    "table": table_hex(rule.table),
+                }
+            )
+            assert compile_rule(rule.canonical).canonical == rule.canonical, text
+        for text in invalid:
+            try:
+                compile_rule(text, presets=False)
+            except ValueError:
+                cases.append({"input": text, "error": True})
+            else:
+                raise AssertionError(f"{text!r} should be an error")
+        d = VECTOR_ROOT / "rules" / name
+        d.mkdir(parents=True, exist_ok=True)
+        meta = {
+            "spec_version": RULES_SPEC_VERSION,
+            "family": "rules",
+            "tier": "bit-exact",
+            "cases": cases,
+        }
+        (d / "params.json").write_text(
+            json.dumps(meta, indent=2, sort_keys=True) + "\n", newline="\n"
+        )
+        print(f"wrote {d.relative_to(REPO_ROOT)} ({len(cases)} rules)")
+
+    rules(
+        "totalistic",
+        [
+            "B3/S23",
+            "b3/s23",
+            " B3 / S23 ",
+            "\tB36/S23\r\n",
+            "\u00a0B3/S23\u3000",
+            "B32/S32",
+            "B33/S233",
+            "B2/S",
+            "B/S23",
+            "B/S",
+            "B3678/S34678",
+            "B1357/S1357",
+            "B3/S12345",
+            "B35678/S5678",
+            "B012345678/S012345678",
+            "B0123478/S01234678",
+            "B03/S23",
+        ],
+        ["\u200bB3/S23", "\x1cB3/S23", "B3/S23\x00", "life"],
+    )
+    rules(
+        "isotropic",
+        [
+            "B3/S2-i34q",
+            "B2-a/S12",
+            snowflakes,
+            "b2cekin/s12",
+            "B2CEKIN/S12",
+            "B4-eijryz/S",
+            "B4acknqtw/S",
+            "B4eijryz/S",
+            "B2a2c/S",
+            "B3a2c/S",
+            "B2-a2a/S",
+            "B2n2-a/S",
+            "B2-cekain/S",
+            "B2cekain/S",
+            "B1c/S",
+            "B1-c/S",
+            "B3-cekainyqj/S",
+            "B3cekainyq/S",
+            "B5-q6-i7c/S8",
+            "B3/S2-ak34aikqtwz5inqy",
+            "B2c3aj4nrt5i6c78/S1c23enr4aet5-iq67",
+            "B1e2cn3acjkr4cny5einqy6ei7c/S01e2-ei3acjkr4-ejr5einqy6-cn7c8",
+            "B2-an3acqry4cnw5-cj6cei78/S1c2n3-nqy4acknqtw5-ijkr6ei78",
+        ],
+        [],
+    )
+    # Each letter class alone, on each side: the tables pin every class's arrangements.
+    singles = [f"B{n}/S" for n in range(9)] + [f"B/S{n}" for n in range(9)]
+    for n in range(1, 8):
+        for letter in "cekainyqjrtwz":
+            try:
+                compile_rule(f"B{n}{letter}/S")
+            except ValueError:
+                continue  # not a class of n
+            singles += [f"B{n}{letter}/S", f"B/S{n}{letter}"]
+    rules("isotropic-classes", singles, [])
+    rules(
+        "map",
+        [
+            map_life,
+            map_life + "==",
+            "map" + map_life[3:],
+            map_life[:-1] + "P",  # the last character's four unused bits set
+            map_aniso,
+            map_noise,
+            " " + map_noise + "== ",
+            "MAP" + "A" * 86,
+            "MAPg" + "A" * 85,  # entry 0 set: B0
+            map_hex,
+            map_hex + "==",
+            map_hex[:-1] + "B",
+            map_vn,
+            map_vn + "==",
+            "MAP" + payload(noise[:128]),
+            "MAP" + payload(noise[:32]),
+        ],
+        [
+            "MAP",
+            "MAP" + "A" * 85,
+            "MAP" + "A" * 87,
+            map_life + "=",
+            map_life + "===",
+            "MAP" + "A" * 84 + "==",
+            map_life[:-1] + "!",
+            map_life + "==x",
+            "MA P" + map_life[3:],
+            map_hex + "H",
+            map_vn + "V",
+            "MAP=" + map_life[3:],
+        ],
+    )
+    rules(
+        "hexagonal",
+        ["B2/S34H", "b2/s34h", "B246/S0123456H", "B/SH", "B0/SH", "B66/S43H"],
+        ["B7/S2H", "B2/S7H", "B2a/S2H", "B2/S2-cH", "B2/S34 H", "B2/S34HH", "B2/S34HV"],
+    )
+    rules(
+        "von-neumann",
+        ["B1/SV", "B2/S013V", "b1/s12v", "B01234/S01234V", "B/SV", "B44/S1V"],
+        ["B5/S1V", "B1/S5V", "B1e/S1V", "B1/S1VH", "B1/S1 V"],
+    )
+    rules(
+        "errors",
+        [],
+        [
+            "",
+            "   ",
+            "garbage",
+            "B9/S23",
+            "23/3",
+            "B3S23",
+            "B3/S23/C4",
+            "S23/B3",
+            "B2x/S",
+            "B1a/S",
+            "B0c/S",
+            "B8c/S",
+            "B2-/S",
+            "B2--a/S",
+            "B-2a/S",
+            "B 3/S23",
+            "B3/S 23",
+            "B3/S2 3",
+            "B3/S23 H",
+            "B3//S23",
+            "B3/S23-",
+            "B\u0663/S23",
+            "\uff223/S23",
+            "B2\u212a/S",
+        ],
+    )
+
+    # -- grids: every rule class on the dense engine (spec/lifelike.md) -----------------
+    grid_cases: list[tuple[str, dict[str, Any]]] = [
+        ("isotropic-tlife-64-torus", {"rule": "B3/S2-i34q", "density": 0.35, "seed": 21}),
+        (
+            "isotropic-minus-64-dead",
+            {"rule": "B2-a/S12", "density": 0.3, "seed": 22, "boundary": "dead"},
+        ),
+        ("isotropic-letters-64-torus", {"rule": snowflakes, "density": 0.4, "seed": 23}),
+        ("map-moore-64-torus", {"rule": map_aniso, "density": 0.35, "seed": 24}),
+        ("map-hexagonal-64-torus", {"rule": map_hex, "density": 0.35, "seed": 25}),
+        (
+            "map-vonneumann-64-dead",
+            {"rule": map_vn, "density": 0.35, "seed": 26, "boundary": "dead"},
+        ),
+        ("hexagonal-64-torus", {"rule": "B2/S34H", "density": 0.35, "seed": 27}),
+        (
+            "vonneumann-64-dead",
+            {"rule": "B2/S013V", "density": 0.35, "seed": 28, "boundary": "dead"},
+        ),
+        ("b0-negative-life-64-torus", {"rule": "B0123478/S01234678", "seed": 29}),
+        ("b0-64-dead", {"rule": "B03/S23", "density": 0.35, "seed": 30, "boundary": "dead"}),
+    ]
+    for name, overrides in grid_cases:
+        params = {"width": 64, "height": 64, **overrides}
+        write_case(
+            "lifelike",
+            name,
+            build_sim("lifelike", params),
+            [0, 1, 10, 100],
+            spec_version=RULES_SPEC_VERSION,
+        )
+
+    # -- HashLife: every rule class without B0 on the unbounded plane (spec/hashlife.md) -
+    root = VECTOR_ROOT / "hashlife"
+
+    def save(d: Path, meta: dict[str, Any]) -> None:
+        full = {"spec_version": RULES_SPEC_VERSION, "family": "hashlife", "tier": "bit-exact"}
+        full.update(meta)
+        (d / "params.json").write_text(
+            json.dumps(full, indent=2, sort_keys=True) + "\n", newline="\n"
+        )
+        print(f"wrote {d.relative_to(REPO_ROOT)}")
+
+    def state(d: Path, u: HashLife, label: str) -> dict[str, Any]:
+        text = u.to_macrocell()
+        box = u.bounding_box()
+        entry: dict[str, Any] = {
+            "generation": str(u.generation),
+            "population": str(u.population),
+            "bounding_box": None if box is None else [str(v) for v in box],
+        }
+        if len(text) <= _HASHLIFE_INLINE_BYTES:
+            (d / f"{label}.mc").write_text(text, newline="\n")
+            entry["state"] = f"{label}.mc"
+        else:
+            entry["state_sha256"] = hashlib.sha256(text.encode("ascii")).hexdigest()
+            entry["state_lines"] = text.count("\n")
+        return entry
+
+    def evolve(name: str, rule: str, seed: int, generations: list[int]) -> None:
+        d = root / f"evolve-{name}"
+        d.mkdir(parents=True, exist_ok=True)
+        start = HashLife(rule)
+        start.fill_random(-16, -16, 15, 15, density=0.35, seed=seed)
+        (d / "input.rle").write_text(start.to_rle(), newline="\n")
+        u = HashLife.from_file(d / "input.rle")
+        checkpoints = []
+        for i, gen in enumerate(generations):
+            u.step(gen - u.generation)
+            checkpoints.append(state(d, u, f"state-{i}"))
+        save(d, {"kind": "evolve", "input": "input.rle", "checkpoints": checkpoints})
+
+    evolve("isotropic-tlife", "B3/S2-i34q", 31, [0, 1, 100, 1000])
+    evolve("isotropic-just-friends", "B2-a/S12", 32, [0, 1, 100, 1000])
+    evolve("isotropic-snowflakes", snowflakes, 33, [0, 1, 100, 2**40])
+    evolve("map-moore", map_aniso, 34, [0, 1, 100, 500])
+    evolve("map-hexagonal", map_hex, 35, [0, 1, 100, 10**18])
+    evolve("map-vonneumann", map_vn, 36, [0, 1, 100, 10**18])
+    evolve("hexagonal", "B2/S34H", 37, [0, 1, 100, 2**64 + 1])
+    evolve("vonneumann", "B2/S013V", 38, [0, 1, 100, 2**64 + 1])
+
+    def macrocell(name: str, text: str) -> None:
+        d = root / f"macrocell-{name}"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "input.mc").write_text(text, newline="\n")
+        try:
+            u = HashLife.from_macrocell(text)
+        except ValueError:
+            save(d, {"kind": "macrocell", "input": "input.mc", "error": True})
+            return
+        meta: dict[str, Any] = {"kind": "macrocell", "input": "input.mc", "rle": "canonical.rle"}
+        meta.update(state(d, u, "canonical"))
+        (d / "canonical.rle").write_text(u.to_rle(), newline="\n")
+        save(d, meta)
+
+    macrocell("isotropic-rule", "[M2] (example 1.0)\n#R b2cekin/s12\n.*$*.*$.**$\n")
+    macrocell("map-rule", f"[M2] (example 1.0)\n#R map{map_hex[3:-1]}B==\n**$**$\n")
+    macrocell("error-b0-map-rule", "[M2] (example 1.0)\n#R MAPg" + "A" * 85 + "\n**$\n")
+
+    def rle(name: str, text: str) -> None:
+        d = root / f"rle-{name}"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "input.rle").write_text(text, newline="\n")
+        u = HashLife.from_rle(text)
+        meta: dict[str, Any] = {"kind": "rle", "input": "input.rle", "rle": "canonical.rle"}
+        meta.update(state(d, u, "canonical"))
+        (d / "canonical.rle").write_text(u.to_rle(), newline="\n")
+        save(d, meta)
+
+    # Uppercase B and O are dead and alive in a two-state file; a header naming any
+    # Life-like rule makes the file two-state (spec/patterns.md "Dialect detection").
+    rle("isotropic-rule-is-two-state", "x = 3, y = 3, rule = B3/S2-i34q\nBOB$BBO$OOO!\n")
+    rle("map-rule-is-two-state", f"#CXRLE Pos=-1,-1\nx = 2, y = 2, rule = {map_vn}==\nOO$OB!\n")
+
+    # -- patterns: the same dialect rule for grids, and the encoder's canonical header -----
+    def grid_rle(name: str, text: str) -> None:
+        d = VECTOR_ROOT / "patterns" / name
+        d.mkdir(parents=True, exist_ok=True)
+        grid, header_rule = rle_decode(text)
+        assert header_rule is not None and grid.max() == 1
+        (d / "input.rle").write_text(text, newline="\n")
+        buf = io.BytesIO()
+        Image.fromarray(grid.astype(np.uint8), mode="L").save(buf, format="PNG")
+        (d / "grid.png").write_bytes(buf.getvalue())
+        (d / "canonical.rle").write_text(rle_encode(grid, rule=header_rule), newline="\n")
+        meta = {
+            "spec_version": RULES_SPEC_VERSION,
+            "family": "patterns",
+            "tier": "bit-exact",
+            "kind": "rle",
+            "rule": header_rule,
+            "input": "input.rle",
+            "grid": {"file": "grid.png", "shape": list(grid.shape)},
+            "canonical": "canonical.rle",
+        }
+        text_out = json.dumps(meta, indent=2, sort_keys=True) + "\n"
+        (d / "params.json").write_text(text_out, newline="\n")
+        print(f"wrote {d.relative_to(REPO_ROOT)}")
+
+    grid_rle("rle-isotropic-uppercase-two-state", "x = 2, y = 2, rule = B2-a/S12\nOB$BO!\n")
+    # Decoding keeps the header's spelling; the encoder writes the rule's canonical form
+    # (spec/patterns.md "Encoding"): letters to the minus form, and a MAP string without
+    # padding and with its unused bits zero.
+    grid_rle("rle-rule-written-canonically", "x = 3, y = 3, rule = b2cekin/s12\nbo$2bo$3o!\n")
+    grid_rle(
+        "rle-map-rule-written-canonically",
+        "x = 3, y = 3, rule = mapFgFoF2gXgH5oF4B+AH4A6B==\nbo$2bo$3o!\n",
+    )
 
 
 def main() -> None:
@@ -591,6 +966,9 @@ def main() -> None:
 
     # -- Pattern files: every format, metadata, timelines (spec/formats.md) -------------
     write_formats_cases()
+
+    # -- Life-like rules: tables, canonical strings, every rule class run (spec/rules.md)
+    write_rule_cases()
 
     print("done")
 

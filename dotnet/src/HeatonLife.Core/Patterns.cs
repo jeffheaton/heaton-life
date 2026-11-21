@@ -345,7 +345,9 @@ namespace HeatonLife
             }
         }
 
-        /// <summary>Canonical RLE; dialect chosen by content (cells above 24 are unencodable).</summary>
+        /// <summary>Canonical RLE; dialect chosen by content (cells above 24 are unencodable). The
+        /// header names a Life-like rule in its canonical form (spec/rules.md), so it reads back as
+        /// the same rule, and any other rule as given.</summary>
         public static string RleEncode(ReadOnlySpan<byte> cells, int width, int height, string rule = "B3/S23")
             => RleEncode(cells, width, height, rule, null);
 
@@ -408,7 +410,7 @@ namespace HeatonLife
             foreach (string note in notes)
                 sb.Append(note).Append('\n');
             sb.Append("x = ").Append(width).Append(", y = ").Append(height)
-              .Append(", rule = ").Append(rule);
+              .Append(", rule = ").Append(RuleString.TryCompile(rule, out LifeRule? life) ? life.Canonical : rule);
             foreach (string bodyLine in body)
                 sb.Append('\n').Append(bodyLine);
             sb.Append('\n');
@@ -1165,25 +1167,8 @@ namespace HeatonLife
                 pos++;
         }
 
-        /// <summary>Strict Life-like rulestring shape (^[Bb][0-8]*/[Ss][0-8]*$), for dialect detection.</summary>
-        private static bool IsLifelikeRule(string rule)
-        {
-            int pos = 0;
-            if (pos >= rule.Length || (rule[pos] != 'B' && rule[pos] != 'b'))
-                return false;
-            pos++;
-            while (pos < rule.Length && rule[pos] >= '0' && rule[pos] <= '8')
-                pos++;
-            if (pos >= rule.Length || rule[pos] != '/')
-                return false;
-            pos++;
-            if (pos >= rule.Length || (rule[pos] != 'S' && rule[pos] != 's'))
-                return false;
-            pos++;
-            while (pos < rule.Length && rule[pos] >= '0' && rule[pos] <= '8')
-                pos++;
-            return pos == rule.Length;
-        }
+        /// <summary>A Life-like rule in any notation of spec/rules.md, for dialect detection.</summary>
+        private static bool IsLifelikeRule(string rule) => RuleString.TryCompile(rule, out _);
 
         private static void RotateInto<T>(
             ReadOnlySpan<T> cells, T[] result, int width, int height, int channels)

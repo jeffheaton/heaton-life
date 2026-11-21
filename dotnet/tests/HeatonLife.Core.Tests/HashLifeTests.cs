@@ -112,6 +112,19 @@ namespace HeatonLife.Tests
         [InlineData("B3/S12345", 32, new[] { 1, 4, 23, 80 })]
         [InlineData("B2/S", 12, new[] { 1, 2, 5, 13, 30, 41 })]
         [InlineData("B1357/S1357", 12, new[] { 1, 3, 7, 15, 31, 45 })]
+        // Every rule class of spec/rules.md runs through the same base case: isotropic letters,
+        // MAP strings (anisotropic ones too, where a mirrored bit order would show), and the
+        // hexagonal and von Neumann neighborhoods. The MAP strings are the vectors' (Life plus
+        // birth on N and NE alone; B2/S34H without birth on NW and N alone; B2/S013V without
+        // birth on N and S alone).
+        [InlineData("B3/S2-i34q", 40, new[] { 1, 2, 9, 40, 120 })]
+        [InlineData("B2-a/S12", 24, new[] { 1, 3, 17, 50 })]
+        [InlineData("B2ci3ai4c8/S02ae3eijkq4iz5ar6i7e", 40, new[] { 1, 4, 23, 80 })]
+        [InlineData("MAPARYXfhZofugWaH7oaIDogBZofuhogOiA6IDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAA", 24, new[] { 1, 2, 9, 30 })]
+        [InlineData("MAPFgFoF2gXgH5oF4B+AH4A6A", 40, new[] { 1, 5, 30, 90 })]
+        [InlineData("MAPHmkphg", 40, new[] { 1, 5, 30, 90 })]
+        [InlineData("B2/S34H", 40, new[] { 1, 4, 23, 80 })]
+        [InlineData("B2/S013V", 40, new[] { 1, 5, 30, 90 })]
         public void AgreesWithTheDenseEngine(string rule, int start, int[] checkpoints)
         {
             // Mixed step sizes against LifeLike on a dead-boundary grid the pattern never reaches.
@@ -310,6 +323,8 @@ namespace HeatonLife.Tests
         public void RulesBudgetsAndStepsAreValidated()
         {
             Assert.Contains("B0", Assert.Throws<ArgumentException>(() => new HashLife("B03/S23")).Message);
+            // A MAP string with entry 0 set is B0 too.
+            Assert.Contains("B0", Assert.Throws<ArgumentException>(() => new HashLife("MAPg" + new string('A', 85))).Message);
             Assert.Throws<ArgumentException>(() => new HashLife("not a rule"));
             Assert.Throws<ArgumentOutOfRangeException>(() => new HashLife(maxMemoryMb: 9));
             var u = new HashLife("b36 / s32", 64);

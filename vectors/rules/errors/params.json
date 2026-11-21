@@ -1,0 +1,103 @@
+{
+  "cases": [
+    {
+      "error": true,
+      "input": ""
+    },
+    {
+      "error": true,
+      "input": "   "
+    },
+    {
+      "error": true,
+      "input": "garbage"
+    },
+    {
+      "error": true,
+      "input": "B9/S23"
+    },
+    {
+      "error": true,
+      "input": "23/3"
+    },
+    {
+      "error": true,
+      "input": "B3S23"
+    },
+    {
+      "error": true,
+      "input": "B3/S23/C4"
+    },
+    {
+      "error": true,
+      "input": "S23/B3"
+    },
+    {
+      "error": true,
+      "input": "B2x/S"
+    },
+    {
+      "error": true,
+      "input": "B1a/S"
+    },
+    {
+      "error": true,
+      "input": "B0c/S"
+    },
+    {
+      "error": true,
+      "input": "B8c/S"
+    },
+    {
+      "error": true,
+      "input": "B2-/S"
+    },
+    {
+      "error": true,
+      "input": "B2--a/S"
+    },
+    {
+      "error": true,
+      "input": "B-2a/S"
+    },
+    {
+      "error": true,
+      "input": "B 3/S23"
+    },
+    {
+      "error": true,
+      "input": "B3/S 23"
+    },
+    {
+      "error": true,
+      "input": "B3/S2 3"
+    },
+    {
+      "error": true,
+      "input": "B3/S23 H"
+    },
+    {
+      "error": true,
+      "input": "B3//S23"
+    },
+    {
+      "error": true,
+      "input": "B3/S23-"
+    },
+    {
+      "error": true,
+      "input": "B\u0663/S23"
+    },
+    {
+      "error": true,
+      "input": "\uff223/S23"
+    },
+    {
+      "error": true,
+      "input": "B2\u212a/S"
+    }
+  ],
+  "family": "rules",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

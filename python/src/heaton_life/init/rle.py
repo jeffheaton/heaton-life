@@ -22,18 +22,30 @@ from heaton_life.init.metadata import MetadataReader, PatternMetadata, metadata_
 _HEADER = re.compile(
     r"x\s*=\s*(\d+)\s*,\s*y\s*=\s*(\d+)(?:\s*,\s*rule\s*=\s*(\S+))?", re.IGNORECASE
 )
-_LIFELIKE_RULE = re.compile(r"^[Bb][0-8]*/[Ss][0-8]*$")
 _TOKEN = re.compile(r"(\d*)(\S)")
+
+
+def _life_rule(rule: str) -> str | None:
+    """The canonical form of ``rule`` when it is a Life-like rule in any notation of
+    spec/rules.md, otherwise None (preset names don't count: they aren't part of any file
+    format)."""
+    # Imported here because heaton_life.ca imports this package.
+    from heaton_life.ca.rulestring import compile_rule
+
+    try:
+        return compile_rule(rule, presets=False).canonical
+    except ValueError:
+        return None
 
 
 def _is_extended(body: str, rule: str | None) -> bool:
     """Dialect detection (spec/patterns.md): uppercase B/O are dead/alive in two-state
     files but states 2/15 in extended RLE. Extended iff the body holds '.', any state
-    letter other than B/O, or the header names a non-Life-like rule."""
+    letter other than B/O, or the header names something other than a Life-like rule."""
     return (
         "." in body
         or any("A" <= ch <= "X" and ch not in ("B", "O") for ch in body)
-        or (rule is not None and not _LIFELIKE_RULE.match(rule))
+        or (rule is not None and _life_rule(rule) is None)
     )
 
 
@@ -274,7 +286,9 @@ def rle_encode(
     metadata: PatternMetadata | None = None,
 ) -> str:
     """Encode a grid as canonical RLE; dialect chosen by content (spec/patterns.md).
-    ``metadata``'s ``#N``, ``#O`` and ``#C`` lines go before the header."""
+    The header names a Life-like rule in its canonical form (spec/rules.md), so it reads
+    back as the same rule, and any other rule as given. ``metadata``'s ``#N``, ``#O`` and
+    ``#C`` lines go before the header."""
     notes = metadata_lines(metadata)
     height, width = grid.shape
     top = int(grid.max(initial=0))
@@ -306,7 +320,7 @@ def rle_encode(
             line = ""
         line += tok
     body_lines.append(line)
-    header = f"x = {width}, y = {height}, rule = {rule}"
+    header = f"x = {width}, y = {height}, rule = {_life_rule(rule) or rule}"
     return "\n".join([*notes, header, *body_lines]) + "\n"
 
 

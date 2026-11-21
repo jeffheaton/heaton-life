@@ -1,0 +1,63 @@
+{
+  "cases": [
+    {
+      "canonical": "B1/SV",
+      "input": "B1/SV",
+      "neighborhood": "vonneumann",
+      "table": "33cc0000cc00000033cc0000cc000000cc00000000000000cc0000000000000033cc0000cc00000033cc0000cc000000cc00000000000000cc00000000000000"
+    },
+    {
+      "canonical": "B2/S013V",
+      "input": "B2/S013V",
+      "neighborhood": "vonneumann",
+      "table": "0033ffcc33cccc330033ffcc33cccc3333cccc33cc0033cc33cccc33cc0033cc0033ffcc33cccc330033ffcc33cccc3333cccc33cc0033cc33cccc33cc0033cc"
+    },
+    {
+      "canonical": "B1/S12V",
+      "input": "b1/s12v",
+      "neighborhood": "vonneumann",
+      "table": "33cc33ffcc00ffcc33cc33ffcc00ffcccc00ffcc0000cc00cc00ffcc0000cc0033cc33ffcc00ffcc33cc33ffcc00ffcccc00ffcc0000cc00cc00ffcc0000cc00"
+    },
+    {
+      "canonical": "B01234/S01234V",
+      "input": "B01234/S01234V",
+      "neighborhood": "vonneumann",
+      "table": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    {
+      "canonical": "B/SV",
+      "input": "B/SV",
+      "neighborhood": "vonneumann",
+      "table": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "canonical": "B4/S1V",
+      "input": "B44/S1V",
+      "neighborhood": "vonneumann",
+      "table": "000033cc0000cc00000033cc0000cc000000cc00003300000000cc0000330000000033cc0000cc00000033cc0000cc000000cc00003300000000cc0000330000"
+    },
+    {
+      "error": true,
+      "input": "B5/S1V"
+    },
+    {
+      "error": true,
+      "input": "B1/S5V"
+    },
+    {
+      "error": true,
+      "input": "B1e/S1V"
+    },
+    {
+      "error": true,
+      "input": "B1/S1VH"
+    },
+    {
+      "error": true,
+      "input": "B1/S1 V"
+    }
+  ],
+  "family": "rules",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

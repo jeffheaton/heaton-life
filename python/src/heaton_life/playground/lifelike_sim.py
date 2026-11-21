@@ -32,7 +32,7 @@ from numpy.typing import NDArray
 
 from heaton_life.ca import LifeLike, LifeLikeParams
 from heaton_life.ca.hashlife import DEFAULT_MEMORY_MB, HashLife, HashLifeMemoryError
-from heaton_life.ca.rulestring import parse_rule
+from heaton_life.ca.rulestring import compile_rule
 from heaton_life.core.neighbors import Boundary
 from heaton_life.core.params import Params
 from heaton_life.init import BUILTIN_PATTERNS, place, rle_decode, rle_encode, rle_measure
@@ -273,7 +273,7 @@ def validate(params: Params) -> tuple[str, str] | None:
     """The first field the engine would reject, as (field, message), or None."""
     assert isinstance(params, LifeLikeSimParams)
     try:
-        parse_rule(params.rule)
+        compile_rule(params.rule)
     except ValueError as exc:
         return ("rule", str(exc))
     pattern = params.pattern

@@ -1,0 +1,16 @@
+{
+  "canonical": "canonical.rle",
+  "family": "patterns",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      3,
+      3
+    ]
+  },
+  "input": "input.rle",
+  "kind": "rle",
+  "rule": "mapFgFoF2gXgH5oF4B+AH4A6B==",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

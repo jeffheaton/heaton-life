@@ -271,6 +271,8 @@ def test_validation_names_the_field(tmp_path: Path) -> None:
     assert problem is not None and problem[0] == "pattern"
     problem = validate(LifeLikeSimParams(rule="B3/S9"))
     assert problem is not None and problem[0] == "rule"
+    for rule in ("B3/S2-i34q", "B2/S34H", "B1/SV", "MAP" + "A" * 86):  # spec/rules.md
+        assert validate(LifeLikeSimParams(rule=rule)) is None, rule
 
 
 def test_the_pattern_presets_build() -> None:

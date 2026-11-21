@@ -1,0 +1,125 @@
+{
+  "cases": [
+    {
+      "canonical": "B3/S23",
+      "input": "B3/S23",
+      "neighborhood": "moore",
+      "table": "0116177e16687ee816687ee86880e88016687ee86880e8806880e8808000800016687ee86880e8806880e880800080006880e880800080008000800000000000"
+    },
+    {
+      "canonical": "B3/S23",
+      "input": "b3/s23",
+      "neighborhood": "moore",
+      "table": "0116177e16687ee816687ee86880e88016687ee86880e8806880e8808000800016687ee86880e8806880e880800080006880e880800080008000800000000000"
+    },
+    {
+      "canonical": "B3/S23",
+      "input": " B3 / S23 ",
+      "neighborhood": "moore",
+      "table": "0116177e16687ee816687ee86880e88016687ee86880e8806880e8808000800016687ee86880e8806880e880800080006880e880800080008000800000000000"
+    },
+    {
+      "canonical": "B36/S23",
+      "input": "\tB36/S23\r\n",
+      "neighborhood": "moore",
+      "table": "0116177e16687ee816687ee86881e88016687ee86881e8806881e8808116800016687ee86881e8806881e880811680006881e880811680008116800016680000"
+    },
+    {
+      "canonical": "B3/S23",
+      "input": "\u00a0B3/S23\u3000",
+      "neighborhood": "moore",
+      "table": "0116177e16687ee816687ee86880e88016687ee86880e8806880e8808000800016687ee86880e8806880e880800080006880e880800080008000800000000000"
+    },
+    {
+      "canonical": "B23/S23",
+      "input": "B32/S32",
+      "neighborhood": "moore",
+      "table": "177e177e7ee87ee87ee87ee8e880e8807ee87ee8e880e880e880e880800080007ee87ee8e880e880e880e88080008000e880e880800080008000800000000000"
+    },
+    {
+      "canonical": "B3/S23",
+      "input": "B33/S233",
+      "neighborhood": "moore",
+      "table": "0116177e16687ee816687ee86880e88016687ee86880e8806880e8808000800016687ee86880e8806880e880800080006880e880800080008000800000000000"
+    },
+    {
+      "canonical": "B2/S",
+      "input": "B2/S",
+      "neighborhood": "moore",
+      "table": "16680000688000006880000080000000688000008000000080000000000000006880000080000000800000000000000080000000000000000000000000000000"
+    },
+    {
+      "canonical": "B/S23",
+      "input": "B/S23",
+      "neighborhood": "moore",
+      "table": "0000177e00007ee800007ee80000e88000007ee80000e8800000e8800000800000007ee80000e8800000e880000080000000e880000080000000800000000000"
+    },
+    {
+      "canonical": "B/S",
+      "input": "B/S",
+      "neighborhood": "moore",
+      "table": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "canonical": "B3678/S34678",
+      "input": "B3678/S34678",
+      "neighborhood": "moore",
+      "table": "011601171668177e1668177e68817ee91668177e68817ee968817ee98117e9971668177e68817ee968817ee98117e99768817ee98117e9978117e997177f977f"
+    },
+    {
+      "canonical": "B1357/S1357",
+      "input": "B1357/S1357",
+      "neighborhood": "moore",
+      "table": "69966996966996699669966969966996966996696996699669966996966996699669966969966996699669969669966969966996966996699669966969966996"
+    },
+    {
+      "canonical": "B3/S12345",
+      "input": "B3/S12345",
+      "neighborhood": "moore",
+      "table": "01167fff1668ffff1668ffff6880fffe1668ffff6880fffe6880fffe8000fee81668ffff6880fffe6880fffe8000fee86880fffe8000fee88000fee80000e880"
+    },
+    {
+      "canonical": "B35678/S5678",
+      "input": "B35678/S5678",
+      "neighborhood": "moore",
+      "table": "01160000166900011669000169970117166900016997011769970117977f177f166900016997011769970117977f177f69970117977f177f977f177f7fff7fff"
+    },
+    {
+      "canonical": "B012345678/S012345678",
+      "input": "B012345678/S012345678",
+      "neighborhood": "moore",
+      "table": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    {
+      "canonical": "B0123478/S01234678",
+      "input": "B0123478/S01234678",
+      "neighborhood": "moore",
+      "table": "fffffffffffefffefffefffefee8fee9fffefffefee8fee9fee8fee9e881e997fffefffefee8fee9fee8fee9e881e997fee8fee9e881e997e881e9978117977f"
+    },
+    {
+      "canonical": "B03/S23",
+      "input": "B03/S23",
+      "neighborhood": "moore",
+      "table": "8116177e16687ee816687ee86880e88016687ee86880e8806880e8808000800016687ee86880e8806880e880800080006880e880800080008000800000000000"
+    },
+    {
+      "error": true,
+      "input": "\u200bB3/S23"
+    },
+    {
+      "error": true,
+      "input": "\u001cB3/S23"
+    },
+    {
+      "error": true,
+      "input": "B3/S23\u0000"
+    },
+    {
+      "error": true,
+      "input": "life"
+    }
+  ],
+  "family": "rules",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

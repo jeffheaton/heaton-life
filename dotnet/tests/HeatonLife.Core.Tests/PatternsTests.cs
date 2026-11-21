@@ -209,5 +209,20 @@ namespace HeatonLife.Tests
                 if (i != 2 && i != 11)
                     Assert.Equal(0.0, grid[i]); // the (3,0) cell clipped, nothing wrapped
         }
+
+        /// <summary>spec/patterns.md "Dialect detection": a header naming any Life-like rule
+        /// makes uppercase B and O dead and alive.</summary>
+        [Fact]
+        public void AHeaderNamingAnyLifeLikeRuleIsTwoState()
+        {
+            foreach (string rule in new[] { "B2-a/S12", "B2/S34H", "B1/SV", "MAP" + new string('A', 86) })
+            {
+                RlePattern pattern = Patterns.RleDecode($"x = 2, y = 2, rule = {rule}\nOB$BO!");
+                Assert.Equal(rule, pattern.Rule);
+                Assert.Equal(new byte[] { 1, 0, 0, 1 }, pattern.Cells);
+            }
+            // A name that is not a rule in this grammar reads as extended: O 15, B 2.
+            Assert.Equal(new byte[] { 15, 2, 2, 15 }, Patterns.RleDecode("x = 2, y = 2, rule = life\nOB$BO!").Cells);
+        }
     }
 }

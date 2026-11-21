@@ -12,7 +12,8 @@ namespace HeatonLife
     /// top-left, y down). Smaller squares keep the same 8-wide row stride ("spread" form): a 4×4
     /// square occupies bits <c>y * 8 + x</c> for x, y &lt; 4, so four of them compose into a leaf
     /// with three shifts. The rule enters only through the 65,536-entry base case, a 4×4 square to
-    /// its center 2×2 one generation later. The Python reference's ca/hashlife/leaves.py.
+    /// its center 2×2 one generation later, built from the rule's 512-entry table (spec/rules.md).
+    /// The Python reference's ca/hashlife/leaves.py.
     /// </summary>
     internal static class HashLifeLeaves
     {
@@ -32,30 +33,36 @@ namespace HeatonLife
             {
                 if (Tables.TryGetValue(canonicalRule, out ushort[]? table))
                     return table;
-                var (birth, survive) = RuleString.Parse(canonicalRule);
-                table = new ushort[1 << 16];
-                for (int index = 0; index < 1 << 16; index++)
-                {
-                    int result = 0;
-                    for (int cell = 0; cell < 4; cell++)
-                    {
-                        int cx = 1 + (cell & 1), cy = 1 + (cell >> 1);
-                        int count = 0;
-                        for (int dy = -1; dy <= 1; dy++)
-                            for (int dx = -1; dx <= 1; dx++)
-                                if (dx != 0 || dy != 0)
-                                    count += (index >> ((cy + dy) * 4 + cx + dx)) & 1;
-                        bool alive = ((index >> (cy * 4 + cx)) & 1) != 0;
-                        if (alive ? survive[count] : birth[count])
-                            result |= 1 << ((cell & 1) + 8 * (cell >> 1));
-                    }
-                    table[index] = (ushort)result;
-                }
+                table = BaseCase(RuleString.Compile(canonicalRule).Table);
                 if (Tables.Count >= 16)
                     Tables.Clear();
                 Tables[canonicalRule] = table;
                 return table;
             }
+        }
+
+        /// <summary>The base case from a rule's table: each center cell's next state is the table
+        /// entry at its 3×3 neighborhood index (spec/rules.md): NW 256, N 128, NE 64, W 32, the
+        /// cell 16, E 8, SW 4, S 2, SE 1.</summary>
+        internal static ushort[] BaseCase(ReadOnlySpan<byte> rule)
+        {
+            var table = new ushort[1 << 16];
+            for (int index = 0; index < 1 << 16; index++)
+            {
+                int result = 0;
+                for (int cell = 0; cell < 4; cell++)
+                {
+                    int cx = 1 + (cell & 1), cy = 1 + (cell >> 1);
+                    int hood = 0;
+                    for (int dy = -1; dy <= 1; dy++)
+                        for (int dx = -1; dx <= 1; dx++)
+                            hood |= ((index >> ((cy + dy) * 4 + cx + dx)) & 1) << (4 - 3 * dy - dx);
+                    if (rule[hood] != 0)
+                        result |= 1 << ((cell & 1) + 8 * (cell >> 1));
+                }
+                table[index] = (ushort)result;
+            }
+            return table;
         }
 
         /// <summary>The 4×4 square at bit 0 of a spread bitmap, as a compact 16-bit table index.</summary>

@@ -49,7 +49,8 @@ strip as [formats.md](formats.md#bytes-and-text) says.
 The two dialects overlap: uppercase `B`/`O` mean dead/alive in two-state files
 but states 2/15 in extended RLE. **Dialect detection** (normative): the pattern
 is extended iff its body contains `.`, or any letter `A`–`X` other than `B`/`O`,
-or its header rule is present and is not a Life-like rulestring (`B…/S…`).
+or its header rule is present and is not a Life-like rule ([rules.md](rules.md): any
+of its notations, preset names excluded).
 Otherwise it is two-state. Then:
 
 - Two-state: `b`/`B` = 0, `o`/`O` = 1.
@@ -93,9 +94,12 @@ pattern and not the rectangle its author saved around it.
 above 24 are unencodable — an error). Runs of length 1 omit the count; trailing
 dead runs in a row are omitted; rows end with `$` (last row with `!`), and k ≥ 2
 consecutive `$` are written as one token `k$`, so a run of empty rows costs one
-token; lines wrap at 70 characters. Encoding then decoding reproduces the grid
-exactly. Given [metadata](formats.md#metadata), the encoder writes its lines (`#N`,
-`#O`, then `#C`) before the header; without it, the text is exactly the above.
+token; lines wrap at 70 characters. The header names a Life-like rule in its canonical
+form ([rules.md](rules.md#canonical-form)), so it reads back as the same rule however it
+was spelled (`b3 / s32` is written `B3/S23`), and any other rule as given. Encoding then
+decoding reproduces the grid exactly. Given [metadata](formats.md#metadata), the
+encoder writes its lines (`#N`, `#O`, then `#C`) before the header; without it, the text
+is exactly the above.
 
 MergeLife, Lenia, and Gray-Scott patterns are **not RLE-representable**; they
 travel as raw cell payloads (the catalog/zoo container format, app-level).

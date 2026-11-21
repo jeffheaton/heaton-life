@@ -1,0 +1,71 @@
+{
+  "cases": [
+    {
+      "canonical": "B2/S34H",
+      "input": "B2/S34H",
+      "neighborhood": "hexagonal",
+      "table": "1166001166881177116600116688117766881177880077ee66881177880077ee66881177880077ee66881177880077ee880077ee0000ee88880077ee0000ee88"
+    },
+    {
+      "canonical": "B2/S34H",
+      "input": "b2/s34h",
+      "neighborhood": "hexagonal",
+      "table": "1166001166881177116600116688117766881177880077ee66881177880077ee66881177880077ee66881177880077ee880077ee0000ee88880077ee0000ee88"
+    },
+    {
+      "canonical": "B246/S0123456H",
+      "input": "B246/S0123456H",
+      "neighborhood": "hexagonal",
+      "table": "1166ffff6699ffff1166ffff6699ffff6699ffff9966ffff6699ffff9966ffff6699ffff9966ffff6699ffff9966ffff9966ffff6699ffff9966ffff6699ffff"
+    },
+    {
+      "canonical": "B/SH",
+      "input": "B/SH",
+      "neighborhood": "hexagonal",
+      "table": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "canonical": "B0/SH",
+      "input": "B0/SH",
+      "neighborhood": "hexagonal",
+      "table": "88000000000000008800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "canonical": "B6/S34H",
+      "input": "B66/S43H",
+      "neighborhood": "hexagonal",
+      "table": "0000001100001177000000110000117700001177000077ee00001177000077ee00001177000077ee00001177000077ee000077ee0011ee88000077ee0011ee88"
+    },
+    {
+      "error": true,
+      "input": "B7/S2H"
+    },
+    {
+      "error": true,
+      "input": "B2/S7H"
+    },
+    {
+      "error": true,
+      "input": "B2a/S2H"
+    },
+    {
+      "error": true,
+      "input": "B2/S2-cH"
+    },
+    {
+      "error": true,
+      "input": "B2/S34 H"
+    },
+    {
+      "error": true,
+      "input": "B2/S34HH"
+    },
+    {
+      "error": true,
+      "input": "B2/S34HV"
+    }
+  ],
+  "family": "rules",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

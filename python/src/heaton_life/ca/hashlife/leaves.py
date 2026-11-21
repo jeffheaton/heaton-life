@@ -4,7 +4,8 @@ A leaf is an 8×8 bitmap in one Python int: cell (x, y) of the leaf is bit ``y *
 (row-major, origin top-left, y down). Smaller squares keep the same 8-wide row stride
 ("spread" form): a 4×4 square occupies bits ``y * 8 + x`` for x, y < 4, so four of them
 compose into a leaf with three shifts. The rule enters only through the 65,536-entry base
-case, a 4×4 square to its center 2×2 one generation later.
+case, a 4×4 square to its center 2×2 one generation later, built from the rule's
+512-entry table (spec/rules.md).
 """
 
 from __future__ import annotations
@@ -21,23 +22,20 @@ SQUARE4 = 0x0F0F0F0F  # a 4×4 square in spread form
 _REPEAT_ROWS = 0x0101010101010101
 
 
-def rule_table(birth: frozenset[int], survive: frozenset[int]) -> tuple[int, ...]:
+def base_case(table: bytes) -> tuple[int, ...]:
     """The base case: a 4×4 square indexed compactly (bit ``y * 4 + x``) to its center
-    2×2 one generation later, in spread form (bits 0, 1, 8, 9)."""
+    2×2 one generation later, in spread form (bits 0, 1, 8, 9). Each center cell's next
+    state is the rule's ``table`` at its 3×3 neighborhood index (spec/rules.md): NW 256,
+    N 128, NE 64, W 32, the cell 16, E 8, SW 4, S 2, SE 1."""
+    lookup = np.frombuffer(table, dtype=np.uint8).astype(np.uint32)
     index = np.arange(1 << 16, dtype=np.uint32)
-    born = np.zeros(9, dtype=np.uint32)
-    born[sorted(birth)] = 1
-    stays = np.zeros(9, dtype=np.uint32)
-    stays[sorted(survive)] = 1
     out = np.zeros(1 << 16, dtype=np.uint32)
     for cx, cy, bit in ((1, 1, 0), (2, 1, 1), (1, 2, 8), (2, 2, 9)):
-        count = np.zeros(1 << 16, dtype=np.uint32)
+        hood = np.zeros(1 << 16, dtype=np.uint32)
         for dy in (-1, 0, 1):
             for dx in (-1, 0, 1):
-                if dx or dy:
-                    count += (index >> ((cy + dy) * 4 + cx + dx)) & 1
-        alive = (index >> (cy * 4 + cx)) & 1
-        out |= np.where(alive == 1, stays[count], born[count]) << bit
+                hood |= ((index >> ((cy + dy) * 4 + cx + dx)) & 1) << (4 - 3 * dy - dx)
+        out |= lookup[hood] << bit
     return tuple(out.tolist())
 
 

@@ -21,6 +21,7 @@ from numpy.typing import NDArray
 
 from heaton_life.ca.hashlife.leaves import (
     array_blocks,
+    base_case,
     columns,
     crop,
     inner,
@@ -28,7 +29,6 @@ from heaton_life.ca.hashlife.leaves import (
     mirror_columns,
     mirror_rows,
     rect_mask,
-    rule_table,
     turn_ccw,
     turn_cw,
 )
@@ -36,7 +36,7 @@ from heaton_life.ca.hashlife.render import TILE_CACHE_LIMIT, RenderMode
 from heaton_life.ca.hashlife.render import render as render_frame
 from heaton_life.ca.hashlife.store import Abort, NodeStore
 from heaton_life.ca.hashlife.view import LifeView
-from heaton_life.ca.rulestring import canonical_rule, parse_rule
+from heaton_life.ca.rulestring import compile_rule
 from heaton_life.core.params import Params
 from heaton_life.init.metadata import PatternMetadata
 from heaton_life.init.seeding import soup
@@ -108,18 +108,17 @@ class Snapshot:
 
 @functools.lru_cache(maxsize=16)
 def _table(rule: str) -> tuple[int, ...]:
-    birth, survive = parse_rule(rule)
-    return rule_table(birth, survive)
+    return base_case(compile_rule(rule).table)
 
 
 def _hashlife_rule(rule: str) -> str:
-    canonical = canonical_rule(rule)
-    if 0 in parse_rule(canonical)[0]:
+    compiled = compile_rule(rule)
+    if compiled.has_b0:
         raise ValueError(
-            f"HashLife cannot run B0 rules ({canonical}): births with no live neighbors "
-            "would fill the infinite background (spec/hashlife.md)"
+            f"HashLife cannot run B0 rules ({compiled.canonical}): births with no live "
+            "neighbors would fill the infinite background (spec/hashlife.md)"
         )
-    return canonical
+    return compiled.canonical
 
 
 def _budget(max_memory_mb: int) -> int:

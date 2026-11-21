@@ -18,7 +18,7 @@ Readers handle two-state files. A file is lines of ASCII text:
 1. **Header.** The first line starts with `[M2]`, usually followed by the writing program
    and version, e.g. `[M2] (example 1.0)`.
 2. **`#` lines**, anywhere after the header:
-   - `#R <rule>` — the rule: a Life-like rulestring ([lifelike.md](lifelike.md)); B0 rules
+   - `#R <rule>` — the rule: any Life-like rule ([rules.md](rules.md)); B0 rules
      are rejected ([hashlife.md](hashlife.md#state)). Without `#R` the rule is `B3/S23`.
    - `#G <n>` — the generation: one or more ASCII digits `0`–`9`, any size, no sign (a
      sign or any other character is an error); 0 without it.
@@ -55,7 +55,7 @@ generation, and rule — and every file written is an ordinary Macrocell file th
 readers of the format accept.
 
 1. `[M2] (heaton-life)`
-2. `#R <rule>` in canonical form (`B3/S23`).
+2. `#R <rule>` in canonical form ([rules.md](rules.md#canonical-form); `B3/S23`).
 3. `#G <generation>` in decimal, only when the generation is above 0.
 4. The nodes of the **minimal root**: the smallest level k ≥ 3 whose square (placed as in
    "Reading") holds every live cell. Equivalently, start from any centered root and
