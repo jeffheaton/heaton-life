@@ -34,7 +34,7 @@ def test_rule_vectors_exist() -> None:
 
 @pytest.mark.parametrize("case", CASES, ids=lambda p: p.parent.name)
 def test_rule_vector(case: Path) -> None:
-    meta: dict[str, Any] = json.loads(case.read_text())
+    meta: dict[str, Any] = json.loads(case.read_text(encoding="utf-8"))
     assert set(meta) == _KEYS
     assert meta["spec_version"] in SPEC_VERSIONS
     assert (meta["family"], meta["tier"]) == ("rules", "bit-exact")
