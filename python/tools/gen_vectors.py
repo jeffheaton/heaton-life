@@ -970,6 +970,11 @@ def main() -> None:
     # -- Life-like rules: tables, canonical strings, every rule class run (spec/rules.md)
     write_rule_cases()
 
+    # -- Measuring a pattern file, turned rectangles, the reasons rules are refused --------
+    write_measure_cases()
+    write_turned_rect_cases()
+    write_reason_cases()
+
     print("done")
 
 
@@ -6457,6 +6462,380 @@ def write_formats_cases() -> None:
         "x = 2, y = 1, rule = B3/S23\n2o!\n",
         [0, 36],
         PatternMetadata(None, "nobody"),
+    )
+
+
+# -- measuring files, turned rectangles, rule reasons (spec 0.16.0) ----------------------------
+
+GAPS_SPEC_VERSION = "0.16.0"
+
+
+def _gap_save(d: Path, meta: dict[str, Any]) -> None:
+    (d / "params.json").write_text(
+        json.dumps(meta, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    print(f"wrote {d.relative_to(REPO_ROOT)}")
+
+
+def _png_header_only(width: int, height: int, depth: int, color: int) -> bytes:
+    """A PNG whose chunks are whole but whose one IDAT holds far too little for its IHDR: its
+    header can be measured, its pixels never read."""
+    import zlib
+
+    def chunk(kind: bytes, body: bytes) -> bytes:
+        crc = zlib.crc32(kind + body) & 0xFFFFFFFF
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", crc)
+
+    header = struct.pack(">IIBBBBB", width, height, depth, color, 0, 0, 0)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(b"\x00\x00", 9))
+        + chunk(b"IEND", b"")
+    )
+
+
+def write_measure_cases() -> None:
+    """Measuring a pattern file without making its grid (spec/formats.md "Measuring"), under
+    vectors/formats/measure-*: every format and gzip, sizes past any grid, empty patterns,
+    pictures whose pixels are never decoded, and the files measuring refuses."""
+    import gzip
+
+    from heaton_life.init import measure_pattern, read_pattern
+
+    root = VECTOR_ROOT / "formats"
+
+    def measure(name: str, data: bytes, ext: str, *, error: bool = False) -> None:
+        d = root / f"measure-{name}"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"input.{ext}").write_bytes(data)
+        meta: dict[str, Any] = {
+            "spec_version": GAPS_SPEC_VERSION,
+            "family": "formats",
+            "tier": "bit-exact",
+            "kind": "measure",
+            "input": f"input.{ext}",
+        }
+        try:
+            e = measure_pattern(data)
+        except ValueError:
+            assert error, f"measure-{name} was meant to measure"
+            meta["error"] = True
+            _gap_save(d, meta)
+            return
+        assert not error, f"measure-{name} was meant to be refused"
+        if e.width * e.height <= 1 << 20:  # small enough to read: the read must agree
+            try:
+                f = read_pattern(data, max_cells=None)
+            except ValueError:
+                assert e.width * e.height == 0 or e.format in ("png", "bmp"), name
+            else:
+                assert (f.format, f.x, f.y, f.rule, f.generation) == (
+                    e.format,
+                    e.x,
+                    e.y,
+                    e.rule,
+                    e.generation,
+                ), name
+                assert f.metadata == e.metadata and f.cells.shape == (e.height, e.width), name
+        meta.update(
+            {
+                "format": e.format,
+                "width": decimal_text.digits_of(e.width),
+                "height": decimal_text.digits_of(e.height),
+                "x": _signed_text(e.x),
+                "y": _signed_text(e.y),
+                "rule": e.rule,
+                "generation": decimal_text.digits_of(e.generation),
+                "metadata": {
+                    "name": e.metadata.name,
+                    "author": e.metadata.author,
+                    "comments": list(e.metadata.comments),
+                },
+                "two_state": e.two_state,
+            }
+        )
+        _gap_save(d, meta)
+
+    gun = (
+        "24bo$22bobo$12b2o6b2o12b2o$11bo3bo4b2o12b2o$2o8bo5bo3b2o$2o8bo3bob2o4bobo$"
+        "10bo5bo7bo$11bo3bo$12b2o!"
+    )
+    gun_rle = (
+        "#N Gosper glider gun\n#O Bill Gosper\n#C The first gun found, in 1970.\n"
+        f"x = 36, y = 9, rule = B3/S23\n{gun}\n"
+    )
+
+    # RLE: the counted extent, its #CXRLE line, the dialect, gzip, and empty patterns.
+    measure("rle-metadata", gun_rle.encode(), "rle")
+    measure(
+        "rle-cxrle",
+        b"#CXRLE Pos=-3,4 Gen=7\n#N Glider\nx = 3, y = 3, rule = B3/S23\nbo$2bo$3o!\n",
+        "rle",
+    )
+    measure(
+        "rle-declared-giant",
+        b"#N Declared giant\nx = 1000000000, y = 1000000000, rule = B3/S23\nbo$2bo$3o!\n",
+        "rle",
+    )
+    measure(
+        "rle-run-past-64-bits",
+        b"#CXRLE Pos=-5,-6 Gen=123456789012345678901234567890\nx = 2, y = 1, rule = B36/S23\n"
+        b"o36893488147419103232bo!\n",
+        "rle",
+    )
+    measure(
+        "rle-wireworld",
+        b"#N Diode\nx = 7, y = 3, rule = WireWorld\n3.2C$4C.3C$3.2C!\n",
+        "rle",
+    )
+    measure("rle-gzip", gzip.compress(gun_rle.encode(), mtime=0), "rle.gz")
+    measure("rle-dead-declared", b"x = 4, y = 2, rule = B3/S23\n!\n", "rle")
+    measure(
+        "rle-empty", b"#CXRLE Pos=7,7\n#C nothing here\nx = 0, y = 0, rule = B3/S23\n!\n", "rle"
+    )
+
+    # Plaintext and Life 1.0x: rows and coordinates, no cell kept.
+    measure(
+        "plaintext-rows",
+        b"!Name: Rows\n\n*.*\n\n.O   \nOOOO.\n  !  indented comment\n..O\n\n\n",
+        "cells",
+    )
+    measure("plaintext-no-rows", b"!Name: Nothing\n!only comments\n\n\n", "cells")
+    measure(
+        "life105-blocks",
+        b"#Life 1.05\n#D Two blocks of rows,\n#D placed by #P.\n#N\n#P -1 -1\n.*.\n..*\n***\n"
+        b"#P 4 -3\n**\n\n*O\n",
+        "lif",
+    )
+    far = 10**30
+    measure("life106-far", f"#Life 1.06\n{far} {-far}\n{far + 2} {-far + 1}\n".encode(), "lif")
+    measure(
+        "life106-giant-box",
+        b"#Life 1.06\n#D two cells far apart\n-1000000000000 0\n1000000000000 7\n",
+        "lif",
+    )
+    measure("life106-no-cells", b"#Life 1.06\n#D nothing but a comment\n#R 23/3\n", "lif")
+
+    # Macrocell: from its tree, roots of every small level, and a root of level 70.
+    mc = (
+        "[M2] (example 1.0)\n#R b36 / S23\n#G 41\n#N Two blocks far apart\n#O Someone\n"
+        "#C Macrocell comments,\n#c in order.\n$$$$....**$....**$\n4 0 0 0 1\n5 0 0 0 2\n"
+        "6 0 0 0 3\n7 4 0 0 4\n"
+    )
+    measure("macrocell-metadata", mc.encode(), "mc")
+    far_mc = "[M2] (example 1.0)\n#N Far out\n*$\n4 0 0 0 1\n" + "".join(
+        f"{k} 0 0 0 {k - 3}\n" for k in range(5, 71)
+    )
+    measure("macrocell-far-gzip", gzip.compress(far_mc.encode(), mtime=0), "mc.gz")
+    measure("macrocell-root-level-1", b"[M2] (example 1.0)\n1 0 1 1 0\n", "mc")
+    measure("macrocell-root-level-2", b"[M2] (example 1.0)\n1 0 0 0 1\n2 0 0 1 0\n", "mc")
+    measure("macrocell-root-leaf", b"[M2] (example 1.0)\n#G 9\n.*$..*$***$\n", "mc")
+    measure(
+        "macrocell-multistate",
+        b"[M2] (example 1.0)\n1 1 0 0 1\n2 1 0 0 1\n3 0 2 0 0\n4 0 3 0 0\n5 4 0 0 4\n",
+        "mc",
+    )
+    measure("macrocell-empty", b"[M2] (example 1.0)\n#R B36/S23\n#N Empty\n$\n", "mc")
+
+    # Pictures: the header's size, whatever the pixels hold.
+    rgb = np.full((4, 5, 3), 255, dtype=np.uint16)
+    rgb[1, 2] = (0, 0, 0)
+    measure("png-rgb8", _png_file(rgb, 8, 2), "png")
+    rng = np.random.default_rng(16)
+    noisy = rng.integers(0, 256, size=(7, 11, 3))
+    measure("png-interlaced", _png_file(noisy, 8, 2, filters=(0, 4, 1), interlace=True), "png")
+    gray1 = np.array([[1] * 10, [1, 0, 1, 0, 1, 1, 1, 1, 1, 0], [0] * 10])
+    measure("png-gzip", gzip.compress(_png_file(gray1, 1, 0), mtime=0), "png.gz")
+    pal = bytes([255, 255, 255, 0, 0, 0, 255, 255, 254, 255, 255, 255])
+    pal2 = np.array([[0, 1, 2, 3, 0], [3, 3, 1, 0, 2]])
+    measure("png-pixels-unread", _png_file(pal2, 2, 3, palette=pal[:9]), "png")
+    measure("png-header-giant", _png_header_only(100_000, 70_000, 1, 0), "png")
+    rows24 = [b"".join(bytes((b, g, r)) for r, g, b in row) for row in rgb.astype(int).tolist()]
+    measure("bmp-24", _bmp_file(5, 4, 24, rows24), "bmp")
+    words32 = [[0xAB000000 | r << 16 | g << 8 | b for r, g, b in row] for row in rgb.tolist()]
+    rows32 = [b"".join(struct.pack("<I", w) for w in row) for row in words32]
+    measure("bmp-32-top-down", _bmp_file(5, 4, 32, rows32, top_down=True), "bmp")
+    idx8 = [bytes(row) for row in [[0, 1, 2, 2], [2, 0, 1, 2]]]
+    palette8 = [(255, 255, 255), (0, 0, 0), (255, 255, 255)]
+    full_palette = palette8 + [(0, 0, 0)] * (256 - len(palette8))
+    measure("bmp-core", _bmp_file(4, 2, 8, idx8, palette=full_palette, header=12), "bmp")
+    measure("bmp-index-unread", _bmp_file(4, 2, 8, idx8, palette=palette8[:2]), "bmp")
+
+    # What measuring refuses: what reading refuses before it would decode a cell.
+    measure("error-empty", b" \n\t\n", "rle", error=True)
+    measure("error-binary", b"GIF89a\x01\x00\x01\x00\x00\x00\x00", "gif", error=True)
+    packed = gzip.compress(gun_rle.encode(), mtime=0)
+    measure("error-gzip-cut-short", packed[:-8], "rle.gz", error=True)
+    measure("error-rle-tag", b"x = 3, y = 3\nbo$2bo$3oZ!\n", "rle", error=True)
+    measure("error-rle-cxrle", b"#CXRLE Pos=a,0\nx = 1, y = 1\no!\n", "rle", error=True)
+    measure("error-plaintext-character", b"!Name: x\n.O\nOx\n", "cells", error=True)
+    measure("error-life105-position", b"#Life 1.05\n#P 1\n*\n", "lif", error=True)
+    measure("error-life106-line", b"#Life 1.06\n1 2 3\n", "lif", error=True)
+    measure("error-macrocell-forward", b"[M2] (example 1.0)\n4 0 0 0 2\n$\n", "mc", error=True)
+    measure("error-macrocell-b0", b"[M2] (example 1.0)\n#R B0/S8\n$\n", "mc", error=True)
+    measure("error-macrocell-no-nodes", b"[M2] (example 1.0)\n#N nothing\n", "mc", error=True)
+    truncated = _png_file(noisy, 8, 2)
+    measure("error-png-truncated", truncated[: len(truncated) // 2], "png", error=True)
+    measure("error-png-depth", _png_header_only(4, 4, 3, 0), "png", error=True)
+    measure("error-bmp-truncated", _bmp_file(5, 4, 24, rows24)[:-3], "bmp", error=True)
+    measure(
+        "error-bmp-run-length",
+        _bmp_file(4, 2, 8, idx8, palette=palette8, compression=1),
+        "bmp",
+        error=True,
+    )
+
+
+def write_turned_rect_cases() -> None:
+    """Where a quarter turn sends a rectangle (spec/patterns.md "Editing a region"), under
+    vectors/patterns/turned-rect/: every parity of x0, y0, x1 and y1, both ways round, lines
+    and squares, coordinates past 2^64, the editing box's edge, and empty rectangles. Each
+    turn is checked here against HashLife's rotate_rect, which the runners repeat."""
+    from heaton_life.ca.hashlife import EDIT_LIMIT, HashLife
+    from heaton_life.init import turned_rect
+
+    def inside(rect: tuple[int, int, int, int]) -> bool:
+        return all(abs(v) <= EDIT_LIMIT for v in rect)
+
+    cases: list[dict[str, Any]] = []
+
+    def add(rect: tuple[int, int, int, int]) -> None:
+        for clockwise in (True, False):
+            entry: dict[str, Any] = {
+                "rect": [_signed_text(v) for v in rect],
+                "clockwise": clockwise,
+            }
+            try:
+                turned = turned_rect(*rect, clockwise=clockwise)
+            except ValueError:
+                entry["error"] = True
+                cases.append(entry)
+                continue
+            back = turned_rect(*turned, clockwise=not clockwise)
+            assert back == rect, (rect, clockwise)
+            spun = rect
+            for _ in range(4):
+                spun = turned_rect(*spun, clockwise=clockwise)
+            assert spun == rect, (rect, clockwise)
+            if inside(rect) and inside(turned):
+                assert HashLife().rotate_rect(*rect, clockwise=clockwise) == turned, rect
+            entry["expect"] = [_signed_text(v) for v in turned]
+            cases.append(entry)
+
+    for x0 in (-3, 2):  # every parity class of (x0, y0, x1, y1)
+        for y0 in (-2, 5):
+            for width in (3, 4):
+                for height in (1, 2):
+                    add((x0, y0, x0 + width - 1, y0 + height - 1))
+    add((0, 0, 0, 0))
+    add((5, 5, 5, 5))
+    add((-4, -4, 3, 3))
+    add((0, 0, 9, 0))
+    add((0, 0, 0, 9))
+    big = 1 << 70
+    add((-big - 1, 3 * 10**25, -big + 5, 3 * 10**25 + 3))
+    add((10**30, -(10**30) + 1, 10**30 + 1, -(10**30) + 5))
+    add((-(1 << 65), -(1 << 65), (1 << 65) - 1, (1 << 65) - 1))
+    add((-EDIT_LIMIT, -EDIT_LIMIT, -EDIT_LIMIT + 3, -EDIT_LIMIT + 1))
+    add((EDIT_LIMIT - 2, 0, EDIT_LIMIT, 9))  # its turn leaves the editing box
+    add((0, 0, -1, 0))
+    add((0, 5, 0, 4))
+    d = VECTOR_ROOT / "patterns" / "turned-rect"
+    d.mkdir(parents=True, exist_ok=True)
+    _gap_save(
+        d,
+        {
+            "spec_version": GAPS_SPEC_VERSION,
+            "family": "patterns",
+            "tier": "bit-exact",
+            "kind": "turned-rect",
+            "cases": cases,
+        },
+    )
+
+
+def write_reason_cases() -> None:
+    """Why a text is no rule (spec/rules.md "Reasons"), under vectors/rules/reasons/: every
+    reason, the order in which problems are found, and text quoted as written."""
+    from heaton_life.ca.rulestring import try_compile_rule
+
+    payload = "A" * 86
+    texts = [
+        "",
+        "   ",
+        "garbage",
+        "23/3",
+        "S23/B3",
+        "\u200bB3/S23",
+        "MA P" + payload,
+        "B9/S23",
+        "B3S23",
+        "B 3/S23",
+        "B-2a/S",
+        "B3x/S23",
+        "B2-a-/S",
+        "B\u0663/S23",
+        "B2\u212a/S",
+        "B3//S23",
+        "B3/23",
+        "B3/ 23",
+        "B3/S23/C4",
+        "B3/S23 H",
+        "B3/S 23",
+        "B3/S2 3",
+        "  B3/S23 x  ",
+        "B3/S23\x00",
+        "B3/S23'",
+        "B3/S2\u00e9",
+        "B3/S23\u200b",
+        "B2/S34HH",
+        "B2/S34HV",
+        "B1/S1VH",
+        "B3/S23-",
+        "B2-/S",
+        "B2--a/S",
+        "B1a/S",
+        "B1kn/S",
+        "B1nK/S",
+        "B1K/S",
+        "B0c/S",
+        "B8c/S",
+        "B7/S2H",
+        "B2/S7H",
+        "B5/S1V",
+        "B1/S5V",
+        "B2a/S2H",
+        "B1e/S1V",
+        "B7/S2aH",
+        "B2a/S7H",
+        "B1a/S23 x",
+        "MAP",
+        "MAP" + "A" * 85,
+        "MAP" + "A" * 87,
+        "MAP" + payload + "=",
+        "MAP" + payload + "===",
+        "MAP" + "A" * 85 + "!",
+        "MAP" + payload + "==x",
+        "MAP=" + payload,
+    ]
+    cases: list[dict[str, Any]] = []
+    for text in texts:
+        rule, reason = try_compile_rule(text, presets=False)
+        assert rule is None and reason is not None, text
+        cases.append({"input": text, "error": True, "reason": reason})
+    d = VECTOR_ROOT / "rules" / "reasons"
+    d.mkdir(parents=True, exist_ok=True)
+    _gap_save(
+        d,
+        {
+            "spec_version": GAPS_SPEC_VERSION,
+            "family": "rules",
+            "tier": "bit-exact",
+            "cases": cases,
+        },
     )
 
 

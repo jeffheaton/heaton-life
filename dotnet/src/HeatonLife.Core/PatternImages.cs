@@ -37,8 +37,42 @@ namespace HeatonLife
         private static bool WholeByte(uint mask)
             => mask == 0xFFu || mask == 0xFF00u || mask == 0xFF0000u || mask == 0xFF000000u;
 
-        /// <summary>A BMP image's cells, 1 alive and 0 dead (white); refused past <paramref name="maxCells"/>.</summary>
-        internal static byte[] BmpLive(byte[] data, long? maxCells, out int width, out int height)
+        /// <summary>A BMP image as far as its pixels: size, row layout, and what counts as white.</summary>
+        private readonly struct BmpLayout
+        {
+            public BmpLayout(
+                long width, long height, int bits, long offset, long stride, bool topDown, uint need, bool[]? white)
+            {
+                Width = width;
+                Height = height;
+                Bits = bits;
+                Offset = offset;
+                Stride = stride;
+                TopDown = topDown;
+                Need = need;
+                White = white;
+            }
+
+            public readonly long Width;
+            public readonly long Height;
+            public readonly int Bits;
+            public readonly long Offset;
+            public readonly long Stride;
+            public readonly bool TopDown;
+
+            /// <summary>The bits of a 16- or 32-bit pixel that are all set when it is white.</summary>
+            public readonly uint Need;
+
+            /// <summary>Which palette entries are white, for 1, 4 and 8 bits.</summary>
+            public readonly bool[]? White;
+        }
+
+        /// <summary>
+        /// Everything <see cref="BmpLive"/> checks before it reads a pixel (spec/formats.md
+        /// "Images"); a measure (<paramref name="measuring"/>) skips the cell limits, since it
+        /// makes no grid.
+        /// </summary>
+        private static BmpLayout Layout(byte[] data, long? maxCells, bool measuring)
         {
             if (!IsBmp(data))
                 throw new FormatException("not a BMP: bad signature or header size");
@@ -77,7 +111,8 @@ namespace HeatonLife
                     throw new FormatException($"not a BMP: an image {w} x {h}");
                 h = Math.Abs(h);
             }
-            CheckLimit(w, h, maxCells);
+            if (!measuring)
+                CheckLimit(w, h, maxCells);
 
             uint maskR = 0, maskG = 0, maskB = 0;
             bool fields = false;
@@ -110,18 +145,17 @@ namespace HeatonLife
             }
 
             long stride = (w * bits + 31) / 32 * 4;
-            if (offset + stride * h > data.Length)
+            // offset + stride × h > the file's length, without the product passing a long when a
+            // measure's header claims a picture no file holds.
+            long room = data.Length - offset;
+            if (room < 0 || stride > room / h)
                 throw new FormatException("not a BMP: the pixel data ends before the last row");
-            width = (int)w;
-            height = (int)h;
-            var cells = new byte[width * height];
 
             bool[]? white = null;
-            int usable = 0;
             if (bits <= 8)
             {
                 long count = colors == 0 ? 1L << bits : colors;
-                usable = (int)Math.Min(count, 1L << bits);
+                int usable = (int)Math.Min(count, 1L << bits);
                 int start = 14 + header;
                 if (start + (long)usable * entry > data.Length)
                     throw new FormatException("not a BMP: the palette runs past the end of the file");
@@ -133,6 +167,33 @@ namespace HeatonLife
                 }
             }
             uint need = fields ? maskR | maskG | maskB : bits == 16 ? 0x7FFFu : 0x00FFFFFFu;
+            return new BmpLayout(w, h, bits, offset, stride, topDown, need, white);
+        }
+
+        /// <summary>
+        /// A BMP image's width and height, its headers, masks, palette and the length of its pixel
+        /// data checked as <see cref="BmpLive"/> checks them but no pixel read (spec/formats.md
+        /// "Measuring").
+        /// </summary>
+        internal static (long Width, long Height) BmpMeasure(byte[] data)
+        {
+            BmpLayout layout = Layout(data, null, measuring: true);
+            return (layout.Width, layout.Height);
+        }
+
+        /// <summary>A BMP image's cells, 1 alive and 0 dead (white); refused past <paramref name="maxCells"/>.</summary>
+        internal static byte[] BmpLive(byte[] data, long? maxCells, out int width, out int height)
+        {
+            BmpLayout layout = Layout(data, maxCells, measuring: false);
+            width = (int)layout.Width;
+            height = (int)layout.Height;
+            int bits = layout.Bits;
+            long offset = layout.Offset, stride = layout.Stride;
+            bool topDown = layout.TopDown;
+            bool[]? white = layout.White;
+            int usable = white?.Length ?? 0;
+            uint need = layout.Need;
+            var cells = new byte[width * height];
 
             for (int y = 0; y < height; y++)
             {

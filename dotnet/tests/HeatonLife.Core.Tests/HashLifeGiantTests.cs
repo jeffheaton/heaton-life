@@ -112,6 +112,26 @@ namespace HeatonLife.Tests
         /// <summary>The Macrocell placement of a level-20 root puts the published file's top-left cell
         /// at (0, 0): the one-row y offset of spec/hashlife.md "Tree coordinates".</summary>
         [GiantFact("caterpillar.mc")]
+        public void TheCaterpillarMeasuresToTheBoxItLoadsTo() => MeasuresTo("caterpillar.mc", Caterpillar.Box);
+
+        [GiantFact("annelid.mc.gz")]
+        public void AnnelidMeasuresToTheBoxItLoadsTo() => MeasuresTo("annelid.mc.gz", Annelid.Box);
+
+        /// <summary>spec/formats.md "Measuring": the box found from the tree alone, with no universe
+        /// and no memory budget, is the box the universe loads to.</summary>
+        private void MeasuresTo(string name, CellBox box)
+        {
+            string path = Path.Combine(Environment.GetEnvironmentVariable("HEATON_LIFE_PATTERNS")!, name);
+            byte[] data = File.ReadAllBytes(path);
+            var clock = Stopwatch.StartNew();
+            PatternExtent extent = PatternFiles.Measure(data);
+            _output.WriteLine($"{name}: measured in {clock.Elapsed.TotalSeconds:F2} s");
+            Assert.Equal(PatternFormat.Macrocell, extent.Format);
+            Assert.Equal((box.X0, box.Y0), (extent.X, extent.Y));
+            Assert.Equal((box.X1 - box.X0 + 1, box.Y1 - box.Y0 + 1), (extent.Width, extent.Height));
+        }
+
+        [GiantFact("caterpillar.mc")]
         public void TheCaterpillarLandsAtTheOrigin()
         {
             HashLife u = Load("caterpillar.mc");

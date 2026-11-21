@@ -11,7 +11,7 @@ namespace HeatonLife.Tests
     /// <summary>
     /// Pattern conformance: replay vectors/patterns/ — RLE dialects with canonical
     /// re-encodes, the extent, the decode limit, trimmed decoding, transforms, extract
-    /// and stamp semantics (spec/patterns.md).
+    /// and stamp semantics, region editing, and turned rectangles (spec/patterns.md).
     /// Bit-exact; the same files the Python suite replays.
     /// </summary>
     public class PatternConformanceTests
@@ -267,6 +267,35 @@ namespace HeatonLife.Tests
                         Assert.Equal(
                             ReadGray(Path.Combine(caseDir, root.GetProperty("grid").GetProperty("file").GetString()!)),
                             decoded.Cells);
+                        break;
+                    }
+                case "turned-rect":
+                    {
+                        foreach (JsonElement entry in root.GetProperty("cases").EnumerateArray())
+                        {
+                            BigInteger[] rect = entry.GetProperty("rect").EnumerateArray().Select(Big).ToArray();
+                            bool clockwise = entry.GetProperty("clockwise").GetBoolean();
+                            var keys = new HashSet<string>(entry.EnumerateObject().Select(p => p.Name));
+                            if (IsError(entry))
+                            {
+                                Assert.True(keys.SetEquals(new[] { "rect", "clockwise", "error" }), caseName);
+                                Assert.Throws<ArgumentException>(
+                                    () => Patterns.TurnedRect(rect[0], rect[1], rect[2], rect[3], clockwise));
+                                continue;
+                            }
+                            Assert.True(keys.SetEquals(new[] { "rect", "clockwise", "expect" }), caseName);
+                            BigInteger[] expect = entry.GetProperty("expect").EnumerateArray().Select(Big).ToArray();
+                            var want = new CellBox(expect[0], expect[1], expect[2], expect[3]);
+                            Assert.Equal(want, Patterns.TurnedRect(rect[0], rect[1], rect[2], rect[3], clockwise));
+                            Assert.Equal(want, Patterns.TurnedRect(new CellBox(rect[0], rect[1], rect[2], rect[3]), clockwise));
+                            if (rect.Concat(expect).All(v => BigInteger.Abs(v) <= HashLife.EditLimit))
+                            {
+                                // The same rectangle as the universe's turn.
+                                CellBox turned = new HashLife().RotateRect(
+                                    (long)rect[0], (long)rect[1], (long)rect[2], (long)rect[3], clockwise);
+                                Assert.Equal(want, turned);
+                            }
+                        }
                         break;
                     }
                 default:

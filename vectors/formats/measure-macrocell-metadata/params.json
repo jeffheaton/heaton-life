@@ -1,0 +1,23 @@
+{
+  "family": "formats",
+  "format": "macrocell",
+  "generation": "41",
+  "height": "66",
+  "input": "input.mc",
+  "kind": "measure",
+  "metadata": {
+    "author": "Someone",
+    "comments": [
+      "Macrocell comments,",
+      "in order."
+    ],
+    "name": "Two blocks far apart"
+  },
+  "rule": "B36/S23",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "two_state": true,
+  "width": "66",
+  "x": "-4",
+  "y": "-3"
+}

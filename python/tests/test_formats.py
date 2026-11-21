@@ -1,6 +1,7 @@
 """Pattern files beyond the vectors (spec/formats.md): round trips of cells and metadata
 through every writer, what the writers refuse, text decoding, numbers of any size, the
-timeline writer's rules, and the image readers checked against images Pillow writes."""
+timeline writer's rules, the image readers checked against images Pillow writes, and
+measuring checked against reading."""
 
 from __future__ import annotations
 
@@ -23,12 +24,14 @@ from heaton_life.core.decimal_text import digits_of, int_of_digits
 from heaton_life.init import (
     PatternMetadata,
     detect_format,
+    measure_pattern,
     read_pattern,
     rle_decode,
     rle_encode,
+    rle_measure,
     rle_metadata,
 )
-from heaton_life.init.metadata import metadata_lines, text_from_bytes
+from heaton_life.init.metadata import inflate, metadata_lines, text_from_bytes
 
 GLIDER = np.array([[0, 1, 0], [0, 0, 1], [1, 1, 1]], dtype=np.uint8)
 NOTES = PatternMetadata("Glider", "R. K. Guy", ("one", "", "  three  "))
@@ -365,3 +368,78 @@ def test_timeline_frames_survive_garbage_collection() -> None:
 def test_read_timeline_needs_frames() -> None:
     with pytest.raises(ValueError, match="no #FRAMES"):
         read_timeline("[M2]\n**$**$\n")
+
+
+# -- measuring (spec/formats.md "Measuring") -------------------------------------------------
+
+_READ_INPUTS = sorted(
+    path
+    for case in (Path(__file__).resolve().parents[2] / "vectors" / "formats").glob("read-*")
+    for path in case.glob("input.*")
+)
+
+
+@pytest.mark.parametrize("path", _READ_INPUTS, ids=lambda p: p.parent.name)
+def test_measuring_agrees_with_reading(path: Path) -> None:
+    """Every read case's input measures as an untrimmed read without a limit gives it; one
+    that reading refuses is refused by measuring too, unless it is empty (0 × 0) or a
+    picture whose pixels are what is wrong."""
+    data = path.read_bytes()
+    try:
+        found = read_pattern(data, max_cells=None)
+    except ValueError:
+        try:
+            extent = measure_pattern(data)
+        except ValueError:
+            return
+        assert extent.width * extent.height == 0 or extent.format in ("png", "bmp")
+        return
+    extent = measure_pattern(data)
+    assert (extent.format, extent.x, extent.y) == (found.format, found.x, found.y)
+    assert (extent.rule, extent.generation) == (found.rule, found.generation)
+    assert extent.metadata == found.metadata
+    assert (extent.height, extent.width) == found.cells.shape
+    if found.format == "rle":
+        assert extent.two_state is not rle_measure(text_from_bytes(inflate(data))).extended
+    else:
+        assert extent.two_state
+
+
+def test_a_macrocell_file_measures_as_its_universe() -> None:
+    """Measuring from the tree gives the bounding box, rule and generation the universe has,
+    for patterns near the origin and far out, written by the canonical writer."""
+    rng = np.random.default_rng(1121)
+    for trial in range(40):
+        u = HashLife("B36/S23" if trial % 2 else "B3/S23")
+        far = int(rng.integers(0, 999_999_000)) * (
+            -1 if trial % 3 else 1
+        )  # x ± 40 stays in the box
+        for _ in range(int(rng.integers(1, 4))):
+            cells = (rng.random((int(rng.integers(1, 9)), int(rng.integers(1, 9)))) < 0.4).astype(
+                np.uint8
+            )
+            x, y = int(rng.integers(-40, 40)), int(rng.integers(-40, 40))
+            u.set_rect(x + (far if trial % 4 == 0 else 0), y, cells, "or")
+        u.step(int(rng.integers(0, 5)))
+        extent = measure_pattern(u.to_macrocell(PatternMetadata("trial", None, ())))
+        box = u.bounding_box()
+        if box is None:
+            assert (extent.width, extent.height, extent.x, extent.y) == (0, 0, 0, 0)
+        else:
+            x0, y0, x1, y1 = box
+            assert (extent.x, extent.y) == (x0, y0)
+            assert (extent.width, extent.height) == (x1 - x0 + 1, y1 - y0 + 1)
+        assert (extent.rule, extent.generation) == (u.rule, u.generation)
+        assert extent.metadata.name == "trial" and extent.two_state
+
+
+def test_measuring_makes_no_grid() -> None:
+    """Sizes no memory holds measure exactly: an RLE run of 2^200 cells, Life 1.06 cells
+    10^40 apart, and a picture whose header alone is read."""
+    run = 1 << 200
+    extent = measure_pattern(f"x = 1, y = 1\no{run}bo!\n")
+    assert (extent.width, extent.height) == (run + 2, 1)
+    apart = measure_pattern(f"#Life 1.06\n0 0\n{10**40} {-(10**40)}\n")
+    assert (apart.width, apart.height, apart.y) == (10**40 + 1, 10**40 + 1, -(10**40))
+    with pytest.raises(ValueError):
+        read_pattern(f"x = 1, y = 1\no{run}bo!\n", max_cells=None)

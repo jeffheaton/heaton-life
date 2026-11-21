@@ -10,7 +10,8 @@ namespace HeatonLife.Tests
 {
     /// <summary>
     /// Life-like rule conformance: replay vectors/rules/ — rule text to its canonical string,
-    /// neighborhood and table, or an error (spec/rules.md "Vector encoding"). As strict as the
+    /// neighborhood and table, or an error and, where a case pins one, its reason (spec/rules.md
+    /// "Vector encoding", "Reasons"). As strict as the
     /// Python runner (python/tests/test_rule_vectors.py): an unknown key or spec_version fails.
     /// </summary>
     public class RuleConformanceTests
@@ -19,6 +20,7 @@ namespace HeatonLife.Tests
         private static readonly string[] CaseKeys = { "spec_version", "family", "tier", "cases" };
         private static readonly string[] RuleKeys = { "input", "canonical", "neighborhood", "table" };
         private static readonly string[] ErrorKeys = { "input", "error" };
+        private static readonly string[] ReasonKeys = { "input", "error", "reason" };
 
         private static string Root => Path.Combine(TestPaths.VectorRoot(), "rules");
 
@@ -34,7 +36,7 @@ namespace HeatonLife.Tests
             var names = new HashSet<string>(Cases().Select(c => (string)c[0]));
             foreach (string name in new[]
             {
-                "totalistic", "isotropic", "isotropic-classes", "map", "hexagonal", "von-neumann", "errors",
+                "totalistic", "isotropic", "isotropic-classes", "map", "hexagonal", "von-neumann", "errors", "reasons",
             })
                 Assert.Contains(name, names);
         }
@@ -54,13 +56,23 @@ namespace HeatonLife.Tests
                 string text = entry.GetProperty("input").GetString()!;
                 if (entry.TryGetProperty("error", out JsonElement error) && error.GetBoolean())
                 {
-                    AssertKeys(entry, ErrorKeys);
+                    bool pinned = entry.TryGetProperty("reason", out JsonElement want);
+                    AssertKeys(entry, pinned ? ReasonKeys : ErrorKeys);
                     Assert.False(RuleString.TryCompile(text, out _), text);
-                    Assert.Throws<ArgumentException>(() => RuleString.Compile(text));
+                    Assert.False(RuleString.TryCompile(text, out LifeRule? none, out string? reason), text);
+                    Assert.Null(none);
+                    Assert.NotNull(reason);
+                    ArgumentException thrown = Assert.Throws<ArgumentException>(() => RuleString.Compile(text));
+                    Assert.StartsWith($"invalid rule '{text}': {reason} (spec/rules.md)", thrown.Message);
+                    if (pinned)
+                        Assert.True(want.GetString() == reason, $"{text}: {reason}");
                     continue;
                 }
                 AssertKeys(entry, RuleKeys);
+                Assert.True(RuleString.TryCompile(text, out LifeRule? compiled, out string? noReason), text);
+                Assert.Null(noReason);
                 LifeRule rule = RuleString.Compile(text);
+                Assert.Equal(rule.Canonical, compiled!.Canonical);
                 Assert.True(entry.GetProperty("canonical").GetString() == rule.Canonical, text);
                 Assert.True(entry.GetProperty("neighborhood").GetString() == Name(rule.Neighborhood), text);
                 Assert.True(entry.GetProperty("table").GetString() == Hex(rule.Table), text);

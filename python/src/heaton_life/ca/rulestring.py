@@ -148,6 +148,18 @@ def compile_rule(rule: str, *, presets: bool = True) -> LifeRule:
     return _compile(rule)
 
 
+def try_compile_rule(
+    rule: str, *, presets: bool = True
+) -> tuple[LifeRule, None] | tuple[None, str]:
+    """``compile_rule`` without raising: ``(rule, None)`` when the text compiles, else
+    ``(None, reason)``, the phrase spec/rules.md "Reasons" gives for the first problem a
+    reading of the text finds (``compile_rule``'s error message carries the same one)."""
+    try:
+        return compile_rule(rule, presets=presets), None
+    except _RuleError as error:
+        return None, error.reason
+
+
 def canonical_rule(rule: str) -> str:
     """The canonical form of a rule or preset name, e.g. 'b3 / s32' -> 'B3/S23'."""
     return compile_rule(rule).canonical
@@ -183,8 +195,16 @@ def _outer_totalistic(rule: LifeRule) -> tuple[frozenset[int], frozenset[int]] |
     return birth, survive
 
 
-def _invalid(text: str, reason: str) -> ValueError:
-    return ValueError(f"invalid rule {text!r}: {reason} (spec/rules.md)")
+class _RuleError(ValueError):
+    """Text that is not a rule, with the reason spec/rules.md "Reasons" gives for it."""
+
+    def __init__(self, text: str, reason: str) -> None:
+        super().__init__(f"invalid rule '{text}': {reason} (spec/rules.md)")
+        self.reason = reason
+
+
+def _invalid(text: str, reason: str) -> _RuleError:
+    return _RuleError(text, reason)
 
 
 @functools.lru_cache(maxsize=64)
@@ -223,7 +243,7 @@ def _compile_bs(text: str, body: str) -> LifeRule:
     elif rest in ("V", "v"):
         neighborhood = "vonneumann"
     else:
-        raise _invalid(text, f"unexpected {rest!r} after the survival counts")
+        raise _invalid(text, f"unexpected '{rest}' after the survival counts")
     born = _side(text, birth, neighborhood)
     stays = _side(text, survive, neighborhood)
     canonical = f"B{_spell(born, neighborhood)}/S{_spell(stays, neighborhood)}"
@@ -287,9 +307,9 @@ def _side(text: str, groups: list[Group], neighborhood: Neighborhood) -> frozens
             continue
         if not defined:
             raise _invalid(text, f"{count} takes no letters")
-        unknown = sorted(set(letters) - set(defined))
-        if unknown:
-            raise _invalid(text, f"{''.join(unknown)} is not a letter class of {count}")
+        unknown = next((letter for letter in letters if letter not in defined), None)
+        if unknown is not None:
+            raise _invalid(text, f"{unknown} is not a letter class of {count}")
         chosen = set(defined) - set(letters) if minus else set(letters)
         keys.update((count, letter) for letter in chosen)
     return frozenset(keys)

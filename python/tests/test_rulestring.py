@@ -1,6 +1,12 @@
 import pytest
 
-from heaton_life.ca.rulestring import LifeRule, canonical_rule, compile_rule, parse_rule
+from heaton_life.ca.rulestring import (
+    LifeRule,
+    canonical_rule,
+    compile_rule,
+    parse_rule,
+    try_compile_rule,
+)
 
 
 def test_parse_life() -> None:
@@ -232,3 +238,32 @@ def test_b0() -> None:
     assert not compile_rule("B3/S23").has_b0
     with pytest.raises(ValueError):
         LifeRule("B3/S23", "moore", bytes(511))
+
+
+def test_try_compile_rule_gives_the_rule_or_the_reason() -> None:
+    """spec/rules.md "Reasons": no exception, and the reason is what compile_rule's message
+    carries between the quoted text and the spec reference."""
+    assert try_compile_rule("b3 / s32") == (compile_rule("B3/S23"), None)
+    assert try_compile_rule("highlife") == (compile_rule("B36/S23"), None)
+    assert try_compile_rule("highlife", presets=False) == (None, "expected B…/S… or MAP…")
+    for text in ("B9/S23", "B3/S23 x", "B1kn/S", "B2/S7H", "MAP", "it's"):
+        rule, reason = try_compile_rule(text)
+        assert rule is None and reason
+        with pytest.raises(ValueError) as raised:
+            compile_rule(text)
+        assert str(raised.value) == f"invalid rule '{text}': {reason} (spec/rules.md)"
+
+
+@pytest.mark.parametrize(
+    "text,reason",
+    [
+        ("B1a/S23 x", "unexpected ' x' after the survival counts"),  # the shape comes first
+        ("B7/S2aH", "the hexagonal neighborhood has 6 neighbors"),  # then birth before survival
+        ("B1nk/S", "n is not a letter class of 1"),  # the first undefined letter as written
+        ("B1Kn/S", "k is not a letter class of 1"),  # in lowercase
+        ("B3/S23\u200b", "unexpected '\u200b' after the survival counts"),  # quoted as written
+        (" \tB3/S23 H \u3000", "unexpected ' H' after the survival counts"),  # ends stripped
+    ],
+)
+def test_the_reason_is_the_first_problem_found(text: str, reason: str) -> None:
+    assert try_compile_rule(text, presets=False) == (None, reason)

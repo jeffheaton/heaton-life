@@ -51,9 +51,20 @@ namespace HeatonLife
             return parsed.Universe;
         }
 
-        /// <summary>A file read once: the universe at its root and <c>#G</c>, its metadata, every
-        /// node line as (value, level), and the timeline lines left for the timeline reader.</summary>
-        private sealed class Parsed
+        /// <summary>A file's lines read once: every node line as (value, level), <c>#G</c>, the
+        /// metadata, and the timeline lines left for the timeline reader.</summary>
+        private class NodeLines
+        {
+            public PatternMetadata Metadata = PatternMetadata.Empty;
+            public BigInteger Generation = BigInteger.Zero;
+            public readonly List<long> Values = new List<long>();
+            public readonly List<int> Levels = new List<int>();
+            public readonly List<(int Number, string Line)> FramesLines = new List<(int, string)>();
+            public readonly List<(int Number, string Line)> FrameLines = new List<(int, string)>();
+        }
+
+        /// <summary>A file read into a universe, at its root and <c>#G</c>.</summary>
+        private sealed class Parsed : NodeLines
         {
             public Parsed(HashLife universe)
             {
@@ -61,11 +72,138 @@ namespace HeatonLife
             }
 
             public HashLife Universe { get; }
-            public PatternMetadata Metadata = PatternMetadata.Empty;
-            public readonly List<long> Values = new List<long>();
-            public readonly List<int> Levels = new List<int>();
-            public readonly List<(int Number, string Line)> FramesLines = new List<(int, string)>();
-            public readonly List<(int Number, string Line)> FrameLines = new List<(int, string)>();
+        }
+
+        /// <summary>Where a file's nodes of level 3 and up go, as ids: a universe's store, or the
+        /// boxes a measure keeps. Levels 1 and 2 are spread bitmaps in the leaf layout, made by
+        /// the reader itself.</summary>
+        private interface INodes
+        {
+            /// <summary>A level-3 node from its 8 × 8 bitmap (bit 8r + c is row r, column c).</summary>
+            long Leaf(ulong bits);
+
+            long Empty(int level);
+
+            long Join(long nw, long ne, long sw, long se, int level);
+
+            /// <summary>An <c>#R</c> line's rule; throws <see cref="ArgumentException"/> for one the
+            /// universe can't run.</summary>
+            void Rule(string text);
+        }
+
+        /// <summary>A file's nodes in a universe's store, its <c>#R</c> the universe's rule.</summary>
+        private sealed class StoreNodes : INodes
+        {
+            private readonly HashLife _universe;
+            private readonly HashLifeStore _store;
+
+            public StoreNodes(HashLife universe)
+            {
+                _universe = universe;
+                _store = universe.Store;
+            }
+
+            public long Leaf(ulong bits) => _store.Leaf(bits);
+
+            public long Empty(int level) => _store.Empty(level);
+
+            public long Join(long nw, long ne, long sw, long se, int level) => _store.Join((int)nw, (int)ne, (int)sw, (int)se);
+
+            public void Rule(string text) => _universe.Rule = text;
+        }
+
+        /// <summary>A file's nodes as their live cells' boxes, each relative to its node's top-left
+        /// corner; id 0 is every empty node. No universe is built (spec/formats.md
+        /// "Measuring").</summary>
+        private sealed class BoxNodes : INodes
+        {
+            public readonly List<CellBox?> Boxes = new List<CellBox?> { null };
+            public string Canonical = "B3/S23";
+
+            public long Leaf(ulong bits)
+            {
+                Boxes.Add(BitsBox(bits));
+                return Boxes.Count - 1;
+            }
+
+            public long Empty(int level) => 0;
+
+            public long Join(long nw, long ne, long sw, long se, int level)
+            {
+                BigInteger half = BigInteger.One << (level - 1);
+                CellBox? box = Widen(null, Boxes[(int)nw], BigInteger.Zero, BigInteger.Zero);
+                box = Widen(box, Boxes[(int)ne], half, BigInteger.Zero);
+                box = Widen(box, Boxes[(int)sw], BigInteger.Zero, half);
+                box = Widen(box, Boxes[(int)se], half, half);
+                Boxes.Add(box);
+                return Boxes.Count - 1;
+            }
+
+            public void Rule(string text) => Canonical = HashLife.CheckedRule(text);
+
+            private static CellBox? Widen(CellBox? box, CellBox? part, BigInteger dx, BigInteger dy)
+            {
+                if (part == null)
+                    return box;
+                CellBox p = part.Value;
+                BigInteger x0 = p.X0 + dx, y0 = p.Y0 + dy, x1 = p.X1 + dx, y1 = p.Y1 + dy;
+                if (box == null)
+                    return new CellBox(x0, y0, x1, y1);
+                CellBox b = box.Value;
+                return new CellBox(
+                    BigInteger.Min(b.X0, x0), BigInteger.Min(b.Y0, y0), BigInteger.Max(b.X1, x1), BigInteger.Max(b.Y1, y1));
+            }
+        }
+
+        /// <summary>The live cells' box in a leaf-layout bitmap (bit 8r + c is row r, column c), or null.</summary>
+        private static CellBox? BitsBox(ulong bits)
+        {
+            if (bits == 0)
+                return null;
+            int top = -1, bottom = -1, columns = 0;
+            for (int r = 0; r < 8; r++)
+            {
+                int row = (int)((bits >> (8 * r)) & 0xFF);
+                if (row == 0)
+                    continue;
+                if (top < 0)
+                    top = r;
+                bottom = r;
+                columns |= row;
+            }
+            int left = 0, right = 7;
+            while ((columns & (1 << left)) == 0)
+                left++;
+            while ((columns & (1 << right)) == 0)
+                right--;
+            return new CellBox(left, top, right, bottom);
+        }
+
+        /// <summary>
+        /// A Macrocell file's live cells' bounding box (null without any) in the universe's
+        /// coordinates, its rule in canonical form, <c>#G</c> and metadata, read from its tree
+        /// without building a universe (spec/formats.md "Measuring"). Refuses what reading
+        /// refuses, but has no memory budget to run out of.
+        /// </summary>
+        internal static CellBox? Measure(string text, out string rule, out BigInteger generation, out PatternMetadata metadata)
+        {
+            List<string> lines = TextLines.Split(text);
+            int start = HeaderLine(lines);
+            var boxes = new BoxNodes();
+            var read = new NodeLines();
+            ReadLines(lines, start, boxes, read);
+            rule = boxes.Canonical;
+            generation = read.Generation;
+            metadata = read.Metadata;
+            long value = read.Values[read.Values.Count - 1];
+            int level = read.Levels[read.Levels.Count - 1];
+            CellBox? found = level >= 3 ? boxes.Boxes[(int)value] : BitsBox((ulong)value);
+            if (found == null)
+                return null;
+            // A level-k root covers x in [-2^(k-1), 2^(k-1) - 1] and y in [-2^(k-1) + 1, 2^(k-1)].
+            BigInteger left = -(BigInteger.One << (level - 1)), top = left + 1;
+            CellBox box = found.Value;
+            return new CellBox(left + box.X0, top + box.Y0, left + box.X1, top + box.Y1);
         }
 
         /// <summary>A node line as a root of level ≥ 4, placed by tree coordinates: a 2 × 2 or
@@ -95,19 +233,39 @@ namespace HeatonLife
         private static Parsed Parse(string text, int maxMemoryMb)
         {
             List<string> lines = TextLines.Split(text);
+            int start = HeaderLine(lines);
+            var universe = new HashLife(maxMemoryMb: maxMemoryMb);
+            var parsed = new Parsed(universe);
+            ReadLines(lines, start, new StoreNodes(universe), parsed);
+            var (root, rootLevel) = NormalizeRoot(
+                universe.Store, parsed.Values[parsed.Values.Count - 1], parsed.Levels[parsed.Levels.Count - 1]);
+            universe.Adopt(root, rootLevel, parsed.Generation);
+            return parsed;
+        }
+
+        /// <summary>The index of the <c>[M2]</c> header line, after any blank lines.</summary>
+        private static int HeaderLine(List<string> lines)
+        {
             int start = 0;
             while (start < lines.Count && TextLines.Strip(lines[start]).Length == 0)
                 start++;
             if (start == lines.Count || !TextLines.Strip(lines[start]).StartsWith("[M2]", StringComparison.Ordinal))
                 throw new FormatException("not a Macrocell file: the first line must start with [M2]");
-            var universe = new HashLife(maxMemoryMb: maxMemoryMb);
-            var parsed = new Parsed(universe);
+            return start;
+        }
+
+        /// <summary>
+        /// Every line after the header, checked, its nodes built in <paramref name="nodes"/>
+        /// (spec/macrocell.md "Reading"): the one reading of the format, for a universe and for a
+        /// measure alike.
+        /// </summary>
+        private static void ReadLines(List<string> lines, int start, INodes nodes, NodeLines into)
+        {
             var notes = new MetadataReader();
-            HashLifeStore store = universe.Store;
             BigInteger generation = BigInteger.Zero;
-            // Each node as (value, level): a store id for level ≥ 3, a spread bitmap below.
-            List<long> values = parsed.Values;
-            List<int> levels = parsed.Levels;
+            // Each node as (value, level): a node id for level ≥ 3, a spread bitmap below.
+            List<long> values = into.Values;
+            List<int> levels = into.Levels;
 
             for (int index = start + 1; index < lines.Count; index++)
             {
@@ -121,7 +279,7 @@ namespace HeatonLife
                     {
                         try
                         {
-                            universe.Rule = TextLines.Strip(line.Substring(2));
+                            nodes.Rule(TextLines.Strip(line.Substring(2)));
                         }
                         catch (ArgumentException e)
                         {
@@ -134,11 +292,11 @@ namespace HeatonLife
                     }
                     else if (line.StartsWith("#FRAMES", StringComparison.Ordinal))
                     {
-                        parsed.FramesLines.Add((number, line));
+                        into.FramesLines.Add((number, line));
                     }
                     else if (line.StartsWith("#FRAME", StringComparison.Ordinal))
                     {
-                        parsed.FrameLines.Add((number, line));
+                        into.FrameLines.Add((number, line));
                     }
                     else
                     {
@@ -148,7 +306,7 @@ namespace HeatonLife
                 }
                 if (line[0] == '.' || line[0] == '*' || line[0] == '$')
                 {
-                    values.Add(store.Leaf(LeafBits(line, number)));
+                    values.Add(nodes.Leaf(LeafBits(line, number)));
                     levels.Add(3);
                     continue;
                 }
@@ -163,16 +321,16 @@ namespace HeatonLife
                 }
                 else if (level == 2)
                 {
-                    long nw = Child(values, levels, fields[1], 1, number, store), ne = Child(values, levels, fields[2], 1, number, store);
-                    long sw = Child(values, levels, fields[3], 1, number, store), se = Child(values, levels, fields[4], 1, number, store);
+                    long nw = Child(values, levels, fields[1], 1, number, nodes), ne = Child(values, levels, fields[2], 1, number, nodes);
+                    long sw = Child(values, levels, fields[3], 1, number, nodes), se = Child(values, levels, fields[4], 1, number, nodes);
                     values.Add(nw | ne << 2 | sw << 16 | se << 18);
                     levels.Add(2);
                 }
                 else if (level == 3)
                 {
-                    long nw = Child(values, levels, fields[1], 2, number, store), ne = Child(values, levels, fields[2], 2, number, store);
-                    long sw = Child(values, levels, fields[3], 2, number, store), se = Child(values, levels, fields[4], 2, number, store);
-                    values.Add(store.Leaf(HashLifeLeaves.Compose((ulong)nw, (ulong)ne, (ulong)sw, (ulong)se)));
+                    long nw = Child(values, levels, fields[1], 2, number, nodes), ne = Child(values, levels, fields[2], 2, number, nodes);
+                    long sw = Child(values, levels, fields[3], 2, number, nodes), se = Child(values, levels, fields[4], 2, number, nodes);
+                    values.Add(nodes.Leaf(HashLifeLeaves.Compose((ulong)nw, (ulong)ne, (ulong)sw, (ulong)se)));
                     levels.Add(3);
                 }
                 else if (level >= 4)
@@ -180,11 +338,11 @@ namespace HeatonLife
                     if (level > HashLifeStore.MaxLevel)
                         throw new FormatException($"line {number}: level {level} is past the deepest tree, level {HashLifeStore.MaxLevel}");
                     int k = (int)level;
-                    int nw = (int)Child(values, levels, fields[1], k - 1, number, store);
-                    int ne = (int)Child(values, levels, fields[2], k - 1, number, store);
-                    int sw = (int)Child(values, levels, fields[3], k - 1, number, store);
-                    int se = (int)Child(values, levels, fields[4], k - 1, number, store);
-                    values.Add(store.Join(nw, ne, sw, se));
+                    long nw = Child(values, levels, fields[1], k - 1, number, nodes);
+                    long ne = Child(values, levels, fields[2], k - 1, number, nodes);
+                    long sw = Child(values, levels, fields[3], k - 1, number, nodes);
+                    long se = Child(values, levels, fields[4], k - 1, number, nodes);
+                    values.Add(nodes.Join(nw, ne, sw, se, k));
                     levels.Add(k);
                 }
                 else
@@ -194,11 +352,8 @@ namespace HeatonLife
             }
             if (values.Count == 0)
                 throw new FormatException("Macrocell file has no nodes");
-
-            var (root, rootLevel) = NormalizeRoot(store, values[values.Count - 1], levels[levels.Count - 1]);
-            universe.Adopt(root, rootLevel, generation);
-            parsed.Metadata = notes.Result();
-            return parsed;
+            into.Generation = generation;
+            into.Metadata = notes.Result();
         }
 
         /// <summary>One or more ASCII digits, no sign (spec/macrocell.md "Reading").</summary>
@@ -244,10 +399,10 @@ namespace HeatonLife
             return fields;
         }
 
-        private static long Child(List<long> values, List<int> levels, long index, int level, int number, HashLifeStore store)
+        private static long Child(List<long> values, List<int> levels, long index, int level, int number, INodes nodes)
         {
             if (index == 0)
-                return level >= 3 ? store.Empty(level) : 0;
+                return level >= 3 ? nodes.Empty(level) : 0;
             if (index > values.Count)
                 throw new FormatException($"line {number}: node {index} is not defined yet");
             int found = levels[(int)index - 1];

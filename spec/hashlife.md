@@ -164,7 +164,9 @@ and the rectangle to (y0 − d, s − x1, y1 − d, s − x0). Both turns of a r
 same (s, d) as each other and as the turns of their results, so each turn undoes the
 other, four make a full turn, and nothing ever drifts.
 
-`rotate_rect` returns the new rectangle. Every cell of the new rectangle takes the turned
+`rotate_rect` returns the new rectangle, which `turned_rect`
+([patterns.md](patterns.md#editing-a-region)) gives without turning anything, so a grid
+can turn a region onto the same cells. Every cell of the new rectangle takes the turned
 value, live or dead (as `copy` pastes); a cell of the old rectangle outside the new one
 dies; cells outside both are untouched. `flip_rect` mirrors in place: horizontally
 (x, y) → (x0 + x1 − x, y), vertically (x, y) → (x, y0 + y1 − y).

@@ -503,7 +503,8 @@ namespace HeatonLife.Tests
             for (long y = y0; y <= y1; y++)
                 for (long x = x0; x <= x1; x++)
                     result[(y + frame) * side + x + frame] = 0;
-            var (s, d) = HashLife.TurnCenter(x0, y0, x1, y1);
+            var (bigS, bigD) = Patterns.TurnCenter(x0, y0, x1, y1);
+            long s = (long)bigS, d = (long)bigD;
             for (long y = y0; y <= y1; y++)
             {
                 for (long x = x0; x <= x1; x++)
@@ -741,6 +742,90 @@ namespace HeatonLife.Tests
             }
             Assert.Equal(before, u.ToMacrocell()); // not a sub-step boundary: as it was
             Assert.Equal(0, (int)u.Generation);
+        }
+
+
+        [Fact]
+        public void TurnedRectIsWhereRotateRectsCellsLand()
+        {
+            // spec/patterns.md "Editing a region": a rectangle's four corner cells, moved by the
+            // tree's own shift (not by TurnedRect), land on the corners of TurnedRect's rectangle.
+            for (long x0 = -3; x0 < 3; x0++)
+            {
+                for (long y0 = -3; y0 < 3; y0++)
+                {
+                    for (int w = 1; w <= 5; w++)
+                    {
+                        for (int h = 1; h <= 5; h++)
+                        {
+                            long x1 = x0 + w - 1, y1 = y0 + h - 1;
+                            foreach (bool clockwise in new[] { true, false })
+                            {
+                                var u = new HashLife();
+                                foreach (long x in new[] { x0, x1 })
+                                {
+                                    foreach (long y in new[] { y0, y1 })
+                                        u.SetCell(x, y, true);
+                                }
+                                u.RotateRect(x0, y0, x1, y1, clockwise);
+                                Assert.Equal((CellBox?)Patterns.TurnedRect(x0, y0, x1, y1, clockwise), u.BoundingBox);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        [Fact]
+        public void AGridTurnsARegionOntoRotateRectsCells()
+        {
+            // Extract, Rotate90 (or Rotate90Ccw), clear, then stamp at TurnedRect's top-left: a
+            // life-like grid's turn of a region gives the cells HashLife.RotateRect gives.
+            const int size = 24;
+            var rng = new Pcg32(2611); // test input only
+            int turns = 0;
+            for (int trial = 0; trial < 80; trial++)
+            {
+                byte[] grid = Noise(size, size, (uint)(100 + trial));
+                int w = 1 + (int)(rng.NextU32() % 9), h = 1 + (int)(rng.NextU32() % 9);
+                int x0 = (int)(rng.NextU32() % (uint)(size - w + 1)), y0 = (int)(rng.NextU32() % (uint)(size - h + 1));
+                int x1 = x0 + w - 1, y1 = y0 + h - 1;
+                bool clockwise = trial % 2 == 0;
+                CellBox target = Patterns.TurnedRect(x0, y0, x1, y1, clockwise);
+                if (target.X0 < 0 || target.Y0 < 0 || target.X1 >= size || target.Y1 >= size)
+                    continue; // past an edge: the caller's to refuse
+                byte[] turned = (byte[])grid.Clone();
+                byte[] region = Patterns.Extract(turned, size, size, 1, x0, y0, w, h, torus: false);
+                for (int y = y0; y <= y1; y++)
+                {
+                    for (int x = x0; x <= x1; x++)
+                        turned[y * size + x] = 0;
+                }
+                byte[] rotated = clockwise ? Patterns.Rotate90(region, w, h) : Patterns.Rotate90Ccw(region, w, h);
+                Patterns.Stamp(turned, size, size, 1, rotated, h, w, (int)target.X0, (int)target.Y0, false, StampMode.Copy);
+                var u = new HashLife();
+                u.SetRect(0, 0, grid, size, size, HashLifePasteMode.Copy);
+                Assert.Equal(target, u.RotateRect(x0, y0, x1, y1, clockwise));
+                Assert.Equal(turned, u.GetRect(0, 0, size - 1, size - 1));
+                turns++;
+            }
+            Assert.True(turns > 50, $"only {turns} turns stayed in the grid");
+        }
+
+        [Fact]
+        public void TurnedRectNeedsARectangleAndTakesAnyIntegers()
+        {
+            Assert.Throws<ArgumentException>(() => Patterns.TurnedRect(0, 0, -1, 0));
+            Assert.Throws<ArgumentException>(() => Patterns.TurnedRect(0, 1, 0, 0, clockwise: false));
+            Assert.Equal(new CellBox(7, 7, 7, 7), Patterns.TurnedRect(7, 7, 7, 7));
+            BigInteger big = BigInteger.One << 100;
+            var rect = new CellBox(big, -big, big + 3, -big + 1);
+            CellBox turned = Patterns.TurnedRect(rect);
+            Assert.Equal(rect, Patterns.TurnedRect(turned, clockwise: false));
+            CellBox spun = rect;
+            for (int i = 0; i < 4; i++)
+                spun = Patterns.TurnedRect(spun);
+            Assert.Equal(rect, spun);
         }
     }
 }

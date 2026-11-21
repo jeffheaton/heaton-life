@@ -1,0 +1,22 @@
+{
+  "family": "formats",
+  "format": "rle",
+  "generation": "0",
+  "height": "9",
+  "input": "input.rle",
+  "kind": "measure",
+  "metadata": {
+    "author": "Bill Gosper",
+    "comments": [
+      "The first gun found, in 1970."
+    ],
+    "name": "Gosper glider gun"
+  },
+  "rule": "B3/S23",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "two_state": true,
+  "width": "36",
+  "x": "0",
+  "y": "0"
+}

@@ -78,10 +78,57 @@ namespace HeatonLife
     }
 
     /// <summary>
+    /// What <see cref="PatternFiles.Read(byte[], long?, bool)"/> without trimming gives, except the
+    /// cells, found without making the grid (spec/formats.md "Measuring"). Every number is exact.
+    /// </summary>
+    public sealed class PatternExtent
+    {
+        internal PatternExtent(
+            PatternFormat format, BigInteger width, BigInteger height, BigInteger x, BigInteger y, string? rule,
+            BigInteger generation, PatternMetadata metadata, bool twoState)
+        {
+            Format = format;
+            Width = width;
+            Height = height;
+            X = x;
+            Y = y;
+            Rule = rule;
+            Generation = generation;
+            Metadata = metadata;
+            TwoState = twoState;
+        }
+
+        public PatternFormat Format { get; }
+
+        /// <summary>The grid's width; 0 (and so is the height) for a pattern that reading
+        /// refuses as empty.</summary>
+        public BigInteger Width { get; }
+
+        public BigInteger Height { get; }
+
+        /// <summary>Where the grid's top-left cell sits in the file's own coordinates (y grows downward).</summary>
+        public BigInteger X { get; }
+
+        public BigInteger Y { get; }
+
+        /// <summary>The file's rule, or null when it names none.</summary>
+        public string? Rule { get; }
+
+        public BigInteger Generation { get; }
+
+        public PatternMetadata Metadata { get; }
+
+        /// <summary>False for an extended RLE file, whatever states it uses: only a two-state file
+        /// can be read into the unbounded universe.</summary>
+        public bool TwoState { get; }
+    }
+
+    /// <summary>
     /// Pattern files in every format, recognized by content (spec/formats.md): RLE, Macrocell,
     /// plaintext, Life 1.05, Life 1.06, and PNG and BMP images, any of them gzip-compressed.
     /// <see cref="Detect(byte[])"/> names a file's format; <see cref="Read(byte[], long?, bool)"/>
-    /// gives its cells as a dense grid; <see cref="ReadUniverse(byte[], int)"/> places it in a
+    /// gives its cells as a dense grid; <see cref="Measure(byte[])"/> gives all of that but the
+    /// cells, without making the grid; <see cref="ReadUniverse(byte[], int)"/> places it in a
     /// HashLife universe. Content that can't be read throws <see cref="FormatException"/>; a
     /// pattern past the decode limit or outside the editing box throws an
     /// <see cref="ArgumentException"/>. The Python reference's heaton_life.init.formats.
@@ -121,6 +168,22 @@ namespace HeatonLife
         /// <summary>Text (a string, say from the clipboard) as a dense grid.</summary>
         public static PatternFile Read(string text, long? maxCells = Patterns.DefaultMaxCells, bool trim = false)
             => Read(Recognize(text), maxCells, trim);
+
+        /// <summary>
+        /// What <see cref="Read(byte[], long?, bool)"/> without trimming would give, except the
+        /// cells, found without making the grid (spec/formats.md "Measuring"): the format, the
+        /// grid's size and position, the rule, the generation, the metadata, and whether the cells
+        /// have two states. No cell is kept, so a pattern too large for any grid measures as easily
+        /// as a glider: RLE by its counted extent, plaintext by its rows, Life 1.0x by its cells'
+        /// coordinates, Macrocell from its tree without a universe, and an image from its header (a
+        /// picture's extent is the picture: its pixels are not decoded). Text is checked as the
+        /// readers check it, an image only as far as its pixel data. A pattern that reading refuses
+        /// as empty measures 0 × 0 at (0, 0).
+        /// </summary>
+        public static PatternExtent Measure(byte[] data) => Measure(Recognize(data));
+
+        /// <summary>Text (a string, say from the clipboard) measured as a file's text.</summary>
+        public static PatternExtent Measure(string text) => Measure(Recognize(text));
 
         /// <summary>
         /// A two-state pattern file of any format in a HashLife universe (spec/formats.md
@@ -236,17 +299,44 @@ namespace HeatonLife
             public readonly long Length;
         }
 
-        /// <summary>A plaintext or Life 1.0x file's live cells, with what else it says.</summary>
+        /// <summary>A plaintext or Life 1.0x file's live cells, with what else it says. A measure
+        /// keeps no run, only their bounding box.</summary>
         private sealed class LiveRuns
         {
+            private readonly bool _keep;
+
+            public LiveRuns(bool keep)
+            {
+                _keep = keep;
+            }
+
             public readonly List<LiveRun> Runs = new List<LiveRun>();
             public long Width;
             public long Height;
             public string? Rule;
             public PatternMetadata Metadata = PatternMetadata.Empty;
+
+            /// <summary>The live cells' bounding box, widened as each run arrives; null without any.</summary>
+            public CellBox? Box;
+
+            public void Add(LiveRun run)
+            {
+                if (_keep)
+                    Runs.Add(run);
+                BigInteger last = run.X + run.Length - 1;
+                if (Box == null)
+                {
+                    Box = new CellBox(run.X, run.Y, last, run.Y);
+                    return;
+                }
+                CellBox b = Box.Value;
+                Box = new CellBox(
+                    BigInteger.Min(b.X0, run.X), BigInteger.Min(b.Y0, run.Y), BigInteger.Max(b.X1, last),
+                    BigInteger.Max(b.Y1, run.Y));
+            }
         }
 
-        private static void RowRuns(string row, BigInteger x, BigInteger y, int number, bool plaintext, List<LiveRun> runs)
+        private static void RowRuns(string row, BigInteger x, BigInteger y, int number, bool plaintext, LiveRuns runs)
         {
             int start = -1;
             for (int i = 0; i < row.Length; i++)
@@ -273,11 +363,12 @@ namespace HeatonLife
                 runs.Add(new LiveRun(x + start, y, row.Length - start));
         }
 
-        private static LiveRuns Plaintext(string text)
+        private static LiveRuns Plaintext(string text, bool keep)
         {
             var notes = new MetadataReader();
-            var rows = new List<(int Number, string Row)>();
+            var result = new LiveRuns(keep);
             List<string> lines = TextLines.Split(text);
+            long rows = 0;
             for (int i = 0; i < lines.Count; i++)
             {
                 string stripped = TextLines.Strip(lines[i]);
@@ -290,19 +381,16 @@ namespace HeatonLife
                         notes.Author(body.Substring(7));
                     else
                         notes.Comment(body);
+                    continue;
                 }
-                else
+                string row = TextLines.StripEnd(lines[i]);
+                RowRuns(row, BigInteger.Zero, rows, i + 1, plaintext: true, result);
+                rows++;
+                if (row.Length > 0)
                 {
-                    rows.Add((i + 1, TextLines.StripEnd(lines[i])));
+                    result.Width = Math.Max(result.Width, row.Length);
+                    result.Height = rows; // blank lines at the end are not rows
                 }
-            }
-            while (rows.Count > 0 && rows[rows.Count - 1].Row.Length == 0)
-                rows.RemoveAt(rows.Count - 1); // blank lines at the end are not rows
-            var result = new LiveRuns { Height = rows.Count };
-            for (int y = 0; y < rows.Count; y++)
-            {
-                RowRuns(rows[y].Row, BigInteger.Zero, y, rows[y].Number, plaintext: true, result.Runs);
-                result.Width = Math.Max(result.Width, rows[y].Row.Length);
             }
             result.Metadata = notes.Result();
             return result;
@@ -377,14 +465,14 @@ namespace HeatonLife
         }
 
         /// <summary>Life 1.05 (<paramref name="blocks"/>: #P blocks of rows) or Life 1.06 (a cell a line).</summary>
-        private static LiveRuns Life(string text, bool blocks)
+        private static LiveRuns Life(string text, bool blocks, bool keep)
         {
             List<string> lines = TextLines.Split(text);
             int header = 0;
             while (TextLines.Strip(lines[header]).Length == 0)
                 header++;
             var notes = new MetadataReader();
-            var result = new LiveRuns();
+            var result = new LiveRuns(keep);
             BigInteger bx = BigInteger.Zero, by = BigInteger.Zero;
             long row = 0;
             for (int i = header + 1; i < lines.Count; i++)
@@ -416,41 +504,26 @@ namespace HeatonLife
                 }
                 else if (blocks)
                 {
-                    RowRuns(TextLines.StripEnd(lines[i]), bx, by + row, number, plaintext: false, result.Runs);
+                    RowRuns(TextLines.StripEnd(lines[i]), bx, by + row, number, plaintext: false, result);
                     row++;
                 }
                 else if (stripped.Length > 0)
                 {
                     var (x, y) = Cell(stripped, number, "a cell");
-                    result.Runs.Add(new LiveRun(x, y, 1));
+                    result.Add(new LiveRun(x, y, 1));
                 }
             }
             result.Metadata = notes.Result();
             return result;
         }
 
-        private static LiveRuns Runs(Recognized found) => found.Format switch
+        private static LiveRuns Runs(Recognized found, bool keep = true) => found.Format switch
         {
-            PatternFormat.Plaintext => Plaintext(found.Text!),
-            PatternFormat.Life105 => Life(found.Text!, blocks: true),
-            PatternFormat.Life106 => Life(found.Text!, blocks: false),
+            PatternFormat.Plaintext => Plaintext(found.Text!, keep),
+            PatternFormat.Life105 => Life(found.Text!, blocks: true, keep),
+            PatternFormat.Life106 => Life(found.Text!, blocks: false, keep),
             _ => throw new InvalidOperationException($"{FormatName(found.Format)} is not read as runs"),
         };
-
-        private static CellBox? Box(List<LiveRun> runs)
-        {
-            if (runs.Count == 0)
-                return null;
-            BigInteger x0 = runs[0].X, y0 = runs[0].Y, x1 = runs[0].X + runs[0].Length - 1, y1 = runs[0].Y;
-            foreach (LiveRun run in runs)
-            {
-                x0 = BigInteger.Min(x0, run.X);
-                y0 = BigInteger.Min(y0, run.Y);
-                x1 = BigInteger.Max(x1, run.X + run.Length - 1);
-                y1 = BigInteger.Max(y1, run.Y);
-            }
-            return new CellBox(x0, y0, x1, y1);
-        }
 
         // ---- reading into a grid ------------------------------------------------------------
 
@@ -524,7 +597,7 @@ namespace HeatonLife
                 byte[] grid = Grid(live.Runs, 0, 0, (int)live.Width, (int)live.Height);
                 return new PatternFile(format, grid, (int)live.Width, (int)live.Height, 0, 0, live.Rule, 0, live.Metadata);
             }
-            CellBox? liveBox = Box(live.Runs);
+            CellBox? liveBox = live.Box;
             if (liveBox == null)
                 throw new FormatException("the pattern has no live cells");
             CellBox box = liveBox.Value;
@@ -564,6 +637,61 @@ namespace HeatonLife
                 universe.Generation, metadata);
         }
 
+        // ---- measuring --------------------------------------------------------------------------
+
+        private static PatternExtent Measure(Recognized found)
+        {
+            PatternFormat format = found.Format;
+            if (format == PatternFormat.Png || format == PatternFormat.Bmp)
+            {
+                var (width, height) = format == PatternFormat.Png
+                    ? PngGrid.MeasureLive(found.Data!)
+                    : PatternImages.BmpMeasure(found.Data!);
+                return new PatternExtent(format, width, height, 0, 0, null, 0, PatternMetadata.Empty, twoState: true);
+            }
+            if (format == PatternFormat.Rle)
+                return MeasureRle(found.Text!);
+            if (format == PatternFormat.Macrocell)
+            {
+                CellBox? box = Macrocell.Measure(
+                    found.Text!, out string rule, out BigInteger generation, out PatternMetadata metadata);
+                return Boxed(format, box, rule, generation, metadata);
+            }
+            LiveRuns live = Runs(found, keep: false);
+            if (format == PatternFormat.Plaintext)
+            {
+                bool empty = live.Width == 0 || live.Height == 0;
+                return new PatternExtent(
+                    format, empty ? 0 : live.Width, empty ? 0 : live.Height, 0, 0, null, 0, live.Metadata, twoState: true);
+            }
+            return Boxed(format, live.Box, live.Rule, 0, live.Metadata);
+        }
+
+        /// <summary>The extent of a format whose grid is its live cells' bounding box.</summary>
+        private static PatternExtent Boxed(
+            PatternFormat format, CellBox? found, string? rule, BigInteger generation, PatternMetadata metadata)
+        {
+            if (found == null)
+                return new PatternExtent(format, 0, 0, 0, 0, rule, generation, metadata, twoState: true);
+            CellBox box = found.Value;
+            return new PatternExtent(
+                format, box.X1 - box.X0 + 1, box.Y1 - box.Y0 + 1, box.X0, box.Y0, rule, generation, metadata,
+                twoState: true);
+        }
+
+        private static PatternExtent MeasureRle(string text)
+        {
+            // The #CXRLE line: position and generation, checked as a read checks them.
+            Patterns.Cxrle(text, out BigInteger x, out BigInteger y, out BigInteger generation);
+            RleExtent extent = Patterns.RleMeasure(text);
+            BigInteger width = extent.Width, height = extent.Height;
+            if (width.IsZero || height.IsZero)
+                width = height = x = y = BigInteger.Zero;
+            return new PatternExtent(
+                PatternFormat.Rle, width, height, x, y, extent.Rule, generation, Patterns.RleMetadata(text),
+                twoState: !extent.Extended);
+        }
+
         // ---- reading into the unbounded universe -----------------------------------------------
 
         private static PatternUniverse ReadUniverse(Recognized found, int maxMemoryMb)
@@ -590,14 +718,15 @@ namespace HeatonLife
             }
             LiveRuns live = Runs(found);
             var universe = new HashLife(live.Rule ?? "B3/S23", maxMemoryMb);
-            Place(universe, live.Runs);
+            Place(universe, live);
             return new PatternUniverse(format, universe, live.Metadata);
         }
 
         /// <summary>Paste live runs, refusing any cell outside the editing box (spec/hashlife.md).</summary>
-        private static void Place(HashLife universe, List<LiveRun> runs)
+        private static void Place(HashLife universe, LiveRuns live)
         {
-            CellBox? found = Box(runs);
+            List<LiveRun> runs = live.Runs;
+            CellBox? found = live.Box;
             if (found == null)
                 return;
             CellBox box = found.Value;

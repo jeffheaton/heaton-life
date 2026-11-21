@@ -126,6 +126,29 @@ makes the file two-state.
   letter set as the bare digit, and MAP strings without padding and with their unused bits
   zero. B0 rules still run as written on grids and are still refused by HashLife.
 
+- **Measuring any pattern file before reading it** (`measure_pattern`, .NET
+  `PatternFiles.Measure`, giving a `PatternExtent`; [spec/formats.md](spec/formats.md)
+  "Measuring"): what an untrimmed `read_pattern` / `PatternFiles.Read` would give, except
+  the cells (the format, the grid's size and position, the rule, the generation, and the
+  metadata), and whether the file is two-state, all found without making the grid. RLE is
+  measured by its counted extent, plaintext by its rows, Life 1.05 and 1.06 by their cells'
+  coordinates, Macrocell from its tree without building a universe (the Caterpillar and
+  Annelid each in under a second in .NET), and PNG and BMP from their headers: a picture's extent
+  is the whole picture, and its pixels are not decoded. Gzip around any of them is fine. A
+  file too large for any grid can now be sent to HashLife, or refused, by its size, before
+  a reader asks for memory.
+- **Turned rectangles for grids** (`turned_rect`, .NET `Patterns.TurnedRect`;
+  [spec/patterns.md](spec/patterns.md) "Editing a region"): the rectangle a quarter turn
+  about its center sends a rectangle to, for any integers. It is the rectangle HashLife's
+  `rotate_rect` / `RotateRect` returns, by one shared formula, so a grid that pastes
+  `rotate90` (or `rotate90_ccw`) of a region there turns it onto the same cells as the
+  unbounded world.
+- **Why a rule is refused, without an exception** (`try_compile_rule`, .NET
+  `RuleString.TryCompile(text, out rule, out reason)`; [spec/rules.md](spec/rules.md)
+  "Reasons"): the compiled rule, or the reason for the first problem in the text, such as
+  `expected '/' after the birth counts`. Every reason is listed in the spec and gives the
+  same text in both ports; compiling's error message carries the same reason.
+
 ### Changed
 
 - **Canonical RLE writes a run of k ≥ 2 row ends as one `k$`** (`rle_encode`,
@@ -146,6 +169,10 @@ makes the file two-state.
   `Patterns.RleEncode`), so the header reads back as the same rule however it was spelled:
   `b3 / s32` is written `B3/S23`. It used to be written as given, and a rule spelled with
   spaces read back as `B3` in the extended dialect. Any other rule is written as given.
+- Python: a refused rule's message now reads as .NET's always has: it quotes the text as
+  written, not as a Python literal, and names the first letter its digit doesn't define
+  (`k is not a letter class of 1` for `B1kn/S`, which used to say `kn`). The two ports now
+  give the same reason for every text.
 - `parse_rule` (.NET `RuleString.Parse`) still gives the birth and survival counts of an
   outer-totalistic Moore rule; for a rule that has none, such as an isotropic or hexagonal
   one, it raises (throws) and points to `compile_rule` (`RuleString.Compile`).

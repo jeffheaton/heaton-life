@@ -17,6 +17,7 @@ import numpy as np
 import pytest
 
 from heaton_life.ca.hashlife import HashLife
+from heaton_life.init import measure_pattern
 
 pytestmark = pytest.mark.slow
 
@@ -26,14 +27,18 @@ CATERPILLAR = (11_967_399, (0, 0, 4194, 330_720))  # population, inclusive box
 ANNELID = (168_807_151, (-3_511_772, -224, 1_653_126, 16_698_877))
 
 
-def _load(name: str, budget: int = BUDGET_MB) -> HashLife:
+def _path(name: str) -> Path:
     cache = os.environ.get("HEATON_LIFE_PATTERNS")
     if not cache:
         pytest.skip("HEATON_LIFE_PATTERNS is not set; run tools/fetch_patterns.py")
     path = Path(cache) / name
     if not path.is_file():
         pytest.skip(f"{name} is not in {cache}; run tools/fetch_patterns.py")
-    return HashLife.from_file(path, max_memory_mb=budget)
+    return path
+
+
+def _load(name: str, budget: int = BUDGET_MB) -> HashLife:
+    return HashLife.from_file(_path(name), max_memory_mb=budget)
 
 
 def _regions(u: HashLife, box: tuple[int, int, int, int], n: int) -> list[list[int]]:
@@ -58,6 +63,18 @@ def _live_cell(u: HashLife, x0: int, y0: int, x1: int, y1: int) -> tuple[int, in
             mid = (y0 + y1) // 2
             y0, y1 = (y0, mid) if u.population_in(x0, y0, x1, mid) else (mid + 1, y1)
     return x0, y0
+
+
+@pytest.mark.parametrize(
+    "name,box", [("caterpillar.mc", CATERPILLAR[1]), ("annelid.mc.gz", ANNELID[1])]
+)
+def test_a_giant_measures_to_the_box_it_loads_to(name: str, box: tuple[int, int, int, int]) -> None:
+    """spec/formats.md "Measuring": the box found from the tree alone, with no universe and
+    no memory budget, is the box the universe loads to."""
+    extent = measure_pattern(_path(name).read_bytes())
+    x0, y0, x1, y1 = box
+    assert (extent.format, extent.x, extent.y) == ("macrocell", x0, y0)
+    assert (extent.width, extent.height) == (x1 - x0 + 1, y1 - y0 + 1)
 
 
 def test_caterpillar_lands_at_the_origin() -> None:

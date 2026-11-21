@@ -1,0 +1,20 @@
+{
+  "family": "formats",
+  "format": "png",
+  "generation": "0",
+  "height": "3",
+  "input": "input.png.gz",
+  "kind": "measure",
+  "metadata": {
+    "author": null,
+    "comments": [],
+    "name": null
+  },
+  "rule": null,
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "two_state": true,
+  "width": "10",
+  "x": "0",
+  "y": "0"
+}

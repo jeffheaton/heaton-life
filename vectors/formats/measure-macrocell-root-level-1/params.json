@@ -1,0 +1,20 @@
+{
+  "family": "formats",
+  "format": "macrocell",
+  "generation": "0",
+  "height": "2",
+  "input": "input.mc",
+  "kind": "measure",
+  "metadata": {
+    "author": null,
+    "comments": [],
+    "name": null
+  },
+  "rule": "B3/S23",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "two_state": true,
+  "width": "2",
+  "x": "-1",
+  "y": "0"
+}

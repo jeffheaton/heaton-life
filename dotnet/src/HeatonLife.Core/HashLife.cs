@@ -213,7 +213,9 @@ namespace HeatonLife
         /// <summary>Garbage collections run so far.</summary>
         public int Collections => _store.Collections;
 
-        private static string CheckedRule(string rule)
+        /// <summary>The canonical form of a rule a universe can run: any Life-like rule
+        /// (spec/rules.md) without B0; anything else throws <see cref="ArgumentException"/>.</summary>
+        internal static string CheckedRule(string rule)
         {
             if (rule == null)
                 throw new ArgumentNullException(nameof(rule));
@@ -724,34 +726,23 @@ namespace HeatonLife
         /// return the rectangle they land on (spec/hashlife.md "Rectangle transforms"): the new
         /// rectangle takes the turned cells, live or dead, and the rest of the old one dies. Both
         /// rectangles must lie in the editing box. The turn works on the tree, so no dense copy is
-        /// made, whatever the rectangle's area or population.
+        /// made, whatever the rectangle's area or population. The new rectangle is
+        /// <see cref="Patterns.TurnedRect(BigInteger, BigInteger, BigInteger, BigInteger, bool)"/>'s,
+        /// which a grid turns a region onto.
         /// </summary>
         public CellBox RotateRect(long x0, long y0, long x1, long y1, bool clockwise = true)
         {
             CheckEditRect(x0, y0, x1, y1);
-            (long sum, long diff) = TurnCenter(x0, y0, x1, y1);
-            long nx0, ny0, nx1, ny1, dx, dy;
-            if (clockwise)
-            {
-                nx0 = sum - y1;
-                ny0 = x0 + diff;
-                nx1 = sum - y0;
-                ny1 = x1 + diff;
-                dx = sum; // in tree coordinates, after turning about the box node's center
-                dy = diff - 1;
-            }
-            else
-            {
-                nx0 = y0 - diff;
-                ny0 = sum - x1;
-                nx1 = y1 - diff;
-                ny1 = sum - x0;
-                dx = 1 - diff;
-                dy = sum;
-            }
+            CellBox turned = Patterns.TurnedRect(x0, y0, x1, y1, clockwise);
+            (BigInteger s, BigInteger d) = Patterns.TurnCenter(x0, y0, x1, y1);
+            long sum = (long)s, diff = (long)d; // the editing box keeps both well inside a long
+            long nx0 = (long)turned.X0, ny0 = (long)turned.Y0, nx1 = (long)turned.X1, ny1 = (long)turned.Y1;
+            // The shift in tree coordinates, after turning about the box node's center.
+            long dx = clockwise ? sum : 1 - diff;
+            long dy = clockwise ? diff - 1 : sum;
             CheckBox(nx0, ny0, nx1, ny1);
             MoveRect(x0, y0, x1, y1, nx0, ny0, nx1, ny1, clockwise ? TurnClockwise : TurnCounterClockwise, dx, dy);
-            return new CellBox(nx0, ny0, nx1, ny1);
+            return turned;
         }
 
         /// <summary>Mirror the inclusive rectangle's cells in place: left-right (x → x0 + x1 − x)
@@ -784,23 +775,6 @@ namespace HeatonLife
         public void AdvanceOutside(
             long x0, long y0, long x1, long y1, BigInteger n, CancellationToken cancellationToken = default)
             => AdvanceRegion(x0, y0, x1, y1, n, outside: true, cancellationToken);
-
-        /// <summary>
-        /// The (s, d) of a quarter turn of the inclusive rectangle (spec/hashlife.md "Rectangle
-        /// transforms"): clockwise sends (x, y) to (s − y, x + d), counter-clockwise to
-        /// (y − d, s − x). The center itself when it is a cell or a cell corner; otherwise the
-        /// one of the two cells it lies between whose x + y is even, so turns never drift.
-        /// </summary>
-        internal static (long S, long D) TurnCenter(long x0, long y0, long x1, long y1)
-        {
-            long sx = x0 + x1, sy = y0 + y1; // twice the center
-            if (((sx - sy) & 1) == 0)
-                return ((sx + sy) >> 1, (sy - sx) >> 1);
-            long s = (sx + sy + 1) >> 1; // floor, then down to the even candidate
-            if ((s & 1) != 0)
-                s--;
-            return (sx & 1) != 0 ? (s, sy - s) : (s, s - sx);
-        }
 
         /// <summary>Every cell dies; the generation stays.</summary>
         public void Clear()

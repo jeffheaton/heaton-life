@@ -9,6 +9,7 @@ dead boundaries read 0 / clip.
 
 from __future__ import annotations
 
+import operator
 from typing import Any, Literal
 
 import numpy as np
@@ -135,6 +136,37 @@ def check_region(width: int, height: int, x0: int, y0: int, x1: int, y1: int) ->
         )
 
 
+def turn_center(x0: int, y0: int, x1: int, y1: int) -> tuple[int, int]:
+    """(s, d) of a quarter turn of the inclusive rectangle (spec/hashlife.md "Rectangle
+    transforms"): clockwise sends (x, y) to (s − y, x + d), counter-clockwise to
+    (y − d, s − x). The center itself when it is a cell or a cell corner; otherwise the cell
+    with an even x + y of the two it lies between, so turns never drift."""
+    sx, sy = x0 + x1, y0 + y1  # twice the center
+    if (sx - sy) % 2 == 0:
+        return (sx + sy) // 2, (sy - sx) // 2
+    s = (sx + sy + 1) // 2
+    if s % 2:
+        s -= 1
+    return (s, sy - s) if sx % 2 else (s, s - sx)
+
+
+def turned_rect(
+    x0: int, y0: int, x1: int, y1: int, *, clockwise: bool = True
+) -> tuple[int, int, int, int]:
+    """The rectangle a quarter turn of the inclusive rectangle about its center lands on
+    (spec/patterns.md "Editing a region"), for any integers and without turning anything:
+    the rectangle HashLife's ``rotate_rect`` returns. A grid turns a region onto it by
+    pasting ``rotate90`` (or ``rotate90_ccw``) of the region at its top-left. Raises
+    ValueError for an empty rectangle (x1 < x0 or y1 < y0)."""
+    x0, y0, x1, y1 = (operator.index(v) for v in (x0, y0, x1, y1))
+    if x1 < x0 or y1 < y0:
+        raise ValueError(f"empty rectangle ({x0}, {y0})..({x1}, {y1})")
+    s, d = turn_center(x0, y0, x1, y1)
+    if clockwise:
+        return s - y1, x0 + d, s - y0, x1 + d
+    return y0 - d, s - x1, y1 - d, s - x0
+
+
 def fill_random(
     grid: NDArray[np.uint8], x0: int, y0: int, x1: int, y1: int, *, density: float, seed: int
 ) -> None:
@@ -152,9 +184,7 @@ def fill_random(
     grid[y0 : y1 + 1, x0 : x1 + 1] = soup((x1 - x0 + 1, y1 - y0 + 1), density=density, seed=seed)
 
 
-def clear(
-    grid: NDArray[Any], x0: int, y0: int, x1: int, y1: int, blank: Any
-) -> None:
+def clear(grid: NDArray[Any], x0: int, y0: int, x1: int, y1: int, blank: Any) -> None:
     """spec/patterns.md "Clear": restore an inclusive rectangle to the family blank.
 
     ``grid`` is indexed ``[y, x]`` with any trailing channel axis, and ``blank`` is
@@ -168,14 +198,13 @@ def clear(
     if x0 > x1 or y0 > y1:
         raise ValueError(f"clear region is empty: ({x0}, {y0})..({x1}, {y1})")
     if x0 < 0 or y0 < 0 or x1 >= width or y1 >= height:
-        raise ValueError(
-            f"clear region ({x0}, {y0})..({x1}, {y1}) is outside {width}x{height}"
-        )
+        raise ValueError(f"clear region ({x0}, {y0})..({x1}, {y1}) is outside {width}x{height}")
     grid[y0 : y1 + 1, x0 : x1 + 1] = blank
 
 
-def compatible(pattern_family: str, target_family: str, pattern: CellArray,
-               target_states: int | None = None) -> str | None:
+def compatible(
+    pattern_family: str, target_family: str, pattern: CellArray, target_states: int | None = None
+) -> str | None:
     """Spec compatibility check: the rejection reason, or None when stampable.
 
     Patterns are family-bound (a glider cannot enter Wireworld); cyclic

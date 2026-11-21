@@ -398,5 +398,119 @@ namespace HeatonLife.Tests
         [Fact]
         public void ReadTimelineNeedsFrames()
             => Assert.Throws<FormatException>(() => Macrocell.ReadTimeline("[M2]\n**$**$\n"));
+
+
+        // ---- measuring (spec/formats.md "Measuring") ------------------------------------------
+
+        public static IEnumerable<object[]> ReadInputs()
+        {
+            string formats = Path.Combine(TestPaths.VectorRoot(), "formats");
+            foreach (string dir in Directory.GetDirectories(formats, "read-*").OrderBy(d => d, StringComparer.Ordinal))
+            {
+                foreach (string file in Directory.GetFiles(dir, "input.*"))
+                    yield return new object[] { Path.GetFileName(dir), Path.GetFileName(file) };
+            }
+        }
+
+        private static bool Refuses(Action action)
+        {
+            try
+            {
+                action();
+                return false;
+            }
+            catch (Exception e) when (e is FormatException || e is ArgumentException)
+            {
+                return true;
+            }
+        }
+
+        /// <summary>Every read case's input measures as an untrimmed read without a limit gives it;
+        /// one that reading refuses is refused by measuring too, unless it is empty (0 x 0) or a
+        /// picture whose pixels are what is wrong.</summary>
+        [Theory]
+        [MemberData(nameof(ReadInputs))]
+        public void MeasuringAgreesWithReading(string caseName, string input)
+        {
+            byte[] data = File.ReadAllBytes(Path.Combine(TestPaths.VectorRoot(), "formats", caseName, input));
+            PatternFile? found = null;
+            if (Refuses(() => found = PatternFiles.Read(data, null)))
+            {
+                PatternExtent? measured = null;
+                if (Refuses(() => measured = PatternFiles.Measure(data)))
+                    return;
+                Assert.True(
+                    measured!.Width * measured.Height == 0 || measured.Format == PatternFormat.Png
+                        || measured.Format == PatternFormat.Bmp,
+                    caseName);
+                return;
+            }
+            PatternExtent extent = PatternFiles.Measure(data);
+            Assert.Equal(found!.Format, extent.Format);
+            Assert.Equal((found.X, found.Y), (extent.X, extent.Y));
+            Assert.Equal((found.Rule, found.Generation), (extent.Rule, extent.Generation));
+            Assert.Equal(found.Metadata, extent.Metadata);
+            Assert.Equal(new BigInteger(found.Width), extent.Width);
+            Assert.Equal(new BigInteger(found.Height), extent.Height);
+            bool extended = found.Format == PatternFormat.Rle
+                && Patterns.RleMeasure(PatternText.Decode(PatternText.Inflate(data))).Extended;
+            Assert.Equal(!extended, extent.TwoState);
+        }
+
+        [Fact]
+        public void AMacrocellFileMeasuresAsItsUniverse()
+        {
+            // Measuring from the tree gives the bounding box, rule and generation the universe has,
+            // for patterns near the origin and far out, written by the canonical writer.
+            var rng = new Pcg32(1121); // test input only
+            for (int trial = 0; trial < 40; trial++)
+            {
+                var u = new HashLife(trial % 2 == 1 ? "B36/S23" : "B3/S23");
+                long far = (long)(rng.NextU32() % 999_999_000u) * (trial % 3 != 0 ? -1 : 1);
+                int pieces = 1 + (int)(rng.NextU32() % 3);
+                for (int k = 0; k < pieces; k++)
+                {
+                    int w = 1 + (int)(rng.NextU32() % 8), h = 1 + (int)(rng.NextU32() % 8);
+                    var cells = new byte[w * h];
+                    for (int i = 0; i < cells.Length; i++)
+                        cells[i] = rng.NextU32() % 5 < 2 ? (byte)1 : (byte)0;
+                    long x = (long)(rng.NextU32() % 80) - 40, y = (long)(rng.NextU32() % 80) - 40;
+                    u.SetRect(x + (trial % 4 == 0 ? far : 0), y, cells, w, h, HashLifePasteMode.Or);
+                }
+                u.Step(rng.NextU32() % 5);
+                PatternExtent extent = PatternFiles.Measure(u.ToMacrocell(new PatternMetadata("trial")));
+                CellBox? found = u.BoundingBox;
+                if (found == null)
+                {
+                    Assert.Equal((BigInteger.Zero, BigInteger.Zero), (extent.Width, extent.Height));
+                    Assert.Equal((BigInteger.Zero, BigInteger.Zero), (extent.X, extent.Y));
+                }
+                else
+                {
+                    CellBox box = found.Value;
+                    Assert.Equal((box.X0, box.Y0), (extent.X, extent.Y));
+                    Assert.Equal((box.X1 - box.X0 + 1, box.Y1 - box.Y0 + 1), (extent.Width, extent.Height));
+                }
+                Assert.Equal((u.Rule, u.Generation), (extent.Rule, extent.Generation));
+                Assert.Equal("trial", extent.Metadata.Name);
+                Assert.True(extent.TwoState);
+            }
+        }
+
+        [Fact]
+        public void MeasuringMakesNoGrid()
+        {
+            // Sizes no memory holds measure exactly: an RLE run of 2^200 cells, Life 1.06 cells
+            // 10^40 apart.
+            BigInteger run = BigInteger.One << 200;
+            string rle = "x = 1, y = 1\no" + run.ToString(System.Globalization.CultureInfo.InvariantCulture) + "bo!\n";
+            PatternExtent extent = PatternFiles.Measure(rle);
+            Assert.Equal((run + 2, BigInteger.One), (extent.Width, extent.Height));
+            BigInteger apart = BigInteger.Pow(10, 40);
+            string far = apart.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            PatternExtent cells = PatternFiles.Measure("#Life 1.06\n0 0\n" + far + " -" + far + "\n");
+            Assert.Equal((apart + 1, apart + 1, -apart), (cells.Width, cells.Height, cells.Y));
+            Assert.True(Refuses(() => PatternFiles.Read(rle, null)));
+        }
     }
 }

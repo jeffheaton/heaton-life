@@ -187,21 +187,34 @@ namespace HeatonLife
         };
 
         /// <summary>
-        /// A pattern image's cells (spec/formats.md "Images"), 1 alive and 0 dead: any valid PNG,
-        /// every color type and bit depth, interlaced or not. White is every color sample at its
-        /// largest (a 16-bit sample by its high byte), or a palette entry of (255, 255, 255);
-        /// alpha and tRNS are never read. An image past <paramref name="maxCells"/> is refused
-        /// before its pixels are decoded.
+        /// The image's size as <see cref="DecodeLive"/> finds it, its chunks checked as far as
+        /// the pixel data but no pixel decoded (spec/formats.md "Measuring").
         /// </summary>
-        internal static byte[] DecodeLive(byte[] png, long? maxCells, out int width, out int height)
+        internal static (long Width, long Height) MeasureLive(byte[] png)
+        {
+            ReadChunks(png, null, out long width, out long height, out _, out _, out _, out _);
+            return (width, height);
+        }
+
+        /// <summary>
+        /// Walk a PNG's chunks to <c>IEND</c>, checking them as far as the pixel data
+        /// (spec/formats.md "Images"): the signature, <c>IHDR</c> first and valid, <c>PLTE</c>,
+        /// an <c>IDAT</c> present, a palette for an indexed image. The <c>IDAT</c> bytes go to
+        /// <paramref name="idat"/> when one is given.
+        /// </summary>
+        private static void ReadChunks(
+            byte[] png, MemoryStream? idat, out long imageWidth, out long imageHeight, out int depth, out int color,
+            out int interlace, out byte[]? palette)
         {
             if (!HasSignature(png))
                 throw new FormatException("not a PNG: bad signature");
-            int depth = 0, color = 0, interlace = 0;
-            long imageWidth = 0, imageHeight = 0;
+            depth = 0;
+            color = 0;
+            interlace = 0;
+            imageWidth = 0;
+            imageHeight = 0;
+            palette = null;
             bool sawHeader = false, sawData = false;
-            byte[]? palette = null;
-            using var idat = new MemoryStream();
             long position = Signature.Length;
             while (true)
             {
@@ -242,7 +255,7 @@ namespace HeatonLife
                 else if (type == "IDAT")
                 {
                     sawData = true;
-                    idat.Write(png, (int)body, (int)length);
+                    idat?.Write(png, (int)body, (int)length);
                 }
                 else if (type == "IEND")
                 {
@@ -254,6 +267,20 @@ namespace HeatonLife
                 throw new FormatException("not a PNG: no IDAT");
             if (color == 3 && palette == null)
                 throw new FormatException("not a PNG: an indexed image without PLTE");
+        }
+
+        /// <summary>
+        /// A pattern image's cells (spec/formats.md "Images"), 1 alive and 0 dead: any valid PNG,
+        /// every color type and bit depth, interlaced or not. White is every color sample at its
+        /// largest (a 16-bit sample by its high byte), or a palette entry of (255, 255, 255);
+        /// alpha and tRNS are never read. An image past <paramref name="maxCells"/> is refused
+        /// before its pixels are decoded.
+        /// </summary>
+        internal static byte[] DecodeLive(byte[] png, long? maxCells, out int width, out int height)
+        {
+            using var idat = new MemoryStream();
+            ReadChunks(png, idat, out long imageWidth, out long imageHeight, out int depth, out int color,
+                out int interlace, out byte[]? palette);
             if (maxCells != null && imageWidth * imageHeight > maxCells.Value)
                 throw new ArgumentException(
                     $"the image is {imageWidth} x {imageHeight} pixels, past the limit of {maxCells.Value} cells");

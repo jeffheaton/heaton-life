@@ -1,0 +1,23 @@
+{
+  "family": "formats",
+  "format": "life-1.05",
+  "generation": "0",
+  "height": "5",
+  "input": "input.lif",
+  "kind": "measure",
+  "metadata": {
+    "author": null,
+    "comments": [
+      "Two blocks of rows,",
+      "placed by #P."
+    ],
+    "name": null
+  },
+  "rule": "B3/S23",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "two_state": true,
+  "width": "7",
+  "x": "-1",
+  "y": "-3"
+}

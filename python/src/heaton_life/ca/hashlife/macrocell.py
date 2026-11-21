@@ -11,10 +11,17 @@ from __future__ import annotations
 import dataclasses
 import itertools
 from collections.abc import Sequence
+from typing import Protocol
 
 from heaton_life.ca.hashlife.leaves import SQUARE4, compose
 from heaton_life.ca.hashlife.store import NodeStore
-from heaton_life.ca.hashlife.universe import DEFAULT_MEMORY_MB, MAX_LEVEL, HashLife, Snapshot
+from heaton_life.ca.hashlife.universe import (
+    DEFAULT_MEMORY_MB,
+    MAX_LEVEL,
+    HashLife,
+    Snapshot,
+    _hashlife_rule,
+)
 from heaton_life.core.decimal_text import digits_of, int_of_digits
 from heaton_life.init.metadata import (
     MetadataReader,
@@ -116,23 +123,57 @@ def _root(store: NodeStore, value: int, level: int) -> tuple[int, int]:
     return value, level
 
 
-def _parse(source: str | bytes, max_memory_mb: int) -> _Parsed:
+class _Nodes(Protocol):
+    """Where a file's nodes of level 3 and up go, as ids: a universe's store, or the boxes a
+    measure keeps. (Levels 1 and 2 are spread bitmaps in the leaf layout, made here.)"""
+
+    def leaf(self, bits: int) -> int:
+        """A level-3 node from its 8 × 8 bitmap (bit 8r + c is row r, column c)."""
+        ...
+
+    def empty(self, level: int) -> int: ...
+
+    def join(self, nw: int, ne: int, sw: int, se: int, level: int) -> int: ...
+
+    def rule(self, text: str) -> None:
+        """An ``#R`` line's rule; raises ValueError for one the universe can't run."""
+        ...
+
+
+@dataclasses.dataclass
+class _Lines:
+    """A file's lines read once: every node line as (value, level), ``#G``, the metadata,
+    and the timeline lines left for ``read_timeline``."""
+
+    nodes: list[tuple[int, int]]
+    generation: int
+    metadata: PatternMetadata
+    frames_lines: list[tuple[int, str]]
+    frame_lines: list[tuple[int, str]]
+
+
+def _lines(source: str | bytes) -> tuple[list[str], int]:
+    """The file's lines and the index of its ``[M2]`` header, checked."""
     lines = _text(source).splitlines()
     start = next((i for i, line in enumerate(lines) if line.strip()), len(lines))
     if start == len(lines) or not lines[start].strip().startswith("[M2]"):
         raise ValueError("not a Macrocell file: the first line must start with [M2]")
-    universe = HashLife(max_memory_mb=max_memory_mb)
-    store = universe._store
+    return lines, start
+
+
+def _read_lines(lines: list[str], start: int, tree: _Nodes) -> _Lines:
+    """Every line after the header, checked, its nodes built in ``tree`` (spec/macrocell.md
+    "Reading"): the one reading of the format, for a universe and for a measure alike."""
     generation = 0
     notes = MetadataReader()
     frames_lines: list[tuple[int, str]] = []
     frame_lines: list[tuple[int, str]] = []
-    # Each node as (value, level): a store id for level ≥ 3, a spread bitmap below.
+    # Each node as (value, level): a tree id for level ≥ 3, a spread bitmap below.
     nodes: list[tuple[int, int]] = []
 
     def child(index: int, level: int, number: int) -> int:
         if index == 0:
-            return store.empty(level) if level >= 3 else 0
+            return tree.empty(level) if level >= 3 else 0
         if not 0 < index <= len(nodes):
             raise ValueError(f"line {number}: node {index} is not defined yet")
         value, found = nodes[index - 1]
@@ -146,7 +187,7 @@ def _parse(source: str | bytes, max_memory_mb: int) -> _Parsed:
             continue
         if line[0] == "#":
             if line.startswith("#R"):
-                universe.rule = line[2:].strip()
+                tree.rule(line[2:].strip())
             elif line.startswith("#G"):
                 value = line[2:].strip()
                 if not _digits(value):
@@ -162,7 +203,7 @@ def _parse(source: str | bytes, max_memory_mb: int) -> _Parsed:
                 notes.hash_line(line)
             continue
         if line[0] in ".*$":
-            nodes.append((store.leaf(_leaf_bits(line, number)), 3))
+            nodes.append((tree.leaf(_leaf_bits(line, number)), 3))
             continue
         fields = line.split()
         if len(fields) != 5 or not all(_digits(f) for f in fields):
@@ -182,16 +223,116 @@ def _parse(source: str | bytes, max_memory_mb: int) -> _Parsed:
             nodes.append((q[0] | q[1] << 2 | q[2] << 16 | q[3] << 18, 2))
         elif level == 3:
             q = [child(i, 2, number) for i in (nw, ne, sw, se)]
-            nodes.append((store.leaf(compose(*q)), 3))
+            nodes.append((tree.leaf(compose(*q)), 3))
         elif level >= 4:
             kids = [child(i, level - 1, number) for i in (nw, ne, sw, se)]
-            nodes.append((store.join(*kids), level))
+            nodes.append((tree.join(kids[0], kids[1], kids[2], kids[3], level), level))
         else:
             raise ValueError(f"line {number}: level must be at least 1")
     if not nodes:
         raise ValueError("Macrocell file has no nodes")
-    universe._adopt(*_root(store, *nodes[-1]), generation)
-    return _Parsed(universe, notes.result(), nodes, frames_lines, frame_lines)
+    return _Lines(nodes, generation, notes.result(), frames_lines, frame_lines)
+
+
+class _StoreNodes:
+    """A file's nodes in a universe's store, its ``#R`` the universe's rule."""
+
+    def __init__(self, universe: HashLife) -> None:
+        self._universe = universe
+        self._store = universe._store
+
+    def leaf(self, bits: int) -> int:
+        return self._store.leaf(bits)
+
+    def empty(self, level: int) -> int:
+        return self._store.empty(level)
+
+    def join(self, nw: int, ne: int, sw: int, se: int, level: int) -> int:
+        return self._store.join(nw, ne, sw, se)
+
+    def rule(self, text: str) -> None:
+        self._universe.rule = text
+
+
+def _parse(source: str | bytes, max_memory_mb: int) -> _Parsed:
+    lines, start = _lines(source)
+    universe = HashLife(max_memory_mb=max_memory_mb)
+    read = _read_lines(lines, start, _StoreNodes(universe))
+    universe._adopt(*_root(universe._store, *read.nodes[-1]), read.generation)
+    return _Parsed(universe, read.metadata, read.nodes, read.frames_lines, read.frame_lines)
+
+
+Box = tuple[int, int, int, int]
+"""An inclusive box (x0, y0, x1, y1)."""
+
+
+def _bits_box(bits: int) -> Box | None:
+    """The live cells' box in a leaf-layout bitmap (bit 8r + c is row r, column c)."""
+    if not bits:
+        return None
+    rows = [r for r in range(8) if (bits >> (8 * r)) & 0xFF]
+    columns = 0
+    for r in rows:
+        columns |= (bits >> (8 * r)) & 0xFF
+    return (columns & -columns).bit_length() - 1, rows[0], columns.bit_length() - 1, rows[-1]
+
+
+class _BoxNodes:
+    """A file's nodes as their live cells' boxes, each relative to its node's top-left
+    corner; id 0 is every empty node. No universe is built (spec/formats.md "Measuring")."""
+
+    def __init__(self) -> None:
+        self.boxes: list[Box | None] = [None]
+        self.canonical = "B3/S23"
+
+    def leaf(self, bits: int) -> int:
+        self.boxes.append(_bits_box(bits))
+        return len(self.boxes) - 1
+
+    def empty(self, level: int) -> int:
+        return 0
+
+    def join(self, nw: int, ne: int, sw: int, se: int, level: int) -> int:
+        half = 1 << (level - 1)
+        box: Box | None = None
+        for node, dx, dy in ((nw, 0, 0), (ne, half, 0), (sw, 0, half), (se, half, half)):
+            part = self.boxes[node]
+            if part is None:
+                continue
+            x0, y0, x1, y1 = part[0] + dx, part[1] + dy, part[2] + dx, part[3] + dy
+            if box is not None:
+                x0, y0 = min(x0, box[0]), min(y0, box[1])
+                x1, y1 = max(x1, box[2]), max(y1, box[3])
+            box = (x0, y0, x1, y1)
+        self.boxes.append(box)
+        return len(self.boxes) - 1
+
+    def rule(self, text: str) -> None:
+        self.canonical = _hashlife_rule(text)
+
+
+def measure_macrocell(source: str | bytes) -> tuple[Box | None, str, int, PatternMetadata]:
+    """A Macrocell file's live cells' bounding box (or None without any) in the universe's
+    coordinates, its rule in canonical form, its generation and its metadata, read from its
+    tree without building a universe (spec/formats.md "Measuring"). Refuses what reading
+    refuses, but has no memory budget to run out of."""
+    lines, start = _lines(source)
+    tree = _BoxNodes()
+    read = _read_lines(lines, start, tree)
+    value, level = read.nodes[-1]
+    box = tree.boxes[value] if level >= 3 else _bits_box(value)
+    if box is None:
+        return None, tree.canonical, read.generation, read.metadata
+    # A level-k root covers x in [-2^(k-1), 2^(k-1) - 1] and y in [-2^(k-1) + 1, 2^(k-1)].
+    left = -(1 << (level - 1))
+    top = left + 1
+    x0, y0, x1, y1 = box
+    return (
+        (left + x0, top + y0, left + x1, top + y1),
+        tree.canonical,
+        read.generation,
+        read.metadata,
+    )
 
 
 def write_macrocell(universe: HashLife, metadata: PatternMetadata | None = None) -> str:

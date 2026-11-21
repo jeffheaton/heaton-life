@@ -39,6 +39,7 @@ from heaton_life.ca.hashlife.view import LifeView
 from heaton_life.ca.rulestring import compile_rule
 from heaton_life.core.params import Params
 from heaton_life.init.metadata import PatternMetadata
+from heaton_life.init.patterns import turn_center, turned_rect
 from heaton_life.init.seeding import soup
 
 EDIT_LIMIT = 1_000_000_000
@@ -179,20 +180,6 @@ def _check_count(n: int) -> None:
             f"than level {MAX_LEVEL}; step(n) takes n < 2^{MAX_LEVEL - 2} "
             '(spec/hashlife.md "Depth")'
         )
-
-
-def turn_center(x0: int, y0: int, x1: int, y1: int) -> tuple[int, int]:
-    """(s, d) of a quarter turn of the inclusive rectangle (spec/hashlife.md "Rectangle
-    transforms"): clockwise sends (x, y) to (s − y, x + d), counter-clockwise to
-    (y − d, s − x). The center itself when it is a cell or a cell corner; otherwise the cell
-    with an even x + y of the two it lies between, so turns never drift."""
-    sx, sy = x0 + x1, y0 + y1  # twice the center
-    if (sx - sy) % 2 == 0:
-        return (sx + sy) // 2, (sy - sx) // 2
-    s = (sx + sy + 1) // 2
-    if s % 2:
-        s -= 1
-    return (s, sy - s) if sx % 2 else (s, s - sx)
 
 
 class HashLife:
@@ -507,12 +494,9 @@ class HashLife:
         self._edit_rect(x0, y0, x1, y1)
         x0, y0, x1, y1 = _ints(x0, y0, x1, y1)
         s, d = turn_center(x0, y0, x1, y1)
-        if clockwise:
-            new = (s - y1, x0 + d, s - y0, x1 + d)
-            shift = (s, d - 1)  # in tree coordinates, after turning about the root's center
-        else:
-            new = (y0 - d, s - x1, y1 - d, s - x0)
-            shift = (1 - d, s)
+        new = turned_rect(x0, y0, x1, y1, clockwise=clockwise)  # what a grid's turn lands on
+        # The shift in tree coordinates, after turning about the root's center.
+        shift = (s, d - 1) if clockwise else (1 - d, s)
         check_box(*new)
         self._move_rect((x0, y0, x1, y1), new, "cw" if clockwise else "ccw", shift)
         return new

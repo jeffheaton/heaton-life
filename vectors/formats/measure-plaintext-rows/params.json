@@ -1,0 +1,22 @@
+{
+  "family": "formats",
+  "format": "plaintext",
+  "generation": "0",
+  "height": "6",
+  "input": "input.cells",
+  "kind": "measure",
+  "metadata": {
+    "author": null,
+    "comments": [
+      "indented comment"
+    ],
+    "name": "Rows"
+  },
+  "rule": null,
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "two_state": true,
+  "width": "5",
+  "x": "0",
+  "y": "0"
+}

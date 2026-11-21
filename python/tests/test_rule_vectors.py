@@ -1,6 +1,6 @@
 """Life-like rule conformance: replay vectors/rules/ — rule text to its canonical string,
-neighborhood and table, or an error (spec/rules.md). The .NET suite replays the same
-files."""
+neighborhood and table, or an error and, where a case pins one, its reason (spec/rules.md).
+The .NET suite replays the same files."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from heaton_life.ca.rulestring import compile_rule
+from heaton_life.ca.rulestring import compile_rule, try_compile_rule
 
 VECTOR_ROOT = Path(__file__).resolve().parents[2] / "vectors" / "rules"
 CASES = sorted(VECTOR_ROOT.glob("*/params.json"))
@@ -18,6 +18,7 @@ SPEC_VERSIONS = {"0.16.0"}
 _KEYS = {"spec_version", "family", "tier", "cases"}
 _RULE = {"input", "canonical", "neighborhood", "table"}
 _ERROR = {"input", "error"}
+_REASON = {"input", "error", "reason"}
 
 
 def _hex(table: bytes) -> str:
@@ -28,7 +29,7 @@ def _hex(table: bytes) -> str:
 def test_rule_vectors_exist() -> None:
     names = {case.parent.name for case in CASES}
     expected = {"totalistic", "isotropic", "isotropic-classes", "map", "hexagonal"}
-    assert expected | {"von-neumann", "errors"} <= names
+    assert expected | {"von-neumann", "errors", "reasons"} <= names
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda p: p.parent.name)
@@ -40,12 +41,18 @@ def test_rule_vector(case: Path) -> None:
     for entry in meta["cases"]:
         text = entry["input"]
         if entry.get("error"):
-            assert set(entry) == _ERROR
-            with pytest.raises(ValueError):
+            assert set(entry) in (_ERROR, _REASON)
+            with pytest.raises(ValueError) as raised:
                 compile_rule(text, presets=False)
+            rule, reason = try_compile_rule(text, presets=False)
+            assert rule is None and reason is not None, text
+            assert str(raised.value) == f"invalid rule '{text}': {reason} (spec/rules.md)"
+            if "reason" in entry:
+                assert reason == entry["reason"], text
             continue
         assert set(entry) == _RULE
         rule = compile_rule(text, presets=False)
+        assert try_compile_rule(text, presets=False) == (rule, None), text
         assert rule.canonical == entry["canonical"], text
         assert rule.neighborhood == entry["neighborhood"], text
         assert _hex(rule.table) == entry["table"], text

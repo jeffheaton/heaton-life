@@ -1,6 +1,7 @@
 """Pattern file conformance: replay vectors/formats/ — every format read into a grid and into
-the unbounded universe, detection, metadata read and written, and Macrocell timelines
-(spec/formats.md, spec/macrocell.md). Bit-exact; the .NET suite replays the same files."""
+the unbounded universe, measured without a grid, detection, metadata read and written, and
+Macrocell timelines (spec/formats.md, spec/macrocell.md). Bit-exact; the .NET suite replays
+the same files."""
 
 from __future__ import annotations
 
@@ -14,7 +15,13 @@ import pytest
 from PIL import Image
 
 from heaton_life.ca.hashlife import HashLife, read_timeline, read_universe, write_timeline
-from heaton_life.init import PatternMetadata, detect_format, read_pattern, rle_encode
+from heaton_life.init import (
+    PatternMetadata,
+    detect_format,
+    measure_pattern,
+    read_pattern,
+    rle_encode,
+)
 
 VECTOR_ROOT = Path(__file__).resolve().parents[2] / "vectors" / "formats"
 CASES = sorted(VECTOR_ROOT.glob("*/params.json"))
@@ -29,6 +36,9 @@ _KEYS = {
     | {"input", "error", "format", "metadata", "with_metadata", "rle", "rle_error"}
     | _STATE,
     "detect": _COMMON | {"inputs"},
+    "measure": _COMMON
+    | {"input", "error", "format", "width", "height", "x", "y", "rule", "generation"}
+    | {"metadata", "two_state"},
     "timeline-read": _COMMON
     | {"input", "error", "count", "first", "step", "metadata", "universe", "frames"},
     "timeline-write": _COMMON | {"input", "generations", "metadata", "timeline", "frames"},
@@ -113,6 +123,22 @@ def test_format_vector(case: Path) -> None:
         else:
             rle = found.universe.to_rle(found.metadata)
             assert rle == (d / meta["rle"]).read_text(encoding="utf-8")
+    elif kind == "measure":
+        data = (d / meta["input"]).read_bytes()
+        if meta.get("error"):
+            with pytest.raises(ValueError):
+                measure_pattern(data)
+            return
+        extent = measure_pattern(data)
+        assert extent.format == meta["format"]
+        assert (extent.width, extent.height) == (int(meta["width"]), int(meta["height"]))
+        assert (extent.x, extent.y) == (int(meta["x"]), int(meta["y"]))
+        assert extent.rule == meta["rule"]
+        assert extent.generation == int(meta["generation"])
+        assert extent.metadata == _metadata(meta["metadata"])
+        assert extent.two_state is meta["two_state"]
+        if data.isascii():  # a text file measures the same handed over as text
+            assert measure_pattern(data.decode("ascii")) == extent
     elif kind == "detect":
         for entry in meta["inputs"]:
             data = bytes.fromhex(entry["input"])

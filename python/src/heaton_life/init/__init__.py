@@ -3,9 +3,11 @@
 from heaton_life.init.builtins import BUILTIN_PATTERNS, BuiltinPattern
 from heaton_life.init.formats import (
     PATTERN_FORMATS,
+    PatternExtent,
     PatternFile,
     PatternFormat,
     detect_format,
+    measure_pattern,
     read_pattern,
 )
 from heaton_life.init.metadata import PatternMetadata
@@ -22,6 +24,7 @@ from heaton_life.init.patterns import (
     rotate90,
     rotate90_ccw,
     stamp,
+    turned_rect,
 )
 from heaton_life.init.png_io import mergelife_from_png, mergelife_to_png
 from heaton_life.init.rle import (
@@ -43,6 +46,7 @@ __all__ = [
     "PATTERN_FORMATS",
     "STAMP_MODES",
     "BuiltinPattern",
+    "PatternExtent",
     "PatternFile",
     "PatternFormat",
     "PatternMetadata",
@@ -58,6 +62,7 @@ __all__ = [
     "fill_random",
     "flip_h",
     "flip_v",
+    "measure_pattern",
     "mergelife_from_png",
     "mergelife_to_png",
     "place",
@@ -72,4 +77,5 @@ __all__ = [
     "single",
     "soup",
     "stamp",
+    "turned_rect",
 ]

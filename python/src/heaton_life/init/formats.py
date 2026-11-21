@@ -2,21 +2,30 @@
 
 RLE, Macrocell, plaintext (``.cells``), Life 1.05, Life 1.06, and PNG and BMP images,
 any of them gzip-compressed. ``detect_format`` names a file's format; ``read_pattern``
-gives its cells as a dense grid with their position, rule, generation, and metadata.
-The HashLife universe's reader, ``heaton_life.ca.hashlife.read_universe``, builds on the
-same recognition and the same text readers.
+gives its cells as a dense grid with their position, rule, generation, and metadata, and
+``measure_pattern`` gives all of that but the cells without making the grid. The HashLife
+universe's reader, ``heaton_life.ca.hashlife.read_universe``, builds on the same
+recognition and the same text readers.
 """
 
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable
 from typing import Literal
 
 import numpy as np
 from numpy.typing import NDArray
 
 from heaton_life.core.decimal_text import int_of_digits
-from heaton_life.init.images import PNG_SIGNATURE, bmp_cells, is_bmp, png_cells
+from heaton_life.init.images import (
+    PNG_SIGNATURE,
+    bmp_cells,
+    bmp_size,
+    is_bmp,
+    png_cells,
+    png_size,
+)
 from heaton_life.init.metadata import (
     MetadataReader,
     PatternMetadata,
@@ -64,6 +73,25 @@ class PatternFile:
     rule: str | None
     generation: int
     metadata: PatternMetadata
+
+
+@dataclasses.dataclass(frozen=True)
+class PatternExtent:
+    """What ``read_pattern`` without ``trim`` gives, except the cells, found without making
+    the grid (spec/formats.md "Measuring"). Every number is exact, of any size."""
+
+    format: PatternFormat
+    width: int
+    """The grid's size; 0 × 0 for a pattern that reading refuses as empty."""
+    height: int
+    x: int
+    """Where the grid's top-left cell sits in the file's own coordinates (y grows downward)."""
+    y: int
+    rule: str | None
+    generation: int
+    metadata: PatternMetadata
+    two_state: bool
+    """False for extended RLE, whatever states it uses: the universe reader refuses it."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -154,9 +182,11 @@ def _row_runs(row: str, x: int, y: int, number: int, alive: str) -> list[Run]:
     return runs
 
 
-def _plaintext(text: str) -> LiveRuns:
+def _plaintext(text: str, add: Callable[[Run], None]) -> tuple[int, int, PatternMetadata]:
+    """Plaintext's live runs, each handed to ``add`` as its row is read; returns the grid's
+    width and height (blank lines at the end are not rows) and the metadata."""
     notes = MetadataReader()
-    rows: list[tuple[int, str]] = []
+    width = height = rows = 0
     for number, raw in enumerate(text.splitlines(), start=1):
         stripped = raw.strip()
         if stripped.startswith("!"):
@@ -167,15 +197,14 @@ def _plaintext(text: str) -> LiveRuns:
                 notes.author(body[7:])
             else:
                 notes.comment(body)
-        else:
-            rows.append((number, raw.rstrip()))
-    while rows and not rows[-1][1]:
-        rows.pop()  # blank lines at the end are not rows
-    runs: list[Run] = []
-    for y, (number, row) in enumerate(rows):
-        runs += _row_runs(row, 0, y, number, "O*")
-    width = max((len(row) for _, row in rows), default=0)
-    return LiveRuns(tuple(runs), width, len(rows), None, notes.result())
+            continue
+        row = raw.rstrip()
+        for run in _row_runs(row, 0, rows, number, "O*"):
+            add(run)
+        rows += 1
+        if row:
+            width, height = max(width, len(row)), rows
+    return width, height, notes.result()
 
 
 def _signed(text: str) -> int | None:
@@ -205,13 +234,15 @@ def _life_rule(value: str) -> str:
     return value
 
 
-def _life(text: str, *, blocks: bool) -> LiveRuns:
-    """Life 1.05 (``blocks``: ``#P`` blocks of rows) or Life 1.06 (a cell a line)."""
+def _life(
+    text: str, *, blocks: bool, add: Callable[[Run], None]
+) -> tuple[str | None, PatternMetadata]:
+    """Life 1.05 (``blocks``: ``#P`` blocks of rows) or Life 1.06 (a cell a line): each live
+    run handed to ``add`` as it is read; returns the rule and the metadata."""
     lines = text.splitlines()
     header = next(i for i, line in enumerate(lines) if line.strip())
     notes = MetadataReader()
     rule: str | None = None
-    runs: list[Run] = []
     bx = by = row = 0
     for number, raw in enumerate(lines[header + 1 :], start=header + 2):
         stripped = raw.strip()
@@ -227,23 +258,41 @@ def _life(text: str, *, blocks: bool) -> LiveRuns:
                 bx, by = _cell(value, number, "#P")
                 row = 0
         elif blocks:
-            runs += _row_runs(raw.rstrip(), bx, by + row, number, "*O")
+            for run in _row_runs(raw.rstrip(), bx, by + row, number, "*O"):
+                add(run)
             row += 1
         elif stripped:
             x, y = _cell(stripped, number, "a cell")
-            runs.append((x, y, 1))
-    return LiveRuns(tuple(runs), 0, 0, rule, notes.result())
+            add((x, y, 1))
+    return rule, notes.result()
 
 
 def live_runs(found: Recognized) -> LiveRuns:
     """The live cells of a plaintext, Life 1.05 or Life 1.06 file."""
+    runs: list[Run] = []
     if found.format == "plaintext":
-        return _plaintext(found.text)
-    if found.format == "life-1.05":
-        return _life(found.text, blocks=True)
-    if found.format == "life-1.06":
-        return _life(found.text, blocks=False)
+        width, height, metadata = _plaintext(found.text, runs.append)
+        return LiveRuns(tuple(runs), width, height, None, metadata)
+    if found.format in ("life-1.05", "life-1.06"):
+        rule, metadata = _life(found.text, blocks=found.format == "life-1.05", add=runs.append)
+        return LiveRuns(tuple(runs), 0, 0, rule, metadata)
     raise ValueError(f"{found.format} is not read as runs")
+
+
+class _Box:
+    """The bounding box of live runs, widened as each one arrives: a measure keeps no cell."""
+
+    def __init__(self) -> None:
+        self.box: tuple[int, int, int, int] | None = None
+
+    def add(self, run: Run) -> None:
+        x, y, length = run
+        last = x + length - 1
+        if self.box is None:
+            self.box = (x, y, last, y)
+        else:
+            x0, y0, x1, y1 = self.box
+            self.box = (min(x0, x), min(y0, y), max(x1, last), max(y1, y))
 
 
 def runs_box(runs: tuple[Run, ...]) -> tuple[int, int, int, int] | None:
@@ -350,3 +399,75 @@ def _read_macrocell(text: str, max_cells: int | None) -> PatternFile:
     _check(x1 - x0 + 1, y1 - y0 + 1, max_cells)
     cells = universe._cells(x0, y0, x1, y1)
     return PatternFile("macrocell", cells, x0, y0, universe.rule, universe.generation, metadata)
+
+
+# -- measuring -------------------------------------------------------------------------------
+
+
+def measure_pattern(source: bytes | bytearray | memoryview | str) -> PatternExtent:
+    """What ``read_pattern`` without ``trim`` would give, except the cells, found without
+    making the grid (spec/formats.md "Measuring"): the format, the grid's size and position,
+    the rule, the generation, the metadata, and whether the cells have two states.
+
+    No cell is kept, so a pattern too large for any grid measures as easily as a glider:
+    RLE by its counted extent, plaintext by its rows, Life 1.0x by its cells' coordinates,
+    Macrocell from its tree without a universe, and an image from its header (a picture's
+    extent is the picture: its pixels are not decoded). Text is checked as the readers check
+    it; an image only as far as its pixel data. A pattern that reading refuses as empty
+    measures 0 × 0 at (0, 0).
+    """
+    found = recognize(source)
+    fmt = found.format
+    if fmt in ("png", "bmp"):
+        width, height = (png_size if fmt == "png" else bmp_size)(found.data)
+        return PatternExtent(fmt, width, height, 0, 0, None, 0, PatternMetadata(), True)
+    if fmt == "rle":
+        return _measure_rle(found.text)
+    box: tuple[int, int, int, int] | None
+    if fmt == "macrocell":
+        from heaton_life.ca.hashlife.macrocell import measure_macrocell
+
+        box, mc_rule, generation, metadata = measure_macrocell(found.text)
+        return _boxed(fmt, box, mc_rule, generation, metadata)
+    if fmt == "plaintext":
+        width, height, metadata = _plaintext(found.text, lambda run: None)
+        if width == 0 or height == 0:
+            width = height = 0
+        return PatternExtent(fmt, width, height, 0, 0, None, 0, metadata, True)
+    found_box = _Box()
+    rule, metadata = _life(found.text, blocks=fmt == "life-1.05", add=found_box.add)
+    return _boxed(fmt, found_box.box, rule, 0, metadata)
+
+
+def _boxed(
+    fmt: PatternFormat,
+    box: tuple[int, int, int, int] | None,
+    rule: str | None,
+    generation: int,
+    metadata: PatternMetadata,
+) -> PatternExtent:
+    """The extent of a format whose grid is its live cells' bounding box."""
+    if box is None:
+        return PatternExtent(fmt, 0, 0, 0, 0, rule, generation, metadata, True)
+    x0, y0, x1, y1 = box
+    return PatternExtent(fmt, x1 - x0 + 1, y1 - y0 + 1, x0, y0, rule, generation, metadata, True)
+
+
+def _measure_rle(text: str) -> PatternExtent:
+    info, _ = rle_runs(text)  # the #CXRLE line: position and generation, checked as read checks
+    extent = rle_measure(text)
+    width, height = extent.width, extent.height
+    x, y = info.position or (0, 0)
+    if width == 0 or height == 0:
+        width = height = x = y = 0
+    return PatternExtent(
+        "rle",
+        width,
+        height,
+        x,
+        y,
+        extent.rule,
+        info.generation,
+        rle_metadata(text),
+        not extent.extended,
+    )

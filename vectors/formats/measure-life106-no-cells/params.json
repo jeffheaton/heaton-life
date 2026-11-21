@@ -1,0 +1,22 @@
+{
+  "family": "formats",
+  "format": "life-1.06",
+  "generation": "0",
+  "height": "0",
+  "input": "input.lif",
+  "kind": "measure",
+  "metadata": {
+    "author": null,
+    "comments": [
+      "nothing but a comment"
+    ],
+    "name": null
+  },
+  "rule": "B3/S23",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "two_state": true,
+  "width": "0",
+  "x": "0",
+  "y": "0"
+}

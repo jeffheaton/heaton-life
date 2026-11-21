@@ -286,5 +286,37 @@ namespace HeatonLife.Tests
             Assert.False(RuleString.Compile("B3/S23").HasB0);
             Assert.False(RuleString.TryCompile(null, out _));
         }
+
+
+        [Fact]
+        public void TryCompileGivesTheRuleOrTheReason()
+        {
+            // spec/rules.md "Reasons": no exception, and the reason is what Compile's message carries.
+            Assert.True(RuleString.TryCompile("b3 / s32", out LifeRule? rule, out string? reason));
+            Assert.Equal("B3/S23", rule!.Canonical);
+            Assert.Null(reason);
+            Assert.False(RuleString.TryCompile(null, out rule, out reason));
+            Assert.Null(rule);
+            Assert.Equal("expected B\u2026/S\u2026 or MAP\u2026", reason);
+            foreach (string text in new[] { "B9/S23", "B3/S23 x", "B1kn/S", "B2/S7H", "MAP", "it's" })
+            {
+                Assert.False(RuleString.TryCompile(text, out _, out reason));
+                ArgumentException thrown = Assert.Throws<ArgumentException>(() => RuleString.Compile(text));
+                Assert.StartsWith($"invalid rule '{text}': {reason} (spec/rules.md)", thrown.Message);
+            }
+        }
+
+        [Theory]
+        [InlineData("B1a/S23 x", "unexpected ' x' after the survival counts")] // the shape comes first
+        [InlineData("B7/S2aH", "the hexagonal neighborhood has 6 neighbors")] // then birth before survival
+        [InlineData("B1nk/S", "n is not a letter class of 1")] // the first undefined letter as written
+        [InlineData("B1Kn/S", "k is not a letter class of 1")] // in lowercase
+        [InlineData("B3/S23\u200b", "unexpected '\u200b' after the survival counts")] // quoted as written
+        [InlineData(" \tB3/S23 H \u3000", "unexpected ' H' after the survival counts")] // ends stripped
+        public void TheReasonIsTheFirstProblemFound(string text, string reason)
+        {
+            Assert.False(RuleString.TryCompile(text, out _, out string? found));
+            Assert.Equal(reason, found);
+        }
     }
 }

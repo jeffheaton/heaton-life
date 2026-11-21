@@ -12,8 +12,8 @@ namespace HeatonLife.Tests
 {
     /// <summary>
     /// Pattern file conformance: replay vectors/formats/ — every format read into a grid and into
-    /// the unbounded universe, detection, metadata read and written, and Macrocell timelines
-    /// (spec/formats.md, spec/macrocell.md). Bit-exact, and as strict as the Python runner
+    /// the unbounded universe, measured without a grid, detection, metadata read and written, and
+    /// Macrocell timelines (spec/formats.md, spec/macrocell.md). Bit-exact, and as strict as the Python runner
     /// (python/tests/test_format_vectors.py): an unknown key, kind, or spec_version fails the case.
     /// </summary>
     public class FormatConformanceTests
@@ -36,6 +36,10 @@ namespace HeatonLife.Tests
                 }),
                 ["universe"] = Of(common, new[] { "input", "error", "format", "metadata", "with_metadata", "rle", "rle_error" }, state),
                 ["detect"] = Of(common, new[] { "inputs" }),
+                ["measure"] = Of(common, new[]
+                {
+                    "input", "error", "format", "width", "height", "x", "y", "rule", "generation", "metadata", "two_state",
+                }),
                 ["timeline-read"] = Of(common, new[] { "input", "error", "count", "first", "step", "metadata", "universe", "frames" }),
                 ["timeline-write"] = Of(common, new[] { "input", "generations", "metadata", "timeline", "frames" }),
             };
@@ -188,6 +192,36 @@ namespace HeatonLife.Tests
                             Assert.Equal(
                                 File.ReadAllText(Path.Combine(dir, root.GetProperty("rle").GetString()!)),
                                 found.Universe.ToRle(found.Metadata));
+                        }
+                        break;
+                    }
+                case "measure":
+                    {
+                        byte[] data = File.ReadAllBytes(Path.Combine(dir, root.GetProperty("input").GetString()!));
+                        if (error)
+                        {
+                            Refused(() => PatternFiles.Measure(data));
+                            return;
+                        }
+                        PatternExtent extent = PatternFiles.Measure(data);
+                        Assert.Equal(root.GetProperty("format").GetString(), PatternFiles.FormatName(extent.Format));
+                        Assert.Equal(BigInteger.Parse(root.GetProperty("width").GetString()!), extent.Width);
+                        Assert.Equal(BigInteger.Parse(root.GetProperty("height").GetString()!), extent.Height);
+                        Assert.Equal(BigInteger.Parse(root.GetProperty("x").GetString()!), extent.X);
+                        Assert.Equal(BigInteger.Parse(root.GetProperty("y").GetString()!), extent.Y);
+                        JsonElement rule = root.GetProperty("rule");
+                        Assert.Equal(rule.ValueKind == JsonValueKind.Null ? null : rule.GetString(), extent.Rule);
+                        Assert.Equal(BigInteger.Parse(root.GetProperty("generation").GetString()!), extent.Generation);
+                        Assert.Equal(Metadata(root.GetProperty("metadata")), extent.Metadata);
+                        Assert.Equal(root.GetProperty("two_state").GetBoolean(), extent.TwoState);
+                        if (data.All(b => b < 0x80))
+                        {
+                            // A text file measures the same handed over as text.
+                            PatternExtent text = PatternFiles.Measure(Encoding.ASCII.GetString(data));
+                            Assert.Equal((extent.Format, extent.Width, extent.Height), (text.Format, text.Width, text.Height));
+                            Assert.Equal((extent.X, extent.Y, extent.Rule), (text.X, text.Y, text.Rule));
+                            Assert.Equal((extent.Generation, extent.TwoState), (text.Generation, text.TwoState));
+                            Assert.Equal(extent.Metadata, text.Metadata);
                         }
                         break;
                     }

@@ -1,0 +1,287 @@
+{
+  "cases": [
+    {
+      "error": true,
+      "input": "",
+      "reason": "expected B…/S… or MAP…"
+    },
+    {
+      "error": true,
+      "input": "   ",
+      "reason": "expected B…/S… or MAP…"
+    },
+    {
+      "error": true,
+      "input": "garbage",
+      "reason": "expected B…/S… or MAP…"
+    },
+    {
+      "error": true,
+      "input": "23/3",
+      "reason": "expected B…/S… or MAP…"
+    },
+    {
+      "error": true,
+      "input": "S23/B3",
+      "reason": "expected B…/S… or MAP…"
+    },
+    {
+      "error": true,
+      "input": "​B3/S23",
+      "reason": "expected B…/S… or MAP…"
+    },
+    {
+      "error": true,
+      "input": "MA PAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "reason": "expected B…/S… or MAP…"
+    },
+    {
+      "error": true,
+      "input": "B9/S23",
+      "reason": "expected '/' after the birth counts"
+    },
+    {
+      "error": true,
+      "input": "B3S23",
+      "reason": "expected '/' after the birth counts"
+    },
+    {
+      "error": true,
+      "input": "B 3/S23",
+      "reason": "expected '/' after the birth counts"
+    },
+    {
+      "error": true,
+      "input": "B-2a/S",
+      "reason": "expected '/' after the birth counts"
+    },
+    {
+      "error": true,
+      "input": "B3x/S23",
+      "reason": "expected '/' after the birth counts"
+    },
+    {
+      "error": true,
+      "input": "B2-a-/S",
+      "reason": "expected '/' after the birth counts"
+    },
+    {
+      "error": true,
+      "input": "B٣/S23",
+      "reason": "expected '/' after the birth counts"
+    },
+    {
+      "error": true,
+      "input": "B2K/S",
+      "reason": "expected '/' after the birth counts"
+    },
+    {
+      "error": true,
+      "input": "B3//S23",
+      "reason": "expected S after '/'"
+    },
+    {
+      "error": true,
+      "input": "B3/23",
+      "reason": "expected S after '/'"
+    },
+    {
+      "error": true,
+      "input": "B3/ 23",
+      "reason": "expected S after '/'"
+    },
+    {
+      "error": true,
+      "input": "B3/S23/C4",
+      "reason": "unexpected '/C4' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "B3/S23 H",
+      "reason": "unexpected ' H' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "B3/S 23",
+      "reason": "unexpected ' 23' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "B3/S2 3",
+      "reason": "unexpected ' 3' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "  B3/S23 x  ",
+      "reason": "unexpected ' x' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "B3/S23\u0000",
+      "reason": "unexpected '\u0000' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "B3/S23'",
+      "reason": "unexpected ''' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "B3/S2é",
+      "reason": "unexpected 'é' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "B3/S23​",
+      "reason": "unexpected '​' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "B2/S34HH",
+      "reason": "unexpected 'HH' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "B2/S34HV",
+      "reason": "unexpected 'HV' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "B1/S1VH",
+      "reason": "unexpected 'VH' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "B3/S23-",
+      "reason": "'-' after 3 must be followed by letters"
+    },
+    {
+      "error": true,
+      "input": "B2-/S",
+      "reason": "'-' after 2 must be followed by letters"
+    },
+    {
+      "error": true,
+      "input": "B2--a/S",
+      "reason": "'-' after 2 must be followed by letters"
+    },
+    {
+      "error": true,
+      "input": "B1a/S",
+      "reason": "a is not a letter class of 1"
+    },
+    {
+      "error": true,
+      "input": "B1kn/S",
+      "reason": "k is not a letter class of 1"
+    },
+    {
+      "error": true,
+      "input": "B1nK/S",
+      "reason": "n is not a letter class of 1"
+    },
+    {
+      "error": true,
+      "input": "B1K/S",
+      "reason": "k is not a letter class of 1"
+    },
+    {
+      "error": true,
+      "input": "B0c/S",
+      "reason": "0 takes no letters"
+    },
+    {
+      "error": true,
+      "input": "B8c/S",
+      "reason": "8 takes no letters"
+    },
+    {
+      "error": true,
+      "input": "B7/S2H",
+      "reason": "the hexagonal neighborhood has 6 neighbors"
+    },
+    {
+      "error": true,
+      "input": "B2/S7H",
+      "reason": "the hexagonal neighborhood has 6 neighbors"
+    },
+    {
+      "error": true,
+      "input": "B5/S1V",
+      "reason": "the von Neumann neighborhood has 4 neighbors"
+    },
+    {
+      "error": true,
+      "input": "B1/S5V",
+      "reason": "the von Neumann neighborhood has 4 neighbors"
+    },
+    {
+      "error": true,
+      "input": "B2a/S2H",
+      "reason": "letters are only defined for Moore rules, not hexagonal"
+    },
+    {
+      "error": true,
+      "input": "B1e/S1V",
+      "reason": "letters are only defined for Moore rules, not von Neumann"
+    },
+    {
+      "error": true,
+      "input": "B7/S2aH",
+      "reason": "the hexagonal neighborhood has 6 neighbors"
+    },
+    {
+      "error": true,
+      "input": "B2a/S7H",
+      "reason": "letters are only defined for Moore rules, not hexagonal"
+    },
+    {
+      "error": true,
+      "input": "B1a/S23 x",
+      "reason": "unexpected ' x' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "MAP",
+      "reason": "a MAP payload is 86, 22 or 6 base64 characters, optionally followed by =="
+    },
+    {
+      "error": true,
+      "input": "MAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "reason": "a MAP payload is 86, 22 or 6 base64 characters, optionally followed by =="
+    },
+    {
+      "error": true,
+      "input": "MAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "reason": "a MAP payload is 86, 22 or 6 base64 characters, optionally followed by =="
+    },
+    {
+      "error": true,
+      "input": "MAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "reason": "a MAP payload is 86, 22 or 6 base64 characters, optionally followed by =="
+    },
+    {
+      "error": true,
+      "input": "MAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA===",
+      "reason": "a MAP payload is 86, 22 or 6 base64 characters, optionally followed by =="
+    },
+    {
+      "error": true,
+      "input": "MAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!",
+      "reason": "a MAP payload is 86, 22 or 6 base64 characters, optionally followed by =="
+    },
+    {
+      "error": true,
+      "input": "MAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==x",
+      "reason": "a MAP payload is 86, 22 or 6 base64 characters, optionally followed by =="
+    },
+    {
+      "error": true,
+      "input": "MAP=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "reason": "a MAP payload is 86, 22 or 6 base64 characters, optionally followed by =="
+    }
+  ],
+  "family": "rules",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

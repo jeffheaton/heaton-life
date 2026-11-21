@@ -10,6 +10,7 @@ outright: it is simple, and its variants are where decoders disagree.
 
 from __future__ import annotations
 
+import dataclasses
 import io
 import struct
 import zlib
@@ -93,6 +94,13 @@ def _png_chunks(data: bytes) -> tuple[tuple[int, int, int, int, int], bytes | No
     return header, palette
 
 
+def png_size(data: bytes) -> tuple[int, int]:
+    """A PNG image's (width, height), its chunks checked as ``png_cells`` checks them but no
+    pixel decoded (spec/formats.md "Measuring")."""
+    (width, height, _depth, _color, _interlace), _palette = _png_chunks(data)
+    return width, height
+
+
 def png_cells(data: bytes, max_cells: int | None = None) -> Cells:
     """A PNG image's cells, 1 alive and 0 dead (white); refused past ``max_cells``."""
     (width, height, _depth, color, _interlace), palette = _png_chunks(data)
@@ -143,8 +151,22 @@ _WHOLE_BYTES = (0xFF, 0xFF00, 0xFF0000, 0xFF000000)
 _MASKS_16 = ((0xF800, 0x07E0, 0x001F), (0x7C00, 0x03E0, 0x001F))
 
 
-def bmp_cells(data: bytes, max_cells: int | None = None) -> Cells:
-    """A BMP image's cells, 1 alive and 0 dead (white); refused past ``max_cells``."""
+@dataclasses.dataclass(frozen=True)
+class _BmpLayout:
+    """A BMP image as far as its pixels: size, row layout, and what counts as white."""
+
+    width: int
+    height: int
+    bits: int
+    rows: NDArray[np.uint8]
+    """(height, stride) stored rows, top to bottom."""
+    masks: tuple[int, int, int] | None
+    white: NDArray[np.bool_] | None
+    """Which palette entries are white, for 1, 4 and 8 bits."""
+
+
+def _bmp_layout(data: bytes, max_cells: int | None) -> _BmpLayout:
+    """Everything ``bmp_cells`` checks before it reads a pixel (spec/formats.md "Images")."""
     if not is_bmp(data):
         raise ValueError("not a BMP: bad signature or header size")
     offset, header_size = (
@@ -190,11 +212,8 @@ def bmp_cells(data: bytes, max_cells: int | None = None) -> Cells:
     stride = (width * bits + 31) // 32 * 4
     if offset + stride * height > len(data):
         raise ValueError("not a BMP: the pixel data ends before the last row")
-    stored = np.frombuffer(data, dtype=np.uint8, count=stride * height, offset=offset)
-    rows = stored.reshape(height, stride)
-    if not top_down:
-        rows = rows[::-1]
 
+    white: NDArray[np.bool_] | None = None
     if bits <= 8:
         usable = min(colors or 1 << bits, 1 << bits)
         start = 14 + header_size
@@ -202,6 +221,33 @@ def bmp_cells(data: bytes, max_cells: int | None = None) -> Cells:
             raise ValueError("not a BMP: the palette runs past the end of the file")
         table = np.frombuffer(data, dtype=np.uint8, count=usable * entry, offset=start)
         white = (table.reshape(usable, entry)[:, :3] == 255).all(axis=1)
+    stored = np.frombuffer(data, dtype=np.uint8, count=stride * height, offset=offset)
+    rows = stored.reshape(height, stride)  # a view: nothing is copied until a pixel is read
+    return _BmpLayout(width, height, bits, rows if top_down else rows[::-1], masks, white)
+
+
+def bmp_size(data: bytes) -> tuple[int, int]:
+    """A BMP image's (width, height), its headers, masks, palette and the length of its
+    pixel data checked as ``bmp_cells`` checks them but no pixel read (spec/formats.md
+    "Measuring")."""
+    layout = _bmp_layout(data, None)
+    return layout.width, layout.height
+
+
+def bmp_cells(data: bytes, max_cells: int | None = None) -> Cells:
+    """A BMP image's cells, 1 alive and 0 dead (white); refused past ``max_cells``."""
+    layout = _bmp_layout(data, max_cells)
+    width, height, bits, rows, masks = (
+        layout.width,
+        layout.height,
+        layout.bits,
+        layout.rows,
+        layout.masks,
+    )
+    stride = rows.shape[1]
+    if layout.white is not None:
+        white = layout.white
+        usable = len(white)
         if bits == 1:
             index = np.unpackbits(rows, axis=1)[:, :width]
         elif bits == 4:

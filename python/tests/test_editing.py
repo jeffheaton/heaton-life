@@ -21,16 +21,19 @@ from heaton_life.ca.hashlife import (
     HashLifeMemoryError,
     StepCanceled,
 )
-from heaton_life.ca.hashlife.universe import turn_center
 from heaton_life.init import (
     BUILTIN_PATTERNS,
+    clear,
+    extract,
     fill_random,
     flip_h,
     rotate90,
     rotate90_ccw,
     soup,
     stamp,
+    turned_rect,
 )
+from heaton_life.init.patterns import turn_center
 
 GLIDER = np.array([[0, 1, 0], [0, 0, 1], [1, 1, 1]], dtype=np.uint8)
 
@@ -455,6 +458,61 @@ def test_turns_undo_each_other_and_never_drift() -> None:
             # rectangle's own cells are compared after the round trips.
             ref = HashLife.from_macrocell(text)
             assert np.array_equal(u.get_rect(*rect), ref.get_rect(*rect)), (rect,)
+
+
+def test_turned_rect_is_where_rotate_rects_cells_land() -> None:
+    """turned_rect (spec/patterns.md "Editing a region") gives the rectangle rotate_rect's
+    cells land on, for every rectangle of a sweep, both ways round. The cells move by the
+    tree's own shift, not by turned_rect: a rectangle's four corner cells, turned, are the
+    turned rectangle's corners."""
+    for x0 in range(-3, 3):
+        for y0 in range(-3, 3):
+            for w in range(1, 6):
+                for h in range(1, 6):
+                    rect = (x0, y0, x0 + w - 1, y0 + h - 1)
+                    for clockwise in (True, False):
+                        u = HashLife()
+                        for x in (rect[0], rect[2]):
+                            for y in (rect[1], rect[3]):
+                                u.set_cell(x, y, 1)
+                        u.rotate_rect(*rect, clockwise=clockwise)
+                        want = turned_rect(*rect, clockwise=clockwise)
+                        assert u.bounding_box() == want, (rect, clockwise)
+
+
+def test_a_grid_turns_a_region_onto_rotate_rects_cells() -> None:
+    """Extract, rotate90 (or rotate90_ccw), clear, then stamp at turned_rect's top-left: a
+    life-like grid's turn of a region gives the cells HashLife's rotate_rect gives."""
+    rng = np.random.default_rng(2611)
+    size = 24
+    turns = 0
+    for trial in range(80):
+        grid = (rng.random((size, size)) < 0.4).astype(np.uint8)
+        w, h = int(rng.integers(1, 10)), int(rng.integers(1, 10))
+        x0, y0 = int(rng.integers(0, size - w + 1)), int(rng.integers(0, size - h + 1))
+        rect = (x0, y0, x0 + w - 1, y0 + h - 1)
+        clockwise = trial % 2 == 0
+        nx0, ny0, nx1, ny1 = turned_rect(*rect, clockwise=clockwise)
+        if not (0 <= nx0 and 0 <= ny0 and nx1 < size and ny1 < size):
+            continue  # past an edge: the caller's to refuse
+        turned = grid.copy()
+        region = extract(turned, x0, y0, w, h, torus=False)
+        clear(turned, *rect, 0)
+        stamp(turned, (rotate90 if clockwise else rotate90_ccw)(region), nx0, ny0, torus=False)
+        u = HashLife()
+        u.set_rect(0, 0, grid)
+        assert u.rotate_rect(*rect, clockwise=clockwise) == (nx0, ny0, nx1, ny1)
+        assert np.array_equal(u.get_rect(0, 0, size - 1, size - 1), turned), (rect, clockwise)
+        turns += 1
+    assert turns > 50
+
+
+def test_turned_rect_needs_a_rectangle() -> None:
+    with pytest.raises(ValueError, match="empty"):
+        turned_rect(0, 0, -1, 0)
+    with pytest.raises(ValueError, match="empty"):
+        turned_rect(0, 1, 0, 0, clockwise=False)
+    assert turned_rect(7, 7, 7, 7) == (7, 7, 7, 7)
 
 
 def test_transforms_reach_any_size_and_stop_at_the_box() -> None:

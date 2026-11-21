@@ -1,0 +1,4 @@
+#CXRLE Pos=-3,4 Gen=7
+#N Glider
+x = 3, y = 3, rule = B3/S23
+bo$2bo$3o!

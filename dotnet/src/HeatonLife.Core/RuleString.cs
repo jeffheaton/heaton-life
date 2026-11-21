@@ -95,21 +95,34 @@ namespace HeatonLife
         private static readonly Dictionary<(int Count, char Letter), int[]> Classes = BuildClasses();
 
         /// <summary>Compile rule text (spec/rules.md "Grammar") to its table and canonical
-        /// string. Throws <see cref="ArgumentException"/> for text outside the grammar.</summary>
+        /// string. Throws <see cref="ArgumentException"/> for text outside the grammar, its
+        /// message carrying the reason (spec/rules.md "Reasons").</summary>
         public static LifeRule Compile(string rule)
         {
             if (rule == null)
                 throw new ArgumentNullException(nameof(rule));
-            LifeRule? compiled = Build(rule, out string error);
+            LifeRule? compiled = Build(rule, out string why);
             if (compiled == null)
-                throw new ArgumentException(error, nameof(rule));
+                throw new ArgumentException(Invalid(rule, why), nameof(rule));
             return compiled;
         }
 
         /// <summary>Like <see cref="Compile"/>, but answers false instead of throwing.</summary>
         public static bool TryCompile(string? rule, [NotNullWhen(true)] out LifeRule? compiled)
+            => TryCompile(rule, out compiled, out _);
+
+        /// <summary>
+        /// Like <see cref="Compile"/>, but answers false instead of throwing, with the reason
+        /// (spec/rules.md "Reasons"): the phrase for the first problem a reading of the text
+        /// finds, such as "expected '/' after the birth counts", the one <see cref="Compile"/>'s
+        /// message carries. The reason is null when the text compiles. Null text reads as
+        /// empty text.
+        /// </summary>
+        public static bool TryCompile(
+            string? rule, [NotNullWhen(true)] out LifeRule? compiled, [NotNullWhen(false)] out string? reason)
         {
-            compiled = rule == null ? null : Build(rule, out _);
+            compiled = Build(rule ?? "", out string why);
+            reason = compiled == null ? why : null;
             return compiled != null;
         }
 
@@ -159,7 +172,7 @@ namespace HeatonLife
 
         private static string Invalid(string text, string reason) => $"invalid rule '{text}': {reason} (spec/rules.md)";
 
-        private static LifeRule? Build(string text, out string error)
+        private static LifeRule? Build(string text, out string reason)
         {
             int start = 0, end = text.Length;
             while (start < end && IsSpace(text[start]))
@@ -169,33 +182,33 @@ namespace HeatonLife
             if (end - start >= 3 && (text[start] == 'M' || text[start] == 'm')
                 && (text[start + 1] == 'A' || text[start + 1] == 'a')
                 && (text[start + 2] == 'P' || text[start + 2] == 'p'))
-                return BuildMap(text, start + 3, end, out error);
+                return BuildMap(text, start + 3, end, out reason);
             if (start < end && (text[start] == 'B' || text[start] == 'b'))
-                return BuildBs(text, start + 1, end, out error);
-            error = Invalid(text, "expected B…/S… or MAP…");
+                return BuildBs(text, start + 1, end, out reason);
+            reason = "expected B…/S… or MAP…";
             return null;
         }
 
-        private static LifeRule? BuildBs(string text, int pos, int end, out string error)
+        private static LifeRule? BuildBs(string text, int pos, int end, out string reason)
         {
             var birth = new List<(int Count, bool Minus, string Letters)>();
-            if (!Groups(text, ref pos, end, birth, out error))
+            if (!Groups(text, ref pos, end, birth, out reason))
                 return null;
             pos = SkipSpace(text, pos, end);
             if (pos >= end || text[pos] != '/')
             {
-                error = Invalid(text, "expected '/' after the birth counts");
+                reason = "expected '/' after the birth counts";
                 return null;
             }
             pos = SkipSpace(text, pos + 1, end);
             if (pos >= end || (text[pos] != 'S' && text[pos] != 's'))
             {
-                error = Invalid(text, "expected S after '/'");
+                reason = "expected S after '/'";
                 return null;
             }
             pos++;
             var survive = new List<(int Count, bool Minus, string Letters)>();
-            if (!Groups(text, ref pos, end, survive, out error))
+            if (!Groups(text, ref pos, end, survive, out reason))
                 return null;
 
             // What follows the survival counts names the neighborhood. A variant with more states
@@ -216,14 +229,14 @@ namespace HeatonLife
             }
             else
             {
-                error = Invalid(text, $"unexpected '{text.Substring(pos, end - pos)}' after the survival counts");
+                reason = $"unexpected '{text.Substring(pos, end - pos)}' after the survival counts";
                 return null;
             }
 
-            HashSet<(int Count, char Letter)>? born = Side(text, birth, neighborhood, out error);
+            HashSet<(int Count, char Letter)>? born = Side(text, birth, neighborhood, out reason);
             if (born == null)
                 return null;
-            HashSet<(int Count, char Letter)>? stays = Side(text, survive, neighborhood, out error);
+            HashSet<(int Count, char Letter)>? stays = Side(text, survive, neighborhood, out reason);
             if (stays == null)
                 return null;
             string suffix = neighborhood == RuleNeighborhood.Hexagonal ? "H"
@@ -258,9 +271,9 @@ namespace HeatonLife
 
         /// <summary>One side's digit groups as written.</summary>
         private static bool Groups(
-            string text, ref int pos, int end, List<(int Count, bool Minus, string Letters)> groups, out string error)
+            string text, ref int pos, int end, List<(int Count, bool Minus, string Letters)> groups, out string reason)
         {
-            error = "";
+            reason = "";
             while (pos < end && text[pos] >= '0' && text[pos] <= '8')
             {
                 int count = text[pos] - '0';
@@ -276,7 +289,7 @@ namespace HeatonLife
                 }
                 if (minus && letters.Length == 0)
                 {
-                    error = Invalid(text, $"'-' after {count} must be followed by letters");
+                    reason = $"'-' after {count} must be followed by letters";
                     return false;
                 }
                 groups.Add((count, minus, letters.ToString()));
@@ -287,9 +300,9 @@ namespace HeatonLife
         /// <summary>The letter classes one side names (spec/rules.md "Birth and survival").</summary>
         private static HashSet<(int Count, char Letter)>? Side(
             string text, List<(int Count, bool Minus, string Letters)> groups, RuleNeighborhood neighborhood,
-            out string error)
+            out string reason)
         {
-            error = "";
+            reason = "";
             int limit = neighborhood == RuleNeighborhood.Moore ? 8
                 : neighborhood == RuleNeighborhood.Hexagonal ? 6 : 4;
             var keys = new HashSet<(int Count, char Letter)>();
@@ -297,14 +310,14 @@ namespace HeatonLife
             {
                 if (count > limit)
                 {
-                    error = Invalid(text, $"the {Name(neighborhood)} neighborhood has {limit} neighbors");
+                    reason = $"the {Name(neighborhood)} neighborhood has {limit} neighbors";
                     return null;
                 }
                 if (neighborhood != RuleNeighborhood.Moore)
                 {
                     if (letters.Length > 0)
                     {
-                        error = Invalid(text, $"letters are only defined for Moore rules, not {Name(neighborhood)}");
+                        reason = $"letters are only defined for Moore rules, not {Name(neighborhood)}";
                         return null;
                     }
                     keys.Add((count, Whole));
@@ -321,14 +334,14 @@ namespace HeatonLife
                 }
                 if (defined.Length == 0)
                 {
-                    error = Invalid(text, $"{count} takes no letters");
+                    reason = $"{count} takes no letters";
                     return null;
                 }
                 foreach (char letter in letters)
                 {
                     if (defined.IndexOf(letter) < 0)
                     {
-                        error = Invalid(text, $"{letter} is not a letter class of {count}");
+                        reason = $"{letter} is not a letter class of {count}";
                         return null;
                     }
                 }
@@ -423,9 +436,9 @@ namespace HeatonLife
 
         // -- MAP strings --------------------------------------------------------------------------
 
-        private static LifeRule? BuildMap(string text, int start, int end, out string error)
+        private static LifeRule? BuildMap(string text, int start, int end, out string reason)
         {
-            error = "";
+            reason = "";
             int length = end - start;
             if (length >= 2 && text[end - 1] == '=' && text[end - 2] == '=')
                 length -= 2;
@@ -446,7 +459,7 @@ namespace HeatonLife
                     cells = 5;
                     break;
                 default:
-                    error = Invalid(text, "a MAP payload is 86, 22 or 6 base64 characters, optionally followed by ==");
+                    reason = "a MAP payload is 86, 22 or 6 base64 characters, optionally followed by ==";
                     return null;
             }
             var values = new int[length];
@@ -455,7 +468,7 @@ namespace HeatonLife
                 values[i] = Base64.IndexOf(text[start + i]);
                 if (values[i] < 0)
                 {
-                    error = Invalid(text, "a MAP payload is 86, 22 or 6 base64 characters, optionally followed by ==");
+                    reason = "a MAP payload is 86, 22 or 6 base64 characters, optionally followed by ==";
                     return null;
                 }
             }

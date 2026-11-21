@@ -1,8 +1,8 @@
 # Pattern files
 
 Conformance tier: **bit-exact**: what a file reads as (its format, cells, position, rule,
-generation, and metadata) and the canonical text the writers make. Vectors:
-[`vectors/formats/`](../vectors/formats/).
+generation, and metadata), what it measures as, and the canonical text the writers make.
+Vectors: [`vectors/formats/`](../vectors/formats/).
 
 Life patterns travel in seven file formats, and a reader recognizes each by its content,
 never by the file's name:
@@ -16,7 +16,9 @@ never by the file's name:
 Any of them may arrive gzip-compressed. This page defines how bytes become text, how a
 format is recognized, what the five formats without a page of their own mean, the
 metadata every text format can carry, and the two readers built on top: one that gives a
-dense grid and one that gives a [HashLife](hashlife.md) universe.
+dense grid and one that gives a [HashLife](hashlife.md) universe. A file can also be
+measured, its grid's size found without the grid being made, before either reader is
+asked for memory.
 
 ## Bytes and text
 
@@ -239,6 +241,54 @@ none), and a grid past it is refused before memory is asked for. An image is ref
 trimmed or not, when the image itself is past the limit, since all of its pixels must be
 read. Positions, sizes, and generations are exact integers of any size.
 
+## Measuring
+
+`measure_pattern(source)` (.NET `PatternFiles.Measure`) detects the format and gives a
+`PatternExtent`: what [reading into a grid](#reading-into-a-grid) without `trim` gives,
+except the cells, found without making the grid. A file that came from outside is
+measured before it is read, so a pattern too large for any grid can be sent to the
+[unbounded universe](#reading-into-the-unbounded-universe), or refused, by its size, before
+a reader asks for memory. The extent holds:
+
+- `format`;
+- `width` and `height`, the grid's size, and `x` and `y`, where its top-left cell sits, as
+  the table above gives them: RLE's decoded size
+  ([patterns.md](patterns.md#rle-text-encoding-life-like-wireworld-cyclic) "Extent") at
+  its `#CXRLE Pos`, plaintext's longest row by its rows, the live cells' bounding box for
+  Macrocell, Life 1.05 and Life 1.06, and an image's own size;
+- `rule`, `generation` and `metadata`, as the table gives them;
+- `two_state`: false for an RLE file in the extended dialect, whatever states it uses,
+  and true for every other file. Only a two-state file can be read into the unbounded
+  universe.
+
+Each format is measured without a cell being kept:
+
+- **RLE** by the scan of patterns.md "Extent", which keeps only counters, and its
+  `#CXRLE` line.
+- **Plaintext** by its rows' lengths; **Life 1.05** and **Life 1.06** by their cells'
+  coordinates, each of which only widens a box.
+- **Macrocell** from its tree: each node line's live cells have a bounding box, a leaf's
+  found from its rows and every other node's from its children's, and the root's box is
+  placed as reading places the root ([macrocell.md](macrocell.md#reading), step 4). No
+  universe is built, so a file measures whatever its universe would need in memory.
+- **PNG and BMP** from the image's header. A picture's extent is the picture: every pixel
+  is a cell, alive or dead, so the grid is the whole image, its width × height pixels at
+  (0, 0). The pixels are not decoded, so which of them are alive, and where their
+  bounding box lies, is not part of a picture's extent.
+
+Measuring checks what reading checks before reading would decode a cell. Text is read
+whole and refused as the readers refuse it, so text that measures also reads, within the
+decode limit (and, for Macrocell, the universe's memory budget). An image is checked as
+far as its pixel data: PNG's chunks up to `IEND`, its `IHDR` and `PLTE` checked and an
+`IDAT` present; BMP's headers, masks and palette, and the length of its pixel data. Image
+data that doesn't inflate, or a pixel whose palette index has no entry, is found only
+when the pixels are read, so such an image measures and is still refused by a read.
+
+A pattern that reading refuses as empty (no cells at all, or, for Macrocell, Life 1.05
+and Life 1.06, no live cell) measures 0 × 0 at (0, 0). There is no decode limit, since
+nothing the size of the pattern is made, and every number is an exact integer of any
+size.
+
 ## Reading into the unbounded universe
 
 `read_universe(source, max_memory_mb)` (.NET `PatternFiles.ReadUniverse`) detects the
@@ -273,8 +323,10 @@ are decimal strings; metadata is `{"name", "author", "comments"}` with `null` fo
 | `read` | `input` (a file in any format, perhaps gzip-compressed); `trim`; `limit` (`"default"`, a number, or `null`) | `format`, `x`, `y`, `rule`, `generation`, `metadata`; `grid` (raw cell values in an 8-bit grayscale PNG, and its `shape`); `canonical`: the grid as canonical RLE with the metadata, under the rule or `B3/S23` — or `error: true` |
 | `universe` | `input` | `format`, `metadata`, and the universe's state as [hashlife.md](hashlife.md#vector-encoding) pins one (`generation`, `population`, `bounding_box`, `state`); `with_metadata`: its canonical Macrocell with the metadata; `rle`: its RLE with the metadata, or `rle_error: true` — or `error: true` |
 | `detect` | `inputs`: a list of byte strings in hex | each one's `format`, or `error: true` |
+| `measure` | `input` (a file in any format, perhaps gzip-compressed) | `format`, `width`, `height`, `x`, `y`, `rule`, `generation`, `metadata`, `two_state` — or `error: true` |
 | `timeline-read` | `input.mc` | `count`, `first`, `step`, `metadata`, the file's own state, and `frames`: each frame's state, its canonical Macrocell in `frame-<i>.mc` — or `error: true` |
 | `timeline-write` | `input` (a pattern), `generations` (a frame at each), `metadata` | `timeline`: the file [macrocell.md](macrocell.md#timelines) writes; reading it back gives each frame's state again |
 
 The round trips (write, then read: the same cells and metadata) are property-tested in
-both suites.
+both suites, and so is measuring against reading: every `read` case's input that reads
+untrimmed measures as that read gives it.

@@ -214,6 +214,18 @@ cyclic grids. (MergeLife pads its edges with the most common value of the whole
 grid, so no part of a MergeLife world evolves on its own; the continuous
 families don't have them.)
 
+**Turning a region** in place turns it as [HashLife](hashlife.md#rectangle-transforms)
+turns a rectangle: a quarter turn about its center that never drifts, the rectangle
+turning with its cells. `turned_rect(x0, y0, x1, y1, clockwise)` gives the rectangle the
+cells land on — the one HashLife's `rotate_rect` returns, by the same formula — for any
+integers and without changing anything; a rectangle with x1 < x0 or y1 < y0 is an error.
+A grid of any family turns a region by extracting it, turning the copy with `rotate90`
+(clockwise) or `rotate90_ccw`, clearing the region, and stamping the copy (mode `copy`)
+at the turned rectangle's top-left: the new rectangle takes the turned cells, the rest of
+the old one is blank, and in a life-like grid the cells are exactly the ones
+`rotate_rect` gives. A region that isn't square can turn past an edge of the grid; a
+turned rectangle that isn't a region of the grid is the caller's to refuse.
+
 Nothing is held back inside the copy. In Advance Selection the region's cells
 may grow past it during the n generations, and what they grow into acts back on
 the region until the copy's region is taken, just as it would if the region
@@ -292,3 +304,8 @@ where a two-state mode meets another value, and the grid must come back unchange
 `outside: true`, Advance Outside on `region` for `n` generations, and expect the grid
 `expected` at generation 0, or `error: true` and the grid unchanged. HashLife's editing
 tools are pinned by the `edit-*` cases of [`../vectors/hashlife/`](../vectors/hashlife/).
+`turned-rect` (kind `turned-rect`) lists `cases`, each a `rect` `[x0, y0, x1, y1]` and
+`clockwise`, with the `expect`ed rectangle or `error: true`; the numbers are decimal
+strings, some past 2⁶⁴. The rectangles cover every parity of x0, y0, x1 and y1, and a
+runner also checks that HashLife's `rotate_rect` returns the same rectangle wherever both
+lie in its editing box.

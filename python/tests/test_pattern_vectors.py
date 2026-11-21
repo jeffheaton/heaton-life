@@ -9,6 +9,7 @@ import pytest
 from PIL import Image
 
 from heaton_life.ca import Cyclic, LifeLike, Wireworld
+from heaton_life.ca.hashlife import EDIT_LIMIT, HashLife
 from heaton_life.init import (
     extract,
     fill_random,
@@ -20,6 +21,7 @@ from heaton_life.init import (
     rotate90,
     rotate90_ccw,
     stamp,
+    turned_rect,
 )
 
 VECTOR_ROOT = Path(__file__).resolve().parents[2] / "vectors" / "patterns"
@@ -44,6 +46,7 @@ def test_pattern_vectors_exist() -> None:
         "rle-trim",
         "fill-random",
         "advance",
+        "turned-rect",
     }
 
 
@@ -165,6 +168,20 @@ def test_pattern_vector(case: Path) -> None:
         advance(*meta["region"], meta["n"])
         assert np.array_equal(world.state, _png(case.parent / meta["expected"]["file"]))
         assert world.generation == 0
+    elif kind == "turned-rect":
+        for entry in meta["cases"]:
+            rect = tuple(int(v) for v in entry["rect"])
+            clockwise = entry["clockwise"]
+            if entry.get("error"):
+                assert set(entry) == {"rect", "clockwise", "error"}
+                with pytest.raises(ValueError):
+                    turned_rect(*rect, clockwise=clockwise)
+                continue
+            assert set(entry) == {"rect", "clockwise", "expect"}
+            expect = tuple(int(v) for v in entry["expect"])
+            assert turned_rect(*rect, clockwise=clockwise) == expect, entry
+            if all(abs(v) <= EDIT_LIMIT for v in rect + expect):  # the same as the universe's
+                assert HashLife().rotate_rect(*rect, clockwise=clockwise) == expect, entry
     else:  # extract
         grid = _png(case.parent / meta["grid"]["file"])
         region = extract(

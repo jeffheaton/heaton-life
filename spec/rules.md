@@ -156,6 +156,44 @@ letter in a hexagonal or von Neumann rule; a `-` without letters; whitespace any
 the ends and around the `/`; a MAP payload of another length, a character outside the
 alphabet, or `=` other than a final `==`; anything after the rule.
 
+### Reasons
+
+Every error has a **reason**, a phrase saying what is wrong, the same in every port. The
+text is read as the grammar reads it, and the reason is that of the first problem found:
+
+1. Whitespace at the two ends is skipped. What is left starts with `MAP` or `B`, in
+   either case, or else: `expected B…/S… or MAP…` (empty text included).
+2. A MAP payload that, without one final `==`, is not 86, 22 or 6 characters of the
+   alphabet: `a MAP payload is 86, 22 or 6 base64 characters, optionally followed by ==`.
+3. A `B…/S…` rule is read from the left. Each side is a run of groups, each a digit `0`–`8`,
+   an optional `-`, and the letters that follow (`c e k a i n y q j r t w z`, in either
+   case):
+   - a `-` that no letter follows: `'-' after N must be followed by letters`, N the
+     group's digit;
+   - after the birth groups and any whitespace, anything but `/`: `expected '/' after the
+     birth counts`;
+   - after the `/` and any whitespace, anything but `S`: `expected S after '/'`;
+   - after the survival groups, anything but the end, `H` or `V`: `unexpected 'TEXT'
+     after the survival counts`, TEXT everything from there to the end, as written.
+4. Then each group is checked, the birth side's before the survival side's, and each
+   side's in the order written:
+   - a digit past the neighborhood's largest count: `the hexagonal neighborhood has 6
+     neighbors`, or `the von Neumann neighborhood has 4 neighbors`;
+   - letters in a hexagonal or von Neumann rule: `letters are only defined for Moore
+     rules, not hexagonal`, or `… not von Neumann`;
+   - letters after `0` or `8`: `N takes no letters`;
+   - a letter the digit doesn't define: `L is not a letter class of N`, L the first such
+     letter as written, in lowercase.
+
+So `B9/S23` gives `expected '/' after the birth counts` (9 is no digit of the grammar, so
+the birth groups end before it), and `B1kn/S` gives `k is not a letter class of 1`.
+
+**API.** Compiling raises (throws) an error that carries the reason: its message is
+`invalid rule '<text>': <reason> (spec/rules.md)`. `try_compile_rule(text)` gives the
+compiled rule and no reason, or no rule and the reason, without raising; .NET's
+`RuleString.TryCompile(text, out rule, out reason)` answers true or false likewise, and
+reads null as empty text.
+
 ## Preset names
 
 A port may accept short names where a person types a rule (the Python reference's
@@ -171,6 +209,7 @@ Each case under `vectors/rules/` has a `params.json` with `family: "rules"`,
 - `input` — the text to compile;
 - `canonical`, `neighborhood` (`moore`, `hexagonal` or `vonneumann`) and `table` — the
   512 entries as 128 lowercase hexadecimal digits, entry 0 in the high bit of the first
-  digit (the bit order of a Moore MAP payload); or `error: true` where compiling must fail.
+  digit (the bit order of a Moore MAP payload); or `error: true` where compiling must fail,
+  with the error's `reason` ([Reasons](#reasons)) in the cases that pin one (`reasons`).
 
 Runners are strict: an unknown key or `spec_version` fails the case.

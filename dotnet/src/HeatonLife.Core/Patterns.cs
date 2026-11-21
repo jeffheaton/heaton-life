@@ -1058,6 +1058,50 @@ namespace HeatonLife
         }
 
         /// <summary>
+        /// The rectangle a quarter turn of the inclusive rectangle about its center lands on
+        /// (spec/patterns.md "Editing a region"), for any integers and without turning anything:
+        /// the rectangle <see cref="HashLife.RotateRect"/> returns, by the same formula
+        /// (spec/hashlife.md "Rectangle transforms"). A grid turns a region onto it by stamping
+        /// <see cref="Rotate90(ReadOnlySpan{byte}, int, int, int)"/> (clockwise) or
+        /// <see cref="Rotate90Ccw(ReadOnlySpan{byte}, int, int, int)"/> of the region at its
+        /// top-left, after clearing the region; a region that isn't square can turn past an edge,
+        /// which is the caller's to refuse. Throws <see cref="ArgumentException"/> for an empty
+        /// rectangle (x1 &lt; x0 or y1 &lt; y0).
+        /// </summary>
+        public static CellBox TurnedRect(BigInteger x0, BigInteger y0, BigInteger x1, BigInteger y1, bool clockwise = true)
+        {
+            if (x1 < x0 || y1 < y0)
+                throw new ArgumentException($"empty rectangle ({x0}, {y0})..({x1}, {y1})");
+            (BigInteger s, BigInteger d) = TurnCenter(x0, y0, x1, y1);
+            return clockwise
+                ? new CellBox(s - y1, x0 + d, s - y0, x1 + d)
+                : new CellBox(y0 - d, s - x1, y1 - d, s - x0);
+        }
+
+        /// <summary>The rectangle a quarter turn of <paramref name="box"/> about its center lands on:
+        /// <see cref="TurnedRect(BigInteger, BigInteger, BigInteger, BigInteger, bool)"/>.</summary>
+        public static CellBox TurnedRect(CellBox box, bool clockwise = true)
+            => TurnedRect(box.X0, box.Y0, box.X1, box.Y1, clockwise);
+
+        /// <summary>
+        /// The (s, d) of a quarter turn of the inclusive rectangle (spec/hashlife.md "Rectangle
+        /// transforms"): clockwise sends (x, y) to (s − y, x + d), counter-clockwise to
+        /// (y − d, s − x). The center itself when it is a cell or a cell corner; otherwise the one
+        /// of the two cells it lies between whose x + y is even, so turns never drift. Every
+        /// division is exact (its numerator is even).
+        /// </summary>
+        internal static (BigInteger S, BigInteger D) TurnCenter(BigInteger x0, BigInteger y0, BigInteger x1, BigInteger y1)
+        {
+            BigInteger sx = x0 + x1, sy = y0 + y1; // twice the center
+            if ((sx - sy).IsEven)
+                return ((sx + sy) / 2, (sy - sx) / 2);
+            BigInteger s = (sx + sy + 1) / 2; // then down to the even candidate
+            if (!s.IsEven)
+                s -= 1;
+            return sx.IsEven ? (s, s - sx) : (s, sy - s);
+        }
+
+        /// <summary>
         /// The spec compatibility check: patterns are family-bound (a glider cannot
         /// enter Wireworld or MergeLife); cyclic patterns must also fit the target's
         /// state count. Returns the rejection reason, or null when stampable.
