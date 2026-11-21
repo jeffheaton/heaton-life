@@ -1,0 +1,36 @@
+{
+  "family": "formats",
+  "frames": [
+    {
+      "bounding_box": [
+        "0",
+        "0",
+        "1",
+        "0"
+      ],
+      "generation": "0",
+      "population": "2",
+      "state": "frame-0.mc"
+    },
+    {
+      "bounding_box": null,
+      "generation": "36",
+      "population": "0",
+      "state": "frame-1.mc"
+    }
+  ],
+  "generations": [
+    "0",
+    "36"
+  ],
+  "input": "input.rle",
+  "kind": "timeline-write",
+  "metadata": {
+    "author": "nobody",
+    "comments": [],
+    "name": null
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "timeline": "timeline.mc"
+}

@@ -1,0 +1,8 @@
+{
+  "error": true,
+  "family": "formats",
+  "input": "input.mc",
+  "kind": "timeline-read",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

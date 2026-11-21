@@ -1,0 +1,4 @@
+#CXRLE Pos=10,20
+#C dead margins on every side
+x = 9, y = 7, rule = B36/S23
+3$3b2o$4bo3b!

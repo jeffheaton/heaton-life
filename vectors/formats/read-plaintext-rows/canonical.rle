@@ -1,0 +1,4 @@
+#N Rows
+#C indented comment
+x = 5, y = 6, rule = B3/S23
+$obo2$bo$4o$2bo!

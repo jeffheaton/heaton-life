@@ -1,0 +1,5 @@
+[M2]
+#FRAMES 2 1 2^4095
+*$
+#FRAME 0 1
+#FRAME 1 1

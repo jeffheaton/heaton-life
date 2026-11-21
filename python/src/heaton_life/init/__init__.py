@@ -1,6 +1,14 @@
 """Initialization strategies and pattern import. Draw order and thresholds are spec'd (spec/lifelike.md)."""
 
 from heaton_life.init.builtins import BUILTIN_PATTERNS, BuiltinPattern
+from heaton_life.init.formats import (
+    PATTERN_FORMATS,
+    PatternFile,
+    PatternFormat,
+    detect_format,
+    read_pattern,
+)
+from heaton_life.init.metadata import PatternMetadata
 from heaton_life.init.patterns import (
     STAMP_MODES,
     StampMode,
@@ -24,6 +32,7 @@ from heaton_life.init.rle import (
     rle_decode,
     rle_encode,
     rle_measure,
+    rle_metadata,
     rle_runs,
 )
 from heaton_life.init.seeding import blob, single, soup
@@ -31,8 +40,12 @@ from heaton_life.init.seeding import blob, single, soup
 __all__ = [
     "BUILTIN_PATTERNS",
     "DEFAULT_MAX_CELLS",
+    "PATTERN_FORMATS",
     "STAMP_MODES",
     "BuiltinPattern",
+    "PatternFile",
+    "PatternFormat",
+    "PatternMetadata",
     "RleExtent",
     "RleInfo",
     "StampMode",
@@ -40,6 +53,7 @@ __all__ = [
     "check_region",
     "clear",
     "compatible",
+    "detect_format",
     "extract",
     "fill_random",
     "flip_h",
@@ -47,9 +61,11 @@ __all__ = [
     "mergelife_from_png",
     "mergelife_to_png",
     "place",
+    "read_pattern",
     "rle_decode",
     "rle_encode",
     "rle_measure",
+    "rle_metadata",
     "rle_runs",
     "rotate90",
     "rotate90_ccw",

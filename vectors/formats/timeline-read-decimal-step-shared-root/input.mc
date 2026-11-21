@@ -1,0 +1,8 @@
+[M2] (example 1.0)
+#R B3/S23
+#FRAMES 4 100 5
+**$**$
+#FRAME 0 1
+#FRAME 1 1
+#FRAME 2 1
+#FRAME 3 1

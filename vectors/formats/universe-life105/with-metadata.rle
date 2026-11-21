@@ -1,0 +1,4 @@
+#CXRLE Pos=-1,-2000
+#C blocks at their own places
+x = 1003, y = 2002, rule = B36/S23
+1001b2o$1001b2o1998$bo$2bo$3o!

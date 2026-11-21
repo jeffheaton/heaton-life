@@ -160,9 +160,9 @@ namespace HeatonLife
             out string body, out bool extended)
         {
             var lines = new List<string>();
-            foreach (string raw in text.Split('\n'))
+            foreach (string raw in TextLines.Split(text)) // as the reference's splitlines and strip
             {
-                string line = raw.TrimEnd('\r').Trim();
+                string line = TextLines.Strip(raw);
                 if (line.Length > 0 && line[0] != '#')
                     lines.Add(line);
             }
@@ -249,7 +249,7 @@ namespace HeatonLife
                 {
                     break;
                 }
-                else if (char.IsWhiteSpace(c))
+                else if (TextLines.IsSpace(c))
                 {
                     continue;
                 }
@@ -298,9 +298,63 @@ namespace HeatonLife
                 any ? new CellBox(x0, y0, x1, y1) : (CellBox?)null, population, rule, extended);
         }
 
+        /// <summary>
+        /// The pattern's name (<c>#N</c>), author (<c>#O</c>), and comment lines (<c>#C</c>,
+        /// <c>#c</c>) in file order (spec/formats.md "Metadata"). A <c>#CXRLE</c> first line is not
+        /// a comment.
+        /// </summary>
+        public static PatternMetadata RleMetadata(string text)
+        {
+            if (text == null)
+                throw new ArgumentNullException(nameof(text));
+            var reader = new MetadataReader();
+            bool first = true;
+            foreach (string raw in TextLines.Split(text))
+            {
+                string line = TextLines.Strip(raw);
+                if (line.Length == 0)
+                    continue;
+                if (first)
+                {
+                    first = false;
+                    if (line.StartsWith("#CXRLE", StringComparison.Ordinal))
+                        continue;
+                }
+                if (line[0] == '#')
+                    reader.HashLine(line);
+            }
+            return reader.Result();
+        }
+
+        /// <summary>Whether a stripped line is an RLE header as the decoders read one
+        /// (spec/formats.md "Detection").</summary>
+        internal static bool IsRleHeader(string line) => TryParseHeader(line, out _, out _, out _);
+
+        /// <summary>The <c>#CXRLE</c> first line's position and generation, or zeros without one.</summary>
+        internal static void Cxrle(string text, out BigInteger x, out BigInteger y, out BigInteger generation)
+        {
+            x = y = generation = BigInteger.Zero;
+            foreach (string raw in TextLines.Split(text))
+            {
+                string line = TextLines.Strip(raw);
+                if (line.Length == 0)
+                    continue;
+                if (line.StartsWith("#CXRLE", StringComparison.Ordinal))
+                    ReadCxrle(line, ref x, ref y, ref generation);
+                return;
+            }
+        }
+
         /// <summary>Canonical RLE; dialect chosen by content (cells above 24 are unencodable).</summary>
         public static string RleEncode(ReadOnlySpan<byte> cells, int width, int height, string rule = "B3/S23")
+            => RleEncode(cells, width, height, rule, null);
+
+        /// <summary>Canonical RLE with <paramref name="metadata"/>'s <c>#N</c>, <c>#O</c> and
+        /// <c>#C</c> lines before the header (spec/formats.md "Metadata").</summary>
+        public static string RleEncode(
+            ReadOnlySpan<byte> cells, int width, int height, string rule, PatternMetadata? metadata)
         {
+            List<string> notes = PatternMetadata.Lines(metadata);
             if (cells.Length != width * height)
                 throw new ArgumentException($"expected {width * height} cells, got {cells.Length}");
             int top = 0;
@@ -351,6 +405,8 @@ namespace HeatonLife
             body.Add(line);
 
             var sb = new StringBuilder();
+            foreach (string note in notes)
+                sb.Append(note).Append('\n');
             sb.Append("x = ").Append(width).Append(", y = ").Append(height)
               .Append(", rule = ").Append(rule);
             foreach (string bodyLine in body)
@@ -531,7 +587,7 @@ namespace HeatonLife
         }
 
         /// <summary>Set <paramref name="length"/> cells from tree position (tx, ty) rightward.</summary>
-        private static void AddRun(Dictionary<long, ulong> blocks, long tx, long ty, long length)
+        internal static void AddRun(Dictionary<long, ulong> blocks, long tx, long ty, long length)
         {
             long by = ty >> 3;
             int shift = (int)(ty & 7) * 8;
@@ -551,18 +607,26 @@ namespace HeatonLife
         /// <summary>
         /// The universe as RLE: <c>#CXRLE Pos=x0,y0</c> (with <c> Gen=n</c> past generation 0),
         /// then the canonical encoding of the bounding box — the same tokens and line breaks
-        /// <see cref="RleEncode"/> gives that rectangle. A pattern reaching outside the editing
+        /// <see cref="RleEncode(ReadOnlySpan{byte}, int, int, string)"/> gives that rectangle. A pattern reaching outside the editing
         /// box throws <see cref="InvalidOperationException"/>; Macrocell carries it.
         /// </summary>
-        public static string HashLifeToRle(HashLife universe)
+        public static string HashLifeToRle(HashLife universe) => HashLifeToRle(universe, null);
+
+        /// <summary>The universe as RLE, <paramref name="metadata"/>'s lines right after the
+        /// <c>#CXRLE</c> line (spec/formats.md "Metadata").</summary>
+        public static string HashLifeToRle(HashLife universe, PatternMetadata? metadata)
         {
             if (universe == null)
                 throw new ArgumentNullException(nameof(universe));
+            List<string> notes = PatternMetadata.Lines(metadata);
+            var noteText = new StringBuilder();
+            foreach (string note in notes)
+                noteText.Append(note).Append('\n');
             BigInteger generation = universe.Generation;
             string gen = generation.Sign > 0 ? " Gen=" + generation.ToString(CultureInfo.InvariantCulture) : "";
             CellBox? found = universe.BoundingBox;
             if (found == null)
-                return $"#CXRLE Pos=0,0{gen}\nx = 0, y = 0, rule = {universe.Rule}\n!\n";
+                return $"#CXRLE Pos=0,0{gen}\n{noteText}x = 0, y = 0, rule = {universe.Rule}\n!\n";
             CellBox box = found.Value;
             const long limit = HashLife.EditLimit;
             if (BigInteger.Abs(box.X0) > limit || BigInteger.Abs(box.X1) > limit
@@ -617,6 +681,7 @@ namespace HeatonLife
             var text = new StringBuilder();
             text.Append("#CXRLE Pos=").Append(x0.ToString(CultureInfo.InvariantCulture)).Append(',')
                 .Append(y0.ToString(CultureInfo.InvariantCulture)).Append(gen).Append('\n');
+            text.Append(noteText);
             text.Append("x = ").Append((x1 - x0 + 1).ToString(CultureInfo.InvariantCulture))
                 .Append(", y = ").Append((y1 - y0 + 1).ToString(CultureInfo.InvariantCulture))
                 .Append(", rule = ").Append(universe.Rule).Append('\n');
@@ -670,7 +735,7 @@ namespace HeatonLife
             return result;
         }
 
-        /// <summary>One run token, wrapped as <see cref="RleEncode"/> wraps: a token that would
+        /// <summary>One run token, wrapped as <see cref="RleEncode(ReadOnlySpan{byte}, int, int, string)"/> wraps: a token that would
         /// pass column 70 starts a new line.</summary>
         private static void AppendToken(StringBuilder text, ref int lineLength, long length, char tag)
         {

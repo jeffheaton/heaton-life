@@ -1,0 +1,72 @@
+{
+  "count": 4,
+  "family": "formats",
+  "first": "100",
+  "frames": [
+    {
+      "bounding_box": [
+        "-4",
+        "-3",
+        "-3",
+        "-2"
+      ],
+      "generation": "100",
+      "population": "4",
+      "state": "frame-0.mc"
+    },
+    {
+      "bounding_box": [
+        "-4",
+        "-3",
+        "-3",
+        "-2"
+      ],
+      "generation": "105",
+      "population": "4",
+      "state": "frame-1.mc"
+    },
+    {
+      "bounding_box": [
+        "-4",
+        "-3",
+        "-3",
+        "-2"
+      ],
+      "generation": "110",
+      "population": "4",
+      "state": "frame-2.mc"
+    },
+    {
+      "bounding_box": [
+        "-4",
+        "-3",
+        "-3",
+        "-2"
+      ],
+      "generation": "115",
+      "population": "4",
+      "state": "frame-3.mc"
+    }
+  ],
+  "input": "input.mc",
+  "kind": "timeline-read",
+  "metadata": {
+    "author": null,
+    "comments": [],
+    "name": null
+  },
+  "spec_version": "0.16.0",
+  "step": "5",
+  "tier": "bit-exact",
+  "universe": {
+    "bounding_box": [
+      "-4",
+      "-3",
+      "-3",
+      "-2"
+    ],
+    "generation": "0",
+    "population": "4",
+    "state": "universe.mc"
+  }
+}

@@ -16,6 +16,9 @@ from collections.abc import Iterator
 import numpy as np
 from numpy.typing import NDArray
 
+from heaton_life.core.decimal_text import int_of_digits
+from heaton_life.init.metadata import MetadataReader, PatternMetadata, metadata_lines
+
 _HEADER = re.compile(
     r"x\s*=\s*(\d+)\s*,\s*y\s*=\s*(\d+)(?:\s*,\s*rule\s*=\s*(\S+))?", re.IGNORECASE
 )
@@ -77,11 +80,37 @@ def rle_runs(text: str) -> tuple[RleInfo, Iterator[tuple[int, int, int, int]]]:
 
 def _cxrle_int(text: str, *, signed: bool) -> int:
     """A ``#CXRLE`` integer: ASCII digits, after an optional ``-`` where ``signed``."""
-    digits = text[1:] if signed and text.startswith("-") else text
+    negative = signed and text.startswith("-")
+    digits = text[1:] if negative else text
     if not (digits.isascii() and digits.isdigit()):
         kind = "an integer" if signed else "a generation in digits"
         raise ValueError(f"#CXRLE needs {kind}, got {text!r}")
-    return int(text)
+    value = int_of_digits(digits)  # any size: int() refuses past 4,300 digits
+    return -value if negative else value
+
+
+def is_rle_header(line: str) -> bool:
+    """Whether a stripped line is an RLE header ``x = W, y = H[, rule = R]`` as the
+    decoders read one (spec/formats.md "Detection")."""
+    return _HEADER.match(line) is not None
+
+
+def rle_metadata(text: str) -> PatternMetadata:
+    """The pattern's name (``#N``), author (``#O``), and comment lines (``#C``, ``#c``),
+    in file order (spec/formats.md "Metadata"). A ``#CXRLE`` first line is not a comment."""
+    reader = MetadataReader()
+    first = True
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if first:
+            first = False
+            if line.startswith("#CXRLE"):
+                continue
+        if line.startswith("#"):
+            reader.hash_line(line)
+    return reader.result()
 
 
 def _scan(body: str, extended: bool) -> Iterator[tuple[int, int, int, int]]:
@@ -237,8 +266,16 @@ def rle_decode(
     return grid, rule
 
 
-def rle_encode(grid: NDArray[np.uint8], rule: str = "B3/S23", *, line_width: int = 70) -> str:
-    """Encode a grid as canonical RLE; dialect chosen by content (spec/patterns.md)."""
+def rle_encode(
+    grid: NDArray[np.uint8],
+    rule: str = "B3/S23",
+    *,
+    line_width: int = 70,
+    metadata: PatternMetadata | None = None,
+) -> str:
+    """Encode a grid as canonical RLE; dialect chosen by content (spec/patterns.md).
+    ``metadata``'s ``#N``, ``#O`` and ``#C`` lines go before the header."""
+    notes = metadata_lines(metadata)
     height, width = grid.shape
     top = int(grid.max(initial=0))
     if top > 24:
@@ -270,7 +307,7 @@ def rle_encode(grid: NDArray[np.uint8], rule: str = "B3/S23", *, line_width: int
         line += tok
     body_lines.append(line)
     header = f"x = {width}, y = {height}, rule = {rule}"
-    return "\n".join([header, *body_lines]) + "\n"
+    return "\n".join([*notes, header, *body_lines]) + "\n"
 
 
 def _row_end_runs(tokens: list[str]) -> list[str]:

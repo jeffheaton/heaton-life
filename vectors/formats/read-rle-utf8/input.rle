@@ -1,0 +1,5 @@
+﻿#N Café glider
+#O Ångström
+#C ą, Å and — keep a 0x85 byte inside one line.
+x = 3, y = 3, rule = B3/S23
+bo$2bo$3o!

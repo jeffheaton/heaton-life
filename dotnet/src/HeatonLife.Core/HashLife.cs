@@ -812,9 +812,12 @@ namespace HeatonLife
         // -- snapshots --------------------------------------------------------------------------
 
         /// <summary>The cells and generation now, in O(1); the nodes stay alive while it does.</summary>
-        public HashLifeSnapshot Snapshot()
+        public HashLifeSnapshot Snapshot() => SnapshotAt(_store.Root, _store.Level, Generation);
+
+        /// <summary>A snapshot of any tree in this universe's store, kept alive like any other.</summary>
+        internal HashLifeSnapshot SnapshotAt(int root, int level, BigInteger generation)
         {
-            var snapshot = new HashLifeSnapshot(this, _store.Root, _store.Level, Generation);
+            var snapshot = new HashLifeSnapshot(this, root, level, generation);
             List<WeakReference<HashLifeSnapshot>> live = _store.Snapshots;
             if (live.Count >= _snapshotPrune)
             {
@@ -854,47 +857,52 @@ namespace HeatonLife
         public static HashLife FromMacrocell(byte[] data, int maxMemoryMb = DefaultMaxMemoryMb)
             => Macrocell.Read(data, maxMemoryMb);
 
-        /// <summary>A pattern file's bytes, recognized by content: gzip or a first line starting
-        /// <c>[M2]</c> is Macrocell, anything else RLE (spec/hashlife.md "Pattern I/O").</summary>
+        /// <summary>A pattern file's bytes in any two-state format, gzip-compressed or not,
+        /// recognized by content (spec/formats.md); <see cref="PatternFiles.ReadUniverse(byte[], int)"/>
+        /// gives its metadata too.</summary>
         public static HashLife Load(byte[] data, int maxMemoryMb = DefaultMaxMemoryMb)
         {
             if (data == null)
                 throw new ArgumentNullException(nameof(data));
-            if (data.Length >= 2 && data[0] == 0x1f && data[1] == 0x8b)
-                return Macrocell.Read(data, maxMemoryMb);
-            int i = 0;
-            while (i < data.Length && (data[i] == ' ' || (data[i] >= 9 && data[i] <= 13)))
-                i++;
-            if (data.Length - i >= 4 && data[i] == '[' && data[i + 1] == 'M' && data[i + 2] == '2' && data[i + 3] == ']')
-                return Macrocell.Read(data, maxMemoryMb);
-            return Patterns.RleToHashLife(Latin1(data, 0, data.Length), maxMemoryMb);
+            return PatternFiles.ReadUniverse(data, maxMemoryMb).Universe;
         }
 
         /// <summary>RLE of the bounding box behind a <c>#CXRLE</c> line; inside the editing box only.</summary>
         public string ToRle() => Patterns.HashLifeToRle(this);
 
+        /// <summary>RLE with <paramref name="metadata"/>'s lines after the <c>#CXRLE</c> line.</summary>
+        public string ToRle(PatternMetadata? metadata) => Patterns.HashLifeToRle(this, metadata);
+
         /// <summary>The canonical Macrocell text: the whole state, any size, in one string.</summary>
         public string ToMacrocell() => Macrocell.Write(this);
 
+        /// <summary>The canonical Macrocell text with <paramref name="metadata"/>'s lines.</summary>
+        public string ToMacrocell(PatternMetadata? metadata) => Macrocell.Write(this, metadata);
+
         /// <summary>The bytes of a pattern file named <paramref name="fileName"/>, by its extension:
         /// <c>.rle</c>, <c>.mc</c>, or <c>.mc.gz</c> (gzip of the canonical text).</summary>
-        public byte[] EncodeFile(string fileName)
+        public byte[] EncodeFile(string fileName) => EncodeFile(fileName, null);
+
+        /// <summary>The bytes of a pattern file named <paramref name="fileName"/> with
+        /// <paramref name="metadata"/>'s lines, as UTF-8 (ASCII unless the metadata isn't).</summary>
+        public byte[] EncodeFile(string fileName, PatternMetadata? metadata)
         {
             if (fileName == null)
                 throw new ArgumentNullException(nameof(fileName));
+            var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
             string name = fileName.ToLowerInvariant();
             if (name.EndsWith(".mc.gz", StringComparison.Ordinal))
             {
-                byte[] text = Encoding.ASCII.GetBytes(ToMacrocell());
+                byte[] text = utf8.GetBytes(ToMacrocell(metadata));
                 using var output = new MemoryStream();
                 using (var gzip = new GZipStream(output, CompressionLevel.Optimal, leaveOpen: true))
                     gzip.Write(text, 0, text.Length);
                 return output.ToArray();
             }
             if (name.EndsWith(".mc", StringComparison.Ordinal))
-                return Encoding.ASCII.GetBytes(ToMacrocell());
+                return utf8.GetBytes(ToMacrocell(metadata));
             if (name.EndsWith(".rle", StringComparison.Ordinal))
-                return Encoding.ASCII.GetBytes(ToRle());
+                return utf8.GetBytes(ToRle(metadata));
             throw new ArgumentException($"unknown pattern extension for '{fileName}' (.rle, .mc, .mc.gz)", nameof(fileName));
         }
 
@@ -919,10 +927,12 @@ namespace HeatonLife
         }
 
         /// <summary>The smallest centered root (level ≥ 3) that holds every live cell.</summary>
-        internal (int Node, int Level) Minimal()
+        internal (int Node, int Level) Minimal() => Minimal(_store.Root, _store.Level);
+
+        /// <summary>The smallest centered root (level ≥ 3) holding every live cell of tree (n, k).</summary>
+        internal (int Node, int Level) Minimal(int n, int k)
         {
             var s = _store;
-            int n = s.Root, k = s.Level;
             while (k > 3)
             {
                 int a = s.Kid(n, 0), b = s.Kid(n, 1), c = s.Kid(n, 2), d = s.Kid(n, 3);
@@ -1193,6 +1203,76 @@ namespace HeatonLife
                 PasteIn(b, k - 1, nx + half, ny),
                 PasteIn(c, k - 1, nx, ny + half),
                 PasteIn(d, k - 1, nx + half, ny + half));
+        }
+
+        /// <summary>
+        /// The inclusive rectangle's cells as <see cref="GetRect"/> gives them, anywhere on the plane,
+        /// for readers that measured it first (spec/formats.md "Reading into a grid").
+        /// </summary>
+        internal byte[] CellsAnywhere(BigInteger x0, BigInteger y0, BigInteger x1, BigInteger y1)
+        {
+            BigInteger w = x1 - x0 + 1, h = y1 - y0 + 1;
+            if (w.Sign <= 0 || h.Sign <= 0)
+                throw new ArgumentException($"empty rectangle ({x0}, {y0})..({x1}, {y1})");
+            if (w * h > int.MaxValue)
+                throw new ArgumentOutOfRangeException(null, $"({x0}, {y0})..({x1}, {y1}) holds more cells than one array can");
+            var cells = new byte[(int)(w * h)];
+            int k = _store.Level;
+            BigInteger origin = -(BigInteger.One << (k - 1));
+            ExtractBig(_store.Root, k, origin - x0, origin - (y0 - 1), (long)w, (long)h, cells);
+            return cells;
+        }
+
+        /// <summary>Level-k node n, its origin at (rx, ry) from the rectangle's top-left tree
+        /// position, into the w × h rectangle; long arithmetic once the node is small.</summary>
+        private void ExtractBig(int n, int k, BigInteger rx, BigInteger ry, long w, long h, byte[] cells)
+        {
+            var s = _store;
+            if (n == s.Empty(k))
+                return;
+            BigInteger size = BigInteger.One << k;
+            if (rx >= w || rx + size <= 0 || ry >= h || ry + size <= 0)
+                return;
+            if (k <= 31)
+            {
+                ExtractSmall(n, k, (long)rx, (long)ry, w, h, cells);
+                return;
+            }
+            BigInteger half = size >> 1;
+            ExtractBig(s.Kid(n, 0), k - 1, rx, ry, w, h, cells);
+            ExtractBig(s.Kid(n, 1), k - 1, rx + half, ry, w, h, cells);
+            ExtractBig(s.Kid(n, 2), k - 1, rx, ry + half, w, h, cells);
+            ExtractBig(s.Kid(n, 3), k - 1, rx + half, ry + half, w, h, cells);
+        }
+
+        private void ExtractSmall(int n, int k, long rx, long ry, long w, long h, byte[] cells)
+        {
+            var s = _store;
+            long size = 1L << k;
+            if (n == s.Empty(k) || rx >= w || rx + size <= 0 || ry >= h || ry + size <= 0)
+                return;
+            if (k == 3)
+            {
+                ulong bits = s.Bits(n);
+                for (int r = 0; r < 8; r++)
+                {
+                    long y = ry + r;
+                    if (y < 0 || y >= h)
+                        continue;
+                    for (int c = 0; c < 8; c++)
+                    {
+                        long x = rx + c;
+                        if (x >= 0 && x < w && ((bits >> (r * 8 + c)) & 1) != 0)
+                            cells[y * w + x] = 1;
+                    }
+                }
+                return;
+            }
+            long half = size >> 1;
+            ExtractSmall(s.Kid(n, 0), k - 1, rx, ry, w, h, cells);
+            ExtractSmall(s.Kid(n, 1), k - 1, rx + half, ry, w, h, cells);
+            ExtractSmall(s.Kid(n, 2), k - 1, rx, ry + half, w, h, cells);
+            ExtractSmall(s.Kid(n, 3), k - 1, rx + half, ry + half, w, h, cells);
         }
 
         private void ExtractIn(int n, int k, long nx, long ny)

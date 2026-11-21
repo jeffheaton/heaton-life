@@ -1,0 +1,29 @@
+{
+  "canonical": "canonical.rle",
+  "family": "formats",
+  "format": "plaintext",
+  "generation": "0",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      6,
+      5
+    ]
+  },
+  "input": "input.cells",
+  "kind": "read",
+  "limit": "default",
+  "metadata": {
+    "author": null,
+    "comments": [
+      "indented comment"
+    ],
+    "name": "Rows"
+  },
+  "rule": null,
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "trim": false,
+  "x": "0",
+  "y": "0"
+}

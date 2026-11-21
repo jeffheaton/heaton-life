@@ -1,0 +1,7 @@
+#CXRLE Pos=-4,-3 Gen=41
+#N Two blocks far apart
+#O Someone
+#C Macrocell comments,
+#C in order.
+x = 66, y = 66, rule = B36/S23
+2o$2o63$64b2o$64b2o!

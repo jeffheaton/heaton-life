@@ -1,0 +1,68 @@
+{
+  "family": "formats",
+  "frames": [
+    {
+      "bounding_box": [
+        "-18",
+        "-4",
+        "17",
+        "4"
+      ],
+      "generation": "0",
+      "population": "36",
+      "state": "frame-0.mc"
+    },
+    {
+      "bounding_box": [
+        "-18",
+        "-4",
+        "17",
+        "7"
+      ],
+      "generation": "30",
+      "population": "41",
+      "state": "frame-1.mc"
+    },
+    {
+      "bounding_box": [
+        "-18",
+        "-4",
+        "17",
+        "15"
+      ],
+      "generation": "60",
+      "population": "46",
+      "state": "frame-2.mc"
+    },
+    {
+      "bounding_box": [
+        "-18",
+        "-4",
+        "22",
+        "22"
+      ],
+      "generation": "90",
+      "population": "51",
+      "state": "frame-3.mc"
+    }
+  ],
+  "generations": [
+    "0",
+    "30",
+    "60",
+    "90"
+  ],
+  "input": "input.rle",
+  "kind": "timeline-write",
+  "metadata": {
+    "author": null,
+    "comments": [
+      "Period 30.",
+      ""
+    ],
+    "name": "Gosper glider gun"
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "timeline": "timeline.mc"
+}

@@ -1,0 +1,10 @@
+{
+  "error": true,
+  "family": "formats",
+  "input": "input.png",
+  "kind": "read",
+  "limit": 9,
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "trim": true
+}

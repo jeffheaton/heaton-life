@@ -62,6 +62,29 @@ limit.
   breeds run after run, each from a fresh population, and run n's seed comes from PCG32
   stream 2, so any run replays on either implementation from the search's seed and its
   number. [spec/rng.md](spec/rng.md) now lists the streams in use.
+- **Pattern files in every common format, recognized by content**
+  ([spec/formats.md](spec/formats.md)): plaintext (`.cells`), Life 1.05, Life 1.06, and
+  PNG and BMP images (a white pixel is dead, any other alive) join RLE and Macrocell,
+  and any of them may be gzip-compressed. `detect_format` / `PatternFiles.Detect` names a
+  file's format from its bytes; `read_pattern` / `PatternFiles.Read` gives its cells as a
+  grid with their position, rule, generation, and metadata, under the decode limit and
+  optionally trimmed; `read_universe` / `PatternFiles.ReadUniverse` places any two-state
+  file in a HashLife universe. PNG covers every color type, bit depth, and interlacing;
+  BMP the core and info headers, 1- to 32-bit pixels, and the common bit-field masks.
+- **Pattern metadata** (`PatternMetadata`; [spec/formats.md](spec/formats.md)
+  "Metadata"): the readers return a file's name, author, and comment lines (RLE and
+  Macrocell `#N`, `#O`, `#C`; plaintext `!Name:`, `!Author:`, `!`; Life 1.0x `#D`)
+  instead of skipping them, and the RLE and Macrocell writers write them back
+  (`rle_metadata` / `Patterns.RleMetadata`; a `metadata` argument on `rle_encode`,
+  `HashLife.to_rle`, `to_macrocell`, and `save`, and new overloads of
+  `Patterns.RleEncode`, `HashLife.ToRle`, `ToMacrocell`, `EncodeFile`, and
+  `Macrocell.Write`). Without metadata every writer gives exactly the text it did.
+- **Macrocell timelines** ([spec/macrocell.md](spec/macrocell.md) "Timelines"): frames
+  of one universe at evenly spaced generations, sharing one node table in one file
+  (`#FRAMES` and `#FRAME` lines). `read_timeline` / `Macrocell.ReadTimeline` gives each
+  frame as a snapshot of one universe; `write_timeline` / `Macrocell.WriteTimeline` writes
+  a file from snapshots, canonically, with its root and `#G` set to the last frame so
+  readers without timelines load that.
 
 - **Editing primitives** for selection and run tools ([spec/patterns.md](spec/patterns.md)
   "Extract and stamp" and "Editing a region", [spec/hashlife.md](spec/hashlife.md)
@@ -105,6 +128,23 @@ limit.
   larger limit, or `None` / `null` to lift it, to decode a bigger grid on purpose.
 - Python: `rle_runs` reads its tokens one at a time. It used to list every token of the
   file first, which held a large file in memory several times over.
+- **`HashLife.from_file` / `HashLife.Load` read every two-state format** by content, not
+  just RLE and Macrocell.
+- **Pattern file bytes are UTF-8 when they are valid UTF-8**, otherwise Latin-1 as before
+  ([spec/formats.md](spec/formats.md) "Bytes and text"). Under Latin-1, a byte `85` inside
+  an accented letter (Å, ą) split its comment line in two, and the second half could then
+  be read as cells.
+- **Gzip input is checked whole**: one member, its CRC-32 and length verified. A
+  truncated `.mc.gz` used to load partially in .NET (Python refused it), and a file of two
+  concatenated members is now refused in both.
+- Macrocell readers skip blank lines before the `[M2]` header (detection already allowed
+  them).
+- .NET: RLE decoding splits lines and skips whitespace exactly as the Python reference
+  does. A file with old Mac (CR-only) line ends decoded as one long line, an empty
+  pattern, instead of the pattern it holds.
+- Python: generations and positions of any length read and write. CPython refuses to
+  convert integers past 4,300 digits, so a Macrocell `#G` or an RLE `#CXRLE Gen` that long
+  failed in Python but not in .NET.
 
 ## 1.1.0 (2026-09-25)
 

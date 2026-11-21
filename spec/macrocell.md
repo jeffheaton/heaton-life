@@ -1,7 +1,8 @@
 # Macrocell — HashLife's native file format
 
 Conformance tier: **bit-exact** (canonical writing). Vectors:
-[`vectors/hashlife/`](../vectors/hashlife/) (`macrocell-*` and every `evolve-*` state).
+[`vectors/hashlife/`](../vectors/hashlife/) (`macrocell-*` and every `evolve-*` state);
+metadata and timelines in [`vectors/formats/`](../vectors/formats/).
 
 Macrocell (`.mc`, often gzip-compressed as `.mc.gz`) is the Life community's format for
 HashLife patterns. It lists a pattern's distinct [quadtree](hashlife.md#quadtree) nodes,
@@ -21,8 +22,10 @@ Readers handle two-state files. A file is lines of ASCII text:
      are rejected ([hashlife.md](hashlife.md#state)). Without `#R` the rule is `B3/S23`.
    - `#G <n>` — the generation: one or more ASCII digits `0`–`9`, any size, no sign (a
      sign or any other character is an error); 0 without it.
-   - `#FRAMES …` and `#FRAME …` — the format's timeline frames; skipped.
-   - Any other `#` line is a comment (conventionally `#C …`); skipped.
+   - `#FRAMES …` and `#FRAME …` — a [timeline](#timelines); a reader that wants one
+     universe skips them.
+   - `#N`, `#O`, `#C` and `#c` — the pattern's [metadata](#metadata).
+   - Any other `#` line is skipped.
 3. **Node lines**, numbered 1, 2, 3, … in file order (blank and `#` lines don't count):
    - **Leaf** (level 3, an 8 × 8 square): rows top to bottom, cells left to right, `.` dead
      and `*` alive, each row ended by `$`. Trailing `.` in a row, and trailing empty rows,
@@ -40,8 +43,10 @@ Readers handle two-state files. A file is lines of ASCII text:
    y ∈ [−2^(k−1) + 1, 2^(k−1)] (the upper-left cell of the root's SE child is (0, 1)).
 
 A file with no node lines, a child that refers forward or to the wrong level, or any other
-malformed line is an error. Gzip compression is a container: a reader handed bytes that
-begin `1f 8b` decompresses them first.
+malformed line is an error. Blank lines before the header are skipped. Gzip compression is
+a container: a reader handed bytes that begin `1f 8b` decompresses them first, and bytes
+become text as [formats.md](formats.md#bytes-and-text) says (UTF-8 when they are valid
+UTF-8, otherwise Latin-1).
 
 ## Writing
 
@@ -66,7 +71,93 @@ readers of the format accept.
 7. **Internal lines** `<level> <nw> <ne> <sw> <se>`, single spaces.
 8. The **empty universe** is the empty leaf, written `$`.
 
-Lines end with `\n` (LF), including the last. No comments are written.
+Lines end with `\n` (LF), including the last. [Metadata](#metadata), when a writer is
+given some, goes after `#R` and `#G`, before the nodes; without it no comment lines are
+written.
+
+## Metadata
+
+A file carries the metadata of [formats.md](formats.md#metadata): `#N <name>`,
+`#O <author>`, and comment lines `#C <text>` (or `#c`), anywhere after the header. The
+first `#N` and `#O` count; comments keep their order. The canonical writer, given
+metadata, writes `#N` (when there is a name), `#O` (when there is an author), then one
+`#C` line per comment, between `#G` (or `#R`) and the nodes. For example a named glider
+whose top-left cell is (0, 0):
+
+```
+[M2] (heaton-life)
+#R B3/S23
+#N Glider
+#C The first spaceship found.
+$$$.....*$......*$....***$
+```
+
+## Timelines
+
+A **timeline** file holds several frames of one universe — its cells at evenly spaced
+generations — and the frames share the file's one node table, so structure that frames
+have in common is written once.
+
+**Reading.** On top of an ordinary file:
+
+- `#FRAMES <count> <first> <step>` — exactly one such line, anywhere after the header.
+  `count` (at least 1) and `first` are ASCII digits, any size, no sign. `step` is ASCII
+  digits, or `<b>^<e>`: two runs of ASCII digits joined by `^`, meaning b to the power e
+  (`2^3` is 8; any b to the power 0 is 1). The step is at least 1 and below 2⁴⁰⁹⁶; a power
+  that would pass that is refused before it is computed. Frame i, for i from 0 to
+  count − 1, is the universe at generation `first + i × step`.
+- `#FRAME <i> <n>` — frame i's root is node line n, both ASCII digits. Every i from 0 to
+  count − 1 has exactly one `#FRAME` line. n is any node line of the file (1 up to the
+  number of node lines), of any level, and a frame's root is placed as the file's root is
+  ("Reading", step 4). References are resolved once the whole file is read, so a `#FRAME`
+  line may come before or after its node; writers put them after the nodes.
+
+Anything else is an error for a timeline reader: no `#FRAMES` line or two of them, a
+malformed field, a count of 0, a frame index past `count − 1` or given twice, a missing
+frame, n of 0 or past the last node line, a step of 0 or one too large. The file's own
+root and `#G` still describe one universe, the one a reader without timelines loads; the
+writer below makes it the last frame. Python: `read_timeline(source)`, giving a
+`MacrocellTimeline` (one `universe` holding every frame's nodes, left at the file's root
+and generation, and `frames`, a snapshot of each); .NET: `Macrocell.ReadTimeline`.
+
+**Writing.** From frames that are snapshots of one universe, in order, at generations
+spaced evenly by a step of at least 1 (a single frame has step 1). Writing is canonical:
+
+1. `[M2] (heaton-life)`
+2. `#R <rule>`: the universe's rule, in canonical form.
+3. `#G <generation>` of the last frame, only when it is above 0.
+4. `#FRAMES <count> <first> <b>^<e>`: the number of frames, the first one's generation,
+   and the step written as a power, b the smallest integer of at least 2 that the step is
+   a power of: 1 is `2^0`, 8 is `2^3`, 12 is `12^1`, 36 is `6^2`.
+5. The metadata lines, when there is metadata ([Metadata](#metadata)).
+6. The nodes: frame by frame in order, each frame's minimal root ("Writing", step 4)
+   written in the order, and with the lines, of "Writing" steps 5–8, except that a node
+   already written for an earlier frame is not written again. An empty frame's root, the
+   empty leaf, gets the line `$` the first time; under a parent it is still the child `0`.
+7. When the last line written is not the last frame's root, that root's line is written
+   once more, so a reader without timelines loads the last frame.
+8. `#FRAME <i> <n>` for each frame in order, n the number of the line where its root was
+   first written.
+
+Every frame must belong to the universe being written, there must be at least one, and
+the steps between frames must all be the same step of at least 1 and below 2⁴⁰⁹⁶, or
+writing is an error. Python: `write_timeline(universe, frames, metadata=None)`; .NET:
+`Macrocell.WriteTimeline`. For example, a blinker on (−1, 0), (0, 0) and (1, 0) at
+generations 0, 1 and 2 — each frame's minimal root is a leaf, and the third frame's root
+was written for the first, so its line is written again at the end:
+
+```
+[M2] (heaton-life)
+#R B3/S23
+#G 2
+#FRAMES 3 0 2^0
+$$$...***$
+$$....*$....*$....*$
+$$$...***$
+#FRAME 0 1
+#FRAME 1 2
+#FRAME 2 1
+```
 
 ## Notes
 

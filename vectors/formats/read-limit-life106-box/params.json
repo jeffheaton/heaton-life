@@ -1,0 +1,10 @@
+{
+  "error": true,
+  "family": "formats",
+  "input": "input.lif",
+  "kind": "read",
+  "limit": 11,
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "trim": false
+}

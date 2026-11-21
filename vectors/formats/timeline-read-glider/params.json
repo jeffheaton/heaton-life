@@ -1,0 +1,64 @@
+{
+  "count": 3,
+  "family": "formats",
+  "first": "0",
+  "frames": [
+    {
+      "bounding_box": [
+        "-1",
+        "-1",
+        "1",
+        "1"
+      ],
+      "generation": "0",
+      "population": "5",
+      "state": "frame-0.mc"
+    },
+    {
+      "bounding_box": [
+        "0",
+        "0",
+        "2",
+        "2"
+      ],
+      "generation": "4",
+      "population": "5",
+      "state": "frame-1.mc"
+    },
+    {
+      "bounding_box": [
+        "1",
+        "1",
+        "3",
+        "3"
+      ],
+      "generation": "8",
+      "population": "5",
+      "state": "frame-2.mc"
+    }
+  ],
+  "input": "input.mc",
+  "kind": "timeline-read",
+  "metadata": {
+    "author": null,
+    "comments": [
+      "Frame lines anywhere, in any order.",
+      "a comment between frame lines"
+    ],
+    "name": "Glider"
+  },
+  "spec_version": "0.16.0",
+  "step": "4",
+  "tier": "bit-exact",
+  "universe": {
+    "bounding_box": [
+      "1",
+      "1",
+      "3",
+      "3"
+    ],
+    "generation": "8",
+    "population": "5",
+    "state": "universe.mc"
+  }
+}

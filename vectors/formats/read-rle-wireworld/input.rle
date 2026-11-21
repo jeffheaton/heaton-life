@@ -1,0 +1,4 @@
+#N Diode
+#C Electrons pass to the right only.
+x = 7, y = 3, rule = WireWorld
+3.2C$4C.3C$3.2C!

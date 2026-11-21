@@ -15,6 +15,8 @@ from heaton_life.ca.hashlife.universe import (
     HashLife,
     check_box,
 )
+from heaton_life.core.decimal_text import digits_of
+from heaton_life.init.metadata import PatternMetadata, metadata_lines
 from heaton_life.init.rle import rle_runs
 
 _LINE_WIDTH = 70
@@ -51,15 +53,7 @@ def read_rle(text: str, *, max_memory_mb: int = DEFAULT_MEMORY_MB) -> HashLife:
             raise ValueError(f"HashLife cells are 0 or 1, not {state}")
         width = max(width, x + length)
         height = max(height, y + 1)
-        cx = x0 + x
-        ty = y0 + y - 1  # tree row
-        by, shift = ty >> 3, (ty & 7) * 8
-        while length:
-            bx, offset = cx >> 3, cx & 7
-            take = min(8 - offset, length)
-            blocks[bx, by] = blocks.get((bx, by), 0) | (((1 << take) - 1) << (offset + shift))
-            cx += take
-            length -= take
+        add_run(blocks, x0 + x, y0 + y - 1, length)  # tree row: one above the cell's y
     if blocks:
         check_box(x0, y0, x0 + width - 1, y0 + height - 1)
         universe._paste_blocks(blocks, (x0, y0 - 1, x0 + width - 1, y0 + height - 2), "or")
@@ -67,12 +61,26 @@ def read_rle(text: str, *, max_memory_mb: int = DEFAULT_MEMORY_MB) -> HashLife:
     return universe
 
 
-def write_rle(universe: HashLife) -> str:
-    """The universe as RLE: ``#CXRLE Pos=x0,y0 [Gen=n]``, then canonical RLE of the box."""
-    gen = f" Gen={universe.generation}" if universe.generation else ""
+def add_run(blocks: dict[tuple[int, int], int], cx: int, ty: int, length: int) -> None:
+    """Set ``length`` cells from tree position (cx, ty) rightward in 8 × 8 leaf blocks."""
+    by, shift = ty >> 3, (ty & 7) * 8
+    while length:
+        bx, offset = cx >> 3, cx & 7
+        take = min(8 - offset, length)
+        blocks[bx, by] = blocks.get((bx, by), 0) | (((1 << take) - 1) << (offset + shift))
+        cx += take
+        length -= take
+
+
+def write_rle(universe: HashLife, metadata: PatternMetadata | None = None) -> str:
+    """The universe as RLE: ``#CXRLE Pos=x0,y0 [Gen=n]``, ``metadata``'s lines, then
+    canonical RLE of the box."""
+    notes = metadata_lines(metadata)
+    gen = f" Gen={digits_of(universe.generation)}" if universe.generation else ""
     box = universe.bounding_box()
     if box is None:
-        return f"#CXRLE Pos=0,0{gen}\nx = 0, y = 0, rule = {universe.rule}\n!\n"
+        empty = [f"#CXRLE Pos=0,0{gen}", *notes, f"x = 0, y = 0, rule = {universe.rule}", "!"]
+        return "\n".join(empty) + "\n"
     x0, y0, x1, y1 = box
     if max(abs(x0), abs(x1), abs(y0), abs(y1)) > EDIT_LIMIT:
         raise ValueError(
@@ -117,7 +125,8 @@ def write_rle(universe: HashLife) -> str:
         line += tok
     body.append(line)
     header = f"x = {x1 - x0 + 1}, y = {y1 - y0 + 1}, rule = {universe.rule}"
-    return "\n".join([f"#CXRLE Pos={x0},{y0}{gen}", header, *body]) + "\n"
+    first = f"#CXRLE Pos={x0},{y0}{gen}"
+    return "\n".join([first, *notes, header, *body]) + "\n"
 
 
 def _run(length: int, tag: str) -> str:

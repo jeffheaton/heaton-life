@@ -1,0 +1,9 @@
+#Life 1.06
+#D a glider, one cell a line
+0 -1
+1 0
+
+-1 1
+0 1
+1 1
+1 1

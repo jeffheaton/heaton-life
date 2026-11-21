@@ -1,0 +1,12 @@
+#Life 1.05
+#D Two blocks of rows,
+#D placed by #P.
+#N
+#P -1 -1
+.*.
+..*
+***
+#P 4 -3
+**
+
+*O

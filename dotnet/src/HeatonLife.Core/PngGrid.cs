@@ -156,6 +156,231 @@ namespace HeatonLife
             return grid;
         }
 
+        // ---- pattern images (spec/formats.md "Images") ------------------------------
+
+        /// <summary>Whether the bytes begin with PNG's signature.</summary>
+        internal static bool HasSignature(byte[] data)
+        {
+            if (data.Length < Signature.Length)
+                return false;
+            for (int i = 0; i < Signature.Length; i++)
+            {
+                if (data[i] != Signature[i])
+                    return false;
+            }
+            return true;
+        }
+
+        private static readonly (int X0, int Y0, int Dx, int Dy)[] Adam7 =
+        {
+            (0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2),
+        };
+
+        private static readonly (int X0, int Y0, int Dx, int Dy)[] WholeImage = { (0, 0, 1, 1) };
+
+        private static bool AllowedDepth(int color, int depth) => color switch
+        {
+            0 => depth == 1 || depth == 2 || depth == 4 || depth == 8 || depth == 16,
+            2 or 4 or 6 => depth == 8 || depth == 16,
+            3 => depth == 1 || depth == 2 || depth == 4 || depth == 8,
+            _ => false,
+        };
+
+        /// <summary>
+        /// A pattern image's cells (spec/formats.md "Images"), 1 alive and 0 dead: any valid PNG,
+        /// every color type and bit depth, interlaced or not. White is every color sample at its
+        /// largest (a 16-bit sample by its high byte), or a palette entry of (255, 255, 255);
+        /// alpha and tRNS are never read. An image past <paramref name="maxCells"/> is refused
+        /// before its pixels are decoded.
+        /// </summary>
+        internal static byte[] DecodeLive(byte[] png, long? maxCells, out int width, out int height)
+        {
+            if (!HasSignature(png))
+                throw new FormatException("not a PNG: bad signature");
+            int depth = 0, color = 0, interlace = 0;
+            long imageWidth = 0, imageHeight = 0;
+            bool sawHeader = false, sawData = false;
+            byte[]? palette = null;
+            using var idat = new MemoryStream();
+            long position = Signature.Length;
+            while (true)
+            {
+                if (position + 8 > png.Length)
+                    throw new FormatException("not a PNG: it ends before IEND");
+                long length = (uint)ReadBigEndian(png, (int)position);
+                string type = System.Text.Encoding.ASCII.GetString(png, (int)position + 4, 4);
+                long body = position + 8;
+                if (length > 0x7FFFFFFF || body + length + 4 > png.Length)
+                    throw new FormatException("not a PNG: a chunk runs past the end of the file");
+                if (!sawHeader && type != "IHDR")
+                    throw new FormatException("not a PNG: the first chunk is not IHDR");
+                if (type == "IHDR")
+                {
+                    if (sawHeader || length != 13)
+                        throw new FormatException("not a PNG: a broken IHDR");
+                    int at = (int)body;
+                    imageWidth = (uint)ReadBigEndian(png, at);
+                    imageHeight = (uint)ReadBigEndian(png, at + 4);
+                    depth = png[at + 8];
+                    color = png[at + 9];
+                    interlace = png[at + 12];
+                    if (imageWidth <= 0 || imageWidth > 0x7FFFFFFF || imageHeight <= 0 || imageHeight > 0x7FFFFFFF)
+                        throw new FormatException($"not a PNG: an image {imageWidth} x {imageHeight}");
+                    if (!AllowedDepth(color, depth))
+                        throw new FormatException($"not a PNG: bit depth {depth} with color type {color}");
+                    if (png[at + 10] != 0 || png[at + 11] != 0 || (interlace != 0 && interlace != 1))
+                        throw new FormatException("not a PNG: unknown compression, filter, or interlace method");
+                    sawHeader = true;
+                }
+                else if (type == "PLTE")
+                {
+                    if (palette != null || length == 0 || length % 3 != 0 || length > 768)
+                        throw new FormatException("not a PNG: a broken PLTE");
+                    palette = new byte[length];
+                    Array.Copy(png, body, palette, 0, length);
+                }
+                else if (type == "IDAT")
+                {
+                    sawData = true;
+                    idat.Write(png, (int)body, (int)length);
+                }
+                else if (type == "IEND")
+                {
+                    break;
+                }
+                position = body + length + 4; // skip the CRC
+            }
+            if (!sawData)
+                throw new FormatException("not a PNG: no IDAT");
+            if (color == 3 && palette == null)
+                throw new FormatException("not a PNG: an indexed image without PLTE");
+            if (maxCells != null && imageWidth * imageHeight > maxCells.Value)
+                throw new ArgumentException(
+                    $"the image is {imageWidth} x {imageHeight} pixels, past the limit of {maxCells.Value} cells");
+            if (imageWidth * imageHeight > int.MaxValue)
+                throw new ArgumentException($"the image is {imageWidth} x {imageHeight} pixels, more than one array holds");
+            width = (int)imageWidth;
+            height = (int)imageHeight;
+
+            int channels = color switch { 2 => 3, 4 => 2, 6 => 4, _ => 1 };
+            int bitsPerPixel = channels * depth;
+            int bpp = Math.Max(1, bitsPerPixel / 8);
+            var passes = interlace == 1 ? Adam7 : WholeImage;
+            long total = 0;
+            foreach (var (x0, y0, dx, dy) in passes)
+            {
+                if (x0 >= width || y0 >= height)
+                    continue;
+                long pw = (width - x0 + dx - 1) / dx, ph = (height - y0 + dy - 1) / dy;
+                total += ph * (1 + (pw * bitsPerPixel + 7) / 8);
+            }
+            if (total > int.MaxValue)
+                throw new ArgumentException("the PNG's image data is more than one array holds");
+            byte[] raw;
+            try
+            {
+                raw = Inflate(idat.ToArray(), (int)total);
+            }
+            catch (Exception e) when (e is ArgumentException || e is InvalidDataException)
+            {
+                throw new FormatException(e.Message, e);
+            }
+
+            int entries = palette == null ? 0 : palette.Length / 3;
+            int top = depth >= 8 ? 255 : (1 << depth) - 1;
+            var cells = new byte[width * height];
+            int offset = 0;
+            foreach (var (x0, y0, dx, dy) in passes)
+            {
+                if (x0 >= width || y0 >= height)
+                    continue;
+                int pw = (width - x0 + dx - 1) / dx, ph = (height - y0 + dy - 1) / dy;
+                int stride = (int)(((long)pw * bitsPerPixel + 7) / 8);
+                byte[] rows = UnfilterRows(raw, offset, ph, stride, bpp);
+                offset += ph * (stride + 1);
+                for (int r = 0; r < ph; r++)
+                {
+                    int line = r * stride;
+                    int target = (y0 + r * dy) * width + x0;
+                    for (int c = 0; c < pw; c++)
+                    {
+                        bool white;
+                        if (depth < 8)
+                        {
+                            int bit = c * depth;
+                            int sample = (rows[line + (bit >> 3)] >> (8 - depth - (bit & 7))) & top;
+                            if (color == 3)
+                            {
+                                if (sample >= entries)
+                                    throw new FormatException($"PNG pixel index past the palette's {entries} entries");
+                                white = palette![sample * 3] == 255 && palette[sample * 3 + 1] == 255
+                                    && palette[sample * 3 + 2] == 255;
+                            }
+                            else
+                            {
+                                white = sample == top;
+                            }
+                        }
+                        else
+                        {
+                            int size = depth / 8; // a 16-bit sample is read by its high byte, first
+                            int at = line + c * channels * size;
+                            if (color == 3)
+                            {
+                                int index = rows[at];
+                                if (index >= entries)
+                                    throw new FormatException($"PNG pixel index past the palette's {entries} entries");
+                                white = palette![index * 3] == 255 && palette[index * 3 + 1] == 255
+                                    && palette[index * 3 + 2] == 255;
+                            }
+                            else if (color == 0 || color == 4)
+                            {
+                                white = rows[at] == 255;
+                            }
+                            else
+                            {
+                                white = rows[at] == 255 && rows[at + size] == 255 && rows[at + 2 * size] == 255;
+                            }
+                        }
+                        cells[target + c * dx] = white ? (byte)0 : (byte)1;
+                    }
+                }
+            }
+            return cells;
+        }
+
+        /// <summary>Reverse scanline filters 0–4 over <paramref name="rows"/> rows of
+        /// <paramref name="stride"/> bytes (each after its filter byte), from <paramref name="offset"/>.</summary>
+        private static byte[] UnfilterRows(byte[] raw, int offset, int rows, int stride, int bpp)
+        {
+            var output = new byte[(long)rows * stride];
+            for (int y = 0; y < rows; y++)
+            {
+                int rowIn = offset + y * (stride + 1);
+                int filter = raw[rowIn];
+                int rowOut = y * stride;
+                for (int x = 0; x < stride; x++)
+                {
+                    int value = raw[rowIn + 1 + x];
+                    int left = x >= bpp ? output[rowOut + x - bpp] : 0;
+                    int up = y > 0 ? output[rowOut - stride + x] : 0;
+                    int upLeft = y > 0 && x >= bpp ? output[rowOut - stride + x - bpp] : 0;
+                    switch (filter)
+                    {
+                        case 0: break;
+                        case 1: value += left; break;
+                        case 2: value += up; break;
+                        case 3: value += (left + up) / 2; break;
+                        case 4: value += Paeth(left, up, upLeft); break;
+                        default:
+                            throw new FormatException($"not a PNG: scanline filter {filter}");
+                    }
+                    output[rowOut + x] = (byte)value;
+                }
+            }
+            return output;
+        }
+
         // ---- internals ----------------------------------------------------------
 
         private static byte[] Inflate(byte[] zlib, int expectedLength)
@@ -267,6 +492,9 @@ namespace HeatonLife
 
         private const uint Crc32Seed = 0xFFFFFFFFu;
         private static uint[]? _crcTable;
+
+        /// <summary>The CRC-32 of all of <paramref name="data"/> (PNG's, and gzip's).</summary>
+        internal static uint Crc32(byte[] data) => Crc32(data, 0, data.Length, Crc32Seed) ^ 0xFFFFFFFFu;
 
         private static uint Crc32(byte[] data, int offset, int count, uint crc)
         {

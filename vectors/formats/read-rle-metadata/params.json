@@ -1,0 +1,32 @@
+{
+  "canonical": "canonical.rle",
+  "family": "formats",
+  "format": "rle",
+  "generation": "0",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      9,
+      36
+    ]
+  },
+  "input": "input.rle",
+  "kind": "read",
+  "limit": "default",
+  "metadata": {
+    "author": "Bill Gosper",
+    "comments": [
+      "The first gun found, in 1970.",
+      "A lowercase tag is a comment too.",
+      "",
+      "A comment after the end counts."
+    ],
+    "name": "Gosper glider gun"
+  },
+  "rule": "B3/S23",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "trim": false,
+  "x": "0",
+  "y": "0"
+}

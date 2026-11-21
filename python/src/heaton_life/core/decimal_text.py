@@ -154,6 +154,17 @@ def difference_x(minuend: str, subtrahend: str) -> tuple[float, int]:
     return (-mantissa if diff < 0 else mantissa), 52 - s
 
 
+def int_of_digits(digits: str) -> int:
+    """``int(digits)`` for a string of ASCII digits of any length. CPython refuses ``int()``
+    of a string past 4,300 digits by default, so longer strings are split and each half
+    converted. The caller checks that ``digits`` holds only ASCII digits."""
+    if len(digits) <= 4_000:
+        return int(digits)
+    half = len(digits) // 2
+    scale: int = 10**half
+    return int_of_digits(digits[:-half]) * scale + int_of_digits(digits[-half:])
+
+
 def digits_of(value: int) -> str:
     """``str(value)`` for a non-negative int of any length. CPython refuses ``str()`` of
     an int past 4,300 digits by default, and the grammar allows 10,000: longer values

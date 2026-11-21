@@ -40,9 +40,11 @@ A pattern is `(family, width, height, cells, rule)`:
 
 The Life community's interchange format, in both of its common dialects.
 
-**Decoding** (liberal): `#`-prefixed comment lines are skipped; an optional
+**Decoding** (liberal): `#`-prefixed lines are not cells (`#N`, `#O`, `#C` and `#c`
+carry the pattern's [metadata](formats.md#metadata), the others are skipped); an optional
 header `x = W, y = H[, rule = R]` may declare size and rule; the body uses run
-counts followed by tags; whitespace is ignored; `!` ends the pattern.
+counts followed by tags; whitespace is ignored; `!` ends the pattern. Lines split and
+strip as [formats.md](formats.md#bytes-and-text) says.
 
 The two dialects overlap: uppercase `B`/`O` mean dead/alive in two-state files
 but states 2/15 in extended RLE. **Dialect detection** (normative): the pattern
@@ -92,7 +94,8 @@ above 24 are unencodable — an error). Runs of length 1 omit the count; trailin
 dead runs in a row are omitted; rows end with `$` (last row with `!`), and k ≥ 2
 consecutive `$` are written as one token `k$`, so a run of empty rows costs one
 token; lines wrap at 70 characters. Encoding then decoding reproduces the grid
-exactly.
+exactly. Given [metadata](formats.md#metadata), the encoder writes its lines (`#N`,
+`#O`, then `#C`) before the header; without it, the text is exactly the above.
 
 MergeLife, Lenia, and Gray-Scott patterns are **not RLE-representable**; they
 travel as raw cell payloads (the catalog/zoo container format, app-level).
@@ -129,7 +132,8 @@ produces for that rectangle. Since a run of row ends is one token, the text grow
 the live rows, not the box's height: two live rows 2·10⁹ apart are joined by one
 `2000000000$`. An empty universe writes `#CXRLE Pos=0,0`, then
 `x = 0, y = 0, rule = <rule>`, then `!`. A pattern that reaches outside the editing box
-is refused; [Macrocell](macrocell.md) carries it.
+is refused; [Macrocell](macrocell.md) carries it. Given [metadata](formats.md#metadata),
+its lines go right after the `#CXRLE` line, before the header.
 
 ## Transforms
 
@@ -271,7 +275,9 @@ codecs. `extent-*` pin the measured extent of files no decoder could hold (the n
 are decimal strings: some pass 2⁶⁴), `limit-*` the decode limit, default and given, and
 `trim-*` trimmed decoding. Round-trip (encode∘decode = identity) is additionally
 property-tested in every implementation. RLE in the unbounded universe is pinned by the `rle-*` cases of
-[`../vectors/hashlife/`](../vectors/hashlife/).
+[`../vectors/hashlife/`](../vectors/hashlife/). Metadata, read and written, and the other
+pattern file formats are pinned by [`../vectors/formats/`](../vectors/formats/)
+([formats.md](formats.md#conformance)).
 
 Region editing (spec 0.16.0): `transform-ccw` adds `rotate90_ccw` to the transform
 outputs; `stamp-mode-*` stamp with a `mode` instead of `transparent` (with `error: true`

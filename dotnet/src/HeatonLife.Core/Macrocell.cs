@@ -26,15 +26,7 @@ namespace HeatonLife
         {
             if (data == null)
                 throw new ArgumentNullException(nameof(data));
-            if (data.Length >= 2 && data[0] == 0x1f && data[1] == 0x8b)
-            {
-                using var source = new MemoryStream(data);
-                using var gzip = new GZipStream(source, CompressionMode.Decompress);
-                using var inflated = new MemoryStream();
-                gzip.CopyTo(inflated);
-                data = inflated.ToArray();
-            }
-            return Read(HashLife.Latin1(data, 0, data.Length), maxMemoryMb);
+            return Read(PatternText.Decode(PatternText.Inflate(data)), maxMemoryMb);
         }
 
         /// <summary>
@@ -47,17 +39,77 @@ namespace HeatonLife
         {
             if (text == null)
                 throw new ArgumentNullException(nameof(text));
+            return Parse(text, maxMemoryMb).Universe;
+        }
+
+        /// <summary><see cref="Read(string, int)"/> and the file's <c>#N</c>, <c>#O</c> and <c>#C</c>
+        /// lines (spec/macrocell.md "Metadata").</summary>
+        internal static HashLife ReadWithMetadata(string text, int maxMemoryMb, out PatternMetadata metadata)
+        {
+            Parsed parsed = Parse(text, maxMemoryMb);
+            metadata = parsed.Metadata;
+            return parsed.Universe;
+        }
+
+        /// <summary>A file read once: the universe at its root and <c>#G</c>, its metadata, every
+        /// node line as (value, level), and the timeline lines left for the timeline reader.</summary>
+        private sealed class Parsed
+        {
+            public Parsed(HashLife universe)
+            {
+                Universe = universe;
+            }
+
+            public HashLife Universe { get; }
+            public PatternMetadata Metadata = PatternMetadata.Empty;
+            public readonly List<long> Values = new List<long>();
+            public readonly List<int> Levels = new List<int>();
+            public readonly List<(int Number, string Line)> FramesLines = new List<(int, string)>();
+            public readonly List<(int Number, string Line)> FrameLines = new List<(int, string)>();
+        }
+
+        /// <summary>A node line as a root of level ≥ 4, placed by tree coordinates: a 2 × 2 or
+        /// 4 × 4 square is centered in a leaf, and a leaf is the center of a level-4 root.</summary>
+        private static (int Root, int Level) NormalizeRoot(HashLifeStore store, long value, int level)
+        {
+            if (level < 3)
+            {
+                value = store.Leaf((ulong)value << (level == 1 ? 27 : 18));
+                level = 3;
+            }
+            int root = (int)value;
+            if (level == 3)
+            {
+                ulong b = store.Bits(root);
+                ulong sq = HashLifeLeaves.Square4;
+                int nw = store.Leaf(HashLifeLeaves.Compose(0, 0, 0, b & sq));
+                int ne = store.Leaf(HashLifeLeaves.Compose(0, 0, (b >> 4) & sq, 0));
+                int sw = store.Leaf(HashLifeLeaves.Compose(0, (b >> 32) & sq, 0, 0));
+                int se = store.Leaf(HashLifeLeaves.Compose((b >> 36) & sq, 0, 0, 0));
+                root = store.Join(nw, ne, sw, se);
+                level = 4;
+            }
+            return (root, level);
+        }
+
+        private static Parsed Parse(string text, int maxMemoryMb)
+        {
             List<string> lines = TextLines.Split(text);
-            if (lines.Count == 0 || !TextLines.StripStart(lines[0]).StartsWith("[M2]", StringComparison.Ordinal))
+            int start = 0;
+            while (start < lines.Count && TextLines.Strip(lines[start]).Length == 0)
+                start++;
+            if (start == lines.Count || !TextLines.Strip(lines[start]).StartsWith("[M2]", StringComparison.Ordinal))
                 throw new FormatException("not a Macrocell file: the first line must start with [M2]");
             var universe = new HashLife(maxMemoryMb: maxMemoryMb);
+            var parsed = new Parsed(universe);
+            var notes = new MetadataReader();
             HashLifeStore store = universe.Store;
             BigInteger generation = BigInteger.Zero;
             // Each node as (value, level): a store id for level ≥ 3, a spread bitmap below.
-            var values = new List<long>();
-            var levels = new List<int>();
+            List<long> values = parsed.Values;
+            List<int> levels = parsed.Levels;
 
-            for (int index = 1; index < lines.Count; index++)
+            for (int index = start + 1; index < lines.Count; index++)
             {
                 int number = index + 1;
                 string line = TextLines.Strip(lines[index]);
@@ -79,6 +131,18 @@ namespace HeatonLife
                     else if (line.StartsWith("#G", StringComparison.Ordinal))
                     {
                         generation = ParseGeneration(TextLines.Strip(line.Substring(2)), number);
+                    }
+                    else if (line.StartsWith("#FRAMES", StringComparison.Ordinal))
+                    {
+                        parsed.FramesLines.Add((number, line));
+                    }
+                    else if (line.StartsWith("#FRAME", StringComparison.Ordinal))
+                    {
+                        parsed.FrameLines.Add((number, line));
+                    }
+                    else
+                    {
+                        notes.HashLine(line);
                     }
                     continue;
                 }
@@ -131,29 +195,10 @@ namespace HeatonLife
             if (values.Count == 0)
                 throw new FormatException("Macrocell file has no nodes");
 
-            long rootValue = values[values.Count - 1];
-            int rootLevel = levels[levels.Count - 1];
-            if (rootLevel < 3)
-            {
-                // A 2×2 or 4×4 root, centered in a leaf.
-                rootValue = store.Leaf((ulong)rootValue << (rootLevel == 1 ? 27 : 18));
-                rootLevel = 3;
-            }
-            int root = (int)rootValue;
-            if (rootLevel == 3)
-            {
-                // A leaf root becomes the center of a level-4 root.
-                ulong b = store.Bits(root);
-                ulong sq = HashLifeLeaves.Square4;
-                int nw = store.Leaf(HashLifeLeaves.Compose(0, 0, 0, b & sq));
-                int ne = store.Leaf(HashLifeLeaves.Compose(0, 0, (b >> 4) & sq, 0));
-                int sw = store.Leaf(HashLifeLeaves.Compose(0, (b >> 32) & sq, 0, 0));
-                int se = store.Leaf(HashLifeLeaves.Compose((b >> 36) & sq, 0, 0, 0));
-                root = store.Join(nw, ne, sw, se);
-                rootLevel = 4;
-            }
+            var (root, rootLevel) = NormalizeRoot(store, values[values.Count - 1], levels[levels.Count - 1]);
             universe.Adopt(root, rootLevel, generation);
-            return universe;
+            parsed.Metadata = notes.Result();
+            return parsed;
         }
 
         /// <summary>One or more ASCII digits, no sign (spec/macrocell.md "Reading").</summary>
@@ -242,26 +287,49 @@ namespace HeatonLife
         /// nodes in post-order — depth-first, children NW, NE, SW, SE before their parent,
         /// each once — with LF line ends.
         /// </summary>
-        public static string Write(HashLife universe)
+        public static string Write(HashLife universe) => Write(universe, null);
+
+        /// <summary>The canonical text with <paramref name="metadata"/>'s <c>#N</c>, <c>#O</c> and
+        /// <c>#C</c> lines after <c>#R</c> and <c>#G</c> (spec/macrocell.md "Metadata").</summary>
+        public static string Write(HashLife universe, PatternMetadata? metadata)
         {
             if (universe == null)
                 throw new ArgumentNullException(nameof(universe));
-            HashLifeStore store = universe.Store;
             var text = new StringBuilder();
             text.Append(Header).Append('\n');
             text.Append("#R ").Append(universe.Rule).Append('\n');
             BigInteger generation = universe.Generation;
             if (generation.Sign > 0)
                 text.Append("#G ").Append(generation.ToString(CultureInfo.InvariantCulture)).Append('\n');
+            foreach (string note in PatternMetadata.Lines(metadata))
+                text.Append(note).Append('\n');
+            var nodes = new List<string>();
             var (root, level) = universe.Minimal();
+            WriteTree(universe.Store, root, level, nodes, new Dictionary<int, int>());
+            foreach (string node in nodes)
+                text.Append(node).Append('\n');
+            return text.ToString();
+        }
+
+        /// <summary>
+        /// Append the node lines of tree (root, level ≥ 3) not written yet — post-order, children
+        /// NW, NE, SW, SE, each node once — and return the root's line number. <paramref name="index"/>
+        /// maps each written node to its line; an empty child is 0 and never gets a line, but an
+        /// empty root does.
+        /// </summary>
+        private static int WriteTree(HashLifeStore store, int root, int level, List<string> nodes, Dictionary<int, int> index)
+        {
+            if (index.TryGetValue(root, out int known))
+                return known;
             if (level == 3)
             {
-                AppendLeaf(text, store.Bits(root));
-                return text.ToString();
+                nodes.Add(LeafLine(store.Bits(root)));
+                index[root] = nodes.Count;
+                return nodes.Count;
             }
-            var index = new Dictionary<int, int>();
             var stack = new Stack<(int Node, int Level, bool Ready)>();
             stack.Push((root, level, false));
+            var line = new StringBuilder();
             while (stack.Count > 0)
             {
                 var (n, k, ready) = stack.Pop();
@@ -269,21 +337,22 @@ namespace HeatonLife
                     continue;
                 if (k == 3)
                 {
-                    AppendLeaf(text, store.Bits(n));
-                    index[n] = index.Count + 1;
+                    nodes.Add(LeafLine(store.Bits(n)));
+                    index[n] = nodes.Count;
                     continue;
                 }
                 int e = store.Empty(k - 1);
                 if (ready)
                 {
-                    text.Append(k.ToString(CultureInfo.InvariantCulture));
+                    line.Clear();
+                    line.Append(k.ToString(CultureInfo.InvariantCulture));
                     for (int q = 0; q < 4; q++)
                     {
                         int kid = store.Kid(n, q);
-                        text.Append(' ').Append((kid == e ? 0 : index[kid]).ToString(CultureInfo.InvariantCulture));
+                        line.Append(' ').Append((kid == e ? 0 : index[kid]).ToString(CultureInfo.InvariantCulture));
                     }
-                    text.Append('\n');
-                    index[n] = index.Count + 1;
+                    nodes.Add(line.ToString());
+                    index[n] = nodes.Count;
                 }
                 else
                 {
@@ -296,12 +365,12 @@ namespace HeatonLife
                     }
                 }
             }
-            return text.ToString();
+            return index[root];
         }
 
         /// <summary>A leaf line in its compact form: rows through the last live one, each without
         /// its trailing '.' and ended by '$'; the empty leaf is "$".</summary>
-        private static void AppendLeaf(StringBuilder text, ulong bits)
+        private static string LeafLine(ulong bits)
         {
             int last = -1;
             for (int r = 0; r < 8; r++)
@@ -310,10 +379,8 @@ namespace HeatonLife
                     last = r;
             }
             if (last < 0)
-            {
-                text.Append("$\n");
-                return;
-            }
+                return "$";
+            var text = new StringBuilder();
             for (int r = 0; r <= last; r++)
             {
                 int row = (int)((bits >> (8 * r)) & 0xFF);
@@ -321,8 +388,243 @@ namespace HeatonLife
                     text.Append(((row >> x) & 1) != 0 ? '*' : '.');
                 text.Append('$');
             }
-            text.Append('\n');
+            return text.ToString();
         }
+
+        // ---- timelines (spec/macrocell.md "Timelines") ------------------------------------------
+
+        /// <summary>A timeline's step is below 2^4096.</summary>
+        private static readonly BigInteger StepLimit = BigInteger.One << 4096;
+
+        /// <summary>A timeline file's frames (spec/macrocell.md "Timelines"): one
+        /// <c>#FRAMES count first step</c> line and a <c>#FRAME i n</c> line for every frame;
+        /// anything else throws <see cref="FormatException"/>.</summary>
+        public static MacrocellTimeline ReadTimeline(byte[] data, int maxMemoryMb = HashLife.DefaultMaxMemoryMb)
+        {
+            if (data == null)
+                throw new ArgumentNullException(nameof(data));
+            return ReadTimeline(PatternText.Decode(PatternText.Inflate(data)), maxMemoryMb);
+        }
+
+        /// <summary>A timeline file's frames, from its text.</summary>
+        public static MacrocellTimeline ReadTimeline(string text, int maxMemoryMb = HashLife.DefaultMaxMemoryMb)
+        {
+            if (text == null)
+                throw new ArgumentNullException(nameof(text));
+            Parsed parsed = Parse(text, maxMemoryMb);
+            if (parsed.FramesLines.Count == 0)
+                throw new FormatException("not a timeline: the file has no #FRAMES line");
+            if (parsed.FramesLines.Count > 1)
+                throw new FormatException($"line {parsed.FramesLines[1].Number}: a second #FRAMES line");
+            var (number, line) = parsed.FramesLines[0];
+            List<string> fields = TextLines.SplitSpace(line.Substring("#FRAMES".Length));
+            if (fields.Count != 3)
+                throw new FormatException($"line {number}: expected '#FRAMES count first step'");
+            BigInteger count = Number(fields[0], number, "the frame count");
+            BigInteger first = Number(fields[1], number, "the first generation");
+            BigInteger step = Step(fields[2], number);
+            if (count.IsZero)
+                throw new FormatException($"line {number}: a timeline has at least one frame");
+            var refs = new Dictionary<BigInteger, BigInteger>();
+            foreach (var (frameNumber, frameLine) in parsed.FrameLines)
+            {
+                List<string> parts = TextLines.SplitSpace(frameLine.Substring("#FRAME".Length));
+                if (parts.Count != 2)
+                    throw new FormatException($"line {frameNumber}: expected '#FRAME index node'");
+                BigInteger index = Number(parts[0], frameNumber, "a frame index");
+                BigInteger node = Number(parts[1], frameNumber, "a frame's node");
+                if (index >= count)
+                    throw new FormatException($"line {frameNumber}: frame {index} is past the {count} frames");
+                if (refs.ContainsKey(index))
+                    throw new FormatException($"line {frameNumber}: frame {index} is given twice");
+                if (node.IsZero || node > parsed.Values.Count)
+                    throw new FormatException($"line {frameNumber}: the file has no node {node}");
+                refs[index] = node;
+            }
+            if (refs.Count != count)
+            {
+                BigInteger missing = BigInteger.Zero;
+                while (refs.ContainsKey(missing))
+                    missing++;
+                throw new FormatException($"the timeline has no #FRAME line for frame {missing}");
+            }
+            HashLife universe = parsed.Universe;
+            var frames = new List<HashLifeSnapshot>();
+            for (int i = 0; i < (int)count; i++)
+            {
+                int node = (int)refs[i] - 1;
+                var (root, level) = NormalizeRoot(universe.Store, parsed.Values[node], parsed.Levels[node]);
+                frames.Add(universe.SnapshotAt(root, level, first + i * step));
+            }
+            return new MacrocellTimeline(universe, frames, step, parsed.Metadata);
+        }
+
+        private static BigInteger Number(string text, int number, string what)
+        {
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (text[i] < '0' || text[i] > '9')
+                    throw new FormatException($"line {number}: {what} must be ASCII digits, got '{text}'");
+            }
+            if (text.Length == 0)
+                throw new FormatException($"line {number}: {what} must be ASCII digits");
+            return BigInteger.Parse(text, NumberStyles.None, CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>Digits or <c>b^e</c>, at least 1 and below 2^4096; a power is measured
+        /// before it is computed.</summary>
+        private static BigInteger Step(string text, int number)
+        {
+            BigInteger step;
+            int caret = text.IndexOf('^');
+            if (caret >= 0)
+            {
+                BigInteger b = Number(text.Substring(0, caret), number, "a step's base");
+                BigInteger e = Number(text.Substring(caret + 1), number, "a step's exponent");
+                if (e.IsZero || b.IsOne)
+                    step = BigInteger.One;
+                else if (b.IsZero)
+                    step = BigInteger.Zero;
+                else if ((BitLength(b) - 1) * e >= 4096)
+                    throw new FormatException($"line {number}: the step {text} is not below 2^4096");
+                else
+                    step = BigInteger.Pow(b, (int)e);
+            }
+            else
+            {
+                step = Number(text, number, "the step");
+            }
+            if (step.Sign <= 0 || step >= StepLimit)
+                throw new FormatException($"line {number}: the step must be at least 1 and below 2^4096");
+            return step;
+        }
+
+        private static long BitLength(BigInteger value)
+        {
+            long bits = 0;
+            byte[] bytes = value.ToByteArray(); // little-endian two's complement; value > 0
+            int top = bytes.Length - 1;
+            while (top > 0 && bytes[top] == 0)
+                top--;
+            for (int b = bytes[top]; b != 0; b >>= 1)
+                bits++;
+            return bits + 8L * top;
+        }
+
+        /// <summary>floor(n^(1/e)) for n ≥ 1, e ≥ 1, by Newton's method from above.</summary>
+        private static BigInteger RootOf(BigInteger n, int e)
+        {
+            BigInteger x = BigInteger.One << (int)((BitLength(n) + e - 1) / e);
+            while (true)
+            {
+                BigInteger y = ((e - 1) * x + n / BigInteger.Pow(x, e - 1)) / e;
+                if (y >= x)
+                    return x;
+                x = y;
+            }
+        }
+
+        /// <summary>(b, e) with step = b^e and b the smallest integer of at least 2 that works.</summary>
+        internal static (BigInteger Base, int Exponent) Power(BigInteger step)
+        {
+            if (step.IsOne)
+                return (2, 0);
+            for (int e = (int)BitLength(step) - 1; e > 1; e--)
+            {
+                BigInteger b = RootOf(step, e);
+                if (BigInteger.Pow(b, e) == step)
+                    return (b, e);
+            }
+            return (step, 1);
+        }
+
+        /// <summary>
+        /// The canonical timeline file of <paramref name="frames"/>, snapshots of
+        /// <paramref name="universe"/> at evenly spaced generations (spec/macrocell.md
+        /// "Timelines", "Writing"). The file's own root and <c>#G</c> are the last frame's.
+        /// </summary>
+        public static string WriteTimeline(
+            HashLife universe, IReadOnlyList<HashLifeSnapshot> frames, PatternMetadata? metadata = null)
+        {
+            if (universe == null)
+                throw new ArgumentNullException(nameof(universe));
+            if (frames == null)
+                throw new ArgumentNullException(nameof(frames));
+            if (frames.Count == 0)
+                throw new ArgumentException("a timeline needs at least one frame", nameof(frames));
+            foreach (HashLifeSnapshot frame in frames)
+            {
+                if (frame == null || !ReferenceEquals(frame.Owner, universe))
+                    throw new ArgumentException("every frame must be a snapshot of the universe being written", nameof(frames));
+            }
+            BigInteger step = frames.Count > 1 ? frames[1].Generation - frames[0].Generation : BigInteger.One;
+            for (int i = 1; i < frames.Count; i++)
+            {
+                if (frames[i].Generation - frames[i - 1].Generation != step)
+                    throw new ArgumentException("a timeline's frames are evenly spaced in generations", nameof(frames));
+            }
+            if (step.Sign <= 0 || step >= StepLimit)
+                throw new ArgumentException($"a timeline's step is at least 1 and below 2^4096, not {step}", nameof(frames));
+            var (b, e) = Power(step);
+            var text = new StringBuilder();
+            text.Append(Header).Append('\n');
+            text.Append("#R ").Append(universe.Rule).Append('\n');
+            BigInteger last = frames[frames.Count - 1].Generation;
+            if (last.Sign > 0)
+                text.Append("#G ").Append(last.ToString(CultureInfo.InvariantCulture)).Append('\n');
+            text.Append("#FRAMES ").Append(frames.Count.ToString(CultureInfo.InvariantCulture)).Append(' ')
+                .Append(frames[0].Generation.ToString(CultureInfo.InvariantCulture)).Append(' ')
+                .Append(b.ToString(CultureInfo.InvariantCulture)).Append('^')
+                .Append(e.ToString(CultureInfo.InvariantCulture)).Append('\n');
+            foreach (string note in PatternMetadata.Lines(metadata))
+                text.Append(note).Append('\n');
+            HashLifeStore store = universe.Store;
+            var nodes = new List<string>();
+            var index = new Dictionary<int, int>();
+            var roots = new int[frames.Count];
+            for (int i = 0; i < frames.Count; i++)
+            {
+                var (root, level) = universe.Minimal(frames[i].RootNode, frames[i].Level);
+                roots[i] = WriteTree(store, root, level, nodes, index);
+            }
+            int lastRoot = roots[roots.Length - 1];
+            if (lastRoot != nodes.Count)
+                nodes.Add(nodes[lastRoot - 1]); // a reader without timelines loads the last frame
+            foreach (string node in nodes)
+                text.Append(node).Append('\n');
+            for (int i = 0; i < roots.Length; i++)
+            {
+                text.Append("#FRAME ").Append(i.ToString(CultureInfo.InvariantCulture)).Append(' ')
+                    .Append(roots[i].ToString(CultureInfo.InvariantCulture)).Append('\n');
+            }
+            return text.ToString();
+        }
+    }
+
+    /// <summary>
+    /// A timeline file's frames (spec/macrocell.md "Timelines"): snapshots of one universe that
+    /// holds every frame's nodes. <see cref="Universe"/> is left at the file's own root and
+    /// <c>#G</c>; frame i is the universe at generation Frames[0].Generation + i × <see cref="Step"/>.
+    /// The Python reference's heaton_life.ca.hashlife.MacrocellTimeline.
+    /// </summary>
+    public sealed class MacrocellTimeline
+    {
+        internal MacrocellTimeline(
+            HashLife universe, IReadOnlyList<HashLifeSnapshot> frames, BigInteger step, PatternMetadata metadata)
+        {
+            Universe = universe;
+            Frames = frames;
+            Step = step;
+            Metadata = metadata;
+        }
+
+        public HashLife Universe { get; }
+
+        public IReadOnlyList<HashLifeSnapshot> Frames { get; }
+
+        public BigInteger Step { get; }
+
+        public PatternMetadata Metadata { get; }
     }
 
     /// <summary>Line splitting and whitespace exactly as the Python reference's str methods
@@ -331,7 +633,7 @@ namespace HeatonLife
     {
         internal static bool IsSpace(char c) => char.IsWhiteSpace(c) || (c >= '\x1c' && c <= '\x1f');
 
-        private static bool IsBreak(char c)
+        internal static bool IsBreak(char c)
             => c == '\n' || c == '\r' || c == '\x0b' || c == '\x0c' || c == '\x1c' || c == '\x1d'
                 || c == '\x1e' || c == '\x85' || c == (char)0x2028 || c == (char)0x2029;
 
@@ -364,6 +666,35 @@ namespace HeatonLife
             while (end > start && IsSpace(text[end - 1]))
                 end--;
             return start == 0 && end == text.Length ? text : text.Substring(start, end - start);
+        }
+
+        /// <summary>The reference's <c>rstrip</c>: trailing whitespace removed.</summary>
+        internal static string StripEnd(string text)
+        {
+            int end = text.Length;
+            while (end > 0 && IsSpace(text[end - 1]))
+                end--;
+            return end == text.Length ? text : text.Substring(0, end);
+        }
+
+        /// <summary>The reference's <c>split()</c>: the runs of non-whitespace.</summary>
+        internal static List<string> SplitSpace(string text)
+        {
+            var parts = new List<string>();
+            int i = 0;
+            while (i < text.Length)
+            {
+                if (IsSpace(text[i]))
+                {
+                    i++;
+                    continue;
+                }
+                int start = i;
+                while (i < text.Length && !IsSpace(text[i]))
+                    i++;
+                parts.Add(text.Substring(start, i - start));
+            }
+            return parts;
         }
 
         internal static string StripStart(string text)

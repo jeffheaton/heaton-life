@@ -1,0 +1,6 @@
+#N Glider
+#O Richard K. Guy
+#C The smallest spaceship.
+#C
+x = 3, y = 3, rule = B3/S23
+bo$2bo$3o!

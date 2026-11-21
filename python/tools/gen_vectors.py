@@ -589,6 +589,9 @@ def main() -> None:
     # -- Editing primitives: paste modes, region editing, HashLife's rectangle tools --
     write_editing_cases()
 
+    # -- Pattern files: every format, metadata, timelines (spec/formats.md) -------------
+    write_formats_cases()
+
     print("done")
 
 
@@ -5220,6 +5223,862 @@ def write_editing_cases() -> None:
             {"op": "advance_selection", "x0": -12, "y0": -12, "x1": 12, "y1": 12, "n": "48"},
             {"op": "advance_outside", "x0": -12, "y0": -12, "x1": 12, "y1": 12, "n": "33"},
         ],
+    )
+
+
+# -- pattern files (spec/formats.md) -----------------------------------------------------------
+
+FORMATS_SPEC_VERSION = "0.16.0"
+_ADAM7 = (
+    (0, 0, 8, 8),
+    (4, 0, 8, 8),
+    (0, 4, 4, 8),
+    (2, 0, 4, 4),
+    (0, 2, 2, 4),
+    (1, 0, 2, 2),
+    (0, 1, 1, 2),
+)
+_PNG_CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
+
+
+def _pack_samples(values: Any, depth: int) -> bytes:
+    """Samples packed as PNG rows and BMP indices are: big-endian at 16 bits, high bits
+    first below 8, the last byte padded with zeros."""
+    flat = [int(v) for v in np.asarray(values).reshape(-1)]
+    if depth == 16:
+        return b"".join(v.to_bytes(2, "big") for v in flat)
+    if depth == 8:
+        return bytes(flat)
+    out = bytearray()
+    acc = bits = 0
+    for v in flat:
+        acc, bits = (acc << depth) | v, bits + depth
+        if bits == 8:
+            out.append(acc)
+            acc = bits = 0
+    if bits:
+        out.append(acc << (8 - bits))
+    return bytes(out)
+
+
+def _png_filter(kind: int, raw: bytes, prior: bytes, bpp: int) -> bytes:
+    out = bytearray([kind])
+    for i, x in enumerate(raw):
+        a = raw[i - bpp] if i >= bpp else 0
+        b = prior[i]
+        c = prior[i - bpp] if i >= bpp else 0
+        if kind == 0:
+            p = 0
+        elif kind == 1:
+            p = a
+        elif kind == 2:
+            p = b
+        elif kind == 3:
+            p = (a + b) // 2
+        else:
+            estimate = a + b - c
+            pa, pb, pc = abs(estimate - a), abs(estimate - b), abs(estimate - c)
+            p = a if pa <= pb and pa <= pc else b if pb <= pc else c
+        out.append((x - p) & 0xFF)
+    return bytes(out)
+
+
+def _png_file(
+    samples: Any,
+    depth: int,
+    color: int,
+    *,
+    palette: bytes | None = None,
+    trns: bytes | None = None,
+    filters: tuple[int, ...] = (0,),
+    interlace: bool = False,
+    split_idat: bool = False,
+    ancillary: tuple[tuple[bytes, bytes], ...] = (),
+) -> bytes:
+    """A PNG written by hand, so that every color type, depth, filter and interlace a reader
+    must handle can be pinned. ``samples`` is (height, width, channels) sample values."""
+    import zlib
+
+    samples = np.asarray(samples)
+    if samples.ndim == 2:
+        samples = samples[:, :, None]
+    height, width, channels = samples.shape
+    assert channels == _PNG_CHANNELS[color]
+    bpp = max(1, channels * depth // 8)
+
+    def scanlines(sub: Any) -> bytes:
+        data = b""
+        prior = None
+        for r in range(sub.shape[0]):
+            raw = _pack_samples(sub[r], depth)
+            kind = filters[r % len(filters)]
+            data += _png_filter(kind, raw, prior if prior is not None else bytes(len(raw)), bpp)
+            prior = raw
+        return data
+
+    if interlace:
+        stream = b"".join(
+            scanlines(samples[y0::dy, x0::dx])
+            for x0, y0, dx, dy in _ADAM7
+            if x0 < width and y0 < height
+        )
+    else:
+        stream = scanlines(samples)
+    packed = zlib.compress(stream, 9)
+
+    def chunk(kind: bytes, body: bytes) -> bytes:
+        crc = zlib.crc32(kind + body) & 0xFFFFFFFF
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", crc)
+
+    out = b"\x89PNG\r\n\x1a\n"
+    out += chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, depth, color, 0, 0, interlace))
+    for kind, body in ancillary:
+        out += chunk(kind, body)
+    if palette is not None:
+        out += chunk(b"PLTE", palette)
+    if trns is not None:
+        out += chunk(b"tRNS", trns)
+    if split_idat:
+        half = len(packed) // 2
+        out += chunk(b"IDAT", packed[:half]) + chunk(b"IDAT", packed[half:])
+    else:
+        out += chunk(b"IDAT", packed)
+    return out + chunk(b"IEND", b"")
+
+
+def _bmp_file(
+    width: int,
+    height: int,
+    bits: int,
+    rows: list[bytes],
+    *,
+    palette: list[tuple[int, int, int]] | None = None,
+    header: int = 40,
+    compression: int = 0,
+    masks: tuple[int, int, int] = (0, 0, 0),
+    top_down: bool = False,
+    colors: int | None = None,
+) -> bytes:
+    """A BMP written by hand: ``rows`` top to bottom and unpadded, ``palette`` as (r, g, b)."""
+    stride = (width * bits + 31) // 32 * 4
+    padded = [row + bytes(stride - len(row)) for row in rows]
+    pixels = b"".join(padded if top_down else padded[::-1])
+    entries = palette or []
+    if header == 12:
+        info = struct.pack("<IHHHH", 12, width, height, 1, bits)
+        table = b"".join(bytes((b, g, r)) for r, g, b in entries)
+    else:
+        count = len(entries) if colors is None else colors
+        info = struct.pack(
+            "<IiiHHIIiiII",
+            header,
+            width,
+            -height if top_down else height,
+            1,
+            bits,
+            compression,
+            len(pixels),
+            2835,
+            2835,
+            count,
+            0,
+        )
+        if header >= 52:
+            info += struct.pack("<III", *masks)
+        info += bytes(header - len(info))
+        if header == 40 and compression == 3:
+            info += struct.pack("<III", *masks)
+        table = b"".join(bytes((b, g, r, 0)) for r, g, b in entries)
+    offset = 14 + len(info) + len(table)
+    return b"BM" + struct.pack("<IHHI", offset + len(pixels), 0, 0, offset) + info + table + pixels
+
+
+def _signed_text(value: int) -> str:
+    return "-" + decimal_text.digits_of(-value) if value < 0 else decimal_text.digits_of(value)
+
+
+def write_formats_cases() -> None:
+    """Pattern files (spec/formats.md; spec/macrocell.md "Metadata" and "Timelines"): what
+    every format reads as, detection, gzip, metadata read and written, and Macrocell
+    timelines, all under vectors/formats/."""
+    import gzip
+    import io
+
+    from PIL import Image
+
+    from heaton_life.ca.hashlife import HashLife, read_timeline, read_universe, write_timeline
+    from heaton_life.init import PatternMetadata, detect_format, read_pattern, rle_encode
+
+    root = VECTOR_ROOT / "formats"
+
+    def case(name: str) -> Path:
+        d = root / name
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def save(d: Path, meta: dict[str, Any]) -> None:
+        full = {"spec_version": FORMATS_SPEC_VERSION, "family": "formats", "tier": "bit-exact"}
+        full.update(meta)
+        (d / "params.json").write_text(
+            json.dumps(full, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        print(f"wrote {d.relative_to(REPO_ROOT)}")
+
+    def gray_png(arr: Any) -> bytes:
+        buf = io.BytesIO()
+        Image.fromarray(np.asarray(arr).astype(np.uint8), mode="L").save(buf, format="PNG")
+        return buf.getvalue()
+
+    def notes(m: PatternMetadata) -> dict[str, Any]:
+        return {"name": m.name, "author": m.author, "comments": list(m.comments)}
+
+    def state(d: Path, u: HashLife, label: str) -> dict[str, Any]:
+        text = u.to_macrocell()
+        box = u.bounding_box()
+        entry: dict[str, Any] = {
+            "generation": decimal_text.digits_of(u.generation),
+            "population": decimal_text.digits_of(u.population),
+            "bounding_box": None if box is None else [_signed_text(v) for v in box],
+        }
+        if len(text) <= _HASHLIFE_INLINE_BYTES:
+            (d / f"{label}.mc").write_text(text, newline="\n")
+            entry["state"] = f"{label}.mc"
+        else:
+            entry["state_sha256"] = hashlib.sha256(text.encode("ascii")).hexdigest()
+            entry["state_lines"] = text.count("\n")
+        return entry
+
+    # -- read: a file of any format into a grid ---------------------------------------
+    def read(
+        name: str,
+        data: bytes,
+        ext: str,
+        *,
+        trim: bool = False,
+        limit: Any = "default",
+        expect: Any = None,
+        error: bool = False,
+    ) -> None:
+        d = case(f"read-{name}")
+        (d / f"input.{ext}").write_bytes(data)
+        meta: dict[str, Any] = {
+            "kind": "read",
+            "input": f"input.{ext}",
+            "trim": trim,
+            "limit": limit,
+        }
+        try:
+            if limit == "default":
+                f = read_pattern(data, trim=trim)
+            else:
+                f = read_pattern(data, trim=trim, max_cells=limit)
+        except ValueError:
+            assert error, f"read-{name} was meant to read"
+            meta["error"] = True
+            save(d, meta)
+            return
+        assert not error, f"read-{name} was meant to be refused"
+        if expect is not None:
+            assert np.array_equal(f.cells, np.asarray(expect, dtype=np.uint8)), name
+        (d / "grid.png").write_bytes(gray_png(f.cells))
+        canonical = rle_encode(f.cells, f.rule or "B3/S23", metadata=f.metadata)
+        (d / "canonical.rle").write_text(canonical, encoding="utf-8", newline="\n")
+        meta.update(
+            {
+                "format": f.format,
+                "x": _signed_text(f.x),
+                "y": _signed_text(f.y),
+                "rule": f.rule,
+                "generation": decimal_text.digits_of(f.generation),
+                "metadata": notes(f.metadata),
+                "grid": {"file": "grid.png", "shape": list(f.cells.shape)},
+                "canonical": "canonical.rle",
+            }
+        )
+        save(d, meta)
+
+    gun = (
+        "24bo$22bobo$12b2o6b2o12b2o$11bo3bo4b2o12b2o$2o8bo5bo3b2o$2o8bo3bob2o4bobo$"
+        "10bo5bo7bo$11bo3bo$12b2o!"
+    )
+    glider = np.array([[0, 1, 0], [0, 0, 1], [1, 1, 1]], dtype=np.uint8)
+
+    # RLE: metadata, the #CXRLE position, trimming, text encodings, line ends, gzip.
+    gun_rle = (
+        "#N Gosper glider gun\n#O Bill Gosper\n#C The first gun found, in 1970.\n"
+        "#c A lowercase tag is a comment too.\n#C\n#P 0 0\n#r 23/3\n"
+        f"x = 36, y = 9, rule = B3/S23\n{gun}\n#C A comment after the end counts.\n"
+    )
+    read("rle-metadata", gun_rle.encode(), "rle")
+    read(
+        "rle-cxrle",
+        b"#CXRLE Pos=-3,4 Gen=7\n#N Glider\n#O   spaced author   \n#N A second name\n"
+        b"x = 3, y = 3, rule = B3/S23\nbo$2bo$3o!\n",
+        "rle",
+        expect=glider,
+    )
+    read(
+        "rle-trim",
+        b"#CXRLE Pos=10,20\n#C dead margins on every side\nx = 9, y = 7, rule = B36/S23\n"
+        b"3$3b2o$4bo3b!\n",
+        "rle",
+        trim=True,
+    )
+    read(
+        "rle-wireworld",
+        b"#N Diode\n#C Electrons pass to the right only.\nx = 7, y = 3, rule = WireWorld\n"
+        b"3.2C$4C.3C$3.2C!\n",
+        "rle",
+    )
+    utf8 = (
+        "\ufeff#N Café glider\n#O Ångström\n#C ą, Å and — keep a 0x85 byte inside one line.\n"
+        "x = 3, y = 3, rule = B3/S23\nbo$2bo$3o!\n"
+    )
+    read("rle-utf8", utf8.encode("utf-8"), "rle", expect=glider)
+    read(
+        "rle-latin1",
+        "#N Café in Latin-1\nx = 3, y = 3\nbo$2bo$3o!\n".encode("latin-1"),
+        "rle",
+        expect=glider,
+    )
+    read(
+        "rle-cr-line-ends",
+        b"#N Glider\r#C old line ends\rx = 3, y = 3, rule = B3/S23\rbo$2bo$\r3o!\r",
+        "rle",
+        expect=glider,
+    )
+    read("rle-gzip", gzip.compress(gun_rle.encode(), mtime=0), "rle.gz")
+
+    # Plaintext.
+    read(
+        "plaintext-glider",
+        b"!Name: Glider\n!Author: Richard K. Guy\n!The smallest spaceship.\n!\n.O\n..O\nOOO\n",
+        "cells",
+        expect=glider,
+    )
+    read(
+        "plaintext-rows",
+        b"!Name: Rows\n\n*.*\n\n.O   \nOOOO.\n  !  indented comment\n..O\n\n\n",
+        "cells",
+        expect=[
+            [0, 0, 0, 0, 0],
+            [1, 0, 1, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0],
+            [1, 1, 1, 1, 0],
+            [0, 0, 1, 0, 0],
+        ],
+    )
+    read("plaintext-bare", b"OO\r\nOO\r\n", "cells", expect=[[1, 1], [1, 1]])
+    read("plaintext-trim", b"!Name: Block\n....\n.OO.\n.OO.\n....\n", "cells", trim=True)
+
+    # Life 1.05 and 1.06.
+    read(
+        "life105-blocks",
+        b"#Life 1.05\n#D Two blocks of rows,\n#D placed by #P.\n#N\n#P -1 -1\n.*.\n..*\n***\n"
+        b"#P 4 -3\n**\n\n*O\n",
+        "lif",
+    )
+    read(
+        "life105-rule",
+        b"\n#Life 1.05\n#R 32/63\n**\n#P 2 2\n.*\n#X an unknown line\n",
+        "lif",
+    )
+    read("life105-bs-rule", b"#Life 1.05\n#R B36/S23\n#P 0 0\n***\n", "lif")
+    read(
+        "life106-glider",
+        b"#Life 1.06\n#D a glider, one cell a line\n0 -1\n1 0\n\n-1 1\n0 1\n1 1\n1 1\n",
+        "lif",
+        expect=glider,
+    )
+    far = 10**30
+    read(
+        "life106-far",
+        f"#Life 1.06\n{far} {-far}\n{far + 2} {-far + 1}\n".encode(),
+        "lif",
+        expect=[[1, 0, 0], [0, 0, 1]],
+    )
+
+    # PNG: every color type and depth, the filters, interlacing, and what isn't read.
+    rgb = np.full((4, 5, 3), 255, dtype=np.uint16)
+    rgb[0, 1] = (254, 255, 255)  # near white is alive
+    rgb[1, 2] = (0, 0, 0)
+    rgb[2, 3] = (255, 0, 255)
+    rgb[3, 0] = (12, 34, 56)
+    rgb_live = [[0, 1, 0, 0, 0], [0, 0, 1, 0, 0], [0, 0, 0, 1, 0], [1, 0, 0, 0, 0]]
+    read(
+        "png-rgb8",
+        _png_file(
+            rgb,
+            8,
+            2,
+            filters=(0, 1, 2, 3, 4),
+            split_idat=True,
+            ancillary=((b"gAMA", struct.pack(">I", 45455)),),
+        ),
+        "png",
+        expect=rgb_live,
+    )
+    read("png-rgb8-paeth", _png_file(rgb, 8, 2, filters=(4,)), "png", expect=rgb_live)
+    rgba = np.zeros((2, 3, 4), dtype=np.uint16)
+    rgba[0, 0] = (255, 255, 255, 255)
+    rgba[0, 1] = (255, 255, 255, 0)  # transparent white: dead
+    rgba[0, 2] = (0, 0, 0, 0)  # transparent black: alive
+    rgba[1] = (255, 255, 255, 128)
+    rgba[1, 1] = (255, 255, 254, 255)
+    read("png-rgba8", _png_file(rgba, 8, 6, filters=(1, 3)), "png", expect=[[0, 0, 1], [0, 1, 0]])
+    gray1 = np.array([[1] * 10, [1, 0, 1, 0, 1, 1, 1, 1, 1, 0], [0] * 10])
+    read("png-gray1", _png_file(gray1, 1, 0, filters=(2,)), "png", expect=1 - gray1)
+    gray4 = np.array([[15, 14, 0, 7, 15], [15, 15, 15, 15, 1]])
+    read(
+        "png-gray4",
+        _png_file(gray4, 4, 0, filters=(4,)),
+        "png",
+        expect=[[0, 1, 1, 1, 0], [0, 0, 0, 0, 1]],
+    )
+    gray16 = np.array([[65535, 65280, 65279, 0], [65535, 300, 65535, 65534]])
+    read(
+        "png-gray16",
+        _png_file(gray16, 16, 0, filters=(1,)),
+        "png",
+        expect=[[0, 0, 1, 1], [0, 1, 0, 0]],
+    )
+    rgb16 = np.full((2, 3, 3), 65535)
+    rgb16[0, 1] = (65535, 65280, 65535)  # high bytes all 255: white
+    rgb16[0, 2] = (65535, 65279, 65535)
+    rgb16[1, 0] = (0, 65535, 65535)
+    read("png-rgb16", _png_file(rgb16, 16, 2, filters=(3,)), "png", expect=[[0, 0, 1], [1, 0, 0]])
+    graya16 = np.array([[[65535, 0], [65280, 65535], [1234, 0]]])
+    read("png-graya16", _png_file(graya16, 16, 4), "png", expect=[[0, 0, 1]])
+    pal = bytes([255, 255, 255, 0, 0, 0, 255, 255, 254, 255, 255, 255])
+    pal2 = np.array([[0, 1, 2, 3, 0], [3, 3, 1, 0, 2]])
+    read(
+        "png-palette2",
+        _png_file(pal2, 2, 3, palette=pal),
+        "png",
+        expect=[[0, 1, 1, 0, 0], [0, 0, 1, 0, 1]],
+    )
+    pal8 = np.array([[0, 1, 2], [2, 1, 0]])
+    read(
+        "png-palette8-trns",
+        _png_file(
+            pal8,
+            8,
+            3,
+            palette=bytes([255, 255, 255, 9, 9, 9, 255, 255, 255]),
+            trns=bytes([0, 255, 0]),
+        ),
+        "png",
+        expect=[[0, 1, 0], [0, 1, 0]],
+    )
+    rng = np.random.default_rng(16)
+    noisy = rng.integers(0, 256, size=(7, 11, 3))
+    noisy[rng.random((7, 11)) < 0.5] = 255
+    noisy_live = ~(noisy == 255).all(axis=2)
+    read(
+        "png-interlaced",
+        _png_file(noisy, 8, 2, filters=(0, 4, 1), interlace=True),
+        "png",
+        expect=noisy_live,
+    )
+    read(
+        "png-interlaced-tiny",
+        _png_file(np.array([[0, 1, 0]]), 1, 0, interlace=True),
+        "png",
+        expect=[[1, 0, 1]],
+    )
+    read("png-trim", _png_file(gray1, 1, 0), "png", trim=True)
+
+    # BMP: the header forms, bit counts, bit fields, row order and padding.
+    def bgr(colors: Any) -> bytes:
+        return b"".join(bytes((b, g, r)) for r, g, b in colors)
+
+    rows24 = [bgr(row) for row in rgb.astype(int).tolist()]
+    read("bmp-24", _bmp_file(5, 4, 24, rows24), "bmp", expect=rgb_live)
+    words32 = [[0xAB000000 | r << 16 | g << 8 | b for r, g, b in row] for row in rgb.tolist()]
+    rows32 = [b"".join(struct.pack("<I", w) for w in row) for row in words32]
+    read("bmp-32-top-down", _bmp_file(5, 4, 32, rows32, top_down=True), "bmp", expect=rgb_live)
+    idx8 = np.array([[0, 1, 2, 2], [2, 0, 1, 2]])
+    palette8 = [(255, 255, 255), (0, 0, 0), (255, 255, 255)]
+    read(
+        "bmp-8",
+        _bmp_file(4, 2, 8, [bytes(row) for row in idx8.tolist()], palette=palette8),
+        "bmp",
+        expect=[[0, 1, 0, 0], [0, 0, 1, 0]],
+    )
+    idx4 = np.array([[0, 3, 15, 1, 0], [1, 1, 0, 15, 3]])
+    palette16 = [(255, 255, 255)] + [(i * 16, i * 16, i * 16) for i in range(1, 16)]
+    palette16[15] = (255, 255, 255)
+    read(
+        "bmp-4",
+        _bmp_file(5, 2, 4, [_pack_samples(row, 4) for row in idx4.tolist()], palette=palette16),
+        "bmp",
+        expect=[[0, 1, 0, 1, 0], [1, 1, 0, 0, 1]],
+    )
+    idx1 = np.array([[1] * 13, [0, 1] * 6 + [0], [1] * 12 + [0]])
+    read(
+        "bmp-1",
+        _bmp_file(
+            13,
+            3,
+            1,
+            [_pack_samples(row, 1) for row in idx1.tolist()],
+            palette=[(0, 0, 0), (255, 255, 255)],
+        ),
+        "bmp",
+        expect=1 - idx1,
+    )
+    w555 = [[0x7FFF, 0xFFFF, 0x7FFE, 0x7BFF], [0x0000, 0x7FFF, 0x7FEF, 0xFFFF]]
+    rows555 = [b"".join(struct.pack("<H", w) for w in row) for row in w555]
+    read("bmp-16", _bmp_file(4, 2, 16, rows555), "bmp", expect=[[0, 0, 1, 1], [1, 0, 1, 0]])
+    w565 = [[0xFFFF, 0xFFDF, 0xF7FF], [0x0000, 0xFFFF, 0xFFFE]]
+    rows565 = [b"".join(struct.pack("<H", w) for w in row) for row in w565]
+    read(
+        "bmp-16-565",
+        _bmp_file(3, 2, 16, rows565, header=124, compression=3, masks=(0xF800, 0x07E0, 0x001F)),
+        "bmp",
+        expect=[[0, 1, 1], [1, 0, 1]],
+    )
+    wfields = [[0x00FFFFFF, 0xFFFFFF00, 0x00FFFF00], [0xFF000000, 0x12FFFFFF, 0x00FFFFFE]]
+    rowsf = [b"".join(struct.pack("<I", w) for w in row) for row in wfields]
+    read(
+        "bmp-32-fields",
+        _bmp_file(3, 2, 32, rowsf, compression=3, masks=(0x000000FF, 0x0000FF00, 0x00FF0000)),
+        "bmp",
+        expect=[[0, 1, 1], [1, 0, 1]],
+    )
+    full_palette = palette8 + [(0, 0, 0)] * (256 - len(palette8))  # a core header's is 2^bits
+    read(
+        "bmp-core",
+        _bmp_file(4, 2, 8, [bytes(row) for row in idx8.tolist()], palette=full_palette, header=12),
+        "bmp",
+        expect=[[0, 1, 0, 0], [0, 0, 1, 0]],
+    )
+    read(
+        "bmp-v4-palette-count",
+        _bmp_file(
+            4, 2, 8, [bytes(row) for row in idx8.tolist()], palette=palette8, header=108, colors=3
+        ),
+        "bmp",
+        expect=[[0, 1, 0, 0], [0, 0, 1, 0]],
+    )
+
+    # Macrocell, gzip around anything.
+    mc = (
+        "[M2] (example 1.0)\n#R b36 / S23\n#G 41\n#N Two blocks far apart\n#O Someone\n"
+        "#C Macrocell comments,\n#c in order.\n$$$$....**$....**$\n4 0 0 0 1\n5 0 0 0 2\n"
+        "6 0 0 0 3\n7 4 0 0 4\n"
+    )
+    read("macrocell-metadata", mc.encode(), "mc")
+    read("macrocell-gzip", gzip.compress(mc.encode(), mtime=0), "mc.gz")
+    read("png-gzip", gzip.compress(_png_file(gray1, 1, 0), mtime=0), "png.gz", expect=1 - gray1)
+    packed = gzip.compress(gun_rle.encode(), mtime=0)
+    read("error-gzip-cut-short", packed[:-8], "rle.gz", error=True)
+    read("error-gzip-cut-in-the-data", packed[: len(packed) // 2], "rle.gz", error=True)
+    read("error-gzip-two-members", packed + packed, "rle.gz", error=True)
+    read("error-gzip-trailing-bytes", packed + b"\n", "rle.gz", error=True)
+    damaged = bytearray(packed)
+    damaged[-8] ^= 0x01  # the CRC-32
+    read("error-gzip-damaged-crc", bytes(damaged), "rle.gz", error=True)
+
+    # The decode limit and trimming.
+    read("limit-plaintext-exactly", b"OO...\n.....\n..O.O\n", "cells", limit=15)
+    read("limit-plaintext-one-short", b"OO...\n.....\n..O.O\n", "cells", limit=14, error=True)
+    read("limit-image", _png_file(gray4, 4, 0), "png", limit=9, error=True)
+    read("limit-image-trimmed", _png_file(gray4, 4, 0), "png", limit=9, trim=True, error=True)
+    read("limit-life106-box", b"#Life 1.06\n0 0\n3 2\n", "lif", limit=11, error=True)
+
+    # Errors.
+    read("error-plaintext-character", b"!Name: x\n.O\nOx\n", "cells", error=True)
+    read("error-life106-line", b"#Life 1.06\n1 2 3\n", "lif", error=True)
+    read("error-life106-plus-sign", b"#Life 1.06\n+1 2\n", "lif", error=True)
+    read("error-life105-position", b"#Life 1.05\n#P 1\n*\n", "lif", error=True)
+    read("error-life105-character", b"#Life 1.05\n#P 0 0\n*o*\n", "lif", error=True)
+    read("error-life106-no-cells", b"#Life 1.06\n#D nothing but a comment\n", "lif", error=True)
+    read("error-empty", b" \n\t\n", "rle", error=True)
+    read("error-binary", b"GIF89a\x01\x00\x01\x00\x00\x00\x00", "gif", error=True)
+    read(
+        "error-bmp-run-length",
+        _bmp_file(4, 2, 8, [bytes(row) for row in idx8.tolist()], palette=palette8, compression=1),
+        "bmp",
+        error=True,
+    )
+    read(
+        "error-bmp-masks",
+        _bmp_file(3, 2, 16, rows565, compression=3, masks=(0xF800, 0x07E0, 0x003F)),
+        "bmp",
+        error=True,
+    )
+    read(
+        "error-bmp-index",
+        _bmp_file(4, 2, 8, [bytes(row) for row in idx8.tolist()], palette=palette8[:2]),
+        "bmp",
+        error=True,
+    )
+    read("error-bmp-truncated", _bmp_file(5, 4, 24, rows24)[:-3], "bmp", error=True)
+    read("error-png-index", _png_file(pal2, 2, 3, palette=pal[:9]), "png", error=True)
+    read("error-png-no-palette", _png_file(pal2, 2, 3), "png", error=True)
+    truncated = _png_file(noisy, 8, 2)
+    read("error-png-truncated", truncated[: len(truncated) // 2], "png", error=True)
+    read(
+        "error-trim-all-white", _png_file(np.full((2, 2), 255), 8, 0), "png", trim=True, error=True
+    )
+    read("error-cxrle-position", b"#CXRLE Pos=a,0\nx = 1, y = 1\no!\n", "rle", error=True)
+
+    # -- universe: a file of any two-state format into HashLife --------------------------
+    def universe(name: str, data: bytes, ext: str, *, error: bool = False) -> None:
+        d = case(f"universe-{name}")
+        (d / f"input.{ext}").write_bytes(data)
+        meta: dict[str, Any] = {"kind": "universe", "input": f"input.{ext}"}
+        try:
+            found = read_universe(data)
+        except ValueError:
+            assert error, f"universe-{name} was meant to read"
+            meta["error"] = True
+            save(d, meta)
+            return
+        assert not error, f"universe-{name} was meant to be refused"
+        u = found.universe
+        meta["format"] = found.format
+        meta["metadata"] = notes(found.metadata)
+        meta.update(state(d, u, "state"))
+        (d / "with-metadata.mc").write_text(
+            u.to_macrocell(found.metadata), encoding="utf-8", newline="\n"
+        )
+        meta["with_metadata"] = "with-metadata.mc"
+        try:
+            text = u.to_rle(found.metadata)
+        except ValueError:
+            meta["rle_error"] = True
+        else:
+            (d / "with-metadata.rle").write_text(text, encoding="utf-8", newline="\n")
+            meta["rle"] = "with-metadata.rle"
+        save(d, meta)
+
+    universe("rle-metadata", ("#CXRLE Pos=-18,-4 Gen=5\n" + gun_rle).encode(), "rle")
+    universe("macrocell-metadata", mc.encode(), "mc")
+    far_mc = "[M2] (example 1.0)\n#N Far out\n*$\n4 0 0 0 1\n" + "".join(
+        f"{k} 0 0 0 {k - 3}\n" for k in range(5, 71)
+    )
+    universe("macrocell-gzip-far", gzip.compress(far_mc.encode(), mtime=0), "mc.gz")
+    universe("plaintext", b"!Name: Glider\n!In a world at last.\n.O\n..O\nOOO\n", "cells")
+    universe(
+        "life105",
+        b"#Life 1.05\n#D blocks at their own places\n#R 23/36\n#P -1 -1\n.*.\n..*\n***\n"
+        b"#P 1000 -2000\n**\n**\n",
+        "lif",
+    )
+    universe(
+        "life106-edges",
+        b"#Life 1.06\n1000000000 -1000000000\n-1000000000 1000000000\n0 0\n",
+        "lif",
+    )
+    universe("life106-empty", b"#Life 1.06\n", "lif")
+    universe("png", _png_file(noisy, 8, 2), "png")
+    universe(
+        "bmp",
+        _bmp_file(
+            13,
+            3,
+            1,
+            [_pack_samples(row, 1) for row in idx1.tolist()],
+            palette=[(0, 0, 0), (255, 255, 255)],
+        ),
+        "bmp",
+    )
+    universe("error-life106-outside", b"#Life 1.06\n1000000001 0\n", "lif", error=True)
+    universe("error-b0-rule", b"#Life 1.05\n#R 23/03\n#P 0 0\n**\n", "lif", error=True)
+    universe("error-rule-text", b"#Life 1.05\n#R WireWorld\n*\n", "lif", error=True)
+    universe(
+        "error-extended-rle",
+        b"x = 2, y = 1, rule = WireWorld\nAC!\n",
+        "rle",
+        error=True,
+    )
+
+    # -- detect: content alone names the format --------------------------------------------
+    inputs = [
+        b"x = 3, y = 3\nbo$2bo$3o!\n",
+        b"#N name\n#C comment\nx = 1, y = 1, rule = B3/S23\no!\n",
+        b"bo$2bo$3o!\n",
+        b"#C comments before a headerless body\nbo$o!\n",
+        b"\n  [M2] (example 1.0)\n$\n",
+        b"\xef\xbb\xbf[M2]\n$\n",
+        b"#Life 1.05\n*\n",
+        b"#Life 1.06\n0 0\n",
+        b"!Name: x\n",
+        b"  !comment first\n.O\n",
+        b".O\nOO\n",
+        b"OOO\n",
+        b"*.*\n",
+        b"O$O\n",
+        b"#C x\n.O\n",
+        b"\x89PNG\r\n\x1a\n",
+        b"BM" + bytes(12) + struct.pack("<I", 40),
+        b"BM" + bytes(12) + struct.pack("<I", 41),
+        b"BMx",
+        gzip.compress(b"!Name: gzip\n.O\n", mtime=0),
+        gzip.compress(gzip.compress(b"OO\n", mtime=0), mtime=0),
+        b"",
+        b"  \r\n\t",
+        b"x\x00",
+    ]
+    entries: list[dict[str, Any]] = []
+    for data in inputs:
+        try:
+            entries.append({"input": data.hex(), "format": detect_format(data)})
+        except ValueError:
+            entries.append({"input": data.hex(), "error": True})
+    save(case("detect-table"), {"kind": "detect", "inputs": entries})
+
+    # -- timelines: frames of one universe in one Macrocell file -----------------------------
+    def timeline_read(name: str, text: str, *, error: bool = False) -> None:
+        d = case(f"timeline-read-{name}")
+        (d / "input.mc").write_text(text, newline="\n")
+        meta: dict[str, Any] = {"kind": "timeline-read", "input": "input.mc"}
+        try:
+            t = read_timeline(text)
+        except ValueError:
+            assert error, f"timeline-read-{name} was meant to read"
+            meta["error"] = True
+            save(d, meta)
+            return
+        assert not error, f"timeline-read-{name} was meant to be refused"
+        meta.update(
+            {
+                "count": len(t.frames),
+                "first": decimal_text.digits_of(t.frames[0].generation),
+                "step": decimal_text.digits_of(t.step),
+                "metadata": notes(t.metadata),
+                "universe": state(d, t.universe, "universe"),
+            }
+        )
+        frames = []
+        for i, frame in enumerate(t.frames):
+            t.universe.restore(frame)
+            frames.append(state(d, t.universe, f"frame-{i}"))
+        meta["frames"] = frames
+        save(d, meta)
+
+    def recorded(rle: str, generations: list[int]) -> tuple[HashLife, list[Any]]:
+        u = read_universe(rle).universe
+        snapshots = []
+        for g in generations:
+            u.step(g - u.generation)
+            snapshots.append(u.snapshot())
+        return u, snapshots
+
+    u, frames = recorded("#CXRLE Pos=-1,-1\nx = 3, y = 3\nbo$2bo$3o!\n", [0, 4, 8])
+    written = write_timeline(
+        u, frames, metadata=PatternMetadata("Glider", None, ("Three frames.",))
+    )
+    lines = written.splitlines()
+    nodes = [ln for ln in lines if not ln.startswith(("#", "["))]
+    refs = [ln for ln in lines if ln.startswith("#FRAME ")]
+    shuffled = (
+        [
+            "[M2] (example 1.0)",
+            "#R B3/S23",
+            "#G 8",
+            refs[2],
+            "#FRAMES 3 0 2^2",
+            "#N Glider",
+            "#C Frame lines anywhere, in any order.",
+        ]
+        + nodes
+        + [refs[1], "#C a comment between frame lines", refs[0]]
+    )
+    timeline_read("glider", "\n".join(shuffled) + "\n")
+    timeline_read(
+        "decimal-step-shared-root",
+        "[M2] (example 1.0)\n#R B3/S23\n#FRAMES 4 100 5\n**$**$\n#FRAME 0 1\n#FRAME 1 1\n"
+        "#FRAME 2 1\n#FRAME 3 1\n",
+    )
+    timeline_read(
+        "small-roots",
+        "[M2]\n#FRAMES 3 7 3^2\n1 1 0 0 1\n2 1 0 0 1\n$.*$\n#FRAME 0 1\n#FRAME 1 2\n#FRAME 2 3\n",
+    )
+    timeline_read("big-step", "[M2]\n#FRAMES 2 0 3^2000\n**$**$\n#FRAME 0 1\n#FRAME 1 1\n")
+    timeline_read("largest-step", "[M2]\n#FRAMES 2 1 2^4095\n*$\n#FRAME 0 1\n#FRAME 1 1\n")
+    timeline_read("zero-power", "[M2]\n#FRAMES 2 9 0^0\n*$\n#FRAME 0 1\n#FRAME 1 1\n")
+    timeline_bad = {
+        "missing-frame": "#FRAMES 3 0 1\n*$\n#FRAME 0 1\n#FRAME 2 1\n",
+        "frame-twice": "#FRAMES 2 0 1\n*$\n#FRAME 0 1\n#FRAME 0 1\n#FRAME 1 1\n",
+        "index-past-count": "#FRAMES 1 0 1\n*$\n#FRAME 0 1\n#FRAME 1 1\n",
+        "node-past-the-last": "#FRAMES 1 0 1\n*$\n#FRAME 0 2\n",
+        "node-zero": "#FRAMES 1 0 1\n*$\n#FRAME 0 0\n",
+        "no-frames-line": "*$\n#FRAME 0 1\n",
+        "two-frames-lines": "#FRAMES 1 0 1\n#FRAMES 1 0 1\n*$\n#FRAME 0 1\n",
+        "count-zero": "#FRAMES 0 0 1\n*$\n",
+        "step-zero": "#FRAMES 1 0 0\n*$\n#FRAME 0 1\n",
+        "step-power-zero": "#FRAMES 1 0 0^5\n*$\n#FRAME 0 1\n",
+        "step-past-the-limit": "#FRAMES 1 0 2^4096\n*$\n#FRAME 0 1\n",
+        "step-computed-past-the-limit": "#FRAMES 1 0 3^2585\n*$\n#FRAME 0 1\n",
+        "step-text": "#FRAMES 1 0 2^x\n*$\n#FRAME 0 1\n",
+        "negative-first": "#FRAMES 1 -4 1\n*$\n#FRAME 0 1\n",
+        "frame-fields": "#FRAMES 1 0 1\n*$\n#FRAME 0\n",
+    }
+    for name, body in timeline_bad.items():
+        timeline_read(f"error-{name}", "[M2]\n" + body, error=True)
+
+    def timeline_write(
+        name: str, rle: str, generations: list[int], metadata: PatternMetadata
+    ) -> None:
+        d = case(f"timeline-write-{name}")
+        (d / "input.rle").write_text(rle, newline="\n")
+        u, snapshots = recorded(rle, generations)
+        text = write_timeline(u, snapshots, metadata=metadata)
+        (d / "timeline.mc").write_text(text, encoding="utf-8", newline="\n")
+        t = read_timeline(text)
+        assert [f.generation for f in t.frames] == generations
+        states = []
+        for i, frame in enumerate(t.frames):
+            t.universe.restore(frame)
+            states.append(state(d, t.universe, f"frame-{i}"))
+        save(
+            d,
+            {
+                "kind": "timeline-write",
+                "input": "input.rle",
+                "generations": [decimal_text.digits_of(g) for g in generations],
+                "metadata": notes(metadata),
+                "timeline": "timeline.mc",
+                "frames": states,
+            },
+        )
+
+    timeline_write(
+        "glider",
+        "#CXRLE Pos=-1,-1\nx = 3, y = 3, rule = B3/S23\nbo$2bo$3o!\n",
+        [0, 4, 8, 12],
+        PatternMetadata("Glider", "Richard K. Guy", ("Four frames, four generations apart.",)),
+    )
+    timeline_write(
+        "blinker",
+        "#CXRLE Pos=-1,0\nx = 3, y = 1, rule = B3/S23\n3o!\n",
+        [0, 1, 2],
+        PatternMetadata(),
+    )
+    timeline_write(
+        "gun",
+        f"#CXRLE Pos=-18,-4\nx = 36, y = 9, rule = B3/S23\n{gun}\n",
+        [0, 30, 60, 90],
+        PatternMetadata("Gosper glider gun", None, ("Period 30.", "")),
+    )
+    timeline_write("single", "x = 2, y = 2, rule = B3/S23\n2o$2o!\n", [5], PatternMetadata())
+    timeline_write(
+        "step-12",
+        "x = 3, y = 3, rule = B36/S23\nbo$2bo$3o!\n",
+        [3, 15, 27],
+        PatternMetadata(None, None, ("Step 12 is written 12^1.",)),
+    )
+    timeline_write(
+        "step-36-dies",
+        "x = 2, y = 1, rule = B3/S23\n2o!\n",
+        [0, 36],
+        PatternMetadata(None, "nobody"),
     )
 
 

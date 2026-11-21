@@ -1,0 +1,29 @@
+{
+  "bounding_box": [
+    "-18",
+    "-4",
+    "17",
+    "4"
+  ],
+  "family": "formats",
+  "format": "rle",
+  "generation": "5",
+  "input": "input.rle",
+  "kind": "universe",
+  "metadata": {
+    "author": "Bill Gosper",
+    "comments": [
+      "The first gun found, in 1970.",
+      "A lowercase tag is a comment too.",
+      "",
+      "A comment after the end counts."
+    ],
+    "name": "Gosper glider gun"
+  },
+  "population": "36",
+  "rle": "with-metadata.rle",
+  "spec_version": "0.16.0",
+  "state": "state.mc",
+  "tier": "bit-exact",
+  "with_metadata": "with-metadata.mc"
+}

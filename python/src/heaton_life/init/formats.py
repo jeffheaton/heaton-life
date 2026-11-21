@@ -1,0 +1,352 @@
+"""Pattern files in every format, recognized by content (spec/formats.md).
+
+RLE, Macrocell, plaintext (``.cells``), Life 1.05, Life 1.06, and PNG and BMP images,
+any of them gzip-compressed. ``detect_format`` names a file's format; ``read_pattern``
+gives its cells as a dense grid with their position, rule, generation, and metadata.
+The HashLife universe's reader, ``heaton_life.ca.hashlife.read_universe``, builds on the
+same recognition and the same text readers.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+from typing import Literal
+
+import numpy as np
+from numpy.typing import NDArray
+
+from heaton_life.core.decimal_text import int_of_digits
+from heaton_life.init.images import PNG_SIGNATURE, bmp_cells, is_bmp, png_cells
+from heaton_life.init.metadata import (
+    MetadataReader,
+    PatternMetadata,
+    first_text_line,
+    inflate,
+    text_from_bytes,
+)
+from heaton_life.init.rle import (
+    DEFAULT_MAX_CELLS,
+    is_rle_header,
+    rle_decode,
+    rle_measure,
+    rle_metadata,
+    rle_runs,
+)
+
+PatternFormat = Literal["rle", "macrocell", "plaintext", "life-1.05", "life-1.06", "png", "bmp"]
+PATTERN_FORMATS: tuple[PatternFormat, ...] = (
+    "rle",
+    "macrocell",
+    "plaintext",
+    "life-1.05",
+    "life-1.06",
+    "png",
+    "bmp",
+)
+
+_PLAINTEXT_CELLS = frozenset(".O*")
+_RULE_DIGITS = frozenset("012345678")
+
+Run = tuple[int, int, int]
+"""A run of live cells: (x, y, length), x and y in the file's own coordinates."""
+
+
+@dataclasses.dataclass(frozen=True, eq=False)
+class PatternFile:
+    """A pattern file read into a grid (spec/formats.md "Reading into a grid")."""
+
+    format: PatternFormat
+    cells: NDArray[np.uint8]
+    """(height, width) row-major cell values: 0/1, or RLE's states up to 24."""
+    x: int
+    """Where ``cells[0, 0]`` sits in the file's own coordinates (y grows downward)."""
+    y: int
+    rule: str | None
+    generation: int
+    metadata: PatternMetadata
+
+
+@dataclasses.dataclass(frozen=True)
+class Recognized:
+    """A file whose format is known (spec/formats.md "Detection"): an image's bytes, or
+    the text of any other format."""
+
+    format: PatternFormat
+    data: bytes = b""
+    text: str = ""
+
+
+@dataclasses.dataclass(frozen=True)
+class LiveRuns:
+    """A plaintext or Life 1.0x file's live cells as runs, with what else it says."""
+
+    runs: tuple[Run, ...]
+    width: int
+    """Plaintext's grid size (the longest row and the row count); 0 for Life 1.0x."""
+    height: int
+    rule: str | None
+    metadata: PatternMetadata
+
+
+def recognize(source: bytes | bytearray | memoryview | str) -> Recognized:
+    """The format of a file's bytes, or of text (spec/formats.md "Detection"). Raises
+    ValueError for empty text and for binary data that is no image."""
+    if isinstance(source, str):
+        text = source
+    else:
+        data = inflate(bytes(source))
+        if data.startswith(PNG_SIGNATURE):
+            return Recognized("png", data=data)
+        if is_bmp(data):
+            return Recognized("bmp", data=data)
+        if b"\x00" in data:
+            raise ValueError("not a pattern file: the data is binary and no known image")
+        text = text_from_bytes(data)
+    lines = text.splitlines()
+    first = first_text_line(lines)
+    if not first:
+        raise ValueError("the pattern file is empty")
+    fmt: PatternFormat
+    if first.startswith("[M2]"):
+        fmt = "macrocell"
+    elif first.startswith("#Life 1.05"):
+        fmt = "life-1.05"
+    elif first.startswith("#Life 1.06"):
+        fmt = "life-1.06"
+    elif first.startswith("!"):
+        fmt = "plaintext"
+    else:
+        content = [stripped for line in lines if (stripped := line.strip())]
+        top = next((line for line in content if not line.startswith("#")), None)
+        if top is not None and is_rle_header(top):
+            fmt = "rle"
+        elif all(set(line) <= _PLAINTEXT_CELLS for line in content):
+            fmt = "plaintext"
+        else:
+            fmt = "rle"
+    return Recognized(fmt, text=text)
+
+
+def detect_format(source: bytes | bytearray | memoryview | str) -> PatternFormat:
+    """A pattern file's format, from its content alone (spec/formats.md "Detection")."""
+    return recognize(source).format
+
+
+# -- the text formats ------------------------------------------------------------------------
+
+
+def _row_runs(row: str, x: int, y: int, number: int, alive: str) -> list[Run]:
+    """The live runs of a row of ``.`` (dead) and ``alive`` characters starting at x."""
+    runs: list[Run] = []
+    start = -1
+    for i, ch in enumerate(row):
+        if ch in alive:
+            if start < 0:
+                start = i
+            continue
+        if ch != ".":
+            raise ValueError(f"line {number}: {ch!r} is not a cell ('.' dead, '{alive}' alive)")
+        if start >= 0:
+            runs.append((x + start, y, i - start))
+            start = -1
+    if start >= 0:
+        runs.append((x + start, y, len(row) - start))
+    return runs
+
+
+def _plaintext(text: str) -> LiveRuns:
+    notes = MetadataReader()
+    rows: list[tuple[int, str]] = []
+    for number, raw in enumerate(text.splitlines(), start=1):
+        stripped = raw.strip()
+        if stripped.startswith("!"):
+            body = stripped[1:]
+            if body.startswith("Name:"):
+                notes.name(body[5:])
+            elif body.startswith("Author:"):
+                notes.author(body[7:])
+            else:
+                notes.comment(body)
+        else:
+            rows.append((number, raw.rstrip()))
+    while rows and not rows[-1][1]:
+        rows.pop()  # blank lines at the end are not rows
+    runs: list[Run] = []
+    for y, (number, row) in enumerate(rows):
+        runs += _row_runs(row, 0, y, number, "O*")
+    width = max((len(row) for _, row in rows), default=0)
+    return LiveRuns(tuple(runs), width, len(rows), None, notes.result())
+
+
+def _signed(text: str) -> int | None:
+    """An optional ``-`` and ASCII digits, any size; None for anything else."""
+    negative = text.startswith("-")
+    digits = text[1:] if negative else text
+    if not (digits and digits.isascii() and digits.isdigit()):
+        return None
+    value = int_of_digits(digits)
+    return -value if negative else value
+
+
+def _cell(text: str, number: int, what: str) -> tuple[int, int]:
+    fields = text.split()
+    if len(fields) == 2:
+        x, y = _signed(fields[0]), _signed(fields[1])
+        if x is not None and y is not None:
+            return x, y
+    raise ValueError(f"line {number}: {what} needs two integers 'x y', got {text!r}")
+
+
+def _life_rule(value: str) -> str:
+    """Life 1.05's survival/birth ``S/B`` digits as ``B…/S…``; other text as written."""
+    survival, slash, birth = value.partition("/")
+    if slash and "/" not in birth and set(survival + birth) <= _RULE_DIGITS:
+        return f"B{''.join(sorted(set(birth)))}/S{''.join(sorted(set(survival)))}"
+    return value
+
+
+def _life(text: str, *, blocks: bool) -> LiveRuns:
+    """Life 1.05 (``blocks``: ``#P`` blocks of rows) or Life 1.06 (a cell a line)."""
+    lines = text.splitlines()
+    header = next(i for i, line in enumerate(lines) if line.strip())
+    notes = MetadataReader()
+    rule: str | None = None
+    runs: list[Run] = []
+    bx = by = row = 0
+    for number, raw in enumerate(lines[header + 1 :], start=header + 2):
+        stripped = raw.strip()
+        if stripped.startswith("#"):
+            tag, value = stripped[:2], stripped[2:].strip()
+            if tag in ("#D", "#C"):
+                notes.comment(value)
+            elif tag == "#N":
+                rule = "B3/S23"
+            elif tag == "#R":
+                rule = _life_rule(value) if value else rule
+            elif tag == "#P" and blocks:
+                bx, by = _cell(value, number, "#P")
+                row = 0
+        elif blocks:
+            runs += _row_runs(raw.rstrip(), bx, by + row, number, "*O")
+            row += 1
+        elif stripped:
+            x, y = _cell(stripped, number, "a cell")
+            runs.append((x, y, 1))
+    return LiveRuns(tuple(runs), 0, 0, rule, notes.result())
+
+
+def live_runs(found: Recognized) -> LiveRuns:
+    """The live cells of a plaintext, Life 1.05 or Life 1.06 file."""
+    if found.format == "plaintext":
+        return _plaintext(found.text)
+    if found.format == "life-1.05":
+        return _life(found.text, blocks=True)
+    if found.format == "life-1.06":
+        return _life(found.text, blocks=False)
+    raise ValueError(f"{found.format} is not read as runs")
+
+
+def runs_box(runs: tuple[Run, ...]) -> tuple[int, int, int, int] | None:
+    """The live cells' inclusive bounding box (x0, y0, x1, y1), or None without any."""
+    if not runs:
+        return None
+    return (
+        min(x for x, _, _ in runs),
+        min(y for _, y, _ in runs),
+        max(x + length - 1 for x, _, length in runs),
+        max(y for _, y, _ in runs),
+    )
+
+
+# -- reading into a grid ---------------------------------------------------------------------
+
+
+def _check(width: int, height: int, max_cells: int | None) -> None:
+    if max_cells is not None and width * height > max_cells:
+        raise ValueError(
+            f"the pattern is {width:,} × {height:,} cells, past the limit of {max_cells:,}"
+        )
+
+
+def _grid(runs: tuple[Run, ...], x0: int, y0: int, width: int, height: int) -> NDArray[np.uint8]:
+    grid = np.zeros((height, width), dtype=np.uint8)
+    for x, y, length in runs:
+        grid[y - y0, x - x0 : x - x0 + length] = 1
+    return grid
+
+
+def _trimmed(cells: NDArray[np.uint8]) -> tuple[NDArray[np.uint8], int, int]:
+    rows = np.flatnonzero(cells.any(axis=1))
+    columns = np.flatnonzero(cells.any(axis=0))
+    if rows.size == 0:
+        raise ValueError("the pattern has no live cells")
+    top, left = int(rows[0]), int(columns[0])
+    box = cells[top : int(rows[-1]) + 1, left : int(columns[-1]) + 1]
+    return np.ascontiguousarray(box), left, top
+
+
+def read_pattern(
+    source: bytes | bytearray | memoryview | str,
+    *,
+    max_cells: int | None = DEFAULT_MAX_CELLS,
+    trim: bool = False,
+) -> PatternFile:
+    """A pattern file of any format as a dense grid (spec/formats.md "Reading into a grid").
+
+    The grid past ``max_cells`` (width × height; ``None`` lifts the limit) is refused before
+    memory is asked for, and so is an image past it, trimmed or not. With ``trim`` the grid
+    is cut to its live cells' bounding box and (x, y) moves with it. Macrocell and Life
+    1.0x always give that box. A pattern without a live cell is an error where a box is
+    asked for.
+    """
+    found = recognize(source)
+    fmt = found.format
+    metadata = PatternMetadata()
+    if fmt in ("png", "bmp"):
+        cells = (png_cells if fmt == "png" else bmp_cells)(found.data, max_cells)
+        x = y = 0
+        if trim:
+            cells, x, y = _trimmed(cells)
+        return PatternFile(fmt, cells, x, y, None, 0, metadata)
+    if fmt == "rle":
+        return _read_rle(found.text, max_cells, trim)
+    if fmt == "macrocell":
+        return _read_macrocell(found.text, max_cells)
+    live = live_runs(found)
+    box = runs_box(live.runs)
+    if fmt == "plaintext" and not trim:
+        if live.width == 0 or live.height == 0:
+            raise ValueError("the plaintext pattern has no cells")
+        _check(live.width, live.height, max_cells)
+        cells = _grid(live.runs, 0, 0, live.width, live.height)
+        return PatternFile(fmt, cells, 0, 0, live.rule, 0, live.metadata)
+    if box is None:
+        raise ValueError("the pattern has no live cells")
+    x0, y0, x1, y1 = box
+    _check(x1 - x0 + 1, y1 - y0 + 1, max_cells)
+    cells = _grid(live.runs, x0, y0, x1 - x0 + 1, y1 - y0 + 1)
+    return PatternFile(fmt, cells, x0, y0, live.rule, 0, live.metadata)
+
+
+def _read_rle(text: str, max_cells: int | None, trim: bool) -> PatternFile:
+    info, _ = rle_runs(text)  # the #CXRLE line: position and generation
+    cells, rule = rle_decode(text, max_cells=max_cells, trim=trim)
+    x, y = info.position or (0, 0)
+    if trim:
+        live = rle_measure(text).live
+        assert live is not None  # a trimmed decode has a live cell
+        x, y = x + live[0], y + live[1]
+    return PatternFile("rle", cells, x, y, rule, info.generation, rle_metadata(text))
+
+
+def _read_macrocell(text: str, max_cells: int | None) -> PatternFile:
+    from heaton_life.ca.hashlife.macrocell import read_macrocell_with_metadata
+
+    universe, metadata = read_macrocell_with_metadata(text)
+    box = universe.bounding_box()
+    if box is None:
+        raise ValueError("the Macrocell pattern has no live cells")
+    x0, y0, x1, y1 = box
+    _check(x1 - x0 + 1, y1 - y0 + 1, max_cells)
+    cells = universe._cells(x0, y0, x1, y1)
+    return PatternFile("macrocell", cells, x0, y0, universe.rule, universe.generation, metadata)

@@ -1,0 +1,24 @@
+{
+  "bounding_box": [
+    "0",
+    "0",
+    "10",
+    "6"
+  ],
+  "family": "formats",
+  "format": "png",
+  "generation": "0",
+  "input": "input.png",
+  "kind": "universe",
+  "metadata": {
+    "author": null,
+    "comments": [],
+    "name": null
+  },
+  "population": "32",
+  "rle": "with-metadata.rle",
+  "spec_version": "0.16.0",
+  "state": "state.mc",
+  "tier": "bit-exact",
+  "with_metadata": "with-metadata.mc"
+}

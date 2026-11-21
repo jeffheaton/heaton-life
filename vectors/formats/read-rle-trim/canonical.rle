@@ -1,0 +1,3 @@
+#C dead margins on every side
+x = 2, y = 2, rule = B36/S23
+2o$bo!

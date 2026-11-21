@@ -38,6 +38,7 @@ from heaton_life.ca.hashlife.store import Abort, NodeStore
 from heaton_life.ca.hashlife.view import LifeView
 from heaton_life.ca.rulestring import canonical_rule, parse_rule
 from heaton_life.core.params import Params
+from heaton_life.init.metadata import PatternMetadata
 from heaton_life.init.seeding import soup
 
 EDIT_LIMIT = 1_000_000_000
@@ -335,6 +336,10 @@ class HashLife:
         """The inclusive rectangle as a (y1 − y0 + 1) × (x1 − x0 + 1) array of 0/1."""
         x0, y0, x1, y1 = _ints(x0, y0, x1, y1)
         check_box(x0, y0, x1, y1)
+        return self._cells(x0, y0, x1, y1)
+
+    def _cells(self, x0: int, y0: int, x1: int, y1: int) -> NDArray[np.uint8]:
+        """``get_rect`` anywhere on the plane, for readers that measured the rectangle."""
         if x1 < x0 or y1 < y0:
             raise ValueError(f"empty rectangle ({x0}, {y0})..({x1}, {y1})")
         out = np.zeros((y1 - y0 + 1, x1 - x0 + 1), dtype=np.uint8)
@@ -551,7 +556,11 @@ class HashLife:
     # -- snapshots ----------------------------------------------------------------------
 
     def snapshot(self) -> Snapshot:
-        snap = Snapshot(self, self._root, self._level, self._generation)
+        return self._snapshot_at(self._root, self._level, self._generation)
+
+    def _snapshot_at(self, root: int, level: int, generation: int) -> Snapshot:
+        """A snapshot of any tree in this universe's store, kept alive like any other."""
+        snap = Snapshot(self, root, level, generation)
         self._snapshots.add(snap)
         return snap
 
@@ -599,36 +608,40 @@ class HashLife:
 
     @classmethod
     def from_file(cls, path: str | Path, *, max_memory_mb: int = DEFAULT_MEMORY_MB) -> HashLife:
-        """A ``.rle``, ``.mc``, or ``.mc.gz`` file, recognized by its content."""
-        raw = Path(path).read_bytes()
-        if raw[:2] == b"\x1f\x8b" or raw.lstrip()[:4] == b"[M2]":
-            return cls.from_macrocell(raw, max_memory_mb=max_memory_mb)
-        return cls.from_rle(raw.decode("latin-1"), max_memory_mb=max_memory_mb)
+        """A pattern file in any two-state format, gzip-compressed or not, recognized by its
+        content (spec/formats.md); ``read_universe`` gives its metadata too."""
+        from heaton_life.ca.hashlife.files import read_universe
 
-    def to_rle(self) -> str:
-        """RLE of the bounding box behind a ``#CXRLE`` line; inside the editing box only."""
+        return read_universe(Path(path).read_bytes(), max_memory_mb=max_memory_mb).universe
+
+    def to_rle(self, metadata: PatternMetadata | None = None) -> str:
+        """RLE of the bounding box behind a ``#CXRLE`` line (and ``metadata``'s lines);
+        inside the editing box only."""
         from heaton_life.ca.hashlife.rle import write_rle
 
-        return write_rle(self)
+        return write_rle(self, metadata)
 
-    def to_macrocell(self) -> str:
-        """The canonical Macrocell text: the whole state, any size, in one string."""
+    def to_macrocell(self, metadata: PatternMetadata | None = None) -> str:
+        """The canonical Macrocell text: the whole state, any size, in one string, with
+        ``metadata``'s lines when given."""
         from heaton_life.ca.hashlife.macrocell import write_macrocell
 
-        return write_macrocell(self)
+        return write_macrocell(self, metadata)
 
-    def save(self, path: str | Path) -> None:
-        """Write by extension: ``.rle``, ``.mc``, or ``.mc.gz``."""
+    def save(self, path: str | Path, metadata: PatternMetadata | None = None) -> None:
+        """Write by extension: ``.rle``, ``.mc``, or ``.mc.gz``, with ``metadata`` if given.
+        The text is UTF-8 (ASCII unless the metadata isn't)."""
         target = Path(path)
         name = target.name.lower()
         if name.endswith(".mc.gz"):
             import gzip
 
-            target.write_bytes(gzip.compress(self.to_macrocell().encode("ascii"), mtime=0))
+            text = self.to_macrocell(metadata).encode("utf-8")
+            target.write_bytes(gzip.compress(text, mtime=0))
         elif name.endswith(".mc"):
-            target.write_text(self.to_macrocell(), encoding="ascii", newline="\n")
+            target.write_text(self.to_macrocell(metadata), encoding="utf-8", newline="\n")
         elif name.endswith(".rle"):
-            target.write_text(self.to_rle(), encoding="ascii", newline="\n")
+            target.write_text(self.to_rle(metadata), encoding="utf-8", newline="\n")
         else:
             raise ValueError(f"unknown pattern extension for {target.name!r} (.rle, .mc, .mc.gz)")
 
@@ -698,9 +711,12 @@ class HashLife:
 
     def _minimal(self) -> tuple[int, int]:
         """The smallest centered root (level ≥ 3) that holds every live cell."""
+        return self._minimal_of(self._root, self._level)
+
+    def _minimal_of(self, n: int, k: int) -> tuple[int, int]:
+        """The smallest centered root (level ≥ 3) holding every live cell of tree (n, k)."""
         store = self._store
         data = store.data
-        n, k = self._root, self._level
         while k > 3:
             a, b, c, d = data[n]
             if k == 4:

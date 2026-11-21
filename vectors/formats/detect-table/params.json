@@ -1,0 +1,104 @@
+{
+  "family": "formats",
+  "inputs": [
+    {
+      "format": "rle",
+      "input": "78203d20332c2079203d20330a626f2432626f24336f210a"
+    },
+    {
+      "format": "rle",
+      "input": "234e206e616d650a234320636f6d6d656e740a78203d20312c2079203d20312c2072756c65203d2042332f5332330a6f210a"
+    },
+    {
+      "format": "rle",
+      "input": "626f2432626f24336f210a"
+    },
+    {
+      "format": "rle",
+      "input": "234320636f6d6d656e7473206265666f72652061206865616465726c65737320626f64790a626f246f210a"
+    },
+    {
+      "format": "macrocell",
+      "input": "0a20205b4d325d20286578616d706c6520312e30290a240a"
+    },
+    {
+      "format": "macrocell",
+      "input": "efbbbf5b4d325d0a240a"
+    },
+    {
+      "format": "life-1.05",
+      "input": "234c69666520312e30350a2a0a"
+    },
+    {
+      "format": "life-1.06",
+      "input": "234c69666520312e30360a3020300a"
+    },
+    {
+      "format": "plaintext",
+      "input": "214e616d653a20780a"
+    },
+    {
+      "format": "plaintext",
+      "input": "202021636f6d6d656e742066697273740a2e4f0a"
+    },
+    {
+      "format": "plaintext",
+      "input": "2e4f0a4f4f0a"
+    },
+    {
+      "format": "plaintext",
+      "input": "4f4f4f0a"
+    },
+    {
+      "format": "plaintext",
+      "input": "2a2e2a0a"
+    },
+    {
+      "format": "rle",
+      "input": "4f244f0a"
+    },
+    {
+      "format": "rle",
+      "input": "234320780a2e4f0a"
+    },
+    {
+      "format": "png",
+      "input": "89504e470d0a1a0a"
+    },
+    {
+      "format": "bmp",
+      "input": "424d00000000000000000000000028000000"
+    },
+    {
+      "error": true,
+      "input": "424d00000000000000000000000029000000"
+    },
+    {
+      "format": "rle",
+      "input": "424d78"
+    },
+    {
+      "format": "plaintext",
+      "input": "1f8b080000000000021353f44bcc4db55248afca2ce0d2f3e702003529b15b0f000000"
+    },
+    {
+      "error": true,
+      "input": "1f8b080000000000021393efe660000126e1cfdf9f333158afdc2ccc0ce4020071bc266317000000"
+    },
+    {
+      "error": true,
+      "input": ""
+    },
+    {
+      "error": true,
+      "input": "20200d0a09"
+    },
+    {
+      "error": true,
+      "input": "7800"
+    }
+  ],
+  "kind": "detect",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

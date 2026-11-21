@@ -297,9 +297,14 @@ integers), so ports move views identically and an app keeps no copy of the math:
 - **[RLE](patterns.md#rle-in-the-unbounded-universe)** carries patterns inside the editing
   box: `#CXRLE Pos=x,y Gen=n` places the pattern and sets the generation; writing puts that
   line before the canonical RLE of the bounding box.
-- Loading by content: gzip bytes or a first line starting with `[M2]` are Macrocell,
-  anything else RLE. Saving by extension: `.rle`, `.mc`, `.mc.gz` (gzip of the canonical
-  text; the compressed bytes are the compressor's and not pinned).
+- Loading by content: every two-state [pattern file](formats.md) format (RLE, Macrocell,
+  plaintext, Life 1.05 and 1.06, PNG and BMP images, any of them gzip-compressed),
+  recognized as [formats.md](formats.md#detection) says and placed as
+  [formats.md](formats.md#reading-into-the-unbounded-universe) says. Saving by extension:
+  `.rle`, `.mc`, `.mc.gz` (gzip of the canonical text; the compressed bytes are the
+  compressor's and not pinned), with the pattern's metadata when given.
+- [Timelines](macrocell.md#timelines): frames of one universe in one Macrocell file,
+  read into snapshots and written from them.
 
 ## Vector encoding
 
