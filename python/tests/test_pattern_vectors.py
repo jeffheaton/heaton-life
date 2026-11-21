@@ -8,14 +8,17 @@ import numpy as np
 import pytest
 from PIL import Image
 
+from heaton_life.ca import Cyclic, LifeLike, Wireworld
 from heaton_life.init import (
     extract,
+    fill_random,
     flip_h,
     flip_v,
     rle_decode,
     rle_encode,
     rle_measure,
     rotate90,
+    rotate90_ccw,
     stamp,
 )
 
@@ -39,6 +42,8 @@ def test_pattern_vectors_exist() -> None:
         "rle-extent",
         "rle-limit",
         "rle-trim",
+        "fill-random",
+        "advance",
     }
 
 
@@ -47,6 +52,28 @@ def _decode(text: str, meta: dict, *, trim: bool = False):  # type: ignore[no-un
     if meta["limit"] == "default":
         return rle_decode(text, trim=trim)
     return rle_decode(text, trim=trim, max_cells=meta["limit"])
+
+
+def _world(desc: dict, grid: np.ndarray):  # type: ignore[no-untyped-def, type-arg]
+    """The world an ``advance`` case names: a family and its parameters, cells from ``grid``."""
+    size = (grid.shape[1], grid.shape[0])
+    family = desc["family"]
+    if family == "lifelike":
+        assert set(desc) == {"family", "rule", "boundary"}
+        return LifeLike(desc["rule"], size=size, init=grid, boundary=desc["boundary"])
+    if family == "wireworld":
+        assert set(desc) == {"family", "boundary"}
+        return Wireworld(size=size, init=grid, boundary=desc["boundary"])
+    assert family == "cyclic"
+    assert set(desc) == {"family", "states", "threshold", "reach", "neighborhood"}
+    return Cyclic(
+        desc["states"],
+        size=size,
+        threshold=desc["threshold"],
+        reach=desc["reach"],
+        neighborhood=desc["neighborhood"],
+        init=grid,
+    )
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda p: p.parent.name)
@@ -86,23 +113,58 @@ def test_pattern_vector(case: Path) -> None:
         assert canonical == (case.parent / meta["canonical"]).read_text()
     elif kind == "transform":
         grid = _png(case.parent / meta["grid"]["file"])
-        assert np.array_equal(rotate90(grid), _png(case.parent / meta["outputs"]["rotate90"]))
-        assert np.array_equal(flip_h(grid), _png(case.parent / meta["outputs"]["flip_h"]))
-        assert np.array_equal(flip_v(grid), _png(case.parent / meta["outputs"]["flip_v"]))
+        transforms = {
+            "rotate90": rotate90,
+            "rotate90_ccw": rotate90_ccw,
+            "flip_h": flip_h,
+            "flip_v": flip_v,
+        }
+        assert {"rotate90", "flip_h", "flip_v"} <= set(meta["outputs"]) <= set(transforms)
+        for name, file in meta["outputs"].items():
+            assert np.array_equal(transforms[name](grid), _png(case.parent / file)), name
     elif kind == "stamp":
         pattern = _png(case.parent / meta["pattern"]["file"])
-        grid = np.full(
-            (meta["grid_height"], meta["grid_width"]), meta["background"], dtype=np.uint8
-        )
-        stamp(
-            grid,
-            pattern,
-            meta["x"],
-            meta["y"],
-            torus=meta["torus"],
-            transparent=meta["transparent"],
-        )
+        if "grid" in meta:  # spec 0.16.0: a background grid instead of one value
+            grid = _png(case.parent / meta["grid"]["file"]).copy()
+        else:
+            grid = np.full(
+                (meta["grid_height"], meta["grid_width"]), meta["background"], dtype=np.uint8
+            )
+        if "mode" in meta:
+            mode = {"mode": meta["mode"]}
+        else:
+            mode = {"transparent": meta["transparent"]}
+        if meta.get("error"):
+            before = grid.copy()
+            with pytest.raises(ValueError):
+                stamp(grid, pattern, meta["x"], meta["y"], torus=meta["torus"], **mode)
+            assert np.array_equal(grid, before)
+            return
+        stamp(grid, pattern, meta["x"], meta["y"], torus=meta["torus"], **mode)
         assert np.array_equal(grid, _png(case.parent / meta["expected"]["file"]))
+    elif kind == "fill-random":
+        grid = _png(case.parent / meta["grid"]["file"]).copy()
+        before = grid.copy()
+        region = meta["region"]
+        if meta.get("error"):
+            with pytest.raises(ValueError):
+                fill_random(grid, *region, density=meta["density"], seed=meta["seed"])
+            assert np.array_equal(grid, before)
+            return
+        fill_random(grid, *region, density=meta["density"], seed=meta["seed"])
+        assert np.array_equal(grid, _png(case.parent / meta["expected"]["file"]))
+    elif kind == "advance":
+        grid = _png(case.parent / meta["grid"]["file"]).copy()
+        world = _world(meta["world"], grid)
+        advance = world.advance_outside if meta["outside"] else world.advance_selection
+        if meta.get("error"):
+            with pytest.raises(ValueError):
+                advance(*meta["region"], meta["n"])
+            assert np.array_equal(world.state, grid) and world.generation == 0
+            return
+        advance(*meta["region"], meta["n"])
+        assert np.array_equal(world.state, _png(case.parent / meta["expected"]["file"]))
+        assert world.generation == 0
     else:  # extract
         grid = _png(case.parent / meta["grid"]["file"])
         region = extract(

@@ -139,6 +139,9 @@ top-bottom), defined on the cell grid: `rotate90(p)[y][x] = p[h-1-x][y]`
 p[h-1-y][x]`. For Gray-Scott both planes transform together; for MergeLife the
 RGB triple moves as one cell.
 
+`rotate90_ccw` turns the other way: `rotate90_ccw(p)[y][x] = p[x][w-1-y]`
+(result is h×w). It undoes `rotate90`, and equals three of them.
+
 ## Extract and stamp
 
 Both take a target grid `(W, H)`, a position `(x, y)` (pattern top-left), and
@@ -146,16 +149,80 @@ the target's boundary mode:
 
 - **Extract**`(grid, x, y, w, h)` — copies the region into a new pattern.
   Torus targets wrap coordinates; dead-boundary targets read 0 outside.
-- **Stamp**`(grid, pattern, x, y, transparent)` — writes the pattern.
+- **Stamp**`(grid, pattern, x, y, mode)` — writes the pattern.
   Torus targets wrap; dead-boundary targets clip (out-of-range cells are
-  dropped). With `transparent = true`, cells equal to the family's transparent
-  value (table above) are skipped, so a spaceship lands without erasing its
-  surroundings; families marked opaque-only ignore the flag. Stamping does not
-  reset the target's generation.
+  dropped). The pattern's cells land in row-major order, so a pattern larger
+  than a torus lands its later cells over its earlier ones. Stamping does not
+  reset the target's generation. The mode says how a pattern cell `p` and the
+  target cell `t` it lands on combine:
+
+  | mode | result | families |
+  |---|---|---|
+  | `copy` (the default) | `p` | all |
+  | `or` | `t` where `p` is the family's transparent value (table above), else `p` | all but the opaque-only |
+  | `xor` | `t xor p` | life-like |
+  | `and` | `t and p` | life-like |
+
+  `or` lands a spaceship without erasing its surroundings; `transparent = true`
+  is the same mode under its older name. `xor` toggles each cell under a live
+  pattern cell, and `and` keeps a cell alive only where the pattern is alive
+  too, so the pattern's dead cells clear what lies under them. Both are
+  two-state operations: every pattern cell, and every target cell the pattern
+  lands on, must be 0 or 1, and a stamp that finds another value is an error
+  that changes nothing. The multi-state families (wireworld, cyclic) stamp with
+  `copy` and `or`, and the opaque-only families with `copy` alone.
 - **Clear**`(grid, x0, y0, x1, y1)` — restores every cell of the inclusive
   rectangle to the family **blank** (table above). The blank is a family fact,
   not an app choice: Gray-Scott's blank is the substrate (U = 1, V = 0), not
   zero. Clearing, like stamping, does not reset the generation.
+
+## Editing a region
+
+A **region** is an inclusive rectangle `(x0, y0, x1, y1)` of a grid with
+`0 ≤ x0 ≤ x1 < W` and `0 ≤ y0 ≤ y1 < H`; any other rectangle is an error that
+changes nothing, and a region never wraps around a torus. Like stamping, these
+operations leave the generation alone. [HashLife](hashlife.md#editing) has the
+same ones on the unbounded plane.
+
+- **Random fill**`(grid, x0, y0, x1, y1, density, seed)` — life-like only, the
+  one two-state grid family. Every cell of the region becomes the matching cell
+  of the soup of a world the region's size ([lifelike.md](lifelike.md)
+  "Initialization"): [PCG32](rng.md) stream 0 seeded with `seed`, one draw per
+  cell of the region in row-major order (y outer, x inner), alive iff
+  `draw < floor(density · 2³²)`, `density` in [0, 1]. The draws depend on the
+  region's size alone, not on where it lies, so HashLife's `fill_random` of a
+  rectangle of the same size and seed gives the same cells.
+- **Advance Selection**`(x0, y0, x1, y1, n)` — the region evolves n ≥ 0
+  generations as if nothing else existed: make a copy of the world in which
+  every cell outside the region is the family blank, run the copy n generations
+  under the world's own rule and boundary, and copy the copy's region back.
+  Cells outside the region are untouched.
+- **Advance Outside**`(x0, y0, x1, y1, n)` — the mirror image: the copy has the
+  region blank instead, and everything outside the region is copied back; the
+  region keeps its cells.
+
+Advance Selection and Advance Outside are defined for life-like, wireworld, and
+cyclic grids. (MergeLife pads its edges with the most common value of the whole
+grid, so no part of a MergeLife world evolves on its own; the continuous
+families don't have them.)
+
+Nothing is held back inside the copy. In Advance Selection the region's cells
+may grow past it during the n generations, and what they grow into acts back on
+the region until the copy's region is taken, just as it would if the region
+were alone in its world. Only one generation is as simple as "the region's
+cells, with blank neighbors outside it". Advance Outside likewise lets the
+outside grow into the blank region, and back out of it, before the region's own
+cells are put back.
+
+**Edges.** The copy has the world's boundary. With dead edges, cells beyond them
+read dead in the copy as in the world. On a torus, cells that cross an edge come
+back at the opposite one, in the copy as in the world: a pattern advanced in a
+region can leave it, wrap around, and enter it again within n generations, and
+Advance Outside's outside wraps across the seam as usual. A region spanning the
+whole width of a torus is its own neighbor across the seam (its left column sees
+its right column), as in the world, and likewise for its height. On the whole
+grid, Advance Selection is n ordinary generations that leave the counter alone,
+and Advance Outside changes nothing.
 
 ## Built-in patterns
 
@@ -205,3 +272,13 @@ are decimal strings: some pass 2⁶⁴), `limit-*` the decode limit, default and
 `trim-*` trimmed decoding. Round-trip (encode∘decode = identity) is additionally
 property-tested in every implementation. RLE in the unbounded universe is pinned by the `rle-*` cases of
 [`../vectors/hashlife/`](../vectors/hashlife/).
+
+Region editing (spec 0.16.0): `transform-ccw` adds `rotate90_ccw` to the transform
+outputs; `stamp-mode-*` stamp with a `mode` instead of `transparent` (with `error: true`
+where a two-state mode meets another value, and the grid must come back unchanged);
+`fill-random-*` (kind `fill-random`) fill a region of a background grid; and
+`advance-*` (kind `advance`) build a `world` — `family` (`lifelike`, `wireworld` or
+`cyclic`) and that family's parameters — from `grid`, run Advance Selection or, with
+`outside: true`, Advance Outside on `region` for `n` generations, and expect the grid
+`expected` at generation 0, or `error: true` and the grid unchanged. HashLife's editing
+tools are pinned by the `edit-*` cases of [`../vectors/hashlife/`](../vectors/hashlife/).

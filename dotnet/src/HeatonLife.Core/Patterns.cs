@@ -6,6 +6,27 @@ using System.Text;
 
 namespace HeatonLife
 {
+    /// <summary>
+    /// How <see cref="Patterns.Stamp(byte[], int, int, int, ReadOnlySpan{byte}, int, int, int, int, bool, StampMode)"/>
+    /// combines a pattern cell p with the target cell t it lands on (spec/patterns.md "Extract and stamp").
+    /// </summary>
+    public enum StampMode
+    {
+        /// <summary>t = p: every cell lands (opaque).</summary>
+        Copy,
+
+        /// <summary>Cells equal to the transparent value 0 are skipped; the rest land. The same as
+        /// <c>transparent: true</c>.</summary>
+        Or,
+
+        /// <summary>t = t xor p, for two-state (0/1) cells: each cell toggles under a live pattern cell.</summary>
+        Xor,
+
+        /// <summary>t = t and p, for two-state (0/1) cells: a cell stays alive only where the pattern
+        /// is alive too.</summary>
+        And,
+    }
+
     /// <summary>A decoded RLE pattern: row-major cells plus the header's rule, if any.</summary>
     public sealed class RlePattern
     {
@@ -680,6 +701,24 @@ namespace HeatonLife
             return result;
         }
 
+        /// <summary>Counter-clockwise quarter turn: result[y][x] = cells[x][width−1−y]; undoes
+        /// <see cref="Rotate90(ReadOnlySpan{byte}, int, int, int)"/>.</summary>
+        public static byte[] Rotate90Ccw(ReadOnlySpan<byte> cells, int width, int height, int channels = 1)
+        {
+            var result = new byte[cells.Length];
+            RotateCcwInto(cells, result, width, height, channels);
+            return result;
+        }
+
+        /// <summary>Counter-clockwise quarter turn: result[y][x] = cells[x][width−1−y]; undoes
+        /// <see cref="Rotate90(ReadOnlySpan{double}, int, int, int)"/>.</summary>
+        public static double[] Rotate90Ccw(ReadOnlySpan<double> cells, int width, int height, int channels = 1)
+        {
+            var result = new double[cells.Length];
+            RotateCcwInto(cells, result, width, height, channels);
+            return result;
+        }
+
         public static byte[] FlipH(ReadOnlySpan<byte> cells, int width, int height, int channels = 1)
         {
             var result = new byte[cells.Length];
@@ -738,18 +777,54 @@ namespace HeatonLife
             byte[] grid, int gridWidth, int gridHeight, int channels,
             ReadOnlySpan<byte> pattern, int patternWidth, int patternHeight,
             int x, int y, bool torus, bool transparent = false)
+            => Stamp(
+                grid, gridWidth, gridHeight, channels, pattern, patternWidth, patternHeight, x, y, torus,
+                transparent ? StampMode.Or : StampMode.Copy);
+
+        /// <summary>
+        /// Write a pattern into a grid in place, combining each pattern cell with the target cell
+        /// it lands on by <paramref name="mode"/> (spec/patterns.md "Extract and stamp"): torus
+        /// wraps, dead boundaries clip, and cells land in row-major order. Every mode but
+        /// <see cref="StampMode.Copy"/> needs a scalar payload, and <see cref="StampMode.Xor"/> and
+        /// <see cref="StampMode.And"/> need two-state cells: a pattern cell, or a target cell under
+        /// the pattern, other than 0 or 1 throws before anything is written.
+        /// </summary>
+        public static void Stamp(
+            byte[] grid, int gridWidth, int gridHeight, int channels,
+            ReadOnlySpan<byte> pattern, int patternWidth, int patternHeight,
+            int x, int y, bool torus, StampMode mode)
         {
-            if (transparent && channels != 1)
-                throw new ArgumentException("transparent stamping is defined for scalar payloads only");
+            if (mode != StampMode.Copy && mode != StampMode.Or && mode != StampMode.Xor && mode != StampMode.And)
+                throw new ArgumentOutOfRangeException(nameof(mode), mode, "unknown stamp mode");
+            if (mode != StampMode.Copy && channels != 1)
+                throw new ArgumentException($"stamp mode {mode} is defined for scalar payloads only");
+            if (mode == StampMode.Xor || mode == StampMode.And)
+            {
+                for (int row = 0; row < patternHeight; row++)
+                    for (int col = 0; col < patternWidth; col++)
+                    {
+                        if (pattern[row * patternWidth + col] > 1)
+                            throw new ArgumentException($"stamp mode {mode} needs a two-state pattern (cells 0 and 1)");
+                        if (TargetIndex(gridWidth, gridHeight, x + col, y + row, torus, out int dst) && grid[dst] > 1)
+                            throw new ArgumentException(
+                                $"stamp mode {mode} needs two-state cells; ({dst % gridWidth}, {dst / gridWidth}) holds {grid[dst]}");
+                    }
+            }
             for (int row = 0; row < patternHeight; row++)
                 for (int col = 0; col < patternWidth; col++)
                 {
-                    if (transparent && pattern[row * patternWidth + col] == 0)
+                    byte p = pattern[(row * patternWidth + col) * channels];
+                    if (mode == StampMode.Or && p == 0)
                         continue;
                     if (!TargetIndex(gridWidth, gridHeight, x + col, y + row, torus, out int dst))
                         continue;
-                    for (int c = 0; c < channels; c++)
-                        grid[dst * channels + c] = pattern[(row * patternWidth + col) * channels + c];
+                    if (mode == StampMode.Xor)
+                        grid[dst] ^= p;
+                    else if (mode == StampMode.And)
+                        grid[dst] &= p;
+                    else
+                        for (int c = 0; c < channels; c++)
+                            grid[dst * channels + c] = pattern[(row * patternWidth + col) * channels + c];
                 }
         }
 
@@ -840,6 +915,19 @@ namespace HeatonLife
             return result;
         }
 
+        /// <summary>Rotate a planar pattern counter-clockwise, every plane together.</summary>
+        public static double[] Rotate90CcwPlanes(
+            ReadOnlySpan<double> cells, int width, int height, int planes)
+        {
+            int plane = width * height;
+            var result = new double[cells.Length];
+            for (int p = 0; p < planes; p++)
+                Array.Copy(
+                    Rotate90Ccw(cells.Slice(p * plane, plane), width, height), 0,
+                    result, p * plane, plane);
+            return result;
+        }
+
         /// <summary>Mirror a planar pattern left-right, every plane together.</summary>
         public static double[] FlipHPlanes(
             ReadOnlySpan<double> cells, int width, int height, int planes)
@@ -864,6 +952,42 @@ namespace HeatonLife
                     FlipV(cells.Slice(p * plane, plane), width, height), 0,
                     result, p * plane, plane);
             return result;
+        }
+
+        // ---- Region editing (spec/patterns.md "Editing a region") ------------------
+
+        /// <summary>
+        /// Throw unless (x0, y0)..(x1, y1) is a region of a width × height grid: an inclusive
+        /// rectangle with 0 ≤ x0 ≤ x1 &lt; width and 0 ≤ y0 ≤ y1 &lt; height.
+        /// </summary>
+        public static void CheckRegion(int width, int height, int x0, int y0, int x1, int y1)
+        {
+            if (!(0 <= x0 && x0 <= x1 && x1 < width && 0 <= y0 && y0 <= y1 && y1 < height))
+                throw new ArgumentOutOfRangeException(
+                    null,
+                    $"region ({x0}, {y0})..({x1}, {y1}) is not an inclusive rectangle inside the {width}x{height} grid");
+        }
+
+        /// <summary>
+        /// Random fill: the region of a two-state (0/1, one byte per cell) grid becomes the soup of
+        /// a world its size — PCG32 stream 0 seeded with <paramref name="seed"/>, one draw per
+        /// cell of the region in row-major order, alive iff draw &lt; ⌊density · 2^32⌋. These are
+        /// the draws of <see cref="Seeding.Soup"/> for the region's width and height, and
+        /// <see cref="HashLife.FillRandom"/> fills a rectangle of the same size and seed alike.
+        /// </summary>
+        public static void FillRandom(
+            byte[] grid, int gridWidth, int gridHeight, int x0, int y0, int x1, int y1, double density, ulong seed)
+        {
+            if (grid == null)
+                throw new ArgumentNullException(nameof(grid));
+            if (grid.Length != (long)gridWidth * gridHeight)
+                throw new ArgumentException($"expected {(long)gridWidth * gridHeight} cells, got {grid.Length}");
+            CheckRegion(gridWidth, gridHeight, x0, y0, x1, y1);
+            ulong threshold = Seeding.Threshold(density);
+            var rng = new Pcg32(seed);
+            for (int y = y0; y <= y1; y++)
+                for (int x = x0; x <= x1; x++)
+                    grid[y * gridWidth + x] = (byte)(rng.NextU32() < threshold ? 1 : 0);
         }
 
         /// <summary>
@@ -1005,6 +1129,17 @@ namespace HeatonLife
                     for (int c = 0; c < channels; c++)
                         result[(y * height + x) * channels + c] =
                             cells[((height - 1 - x) * width + y) * channels + c];
+        }
+
+        private static void RotateCcwInto<T>(
+            ReadOnlySpan<T> cells, T[] result, int width, int height, int channels)
+        {
+            // result[y][x] = cells[x][width-1-y]; result is height wide and width tall.
+            for (int y = 0; y < width; y++)
+                for (int x = 0; x < height; x++)
+                    for (int c = 0; c < channels; c++)
+                        result[(y * height + x) * channels + c] =
+                            cells[(x * width + (width - 1 - y)) * channels + c];
         }
 
         private static void FlipInto<T>(

@@ -1,0 +1,31 @@
+{
+  "expected": {
+    "file": "expected.png",
+    "shape": [
+      5,
+      7
+    ]
+  },
+  "family": "patterns",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      5,
+      7
+    ]
+  },
+  "kind": "stamp",
+  "mode": "or",
+  "pattern": {
+    "file": "pattern.png",
+    "shape": [
+      4,
+      3
+    ]
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "torus": false,
+  "x": -1,
+  "y": -2
+}

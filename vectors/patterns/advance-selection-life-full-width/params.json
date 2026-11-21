@@ -1,0 +1,33 @@
+{
+  "expected": {
+    "file": "expected.png",
+    "shape": [
+      10,
+      12
+    ]
+  },
+  "family": "patterns",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      10,
+      12
+    ]
+  },
+  "kind": "advance",
+  "n": 24,
+  "outside": false,
+  "region": [
+    0,
+    1,
+    11,
+    6
+  ],
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "world": {
+    "boundary": "torus",
+    "family": "lifelike",
+    "rule": "B3/S23"
+  }
+}

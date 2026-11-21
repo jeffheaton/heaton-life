@@ -112,6 +112,56 @@ def rect_mask(c0: int, c1: int, r0: int, r1: int) -> int:
     return (row * _REPEAT_ROWS) & (((1 << ((r1 - r0 + 1) * 8)) - 1) << (8 * r0))
 
 
+def mirror_columns(b: int) -> int:
+    """A leaf mirrored left-right: cell (x, y) moves to (7 − x, y)."""
+    b = ((b >> 4) & 0x0F0F0F0F0F0F0F0F) | ((b & 0x0F0F0F0F0F0F0F0F) << 4)
+    b = ((b >> 2) & 0x3333333333333333) | ((b & 0x3333333333333333) << 2)
+    return ((b >> 1) & 0x5555555555555555) | ((b & 0x5555555555555555) << 1)
+
+
+def mirror_rows(b: int) -> int:
+    """A leaf mirrored top-bottom: cell (x, y) moves to (x, 7 − y)."""
+    return int.from_bytes(b.to_bytes(8, "little"), "big")
+
+
+def transpose(b: int) -> int:
+    """A leaf mirrored about its main diagonal: cell (x, y) moves to (y, x). Three delta
+    swaps exchange ever larger off-diagonal blocks: 1×1 cells, 2×2, then 4×4."""
+    t = (b ^ (b >> 7)) & 0x00AA00AA00AA00AA
+    b ^= t ^ (t << 7)
+    t = (b ^ (b >> 14)) & 0x0000CCCC0000CCCC
+    b ^= t ^ (t << 14)
+    t = (b ^ (b >> 28)) & 0x00000000F0F0F0F0
+    return b ^ t ^ (t << 28)
+
+
+def turn_cw(b: int) -> int:
+    """A leaf turned a quarter clockwise (y down): cell (x, y) moves to (7 − y, x)."""
+    return mirror_columns(transpose(b))
+
+
+def turn_ccw(b: int) -> int:
+    """A leaf turned a quarter counter-clockwise: cell (x, y) moves to (y, 7 − x)."""
+    return mirror_rows(transpose(b))
+
+
+def crop(nw: int, ne: int, sw: int, se: int, ox: int, oy: int) -> int:
+    """The leaf at offset (ox, oy), 0 ≤ ox, oy ≤ 8, in the 16×16 square of four leaves."""
+    if ox:
+        if ox == 8:
+            nw, sw = ne, se
+        else:
+            low = ((1 << (8 - ox)) - 1) * _REPEAT_ROWS  # the low 8 − ox columns of each row
+            high = MASK64 ^ low
+            nw = ((nw >> ox) & low) | ((ne << (8 - ox)) & high)
+            sw = ((sw >> ox) & low) | ((se << (8 - ox)) & high)
+    if oy == 0:
+        return nw
+    if oy == 8:
+        return sw
+    return (nw >> (8 * oy)) | ((sw << (8 * (8 - oy))) & MASK64)
+
+
 def columns(b: int) -> int:
     """The 8-bit OR of a leaf's rows: bit x is set when column x holds a live cell."""
     b |= b >> 32

@@ -1,0 +1,28 @@
+{
+  "density": 1.0,
+  "expected": {
+    "file": "expected.png",
+    "shape": [
+      16,
+      24
+    ]
+  },
+  "family": "patterns",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      16,
+      24
+    ]
+  },
+  "kind": "fill-random",
+  "region": [
+    10,
+    0,
+    13,
+    15
+  ],
+  "seed": 2,
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

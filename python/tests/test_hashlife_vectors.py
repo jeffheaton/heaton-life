@@ -29,7 +29,7 @@ from heaton_life.ca.hashlife import (
 
 VECTOR_ROOT = Path(__file__).resolve().parents[2] / "vectors" / "hashlife"
 CASES = sorted(VECTOR_ROOT.glob("*/params.json"))
-SPEC_VERSIONS = {"0.14.0", "0.15.0"}
+SPEC_VERSIONS = {"0.14.0", "0.15.0", "0.16.0"}
 _COMMON = {"spec_version", "family", "tier", "kind"}
 _STATE = {"generation", "population", "bounding_box"}
 _KEYS = {
@@ -72,6 +72,21 @@ def _apply(u: HashLife, op: dict[str, Any]) -> None:
         u.step(int(op["n"]))
     elif kind == "clear":
         u.clear()
+    elif kind == "clear_outside":  # spec 0.16.0 on
+        u.clear_outside(op["x0"], op["y0"], op["x1"], op["y1"])
+    elif kind == "rotate_rect":
+        got = u.rotate_rect(op["x0"], op["y0"], op["x1"], op["y1"], clockwise=op["clockwise"])
+        assert list(got) == op["expect"], op
+    elif kind == "flip_rect":
+        u.flip_rect(op["x0"], op["y0"], op["x1"], op["y1"], horizontal=op["horizontal"])
+    elif kind in ("advance_selection", "advance_outside"):
+        advance = u.advance_selection if kind == "advance_selection" else u.advance_outside
+        advance(op["x0"], op["y0"], op["x1"], op["y1"], int(op["n"]))
+    elif kind == "set_generation":
+        u.set_generation(int(op["n"]))
+    elif kind == "bounding_box_in":
+        box = u.bounding_box_in(*(int(op[k]) for k in ("x0", "y0", "x1", "y1")))
+        assert (None if box is None else [str(v) for v in box]) == op["expect"], op
     else:
         raise AssertionError(f"unknown op {kind!r}")
 

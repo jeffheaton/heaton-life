@@ -1,0 +1,27 @@
+{
+  "error": true,
+  "family": "patterns",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      10,
+      10
+    ]
+  },
+  "kind": "advance",
+  "n": 2,
+  "outside": false,
+  "region": [
+    3,
+    3,
+    10,
+    9
+  ],
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "world": {
+    "boundary": "torus",
+    "family": "lifelike",
+    "rule": "B36/S23"
+  }
+}

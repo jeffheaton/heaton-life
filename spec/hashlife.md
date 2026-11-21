@@ -102,6 +102,9 @@ A cancel that arrives while no step is running is forgotten (the next `step` cle
 - `bounding_box()`: (x0, y0, x1, y1), the inclusive extremes of the live cells, or none
   for an empty universe.
 - `population_in(x0, y0, x1, y1)`: the live cells in an inclusive rectangle.
+- `bounding_box_in(x0, y0, x1, y1)`: the inclusive extremes of the live cells inside an
+  inclusive rectangle, or none when it holds none (an empty rectangle holds none): where
+  a Shrink Selection tool moves a selection.
 - The cells themselves: `get_cell`, `get_rect`, and the canonical Macrocell text
   ([macrocell.md](macrocell.md)), which pins the whole state in one string.
 
@@ -118,17 +121,74 @@ error and changes nothing.
   origin top-left. An empty rectangle (x1 < x0 or y1 < y0) is an error.
 - `set_rect(x, y, cells, mode)`: `cells` (h × w, nonzero = alive) lands with its top-left
   cell at (x, y). Modes: `copy` replaces every cell of the rectangle, `or` adds the live
-  cells, `xor` toggles each cell where `cells` is alive.
+  cells, `xor` toggles each cell where `cells` is alive, and `and` keeps a cell of the
+  rectangle alive only where `cells` is alive too.
 - `clear_rect(x0, y0, x1, y1)`: every cell of the inclusive rectangle dies.
+- `clear_outside(x0, y0, x1, y1)`: every cell outside the inclusive rectangle dies,
+  wherever it lies. An empty rectangle is an error (`clear()` empties everything).
 - `fill_random(x0, y0, x1, y1, density, seed)`: `set_rect(x0, y0, soup, copy)` with the
   rectangle's soup: [PCG32](rng.md) with seq 0, one draw per cell in row-major order
   (y outer, x inner), alive iff `draw < floor(density · 2³²)`. These are the draws of
   lifelike's `soup` for the same width and height ([lifelike.md](lifelike.md),
   "Initialization"); `density` must lie in [0, 1].
+- `rotate_rect(x0, y0, x1, y1, clockwise)` → the rectangle the cells land on, and
+  `flip_rect(x0, y0, x1, y1, horizontal)`: turn or mirror the cells of an inclusive
+  rectangle in place ("Rectangle transforms", below).
+- `advance_selection(x0, y0, x1, y1, n)` and `advance_outside(x0, y0, x1, y1, n)`: evolve
+  the inside or the outside of an inclusive rectangle on its own ("Advancing part of the
+  universe", below).
+- `set_generation(n)`: the generation becomes n, any integer ≥ 0; no cell changes.
 - `clear()`: every cell dies.
 
-Editing never changes the generation. A pattern larger than the box still loads, runs,
-renders, and reports; it just can't be edited outside the box.
+Editing never changes the generation, except `set_generation`. A pattern larger than the
+box still loads, runs, renders, and reports; it just can't be edited outside the box.
+
+### Rectangle transforms
+
+A quarter turn moves an inclusive rectangle (x0, y0, x1, y1) about its center, and the
+rectangle turns with its cells: w × h becomes h × w. With X = x0 + x1 and Y = y0 + y1
+(twice the center), let
+
+- s = (X + Y) / 2 and d = (Y − X) / 2 when X and Y have the same parity: the turn is
+  about the center itself;
+- otherwise s = the even one of (X + Y − 1) / 2 and (X + Y + 1) / 2, and d = Y − s when
+  X is odd, or d = s − X when Y is odd: the center lies half a cell off the grid along one
+  axis, and the turn is about whichever of the two cells it lies between has an even
+  x + y.
+
+A clockwise turn sends cell (x, y) to (s − y, x + d), and the rectangle to
+(s − y1, x0 + d, s − y0, x1 + d); a counter-clockwise turn sends (x, y) to (y − d, s − x),
+and the rectangle to (y0 − d, s − x1, y1 − d, s − x0). Both turns of a rectangle pick the
+same (s, d) as each other and as the turns of their results, so each turn undoes the
+other, four make a full turn, and nothing ever drifts.
+
+`rotate_rect` returns the new rectangle. Every cell of the new rectangle takes the turned
+value, live or dead (as `copy` pastes); a cell of the old rectangle outside the new one
+dies; cells outside both are untouched. `flip_rect` mirrors in place: horizontally
+(x, y) → (x0 + x1 − x, y), vertically (x, y) → (x, y0 + y1 − y).
+
+Both rectangles must lie in the editing box, so a turn whose new rectangle would leave it
+is an error that changes nothing; an empty rectangle is an error too. Neither operation
+makes a dense copy of the rectangle: a port works on the tree, so the cost follows the
+tree, not the rectangle's area or population.
+
+### Advancing part of the universe
+
+`advance_selection` and `advance_outside` are Advance Selection and Advance Outside
+([patterns.md](patterns.md#editing-a-region)) with the plane as the world. The selection,
+an inclusive rectangle in the editing box, evolves n generations as an isolated plane:
+every cell outside it counts as dead at the start, the plane evolves, and the result is
+clipped to the selection, whose outside is untouched. Advance Outside is the mirror
+image: the outside evolves as if the selection were empty, and the selection keeps its
+cells. Nothing is held back in between: cells grown outside the selection act back on it
+until the result is taken, and Advance Outside's outside may grow into the empty
+selection and out again before the selection's own cells are put back.
+
+`n` is any count `step` takes (0 ≤ n < 2⁵¹⁰), and the generation doesn't change. The
+evolution reaches everywhere, as `step` does; only the rectangle must lie in the box, and
+it must not be empty. Each raises what `step` raises (cancellation, `HashLifeMemoryError`,
+a tree too deep) and then leaves the universe exactly as it was: unlike `step`, it never
+stops at a sub-step boundary.
 
 ## Snapshots
 
@@ -256,7 +316,7 @@ Each case under `vectors/hashlife/` has a `params.json` with `family: "hashlife"
 | `rle` | `input.rle` | the state and `rle` (the canonical RLE file); or `error: true` |
 | `view` | `operations`: each names a view function and its inputs (views as `[x, y, mag]`, big integers as strings) | each operation's `expect`, or `error: true` where the function must raise |
 | `render` | `input`, stepped to `generation`; each frame's `view`, `size` (`[width, height]`), and `mode` | each frame's 8-bit grayscale PNG (compared by decoded pixels; the PNG bytes are the encoder's) |
-| `edit` | `rule`, then `ops` in order on an empty universe: `set_cell` (`x`, `y`, `alive`), `set_rect` (`x`, `y`, `mode`, `cells` as rows of `.`/`*`), `clear_rect` (`x0`…`y1`), `fill_random` (`x0`…`y1`, `density`, `seed`), `step` (`n`, a decimal string), `clear` | the final state; an op with `error: true` must raise and change nothing |
+| `edit` | `rule`, then `ops` in order on an empty universe: `set_cell` (`x`, `y`, `alive`), `set_rect` (`x`, `y`, `mode`, `cells` as rows of `.`/`*`), `clear_rect` (`x0`…`y1`), `fill_random` (`x0`…`y1`, `density`, `seed`), `step` (`n`, a decimal string), `clear`; from spec 0.16.0 also `clear_outside` (`x0`…`y1`), `rotate_rect` (`x0`…`y1`, `clockwise`, and `expect`: the new rectangle), `flip_rect` (`x0`…`y1`, `horizontal`), `advance_selection` and `advance_outside` (`x0`…`y1`, `n`), `set_generation` (`n`), and the query `bounding_box_in` (`x0`…`y1` as decimal strings; `expect`: the box as four decimal strings, or null) | the final state; an op with `error: true` must raise and change nothing |
 
 Runners are strict: an unknown key, kind, or `spec_version` fails the case.
 

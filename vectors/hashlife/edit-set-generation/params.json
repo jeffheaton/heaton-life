@@ -1,0 +1,54 @@
+{
+  "bounding_box": [
+    "4",
+    "5",
+    "6",
+    "7"
+  ],
+  "family": "hashlife",
+  "generation": "3",
+  "kind": "edit",
+  "ops": [
+    {
+      "cells": [
+        ".*.",
+        "..*",
+        "***"
+      ],
+      "mode": "copy",
+      "op": "set_rect",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "n": "10",
+      "op": "step"
+    },
+    {
+      "n": "123456789012345678901234567890",
+      "op": "set_generation"
+    },
+    {
+      "n": "5",
+      "op": "step"
+    },
+    {
+      "error": true,
+      "n": "-1",
+      "op": "set_generation"
+    },
+    {
+      "n": "0",
+      "op": "set_generation"
+    },
+    {
+      "n": "3",
+      "op": "step"
+    }
+  ],
+  "population": "5",
+  "rule": "B3/S23",
+  "spec_version": "0.16.0",
+  "state": "final.mc",
+  "tier": "bit-exact"
+}

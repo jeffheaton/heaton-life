@@ -11,6 +11,7 @@ import dataclasses
 import numpy as np
 from numpy.typing import NDArray
 
+from heaton_life.ca._advance import AdvanceRegion
 from heaton_life.core.params import Params
 from heaton_life.core.rng import Pcg32
 from heaton_life.init.patterns import clear
@@ -44,7 +45,7 @@ def _offsets(reach: int, neighborhood: str) -> list[tuple[int, int]]:
     return out
 
 
-class Cyclic:
+class Cyclic(AdvanceRegion):
     """A cyclic CA. State is uint8 in [0, states), shape (height, width), torus."""
 
     def __init__(

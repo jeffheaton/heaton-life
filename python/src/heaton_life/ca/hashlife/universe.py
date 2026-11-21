@@ -22,10 +22,15 @@ from numpy.typing import NDArray
 from heaton_life.ca.hashlife.leaves import (
     array_blocks,
     columns,
+    crop,
     inner,
     leaf_cells,
+    mirror_columns,
+    mirror_rows,
     rect_mask,
     rule_table,
+    turn_ccw,
+    turn_cw,
 )
 from heaton_life.ca.hashlife.render import TILE_CACHE_LIMIT, RenderMode
 from heaton_life.ca.hashlife.render import render as render_frame
@@ -42,10 +47,20 @@ MAX_LEVEL = 512
 the walks below recurse at most once per level, well inside Python's recursion limit."""
 DEFAULT_MEMORY_MB = 500
 MIN_MEMORY_MB = 10
-PasteMode = Literal["copy", "or", "xor"]
-PASTE_MODES: tuple[PasteMode, ...] = ("copy", "or", "xor")
+PasteMode = Literal["copy", "or", "xor", "and"]
+PASTE_MODES: tuple[PasteMode, ...] = ("copy", "or", "xor", "and")
 _MIN_LEVEL = 4  # the root is always an internal node
 _MIN_STEP_LEVEL = 6  # sub-steps check containment on the root's great-grandchildren
+_TURN_LEVEL = 33  # a centered root this tall holds the editing box with room for any shift
+
+# A node turned or mirrored about its own center: the leaf transform, and which old child
+# lands in each new quadrant (NW, NE, SW, SE).
+_TRANSFORMS = {
+    "cw": (turn_cw, (2, 0, 3, 1)),
+    "ccw": (turn_ccw, (1, 3, 0, 2)),
+    "h": (mirror_columns, (1, 0, 3, 2)),
+    "v": (mirror_rows, (2, 3, 0, 1)),
+}
 
 # Extremes for the bounding box: (near children, far children, use min) per edge; the far
 # pair sits half a node further along the axis.
@@ -145,6 +160,41 @@ def _leaf_mask(nx: int, ny: int, rect: tuple[int, int, int, int]) -> int:
     return rect_mask(max(x0 - nx, 0), min(x1 - nx, 7), max(y0 - ny, 0), min(y1 - ny, 7))
 
 
+def _leaf_edge(b: int, which: str) -> int:
+    """One extreme of a non-empty leaf's live cells, as a column or row 0..7."""
+    lowest = _EDGES[which][2]
+    if which in ("min_x", "max_x"):
+        cols = columns(b)
+        return (cols & -cols).bit_length() - 1 if lowest else cols.bit_length() - 1
+    return ((b & -b).bit_length() - 1 if lowest else b.bit_length() - 1) >> 3
+
+
+def _check_count(n: int) -> None:
+    """Raise ValueError unless ``step`` can take ``n`` generations (0 ≤ n < 2^510)."""
+    if n < 0:
+        raise ValueError(f"cannot step backward ({n} generations)")
+    if n.bit_length() > MAX_LEVEL - 2:
+        raise ValueError(
+            f"a step of 2^{n.bit_length() - 1} generations or more needs a tree deeper "
+            f"than level {MAX_LEVEL}; step(n) takes n < 2^{MAX_LEVEL - 2} "
+            '(spec/hashlife.md "Depth")'
+        )
+
+
+def turn_center(x0: int, y0: int, x1: int, y1: int) -> tuple[int, int]:
+    """(s, d) of a quarter turn of the inclusive rectangle (spec/hashlife.md "Rectangle
+    transforms"): clockwise sends (x, y) to (s − y, x + d), counter-clockwise to
+    (y − d, s − x). The center itself when it is a cell or a cell corner; otherwise the cell
+    with an even x + y of the two it lies between, so turns never drift."""
+    sx, sy = x0 + x1, y0 + y1  # twice the center
+    if (sx - sy) % 2 == 0:
+        return (sx + sy) // 2, (sy - sx) // 2
+    s = (sx + sy + 1) // 2
+    if s % 2:
+        s -= 1
+    return (s, sy - s) if sx % 2 else (s, s - sx)
+
+
 class HashLife:
     """An unbounded Life-like universe. See spec/hashlife.md for the full contract."""
 
@@ -239,6 +289,25 @@ class HashLife:
         origin = -(1 << (self._level - 1))
         return self._count(self._root, self._level, origin, origin, (x0, y0 - 1, x1, y1 - 1))
 
+    def bounding_box_in(
+        self, x0: int, y0: int, x1: int, y1: int
+    ) -> tuple[int, int, int, int] | None:
+        """(x0, y0, x1, y1): the inclusive extremes of the live cells inside the inclusive
+        rectangle, or None when it holds none — where Shrink Selection moves a selection.
+        Any coordinates."""
+        x0, y0, x1, y1 = _ints(x0, y0, x1, y1)
+        if x1 < x0 or y1 < y0:
+            return None
+        origin = -(1 << (self._level - 1))
+        rect = (x0, y0 - 1, x1, y1 - 1)
+        found = []
+        for which in ("min_x", "max_x", "min_y", "max_y"):
+            edge = self._extreme_in(self._root, self._level, origin, origin, rect, which, {})
+            if edge is None:
+                return None
+            found.append(edge)
+        return found[0], found[2] + 1, found[1], found[3] + 1
+
     def get_cell(self, x: int, y: int) -> int:
         x, y = _ints(x, y)
         check_box(x, y, x, y)
@@ -281,14 +350,7 @@ class HashLife:
         ``cancel()`` stops it, ``HashLifeMemoryError`` if one generation can't fit, and
         ValueError if a sub-step needs a tree deeper than ``MAX_LEVEL``."""
         n = operator.index(n)
-        if n < 0:
-            raise ValueError(f"cannot step backward ({n} generations)")
-        if n.bit_length() > MAX_LEVEL - 2:
-            raise ValueError(
-                f"a step of 2^{n.bit_length() - 1} generations or more needs a tree deeper "
-                f"than level {MAX_LEVEL}; step(n) takes n < 2^{MAX_LEVEL - 2} "
-                '(spec/hashlife.md "Depth")'
-            )
+        _check_count(n)
         self._store.cancel_requested = False
         j = 0
         while n:
@@ -425,6 +487,63 @@ class HashLife:
         cells = soup((x1 - x0 + 1, y1 - y0 + 1), density=density, seed=seed)
         self.set_rect(x0, y0, cells, "copy")
 
+    def clear_outside(self, x0: int, y0: int, x1: int, y1: int) -> None:
+        """Every cell outside the inclusive rectangle dies, wherever it lies."""
+        rect = self._edit_rect(x0, y0, x1, y1)
+        origin = -(1 << (self._level - 1))
+        self._root = self._keep(self._root, self._level, origin, origin, rect)
+
+    def rotate_rect(
+        self, x0: int, y0: int, x1: int, y1: int, *, clockwise: bool = True
+    ) -> tuple[int, int, int, int]:
+        """Turn the inclusive rectangle and its cells a quarter about its center, in place,
+        and return the rectangle they land on (spec/hashlife.md "Rectangle transforms").
+        The new rectangle takes the turned cells, live or dead; the rest of the old one
+        dies. Works on the tree: no dense copy, whatever the area or population."""
+        self._edit_rect(x0, y0, x1, y1)
+        x0, y0, x1, y1 = _ints(x0, y0, x1, y1)
+        s, d = turn_center(x0, y0, x1, y1)
+        if clockwise:
+            new = (s - y1, x0 + d, s - y0, x1 + d)
+            shift = (s, d - 1)  # in tree coordinates, after turning about the root's center
+        else:
+            new = (y0 - d, s - x1, y1 - d, s - x0)
+            shift = (1 - d, s)
+        check_box(*new)
+        self._move_rect((x0, y0, x1, y1), new, "cw" if clockwise else "ccw", shift)
+        return new
+
+    def flip_rect(self, x0: int, y0: int, x1: int, y1: int, *, horizontal: bool = True) -> None:
+        """Mirror the inclusive rectangle's cells in place: left-right (x → x0 + x1 − x) or,
+        with ``horizontal=False``, top-bottom (y → y0 + y1 − y). No dense copy is made."""
+        self._edit_rect(x0, y0, x1, y1)
+        x0, y0, x1, y1 = _ints(x0, y0, x1, y1)
+        rect = (x0, y0, x1, y1)
+        if horizontal:
+            self._move_rect(rect, rect, "h", (x0 + x1 + 1, 0))
+        else:
+            self._move_rect(rect, rect, "v", (0, y0 + y1 - 1))
+
+    def advance_selection(self, x0: int, y0: int, x1: int, y1: int, n: int) -> None:
+        """Evolve the inclusive rectangle ``n`` generations as an isolated plane (cells
+        outside it dead at the start) and clip the result to it; the outside and the
+        generation are untouched. Raises what ``step`` raises, leaving the universe as it
+        was (spec/hashlife.md "Advancing part of the universe")."""
+        self._advance_region(x0, y0, x1, y1, n, outside=False)
+
+    def advance_outside(self, x0: int, y0: int, x1: int, y1: int, n: int) -> None:
+        """Evolve everything outside the inclusive rectangle ``n`` generations as if the
+        rectangle were empty; the rectangle keeps its cells and the generation stays. Raises
+        what ``step`` raises, leaving the universe as it was."""
+        self._advance_region(x0, y0, x1, y1, n, outside=True)
+
+    def set_generation(self, generation: int) -> None:
+        """Set the generation counter to any integer ≥ 0; no cell changes."""
+        generation = operator.index(generation)
+        if generation < 0:
+            raise ValueError(f"a generation is never negative, got {generation}")
+        self._generation = generation
+
     def clear(self) -> None:
         self._level = _MIN_LEVEL
         self._root = self._store.empty(_MIN_LEVEL)
@@ -517,6 +636,65 @@ class HashLife:
 
     def _adopt(self, root: int, level: int, generation: int) -> None:
         self._root, self._level, self._generation = root, level, generation
+
+    def _edit_rect(self, x0: int, y0: int, x1: int, y1: int) -> tuple[int, int, int, int]:
+        """The tree rectangle of a non-empty inclusive rectangle in the editing box."""
+        x0, y0, x1, y1 = _ints(x0, y0, x1, y1)
+        check_box(x0, y0, x1, y1)
+        if x1 < x0 or y1 < y0:
+            raise ValueError(f"empty rectangle ({x0}, {y0})..({x1}, {y1})")
+        return x0, y0 - 1, x1, y1 - 1
+
+    def _move_rect(
+        self,
+        old: tuple[int, int, int, int],
+        new: tuple[int, int, int, int],
+        kind: str,
+        shift: tuple[int, int],
+    ) -> None:
+        """Lift the cells of ``old`` (cell coordinates), turn or mirror them about the root's
+        center (``kind`` in ``_TRANSFORMS``), move them by ``shift`` (tree coordinates) onto
+        ``new``, and paste them there by copy; the rest of ``old`` dies."""
+        while self._level < _TURN_LEVEL:
+            self._expand()
+        k = self._level
+        origin = -(1 << (k - 1))
+        told = (old[0], old[1] - 1, old[2], old[3] - 1)
+        tnew = (new[0], new[1] - 1, new[2], new[3] - 1)
+        lifted = self._keep(self._root, k, origin, origin, told)
+        turned = self._transform(lifted, k, kind, {})
+        moved = self._shifted(turned, k, *shift)
+        rest = self._clear(self._root, k, origin, origin, told)
+        self._root = self._splice(moved, rest, k, origin, origin, tnew)
+
+    def _advance_region(self, x0: int, y0: int, x1: int, y1: int, n: int, *, outside: bool) -> None:
+        rect = self._edit_rect(x0, y0, x1, y1)
+        n = operator.index(n)
+        _check_count(n)
+        saved = self.snapshot()  # a collection inside the step keeps the original's nodes
+        origin = -(1 << (self._level - 1))
+        if outside:
+            self._root = self._clear(self._root, self._level, origin, origin, rect)
+        else:
+            self._root = self._keep(self._root, self._level, origin, origin, rect)
+        try:
+            self.step(n)
+        except BaseException:
+            self.restore(saved)
+            raise
+        grown, grown_level = self._root, self._level
+        self.restore(saved)
+        while self._level < grown_level:
+            self._expand()
+        while grown_level < self._level:
+            grown = self._grow(grown, grown_level)
+            grown_level += 1
+        k = self._level
+        origin = -(1 << (k - 1))
+        if outside:
+            self._root = self._splice(self._root, grown, k, origin, origin, rect)
+        else:
+            self._root = self._splice(grown, self._root, k, origin, origin, rect)
 
     def _minimal(self) -> tuple[int, int]:
         """The smallest centered root (level ≥ 3) that holds every live cell."""
@@ -616,6 +794,146 @@ class HashLife:
             self._clear(d, k1, nx + half, ny + half, rect),
         )
 
+    def _keep(self, n: int, k: int, nx: int, ny: int, rect: tuple[int, int, int, int]) -> int:
+        """Node n with every cell outside the tree rectangle cleared."""
+        size = 1 << k
+        store = self._store
+        e = store.empty(k)
+        if n == e or _disjoint(nx, ny, size, rect):
+            return e
+        if _covers(nx, ny, size, rect):
+            return n
+        if k == 3:
+            return store.leaf(store.data[n] & _leaf_mask(nx, ny, rect))
+        half = size >> 1
+        a, b, c, d = store.data[n]
+        k1 = k - 1
+        return store.join(
+            self._keep(a, k1, nx, ny, rect),
+            self._keep(b, k1, nx + half, ny, rect),
+            self._keep(c, k1, nx, ny + half, rect),
+            self._keep(d, k1, nx + half, ny + half, rect),
+        )
+
+    def _splice(
+        self, inside: int, outside: int, k: int, nx: int, ny: int, rect: tuple[int, int, int, int]
+    ) -> int:
+        """Two aligned level-k nodes made one: ``inside``'s cells in the tree rectangle,
+        ``outside``'s everywhere else."""
+        if inside == outside:
+            return inside
+        size = 1 << k
+        if _disjoint(nx, ny, size, rect):
+            return outside
+        if _covers(nx, ny, size, rect):
+            return inside
+        store = self._store
+        data = store.data
+        if k == 3:
+            mask = _leaf_mask(nx, ny, rect)
+            return store.leaf((data[inside] & mask) | (data[outside] & ~mask))
+        half = size >> 1
+        ia, ib, ic, id_ = data[inside]
+        oa, ob, oc, od = data[outside]
+        k1 = k - 1
+        return store.join(
+            self._splice(ia, oa, k1, nx, ny, rect),
+            self._splice(ib, ob, k1, nx + half, ny, rect),
+            self._splice(ic, oc, k1, nx, ny + half, rect),
+            self._splice(id_, od, k1, nx + half, ny + half, rect),
+        )
+
+    def _grow(self, n: int, k: int) -> int:
+        """Centered level-k node n (k ≥ 4) inside a centered node twice its size."""
+        store = self._store
+        e = store.empty(k - 1)
+        join = store.join
+        a, b, c, d = store.data[n]
+        return join(join(e, e, e, a), join(e, e, b, e), join(e, c, e, e), join(d, e, e, e))
+
+    def _transform(self, n: int, k: int, kind: str, memo: dict[int, int]) -> int:
+        """Level-k node n turned or mirrored about its own center (``_TRANSFORMS``)."""
+        hit = memo.get(n)
+        if hit is not None:
+            return hit
+        store = self._store
+        leaf, order = _TRANSFORMS[kind]
+        if k == 3:
+            r = store.leaf(leaf(store.data[n]))
+        elif n == store.empty(k):
+            r = n
+        else:
+            kids = store.data[n]
+            k1 = k - 1
+            turned = []
+            for i in order:  # a plain loop: one frame per level (spec/hashlife.md "Depth")
+                turned.append(self._transform(kids[i], k1, kind, memo))
+            r = store.join(*turned)
+        memo[n] = r
+        return r
+
+    def _shifted(self, n: int, k: int, dx: int, dy: int) -> int:
+        """Centered level-k node n with every cell moved by (dx, dy), |dx|, |dy| ≤ 2^(k−1).
+        A cell moved past the node's edge is lost; callers leave room."""
+        big = self._store.data[self._grow(n, k)]
+        half = 1 << (k - 1)
+        return self._crop(k, big[0], big[1], big[2], big[3], half - dx, half - dy, {})
+
+    def _crop(
+        self,
+        k: int,
+        a: int,
+        b: int,
+        c: int,
+        d: int,
+        ox: int,
+        oy: int,
+        memo: dict[tuple[int, ...], int],
+    ) -> int:
+        """The level-k node at offset (ox, oy), 0 ≤ ox, oy ≤ 2^k, in the square of the four
+        aligned level-k nodes a b over c d."""
+        size = 1 << k
+        if ox in (0, size) and oy in (0, size):
+            return (a, b, c, d)[(ox != 0) + 2 * (oy != 0)]
+        store = self._store
+        e = store.empty(k)
+        if a == e and b == e and c == e and d == e:
+            return e
+        key = (k, a, b, c, d, ox, oy)
+        hit = memo.get(key)
+        if hit is not None:
+            return hit
+        data = store.data
+        if k == 3:
+            r = store.leaf(crop(data[a], data[b], data[c], data[d], ox, oy))
+        else:
+            na, nb, nc, nd = data[a], data[b], data[c], data[d]
+            grid = (
+                (na[0], na[1], nb[0], nb[1]),
+                (na[2], na[3], nb[2], nb[3]),
+                (nc[0], nc[1], nd[0], nd[1]),
+                (nc[2], nc[3], nd[2], nd[3]),
+            )
+            half = size >> 1
+            kids = []
+            for j in (0, 1):
+                gy, ry = divmod(oy + j * half, half)
+                if gy == 3:
+                    gy, ry = 2, half
+                for i in (0, 1):
+                    gx, rx = divmod(ox + i * half, half)
+                    if gx == 3:
+                        gx, rx = 2, half
+                    top, below = grid[gy], grid[gy + 1]
+                    kids.append(
+                        self._crop(
+                            k - 1, top[gx], top[gx + 1], below[gx], below[gx + 1], rx, ry, memo
+                        )
+                    )
+            r = store.join(*kids)
+        memo[key] = r
+        return r
+
     def _paste(
         self,
         n: int,
@@ -638,12 +956,14 @@ class HashLife:
                 new = (old & ~_leaf_mask(nx, ny, rect)) | src
             elif mode == "or":
                 new = old | src
-            else:
+            elif mode == "xor":
                 new = old ^ src
+            else:  # and: inside the rectangle only the source's live cells may stay
+                new = old & (src | ~_leaf_mask(nx, ny, rect))
             return store.leaf(new)
         tier = tiers.get(k)  # None at the root, which is centered, not aligned
         if tier is not None and (nx >> k, ny >> k) not in tier:  # no source cells below
-            return self._clear(n, k, nx, ny, rect) if mode == "copy" else n
+            return self._clear(n, k, nx, ny, rect) if mode in ("copy", "and") else n
         half = size >> 1
         a, b, c, d = store.data[n]
         k1 = k - 1
@@ -705,26 +1025,21 @@ class HashLife:
 
     def _edge(self, which: str) -> int:
         """One extreme of the live cells, as an offset from the root's origin."""
-        near, far, lowest = _EDGES[which]
-        store = self._store
-        data = store.data
-        memo: dict[int, int] = {}
+        return self._node_edge(self._root, self._level, which, {})
 
-        def walk(n: int, k: int) -> int:
+    def _node_edge(self, n: int, k: int, which: str, memo: dict[int, int]) -> int:
+        """One extreme of the live cells of non-empty level-k node n, as an offset from its
+        origin; ``memo`` holds this edge's answers by node."""
+        hit = memo.get(n)
+        if hit is not None:
+            return hit
+        store = self._store
+        if k == 3:
+            r = _leaf_edge(store.data[n], which)
+        else:
             # Plain loops, not comprehensions: one frame per level (spec/hashlife.md "Depth").
-            hit = memo.get(n)
-            if hit is not None:
-                return hit
-            if k == 3:
-                b = data[n]
-                if which in ("min_x", "max_x"):
-                    cols = columns(b)
-                    r = (cols & -cols).bit_length() - 1 if lowest else cols.bit_length() - 1
-                else:
-                    r = ((b & -b).bit_length() - 1 if lowest else b.bit_length() - 1) >> 3
-                memo[n] = r
-                return r
-            kids = data[n]
+            near, far, lowest = _EDGES[which]
+            kids = store.data[n]
             e = store.empty(k - 1)
             half = 1 << (k - 1)
             side, offset = near, 0 if lowest else half
@@ -733,9 +1048,44 @@ class HashLife:
             found = []
             for i in side:
                 if kids[i] != e:
-                    found.append(walk(kids[i], k - 1))
+                    found.append(self._node_edge(kids[i], k - 1, which, memo))
             r = (min(found) if lowest else max(found)) + offset
-            memo[n] = r
-            return r
+        memo[n] = r
+        return r
 
-        return walk(self._root, self._level)
+    def _extreme_in(
+        self,
+        n: int,
+        k: int,
+        nx: int,
+        ny: int,
+        rect: tuple[int, int, int, int],
+        which: str,
+        memo: dict[int, int],
+    ) -> int | None:
+        """One extreme of node n's live cells inside the tree rectangle, as a tree
+        coordinate, or None when it holds none. The near half is searched first: anything
+        found there beats everything in the far half."""
+        size = 1 << k
+        store = self._store
+        if n == store.empty(k) or _disjoint(nx, ny, size, rect):
+            return None
+        base = nx if which in ("min_x", "max_x") else ny
+        if _covers(nx, ny, size, rect):
+            return base + self._node_edge(n, k, which, memo)
+        if k == 3:
+            bits = store.data[n] & _leaf_mask(nx, ny, rect)
+            return None if bits == 0 else base + _leaf_edge(bits, which)
+        near, far, lowest = _EDGES[which]
+        half = size >> 1
+        kids = store.data[n]
+        corners = ((nx, ny), (nx + half, ny), (nx, ny + half), (nx + half, ny + half))
+        for side in (near, far):
+            found = []
+            for i in side:
+                got = self._extreme_in(kids[i], k - 1, *corners[i], rect, which, memo)
+                if got is not None:
+                    found.append(got)
+            if found:
+                return min(found) if lowest else max(found)
+        return None

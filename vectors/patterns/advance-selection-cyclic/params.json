@@ -1,0 +1,35 @@
+{
+  "expected": {
+    "file": "expected.png",
+    "shape": [
+      14,
+      18
+    ]
+  },
+  "family": "patterns",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      14,
+      18
+    ]
+  },
+  "kind": "advance",
+  "n": 6,
+  "outside": false,
+  "region": [
+    4,
+    3,
+    12,
+    9
+  ],
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "world": {
+    "family": "cyclic",
+    "neighborhood": "vonneumann",
+    "reach": 2,
+    "states": 5,
+    "threshold": 2
+  }
+}

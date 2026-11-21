@@ -9,17 +9,26 @@ dead boundaries read 0 / clip.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 from numpy.typing import NDArray
 
+from heaton_life.init.seeding import soup
+
 CellArray = NDArray[Any]
+StampMode = Literal["copy", "or", "xor", "and"]
+STAMP_MODES: tuple[StampMode, ...] = ("copy", "or", "xor", "and")
 
 
 def rotate90(pattern: CellArray) -> CellArray:
     """Clockwise quarter turn: result[y][x] = pattern[h-1-x][y]."""
     return np.ascontiguousarray(np.rot90(pattern, k=-1, axes=(0, 1)))
+
+
+def rotate90_ccw(pattern: CellArray) -> CellArray:
+    """Counter-clockwise quarter turn: result[y][x] = pattern[x][w-1-y]; undoes rotate90."""
+    return np.ascontiguousarray(np.rot90(pattern, k=1, axes=(0, 1)))
 
 
 def flip_h(pattern: CellArray) -> CellArray:
@@ -61,27 +70,86 @@ def stamp(
     *,
     torus: bool,
     transparent: bool = False,
+    mode: StampMode = "copy",
 ) -> None:
-    """Write the pattern into the grid at top-left (x, y), in place.
+    """Write the pattern into the grid at top-left (x, y), in place (spec/patterns.md
+    "Extract and stamp").
 
-    Torus targets wrap; dead-boundary targets clip out-of-range cells. With
-    ``transparent``, cells equal to 0 are skipped (2-D payloads only — the
-    opaque-only families reject the flag, per spec).
+    Torus targets wrap; dead-boundary targets clip out-of-range cells; cells land in
+    row-major order. ``mode`` combines each pattern cell ``p`` with the target cell ``t``:
+    ``copy`` writes ``p``; ``or`` skips cells equal to 0 (the transparent value), which is
+    what ``transparent=True`` means; ``xor`` and ``and`` write ``t ^ p`` and ``t & p``.
+    Every mode but ``copy`` needs a 2-D payload (the opaque-only families reject it), and
+    ``xor`` and ``and`` need two-state cells: a pattern cell, or a target cell under the
+    pattern, other than 0 or 1 is a ValueError raised before anything is written.
     """
-    if transparent and pattern.ndim != 2:
-        raise ValueError("transparent stamping is defined for 2-D cell payloads only")
+    if transparent:
+        if mode not in ("copy", "or"):
+            raise ValueError(f"transparent stamping is mode 'or'; it cannot be {mode!r} too")
+        mode = "or"
+    if mode not in STAMP_MODES:
+        raise ValueError(f"unknown stamp mode {mode!r}; expected one of {STAMP_MODES}")
+    if mode != "copy" and pattern.ndim != 2:
+        raise ValueError(f"stamp mode {mode!r} is defined for 2-D cell payloads only")
     grid_h, grid_w = grid.shape[0], grid.shape[1]
     pat_h, pat_w = pattern.shape[0], pattern.shape[1]
+    targets: list[tuple[int, int, int, int]] = []  # (row, col, dst_y, dst_x) in landing order
     for row in range(pat_h):
         for col in range(pat_w):
-            if transparent and pattern[row, col] == 0:
-                continue
             dst_y = y + row
             dst_x = x + col
             if torus:
-                grid[dst_y % grid_h, dst_x % grid_w] = pattern[row, col]
+                targets.append((row, col, dst_y % grid_h, dst_x % grid_w))
             elif 0 <= dst_y < grid_h and 0 <= dst_x < grid_w:
-                grid[dst_y, dst_x] = pattern[row, col]
+                targets.append((row, col, dst_y, dst_x))
+    if mode in ("xor", "and"):
+        if not np.isin(pattern, (0, 1)).all():
+            raise ValueError(f"stamp mode {mode!r} needs a two-state pattern (cells 0 and 1)")
+        for _, _, dst_y, dst_x in targets:
+            if grid[dst_y, dst_x] not in (0, 1):
+                raise ValueError(
+                    f"stamp mode {mode!r} needs two-state cells; ({dst_x}, {dst_y}) holds "
+                    f"{grid[dst_y, dst_x]}"
+                )
+    for row, col, dst_y, dst_x in targets:
+        p = pattern[row, col]
+        if mode == "copy":
+            grid[dst_y, dst_x] = p
+        elif mode == "or":
+            if p != 0:
+                grid[dst_y, dst_x] = p
+        elif mode == "xor":
+            grid[dst_y, dst_x] ^= p
+        else:
+            grid[dst_y, dst_x] &= p
+
+
+def check_region(width: int, height: int, x0: int, y0: int, x1: int, y1: int) -> None:
+    """Raise ValueError unless (x0, y0)..(x1, y1) is a region of a width × height grid:
+    an inclusive rectangle with 0 ≤ x0 ≤ x1 < width and 0 ≤ y0 ≤ y1 < height
+    (spec/patterns.md "Editing a region")."""
+    if not (0 <= x0 <= x1 < width and 0 <= y0 <= y1 < height):
+        raise ValueError(
+            f"region ({x0}, {y0})..({x1}, {y1}) is not an inclusive rectangle inside the "
+            f"{width}x{height} grid"
+        )
+
+
+def fill_random(
+    grid: NDArray[np.uint8], x0: int, y0: int, x1: int, y1: int, *, density: float, seed: int
+) -> None:
+    """spec/patterns.md "Random fill": the region becomes the soup of a world its size.
+
+    PCG32 stream 0 seeded with ``seed``, one draw per cell of the region in row-major
+    order, alive iff ``draw < floor(density * 2**32)`` — the draws of ``soup`` for the
+    region's width and height, and of HashLife's ``fill_random`` for the same rectangle
+    size. Two-state (life-like) grids only; the generation is the caller's and stays.
+    """
+    if grid.ndim != 2:
+        raise ValueError("random fill is defined for two-state (2-D) grids only")
+    height, width = grid.shape
+    check_region(width, height, x0, y0, x1, y1)
+    grid[y0 : y1 + 1, x0 : x1 + 1] = soup((x1 - x0 + 1, y1 - y0 + 1), density=density, seed=seed)
 
 
 def clear(

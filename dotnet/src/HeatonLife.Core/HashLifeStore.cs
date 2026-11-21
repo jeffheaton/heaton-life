@@ -145,6 +145,74 @@ namespace HeatonLife
             return (row * RepeatRows) & band;
         }
 
+        /// <summary>A leaf mirrored left-right: cell (x, y) moves to (7 − x, y).</summary>
+        internal static ulong MirrorColumns(ulong b)
+        {
+            b = ((b >> 4) & 0x0F0F0F0F0F0F0F0FUL) | ((b & 0x0F0F0F0F0F0F0F0FUL) << 4);
+            b = ((b >> 2) & 0x3333333333333333UL) | ((b & 0x3333333333333333UL) << 2);
+            return ((b >> 1) & 0x5555555555555555UL) | ((b & 0x5555555555555555UL) << 1);
+        }
+
+        /// <summary>A leaf mirrored top-bottom: cell (x, y) moves to (x, 7 − y).</summary>
+        internal static ulong MirrorRows(ulong b)
+        {
+            b = ((b >> 8) & 0x00FF00FF00FF00FFUL) | ((b & 0x00FF00FF00FF00FFUL) << 8);
+            b = ((b >> 16) & 0x0000FFFF0000FFFFUL) | ((b & 0x0000FFFF0000FFFFUL) << 16);
+            return (b >> 32) | (b << 32);
+        }
+
+        /// <summary>A leaf mirrored about its main diagonal: cell (x, y) moves to (y, x). Three
+        /// delta swaps exchange ever larger off-diagonal blocks: 1×1 cells, 2×2, then 4×4.</summary>
+        internal static ulong Transpose(ulong b)
+        {
+            ulong t = (b ^ (b >> 7)) & 0x00AA00AA00AA00AAUL;
+            b ^= t ^ (t << 7);
+            t = (b ^ (b >> 14)) & 0x0000CCCC0000CCCCUL;
+            b ^= t ^ (t << 14);
+            t = (b ^ (b >> 28)) & 0x00000000F0F0F0F0UL;
+            return b ^ t ^ (t << 28);
+        }
+
+        /// <summary>A leaf turned a quarter clockwise (y down): cell (x, y) moves to (7 − y, x).</summary>
+        internal static ulong TurnCw(ulong b) => MirrorColumns(Transpose(b));
+
+        /// <summary>A leaf turned a quarter counter-clockwise: cell (x, y) moves to (y, 7 − x).</summary>
+        internal static ulong TurnCcw(ulong b) => MirrorRows(Transpose(b));
+
+        /// <summary>The leaf at offset (ox, oy), 0 ≤ ox, oy ≤ 8, in the 16×16 square of four leaves.</summary>
+        internal static ulong Crop(ulong nw, ulong ne, ulong sw, ulong se, int ox, int oy)
+        {
+            if (ox == 8)
+            {
+                nw = ne;
+                sw = se;
+            }
+            else if (ox != 0)
+            {
+                ulong low = ((1UL << (8 - ox)) - 1) * RepeatRows; // the low 8 − ox columns of each row
+                nw = ((nw >> ox) & low) | ((ne << (8 - ox)) & ~low);
+                sw = ((sw >> ox) & low) | ((se << (8 - ox)) & ~low);
+            }
+            if (oy == 0)
+                return nw;
+            if (oy == 8)
+                return sw;
+            return (nw >> (8 * oy)) | (sw << (8 * (8 - oy)));
+        }
+
+        /// <summary>One extreme of a non-empty leaf's live cells, as a column or row 0..7: edge 0
+        /// is the least x, 1 the greatest x, 2 the least y, 3 the greatest y.</summary>
+        internal static int Edge(ulong b, int edge)
+        {
+            bool lowest = edge == 0 || edge == 2;
+            if (edge < 2)
+            {
+                ulong cols = (ulong)Columns(b);
+                return lowest ? LowestBit(cols) : HighestBit(cols);
+            }
+            return (lowest ? LowestBit(b) : HighestBit(b)) >> 3;
+        }
+
         /// <summary>The 8-bit OR of a leaf's rows: bit x is set when column x holds a live cell.</summary>
         internal static int Columns(ulong b)
         {

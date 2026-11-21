@@ -586,6 +586,9 @@ def main() -> None:
     # -- HashLife: the unbounded universe (spec/hashlife.md, macrocell.md) ------------
     write_hashlife_cases()
 
+    # -- Editing primitives: paste modes, region editing, HashLife's rectangle tools --
+    write_editing_cases()
+
     print("done")
 
 
@@ -4567,6 +4570,655 @@ def write_hashlife_cases() -> None:
                 "error": True,
             },
             {"op": "step", "n": "2"},
+        ],
+    )
+
+
+EDITING_SPEC_VERSION = "0.16.0"
+
+
+def write_editing_cases() -> None:
+    """Editing primitives (spec 0.16.0; spec/patterns.md "Extract and stamp" and "Editing a
+    region", spec/hashlife.md "Editing"). Grids, under vectors/patterns/: the counter-
+    clockwise turn, stamp modes, random fill, and Advance Selection / Advance Outside on
+    life-like, wireworld, and cyclic worlds. HashLife, under vectors/hashlife/edit-*: paste
+    and, Clear Outside, rectangle turns and flips, the generation setter, Advance Selection /
+    Advance Outside, and bounding_box_in. Every case is new; nothing existing changes."""
+    import io
+
+    from PIL import Image
+
+    from heaton_life.ca import Cyclic, clock_loop
+    from heaton_life.ca.hashlife import HashLife
+    from heaton_life.init import (
+        BUILTIN_PATTERNS,
+        fill_random,
+        flip_h,
+        flip_v,
+        rotate90,
+        rotate90_ccw,
+        soup,
+        stamp,
+    )
+
+    def gray_png(arr: np.ndarray) -> bytes:
+        buf = io.BytesIO()
+        Image.fromarray(np.asarray(arr).astype(np.uint8), mode="L").save(buf, format="PNG")
+        return buf.getvalue()
+
+    def picture(file: str, arr: np.ndarray) -> dict[str, Any]:
+        return {"file": file, "shape": list(np.asarray(arr).shape)}
+
+    def save(family: str, name: str, meta: dict[str, Any], files: dict[str, np.ndarray]) -> None:
+        d = VECTOR_ROOT / family / name
+        d.mkdir(parents=True, exist_ok=True)
+        for file, arr in files.items():
+            (d / file).write_bytes(gray_png(arr))
+        full = {"spec_version": EDITING_SPEC_VERSION, "family": family, "tier": "bit-exact"}
+        full.update(meta)
+        (d / "params.json").write_text(
+            json.dumps(full, indent=2, sort_keys=True) + "\n", newline="\n"
+        )
+        print(f"wrote {d.relative_to(REPO_ROOT)}")
+
+    def builtin(name: str) -> np.ndarray:
+        return next(p for p in BUILTIN_PATTERNS if p.name == name).cells()
+
+    # -- grids: the counter-clockwise turn ---------------------------------------------------
+    base = np.array([[1, 2, 3, 0], [0, 4, 0, 5], [6, 0, 7, 8]], dtype=np.uint8)
+    outputs = {
+        "rotate90": rotate90(base),
+        "rotate90_ccw": rotate90_ccw(base),
+        "flip_h": flip_h(base),
+        "flip_v": flip_v(base),
+    }
+    save(
+        "patterns",
+        "transform-ccw",
+        {
+            "kind": "transform",
+            "grid": picture("grid.png", base),
+            "outputs": {k: f"{k}.png" for k in outputs},
+        },
+        {"grid.png": base, **{f"{k}.png": v for k, v in outputs.items()}},
+    )
+
+    # -- grids: stamp modes ------------------------------------------------------------------
+    two_state = soup((7, 5), density=0.5, seed=3)
+    piece = np.array([[1, 1, 0], [0, 1, 1], [1, 0, 1], [0, 0, 1]], dtype=np.uint8)
+    states = np.array([[2, 0, 1, 3], [0, 3, 3, 0], [1, 2, 0, 1]], dtype=np.uint8)
+    ghost = np.array([[0, 1], [2, 0]], dtype=np.uint8)
+    with_two = two_state.copy()
+    with_two[4, 6] = 2  # lies under the pattern only when it wraps from (5, 3)
+    stamp_cases: list[tuple[str, np.ndarray, np.ndarray, int, int, bool, str]] = [
+        ("stamp-mode-xor-torus", two_state, piece, 5, 3, True, "xor"),
+        ("stamp-mode-and-torus", two_state, piece, 5, 3, True, "and"),
+        ("stamp-mode-and-clip", two_state, piece, 5, 3, False, "and"),
+        ("stamp-mode-or-clip", two_state, piece, -1, -2, False, "or"),
+        ("stamp-mode-copy-clip", two_state, piece, -1, -2, False, "copy"),
+        (
+            "stamp-mode-xor-overlap",
+            two_state[:3, :3],
+            soup((4, 5), density=0.5, seed=4),
+            1,
+            2,
+            True,
+            "xor",
+        ),
+        ("stamp-mode-or-multistate", states, ghost, 3, 2, True, "or"),
+        ("stamp-mode-xor-error-target", with_two, piece, 5, 3, True, "xor"),
+        ("stamp-mode-and-ok-target-clipped", with_two, piece, 5, 3, False, "and"),
+        ("stamp-mode-and-error-pattern", two_state, piece * 2, 0, 0, False, "and"),
+        ("stamp-mode-xor-error-multistate", states, ghost, 0, 0, False, "xor"),
+    ]
+    for name, grid, pat, x, y, torus, mode in stamp_cases:
+        meta: dict[str, Any] = {
+            "kind": "stamp",
+            "pattern": picture("pattern.png", pat),
+            "grid": picture("grid.png", grid),
+            "x": x,
+            "y": y,
+            "torus": torus,
+            "mode": mode,
+        }
+        files = {"pattern.png": pat, "grid.png": grid}
+        target = grid.copy()
+        try:
+            stamp(target, pat, x, y, torus=torus, mode=mode)  # type: ignore[arg-type]
+        except ValueError:
+            meta["error"] = True
+            assert np.array_equal(target, grid)
+        else:
+            meta["expected"] = picture("expected.png", target)
+            files["expected.png"] = target
+        save("patterns", name, meta, files)
+
+    # -- grids: random fill ------------------------------------------------------------------
+    background = soup((24, 16), density=0.3, seed=21)
+    fill_cases = [
+        ("fill-random-region", (3, 2, 17, 11), 0.45, 12345),
+        ("fill-random-whole-grid", (0, 0, 23, 15), 0.3, 21),  # the grid's own soup again
+        ("fill-random-one-cell", (23, 15, 23, 15), 0.5, 7),
+        ("fill-random-full-density", (10, 0, 13, 15), 1.0, 2),
+        ("fill-random-error-outside", (20, 10, 24, 15), 0.5, 1),
+        ("fill-random-error-density", (0, 0, 3, 3), 1.5, 1),
+    ]
+    for name, region, density, seed in fill_cases:
+        meta = {
+            "kind": "fill-random",
+            "grid": picture("grid.png", background),
+            "region": list(region),
+            "density": density,
+            "seed": seed,
+        }
+        files = {"grid.png": background}
+        target = background.copy()
+        try:
+            fill_random(target, *region, density=density, seed=seed)
+        except ValueError:
+            meta["error"] = True
+            assert np.array_equal(target, background)
+        else:
+            meta["expected"] = picture("expected.png", target)
+            files["expected.png"] = target
+        save("patterns", name, meta, files)
+
+    # -- grids: Advance Selection and Advance Outside ----------------------------------------
+    def world(desc: dict[str, Any], grid: np.ndarray) -> Any:
+        size = (grid.shape[1], grid.shape[0])
+        if desc["family"] == "lifelike":
+            return LifeLike(desc["rule"], size=size, init=grid, boundary=desc["boundary"])
+        if desc["family"] == "wireworld":
+            return Wireworld(size=size, init=grid, boundary=desc["boundary"])
+        return Cyclic(
+            desc["states"],
+            size=size,
+            threshold=desc["threshold"],
+            reach=desc["reach"],
+            neighborhood=desc["neighborhood"],
+            init=grid,
+        )
+
+    def advance(
+        name: str,
+        desc: dict[str, Any],
+        grid: np.ndarray,
+        region: tuple[int, int, int, int],
+        n: int,
+        outside: bool,
+    ) -> None:
+        w = world(desc, grid)
+        meta: dict[str, Any] = {
+            "kind": "advance",
+            "world": desc,
+            "grid": picture("grid.png", grid),
+            "region": list(region),
+            "n": n,
+            "outside": outside,
+        }
+        files = {"grid.png": grid}
+        try:
+            (w.advance_outside if outside else w.advance_selection)(*region, n)
+        except ValueError:
+            meta["error"] = True
+            assert np.array_equal(w.state, grid)
+        else:
+            assert w.generation == 0
+            meta["expected"] = picture("expected.png", w.state)
+            files["expected.png"] = np.asarray(w.state)
+        save("patterns", name, meta, files)
+
+    life_torus = {"family": "lifelike", "rule": "B3/S23", "boundary": "torus"}
+    lone = np.zeros((8, 8), np.uint8)
+    lone[0:3, 0:3] = builtin("Glider")
+    advance("advance-selection-life-wraps-back", life_torus, lone, (0, 0, 3, 3), 32, False)
+    lane = np.zeros((10, 12), np.uint8)
+    lane[2:6, 0:5] = builtin("Lightweight spaceship")
+    lane[8, 3:6] = 1  # a blinker below the band, outside it
+    advance("advance-selection-life-full-width", life_torus, lane, (0, 1, 11, 6), 24, False)
+    advance("advance-outside-life-full-width", life_torus, lane, (0, 1, 11, 6), 3, True)
+    soup_dead = soup((20, 16), density=0.4, seed=31)
+    life_dead = {"family": "lifelike", "rule": "B3/S23", "boundary": "dead"}
+    advance("advance-outside-life-dead", life_dead, soup_dead, (6, 4, 13, 10), 17, True)
+    advance("advance-selection-life-dead-edge", life_dead, soup_dead, (0, 9, 7, 15), 11, False)
+    life_b0 = {"family": "lifelike", "rule": "B0123478/S01234678", "boundary": "torus"}
+    b0 = soup((14, 10), density=0.5, seed=32)
+    advance("advance-selection-life-b0", life_b0, b0, (2, 3, 9, 7), 3, False)
+    advance("advance-outside-life-b0", life_b0, b0, (2, 3, 9, 7), 4, True)
+    highlife = {"family": "lifelike", "rule": "B36/S23", "boundary": "torus"}
+    advance(
+        "advance-selection-life-whole-grid",
+        highlife,
+        soup((10, 10), density=0.4, seed=33),
+        (0, 0, 9, 9),
+        5,
+        False,
+    )
+    advance(
+        "advance-outside-life-whole-grid",
+        highlife,
+        soup((10, 10), density=0.4, seed=33),
+        (0, 0, 9, 9),
+        5,
+        True,
+    )
+    advance(
+        "advance-selection-life-zero",
+        highlife,
+        soup((10, 10), density=0.4, seed=34),
+        (1, 1, 6, 6),
+        0,
+        False,
+    )
+    advance(
+        "advance-error-past-the-edge",
+        highlife,
+        soup((10, 10), density=0.4, seed=35),
+        (3, 3, 10, 9),
+        2,
+        False,
+    )
+    advance(
+        "advance-error-backward",
+        highlife,
+        soup((10, 10), density=0.4, seed=36),
+        (3, 3, 8, 8),
+        -1,
+        True,
+    )
+    circuit = clock_loop((20, 12), margin=1)
+    circuit[6, 4:16] = 3  # a crossbar the clock's electron reaches
+    wire_dead = {"family": "wireworld", "boundary": "dead"}
+    wire_torus = {"family": "wireworld", "boundary": "torus"}
+    advance("advance-selection-wireworld", wire_dead, circuit, (0, 0, 9, 11), 9, False)
+    advance("advance-outside-wireworld-torus", wire_torus, circuit, (5, 0, 14, 4), 13, True)
+    cyc = Cyclic(5, size=(18, 14), threshold=2, reach=2, neighborhood="vonneumann", seed=37)
+    cyclic_vn = {
+        "family": "cyclic",
+        "states": 5,
+        "threshold": 2,
+        "reach": 2,
+        "neighborhood": "vonneumann",
+    }
+    advance("advance-selection-cyclic", cyclic_vn, cyc.state.copy(), (4, 3, 12, 9), 6, False)
+    cyc4 = Cyclic(4, size=(18, 14), seed=38)
+    cyclic_moore = {
+        "family": "cyclic",
+        "states": 4,
+        "threshold": 1,
+        "reach": 1,
+        "neighborhood": "moore",
+    }
+    advance("advance-outside-cyclic", cyclic_moore, cyc4.state.copy(), (0, 0, 17, 2), 5, True)
+
+    # -- HashLife: paste and, rectangle tools, generation, advances, bounding_box_in ---------
+    root = VECTOR_ROOT / "hashlife"
+
+    def rows(arr: np.ndarray) -> list[str]:
+        return ["".join("*" if v else "." for v in row) for row in np.asarray(arr)]
+
+    def hashlife_state(d: Path, u: HashLife) -> dict[str, Any]:
+        text = u.to_macrocell()
+        box = u.bounding_box()
+        entry: dict[str, Any] = {
+            "generation": str(u.generation),
+            "population": str(u.population),
+            "bounding_box": None if box is None else [str(v) for v in box],
+        }
+        if len(text) <= _HASHLIFE_INLINE_BYTES:
+            (d / "final.mc").write_text(text, newline="\n")
+            entry["state"] = "final.mc"
+        else:
+            entry["state_sha256"] = hashlib.sha256(text.encode("ascii")).hexdigest()
+            entry["state_lines"] = text.count("\n")
+        return entry
+
+    def edit(name: str, rule: str, ops: list[dict[str, Any]]) -> None:
+        d = root / f"edit-{name}"
+        d.mkdir(parents=True, exist_ok=True)
+        u = HashLife(rule)
+        for op in ops:
+            kind = op["op"]
+            before = (u.to_macrocell(), u.generation)
+            try:
+                if kind == "set_cell":
+                    u.set_cell(op["x"], op["y"], op["alive"])
+                elif kind == "set_rect":
+                    cells = np.array([[c == "*" for c in row] for row in op["cells"]], np.uint8)
+                    u.set_rect(op["x"], op["y"], cells, op["mode"])
+                elif kind == "fill_random":
+                    u.fill_random(op["x0"], op["y0"], op["x1"], op["y1"], op["density"], op["seed"])
+                elif kind == "step":
+                    u.step(int(op["n"]))
+                elif kind == "clear_outside":
+                    u.clear_outside(op["x0"], op["y0"], op["x1"], op["y1"])
+                elif kind == "rotate_rect":
+                    got = u.rotate_rect(
+                        op["x0"], op["y0"], op["x1"], op["y1"], clockwise=op["clockwise"]
+                    )
+                    op["expect"] = list(got)
+                elif kind == "flip_rect":
+                    u.flip_rect(op["x0"], op["y0"], op["x1"], op["y1"], horizontal=op["horizontal"])
+                elif kind == "advance_selection":
+                    u.advance_selection(op["x0"], op["y0"], op["x1"], op["y1"], int(op["n"]))
+                elif kind == "advance_outside":
+                    u.advance_outside(op["x0"], op["y0"], op["x1"], op["y1"], int(op["n"]))
+                elif kind == "set_generation":
+                    u.set_generation(int(op["n"]))
+                elif kind == "bounding_box_in":
+                    box = u.bounding_box_in(*(int(op[k]) for k in ("x0", "y0", "x1", "y1")))
+                    op["expect"] = None if box is None else [str(v) for v in box]
+                else:
+                    raise AssertionError(kind)
+            except ValueError:
+                assert op.get("error"), op
+                assert (u.to_macrocell(), u.generation) == before, op
+            else:
+                assert not op.get("error"), op
+        meta: dict[str, Any] = {"kind": "edit", "rule": rule, "ops": ops}
+        meta.update(hashlife_state(d, u))
+        full = {"spec_version": EDITING_SPEC_VERSION, "family": "hashlife", "tier": "bit-exact"}
+        full.update(meta)
+        (d / "params.json").write_text(
+            json.dumps(full, indent=2, sort_keys=True) + "\n", newline="\n"
+        )
+        print(f"wrote {d.relative_to(REPO_ROOT)}")
+
+    edge = 1_000_000_000
+    edit(
+        "paste-and",
+        "B3/S23",
+        [
+            {
+                "op": "fill_random",
+                "x0": -12,
+                "y0": -9,
+                "x1": 13,
+                "y1": 10,
+                "density": 0.6,
+                "seed": 5,
+            },
+            {
+                "op": "set_rect",
+                "x": -15,
+                "y": -4,
+                "mode": "and",
+                "cells": rows(soup((9, 6), density=0.5, seed=6)),
+            },
+            {
+                "op": "set_rect",
+                "x": 2,
+                "y": 3,
+                "mode": "and",
+                "cells": rows(soup((12, 11), density=0.7, seed=7)),
+            },
+            {"op": "set_rect", "x": 9, "y": -12, "mode": "and", "cells": ["......"] * 5},
+            {
+                "op": "set_rect",
+                "x": edge - 1,
+                "y": 0,
+                "mode": "and",
+                "cells": ["***"],
+                "error": True,
+            },
+            {"op": "step", "n": "11"},
+        ],
+    )
+    edit(
+        "clear-outside",
+        "B3/S23",
+        [
+            {
+                "op": "fill_random",
+                "x0": -30,
+                "y0": -20,
+                "x1": 29,
+                "y1": 19,
+                "density": 0.4,
+                "seed": 8,
+            },
+            {"op": "set_cell", "x": edge, "y": -edge, "alive": True},
+            {"op": "set_cell", "x": -edge + 1, "y": edge - 1, "alive": True},
+            {"op": "clear_outside", "x0": -9, "y0": -13, "x1": 17, "y1": 6},
+            {"op": "clear_outside", "x0": 5, "y0": 5, "x1": 4, "y1": 5, "error": True},
+            {"op": "clear_outside", "x0": 0, "y0": 0, "x1": edge + 1, "y1": 0, "error": True},
+            {"op": "step", "n": "25"},
+        ],
+    )
+    m = edge - 1  # a glider moves (m, m) in 4m generations, half of it then past the box
+    edit(
+        "clear-outside-beyond-the-box",
+        "B3/S23",
+        [
+            {"op": "set_rect", "x": 0, "y": 0, "mode": "copy", "cells": [".*.", "..*", "***"]},
+            {"op": "step", "n": str(4 * m)},
+            {"op": "set_rect", "x": -5, "y": -5, "mode": "copy", "cells": ["**", "**"]},
+            {
+                "op": "bounding_box_in",
+                "x0": str(-edge),
+                "y0": str(-edge),
+                "x1": str(edge),
+                "y1": str(edge),
+            },
+            {"op": "clear_outside", "x0": -edge, "y0": -edge, "x1": edge, "y1": edge},
+            {"op": "step", "n": "1"},
+        ],
+    )
+    turns: list[dict[str, Any]] = [
+        {"op": "fill_random", "x0": -40, "y0": -30, "x1": 39, "y1": 29, "density": 0.5, "seed": 77},
+    ]
+    for (x0, y0, x1, y1), clockwise in (
+        ((0, 0, 6, 3), True),  # X even, Y odd
+        ((-17, -11, -9, -2), False),  # X even, Y odd, negative
+        ((3, -20, 7, -12), True),  # both even: about a cell corner
+        ((-30, 5, -25, 11), False),  # X odd, Y even
+        ((-31, 5, -26, 11), True),  # X odd, Y even, the other parity of x + y
+        ((10, 10, 14, 14), True),  # square
+        ((20, -5, 20, 9), False),  # one column
+        ((-2, -1, 2, 1), True),  # both odd: about the center cell
+    ):
+        turns.append(
+            {"op": "rotate_rect", "x0": x0, "y0": y0, "x1": x1, "y1": y1, "clockwise": clockwise}
+        )
+    turns += [
+        {"op": "flip_rect", "x0": -35, "y0": -25, "x1": -10, "y1": -3, "horizontal": True},
+        {"op": "flip_rect", "x0": 0, "y0": -28, "x1": 33, "y1": 2, "horizontal": False},
+        {
+            "op": "rotate_rect",
+            "x0": edge - 10,
+            "y0": 0,
+            "x1": edge,
+            "y1": 100,
+            "clockwise": True,
+            "error": True,
+        },
+        {"op": "flip_rect", "x0": 4, "y0": 4, "x1": 3, "y1": 4, "horizontal": True, "error": True},
+        {"op": "step", "n": "9"},
+    ]
+    edit("rotate-and-flip", "B36/S23", turns)
+    gun = rows(builtin("Gosper glider gun"))
+    edit(
+        "turns-at-the-box",
+        "B3/S23",
+        [
+            *(
+                {"op": "set_rect", "x": x, "y": y, "mode": "or", "cells": gun}
+                for x, y in (
+                    (-999_999_000, -999_999_000),
+                    (999_990_000, 3),
+                    (5, 999_999_000),
+                    (-7, -7),
+                )
+            ),
+            {
+                "op": "rotate_rect",
+                "x0": -edge,
+                "y0": -edge,
+                "x1": edge,
+                "y1": edge - 1,
+                "clockwise": True,
+            },
+            {
+                "op": "rotate_rect",
+                "x0": -edge + 1,
+                "y0": -edge,
+                "x1": edge,
+                "y1": edge,
+                "clockwise": False,
+            },
+            {
+                "op": "flip_rect",
+                "x0": -edge,
+                "y0": -edge,
+                "x1": edge,
+                "y1": edge,
+                "horizontal": False,
+            },
+            {
+                "op": "flip_rect",
+                "x0": -edge,
+                "y0": -edge,
+                "x1": edge,
+                "y1": edge,
+                "horizontal": True,
+            },
+            {"op": "step", "n": "64"},
+        ],
+    )
+    edit(
+        "set-generation",
+        "B3/S23",
+        [
+            {"op": "set_rect", "x": 0, "y": 0, "mode": "copy", "cells": [".*.", "..*", "***"]},
+            {"op": "step", "n": "10"},
+            {"op": "set_generation", "n": "123456789012345678901234567890"},
+            {"op": "step", "n": "5"},
+            {"op": "set_generation", "n": "-1", "error": True},
+            {"op": "set_generation", "n": "0"},
+            {"op": "step", "n": "3"},
+        ],
+    )
+    big = 2**70
+    queries: list[dict[str, Any]] = [
+        {"op": "fill_random", "x0": -20, "y0": -15, "x1": 19, "y1": 14, "density": 0.3, "seed": 4},
+        {"op": "set_rect", "x": 40, "y": 40, "mode": "copy", "cells": [".*.", "..*", "***"]},
+        {"op": "set_cell", "x": 999_999_999, "y": -999_999_999, "alive": True},
+    ]
+    for box in (
+        (-20, -15, 19, 14),
+        (-5, -5, 5, 5),
+        (-100, -100, -21, 100),
+        (5, 5, 4, 5),
+        (-(10**21), -(10**21), 10**21, 10**21),
+        (0, -(10**9), 10**9, 0),
+        (17, -3, 60, 2),
+    ):
+        queries.append(
+            {"op": "bounding_box_in", **dict(zip(("x0", "y0", "x1", "y1"), map(str, box)))}
+        )
+    queries.append({"op": "step", "n": str(4 * big)})
+    for box in (
+        (big, big, big + 100, big + 100),
+        (big + 41, big + 40, big + 42, big + 42),
+        (-big, -big, big, big),
+        (big + 43, big, big + 1000, big + 1000),
+    ):
+        queries.append(
+            {"op": "bounding_box_in", **dict(zip(("x0", "y0", "x1", "y1"), map(str, box)))}
+        )
+    edit("bounding-box-in", "B3/S23", queries)
+    edit(
+        "advance-selection",
+        "B3/S23",
+        [
+            {"op": "set_rect", "x": 0, "y": 0, "mode": "copy", "cells": gun},
+            {"op": "set_rect", "x": 500, "y": 500, "mode": "copy", "cells": ["**", "**"]},
+            {
+                "op": "fill_random",
+                "x0": -60,
+                "y0": 40,
+                "x1": -20,
+                "y1": 70,
+                "density": 0.4,
+                "seed": 9,
+            },
+            {"op": "advance_selection", "x0": -5, "y0": -5, "x1": 40, "y1": 15, "n": str(2**40)},
+            {"op": "advance_selection", "x0": -55, "y0": 45, "x1": -30, "y1": 60, "n": "37"},
+            {"op": "advance_selection", "x0": 490, "y0": 490, "x1": 510, "y1": 510, "n": "1"},
+            {"op": "advance_selection", "x0": -1, "y0": -1, "x1": 4, "y1": 4, "n": "0"},
+            {
+                "op": "advance_selection",
+                "x0": 0,
+                "y0": 0,
+                "x1": 10,
+                "y1": 10,
+                "n": str(2**510),
+                "error": True,
+            },
+            {
+                "op": "advance_selection",
+                "x0": 5,
+                "y0": 5,
+                "x1": 4,
+                "y1": 5,
+                "n": "1",
+                "error": True,
+            },
+            {
+                "op": "advance_selection",
+                "x0": 0,
+                "y0": 0,
+                "x1": edge + 1,
+                "y1": 3,
+                "n": "1",
+                "error": True,
+            },
+            {"op": "step", "n": "3"},
+        ],
+    )
+    edit(
+        "advance-outside",
+        "B3/S23",
+        [
+            {"op": "set_rect", "x": 0, "y": 0, "mode": "copy", "cells": gun},
+            {"op": "set_rect", "x": 100, "y": 100, "mode": "copy", "cells": ["**.*", "**.."]},
+            {
+                "op": "fill_random",
+                "x0": 60,
+                "y0": -40,
+                "x1": 90,
+                "y1": -20,
+                "density": 0.4,
+                "seed": 10,
+            },
+            {"op": "advance_outside", "x0": 99, "y0": 99, "x1": 104, "y1": 102, "n": "1000"},
+            {"op": "advance_outside", "x0": -1000, "y0": -1000, "x1": 1000, "y1": 1000, "n": "64"},
+            {"op": "advance_outside", "x0": 0, "y0": 0, "x1": 3, "y1": 3, "n": "-1", "error": True},
+            {"op": "step", "n": "2"},
+        ],
+    )
+    edit(
+        "advance-highlife",
+        "B36/S23",
+        [
+            {
+                "op": "set_rect",
+                "x": -2,
+                "y": -2,
+                "mode": "copy",
+                "cells": rows(builtin("Replicator (HighLife)")),
+            },
+            {
+                "op": "fill_random",
+                "x0": 20,
+                "y0": -10,
+                "x1": 45,
+                "y1": 10,
+                "density": 0.35,
+                "seed": 11,
+            },
+            {"op": "advance_selection", "x0": -12, "y0": -12, "x1": 12, "y1": 12, "n": "48"},
+            {"op": "advance_outside", "x0": -12, "y0": -12, "x1": 12, "y1": 12, "n": "33"},
         ],
     )
 

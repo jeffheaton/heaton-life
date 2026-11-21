@@ -14,6 +14,7 @@ from typing import cast
 import numpy as np
 from numpy.typing import NDArray
 
+from heaton_life.ca._advance import AdvanceRegion
 from heaton_life.core.neighbors import Boundary, moore_sum
 from heaton_life.core.params import Params
 from heaton_life.init.patterns import clear
@@ -65,7 +66,7 @@ class WireworldParams(Params):
     boundary: str = dataclasses.field(default="dead", metadata={"choices": ["dead", "torus"]})
 
 
-class Wireworld:
+class Wireworld(AdvanceRegion):
     """Wireworld. State is uint8 in {0,1,2,3}, shape (height, width)."""
 
     def __init__(

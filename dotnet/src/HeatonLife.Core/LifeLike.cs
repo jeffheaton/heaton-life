@@ -135,6 +135,38 @@ namespace HeatonLife
                     SetCell(x, y, 0);
         }
 
+        /// <summary>
+        /// Advance Selection (spec/patterns.md "Editing a region"): the inclusive region evolves
+        /// <paramref name="n"/> generations as if nothing else existed — a copy of the world blank
+        /// outside it runs under the world's rule and boundary (a torus wraps), and its region is
+        /// copied back. Cells outside the region and <see cref="Generation"/> are untouched.
+        /// </summary>
+        public void AdvanceSelection(int x0, int y0, int x1, int y1, int n = 1) => Advance(x0, y0, x1, y1, n, outside: false);
+
+        /// <summary>
+        /// Advance Outside: Advance Selection's mirror image. The world with the region blank runs
+        /// <paramref name="n"/> generations and everything outside the region is copied back; the
+        /// region keeps its cells, and <see cref="Generation"/> stays.
+        /// </summary>
+        public void AdvanceOutside(int x0, int y0, int x1, int y1, int n = 1) => Advance(x0, y0, x1, y1, n, outside: true);
+
+        private void Advance(int x0, int y0, int x1, int y1, int n, bool outside)
+        {
+            byte[] saved = GridRegion.Isolate(_cells, Width, Height, x0, y0, x1, y1, n, outside);
+            for (int s = 0; s < n; s++)
+                StepOnce();
+            GridRegion.Merge(_cells, saved, Width, Height, x0, y0, x1, y1, outside);
+        }
+
+        /// <summary>
+        /// Random fill (spec/patterns.md "Editing a region"): the inclusive region becomes the soup
+        /// of a world its size — PCG32 stream 0, one draw per cell in row-major order, alive iff
+        /// draw &lt; ⌊density · 2^32⌋ — the same cells <see cref="HashLife.FillRandom"/> gives a
+        /// rectangle of that size and seed. <see cref="Generation"/> is untouched.
+        /// </summary>
+        public void FillRandom(int x0, int y0, int x1, int y1, double density, ulong seed)
+            => Patterns.FillRandom(_cells, Width, Height, x0, y0, x1, y1, density, seed);
+
         public void Step(int n = 1)
         {
             for (int s = 0; s < n; s++)

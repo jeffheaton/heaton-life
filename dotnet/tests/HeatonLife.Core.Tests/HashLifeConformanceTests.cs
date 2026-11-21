@@ -20,7 +20,7 @@ namespace HeatonLife.Tests
     /// </summary>
     public class HashLifeConformanceTests
     {
-        private static readonly string[] SpecVersions = { "0.14.0", "0.15.0" };
+        private static readonly string[] SpecVersions = { "0.14.0", "0.15.0", "0.16.0" };
 
         private static readonly Dictionary<string, HashSet<string>> Keys = BuildKeys();
 
@@ -219,6 +219,7 @@ namespace HeatonLife.Tests
                             "copy" => HashLifePasteMode.Copy,
                             "or" => HashLifePasteMode.Or,
                             "xor" => HashLifePasteMode.Xor,
+                            "and" => HashLifePasteMode.And, // spec 0.16.0 on
                             var other => throw new InvalidDataException($"unknown paste mode {other}"),
                         };
                         u.SetRect(op.GetProperty("x").GetInt64(), op.GetProperty("y").GetInt64(), cells, width, rows.Length, mode);
@@ -241,10 +242,63 @@ namespace HeatonLife.Tests
                 case "clear":
                     u.Clear();
                     break;
+                case "clear_outside": // spec 0.16.0 on
+                    u.ClearOutside(Long(op, "x0"), Long(op, "y0"), Long(op, "x1"), Long(op, "y1"));
+                    break;
+                case "rotate_rect":
+                    {
+                        CellBox got = u.RotateRect(
+                            Long(op, "x0"), Long(op, "y0"), Long(op, "x1"), Long(op, "y1"),
+                            op.GetProperty("clockwise").GetBoolean());
+                        Assert.Equal(
+                            op.GetProperty("expect").EnumerateArray().Select(v => v.GetInt64().ToString()).ToArray(),
+                            new[] { got.X0, got.Y0, got.X1, got.Y1 }.Select(v => v.ToString()).ToArray());
+                        break;
+                    }
+                case "flip_rect":
+                    u.FlipRect(
+                        Long(op, "x0"), Long(op, "y0"), Long(op, "x1"), Long(op, "y1"),
+                        op.GetProperty("horizontal").GetBoolean());
+                    break;
+                case "advance_selection":
+                    u.AdvanceSelection(
+                        Long(op, "x0"), Long(op, "y0"), Long(op, "x1"), Long(op, "y1"),
+                        BigInteger.Parse(op.GetProperty("n").GetString()!));
+                    break;
+                case "advance_outside":
+                    u.AdvanceOutside(
+                        Long(op, "x0"), Long(op, "y0"), Long(op, "x1"), Long(op, "y1"),
+                        BigInteger.Parse(op.GetProperty("n").GetString()!));
+                    break;
+                case "set_generation":
+                    u.SetGeneration(BigInteger.Parse(op.GetProperty("n").GetString()!));
+                    break;
+                case "bounding_box_in":
+                    {
+                        CellBox? box = u.BoundingBoxIn(
+                            Big(op.GetProperty("x0")), Big(op.GetProperty("y0")),
+                            Big(op.GetProperty("x1")), Big(op.GetProperty("y1")));
+                        JsonElement expect = op.GetProperty("expect");
+                        if (expect.ValueKind == JsonValueKind.Null)
+                        {
+                            Assert.Null(box);
+                        }
+                        else
+                        {
+                            Assert.NotNull(box);
+                            CellBox b = box!.Value;
+                            Assert.Equal(
+                                expect.EnumerateArray().Select(v => v.GetString()).ToArray(),
+                                new[] { b.X0, b.Y0, b.X1, b.Y1 }.Select(v => v.ToString()).ToArray());
+                        }
+                        break;
+                    }
                 default:
                     throw new InvalidDataException($"unknown op {op.GetProperty("op").GetString()}");
             }
         }
+
+        private static long Long(JsonElement op, string key) => op.GetProperty(key).GetInt64();
 
         private static BigInteger Big(JsonElement value)
             => value.ValueKind == JsonValueKind.String ? BigInteger.Parse(value.GetString()!) : value.GetInt64();

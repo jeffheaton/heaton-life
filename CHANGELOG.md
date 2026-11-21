@@ -7,7 +7,7 @@ vectors) moves on its own; each release lists the one it implements.
 
 ## 1.2.0 (unreleased)
 
-Implements spec version 0.15.0 (1.1.0 implemented 0.13.0). Every conformance vector that
+Implements spec version 0.16.0 (1.1.0 implemented 0.13.0). Every conformance vector that
 existed at 1.1.0 is byte-identical; the new behavior comes with new vector cases. The
 public APIs of both packages are backward compatible: nothing was removed or renamed.
 Two behaviors changed (below): canonical RLE's form, and RLE decoding now has a size
@@ -62,6 +62,34 @@ limit.
   breeds run after run, each from a fresh population, and run n's seed comes from PCG32
   stream 2, so any run replays on either implementation from the search's seed and its
   number. [spec/rng.md](spec/rng.md) now lists the streams in use.
+
+- **Editing primitives** for selection and run tools ([spec/patterns.md](spec/patterns.md)
+  "Extract and stamp" and "Editing a region", [spec/hashlife.md](spec/hashlife.md)
+  "Editing"):
+  - Paste modes: grid stamps take a `mode` (`stamp(..., mode=...)`, .NET `StampMode`):
+    `copy`, `or` (the old `transparent`), and the two-state `xor` and `and`, which refuse
+    any cell other than 0 or 1 and change nothing. HashLife's `set_rect` gains `and`
+    (`HashLifePasteMode.And`).
+  - The counter-clockwise turn: `rotate90_ccw`, `Patterns.Rotate90Ccw` and
+    `Rotate90CcwPlanes`.
+  - Random fill of a region of a life-like grid (`LifeLike.fill_random`, `fill_random`;
+    `LifeLike.FillRandom`, `Patterns.FillRandom`): the soup of a world the region's size,
+    from PCG32 stream 0 ([spec/rng.md](spec/rng.md) now lists the fills there), so it
+    fills a rectangle exactly as HashLife's `fill_random` does. `check_region` /
+    `Patterns.CheckRegion` validate a region.
+  - Advance Selection and Advance Outside (`advance_selection`, `advance_outside`;
+    `AdvanceSelection`, `AdvanceOutside`) on life-like, wireworld, and cyclic grids and in
+    HashLife: the selection evolves n generations on its own, the rest of the world
+    blank, and is clipped back; or the outside evolves as if the selection were empty.
+    The generation counter stays. A grid's copy keeps the world's boundary, so a torus
+    wraps; in HashLife the selection is an isolated plane, a jump costs what `step`
+    costs, and a canceled or failed advance leaves the universe as it was.
+  - HashLife rectangle tools: `bounding_box_in` / `BoundingBoxIn` (for Shrink Selection;
+    any coordinates), `clear_outside` / `ClearOutside`, `rotate_rect` / `RotateRect` in
+    either direction (about the rectangle's center, never drifting, returning where the
+    cells land) and `flip_rect` / `FlipRect`, all on the tree, with no dense copy, at any
+    area or population; and `set_generation` / `SetGeneration`, which changes only the
+    counter.
 
 ### Changed
 

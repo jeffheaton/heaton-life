@@ -19,6 +19,9 @@ namespace HeatonLife
 
         /// <summary>Each cell toggles where the source is alive.</summary>
         Xor,
+
+        /// <summary>A cell of the rectangle stays alive only where the source is alive too.</summary>
+        And,
     }
 
     /// <summary>What a zoomed-out pixel shows (spec/hashlife.md "View and render").</summary>
@@ -280,6 +283,39 @@ namespace HeatonLife
             return CountBig(_store.Root, k, origin, origin, x0, y0 - 1, x1, y1 - 1);
         }
 
+        /// <summary>
+        /// The inclusive extremes of the live cells inside the inclusive rectangle, or null when it
+        /// holds none (an empty rectangle holds none): where Shrink Selection moves a selection
+        /// (spec/hashlife.md "Observables"). Any coordinates.
+        /// </summary>
+        public CellBox? BoundingBoxIn(BigInteger x0, BigInteger y0, BigInteger x1, BigInteger y1)
+        {
+            if (x1 < x0 || y1 < y0)
+                return null;
+            var s = _store;
+            int k = s.Level;
+            BigInteger origin = -(BigInteger.One << (k - 1));
+            var found = new BigInteger[4];
+            try
+            {
+                for (int edge = 0; edge < 4; edge++)
+                {
+                    _edgeMemo.Clear();
+                    _edgeMemoBig.Clear();
+                    BigInteger? extreme = ExtremeBig(s.Root, k, origin, origin, x0, y0 - 1, x1, y1 - 1, edge);
+                    if (extreme == null)
+                        return null;
+                    found[edge] = extreme.Value;
+                }
+            }
+            finally
+            {
+                _edgeMemo.Clear();
+                _edgeMemoBig.Clear();
+            }
+            return new CellBox(found[0], found[2] + 1, found[1], found[3] + 1);
+        }
+
         public bool GetCell(long x, long y)
         {
             CheckBox(x, y, x, y);
@@ -483,7 +519,9 @@ namespace HeatonLife
             _genCache = null;
         }
 
-        internal void SetGeneration(BigInteger generation)
+        /// <summary>Set the generation counter to any integer ≥ 0; no cell changes
+        /// (spec/hashlife.md "Editing").</summary>
+        public void SetGeneration(BigInteger generation)
         {
             if (generation.Sign < 0)
                 throw new ArgumentOutOfRangeException(nameof(generation), generation, "a generation is never negative");
@@ -580,7 +618,8 @@ namespace HeatonLife
             long x, long y, ReadOnlySpan<byte> cells, int width, int height,
             HashLifePasteMode mode = HashLifePasteMode.Copy)
         {
-            if (mode != HashLifePasteMode.Copy && mode != HashLifePasteMode.Or && mode != HashLifePasteMode.Xor)
+            if (mode != HashLifePasteMode.Copy && mode != HashLifePasteMode.Or && mode != HashLifePasteMode.Xor
+                && mode != HashLifePasteMode.And)
                 throw new ArgumentOutOfRangeException(nameof(mode), mode, "unknown paste mode");
             if (width < 1 || height < 1)
                 throw new ArgumentException($"cells must be a non-empty rectangle, got {width} x {height}");
@@ -654,6 +693,112 @@ namespace HeatonLife
             for (int i = 0; i < cells.Length; i++)
                 cells[i] = (byte)(rng.NextU32() < threshold ? 1 : 0);
             SetRect(x0, y0, cells, (int)width, (int)height, HashLifePasteMode.Copy);
+        }
+
+        /// <summary>Every cell outside the inclusive rectangle dies, wherever it lies. An empty
+        /// rectangle is an error (<see cref="Clear"/> empties everything).</summary>
+        public void ClearOutside(long x0, long y0, long x1, long y1)
+        {
+            CheckEditRect(x0, y0, x1, y1);
+            SetBounds(x0, y0 - 1, x1, y1 - 1);
+            OpenWindow();
+            for (int w = 0; w < _windowCount; w++)
+                _windowNode[w] = KeepIn(_windowNode[w], _windowLevel, _windowX[w], _windowY[w]);
+            var s = _store;
+            if (_windowCount == 1)
+            {
+                s.Root = _windowNode[0];
+            }
+            else
+            {
+                // Everything outside the four windows lies outside the box, and so dies.
+                s.Root = s.Join(_windowNode[0], _windowNode[1], _windowNode[2], _windowNode[3]);
+                s.Level = WindowLevel + 1;
+            }
+            _version++;
+        }
+
+        /// <summary>
+        /// Turn the inclusive rectangle and its cells a quarter about its center, in place, and
+        /// return the rectangle they land on (spec/hashlife.md "Rectangle transforms"): the new
+        /// rectangle takes the turned cells, live or dead, and the rest of the old one dies. Both
+        /// rectangles must lie in the editing box. The turn works on the tree, so no dense copy is
+        /// made, whatever the rectangle's area or population.
+        /// </summary>
+        public CellBox RotateRect(long x0, long y0, long x1, long y1, bool clockwise = true)
+        {
+            CheckEditRect(x0, y0, x1, y1);
+            (long sum, long diff) = TurnCenter(x0, y0, x1, y1);
+            long nx0, ny0, nx1, ny1, dx, dy;
+            if (clockwise)
+            {
+                nx0 = sum - y1;
+                ny0 = x0 + diff;
+                nx1 = sum - y0;
+                ny1 = x1 + diff;
+                dx = sum; // in tree coordinates, after turning about the box node's center
+                dy = diff - 1;
+            }
+            else
+            {
+                nx0 = y0 - diff;
+                ny0 = sum - x1;
+                nx1 = y1 - diff;
+                ny1 = sum - x0;
+                dx = 1 - diff;
+                dy = sum;
+            }
+            CheckBox(nx0, ny0, nx1, ny1);
+            MoveRect(x0, y0, x1, y1, nx0, ny0, nx1, ny1, clockwise ? TurnClockwise : TurnCounterClockwise, dx, dy);
+            return new CellBox(nx0, ny0, nx1, ny1);
+        }
+
+        /// <summary>Mirror the inclusive rectangle's cells in place: left-right (x → x0 + x1 − x)
+        /// or, with <paramref name="horizontal"/> false, top-bottom (y → y0 + y1 − y). No dense
+        /// copy is made.</summary>
+        public void FlipRect(long x0, long y0, long x1, long y1, bool horizontal = true)
+        {
+            CheckEditRect(x0, y0, x1, y1);
+            if (horizontal)
+                MoveRect(x0, y0, x1, y1, x0, y0, x1, y1, MirrorLeftRight, x0 + x1 + 1, 0);
+            else
+                MoveRect(x0, y0, x1, y1, x0, y0, x1, y1, MirrorTopBottom, 0, y0 + y1 - 1);
+        }
+
+        /// <summary>
+        /// Evolve the inclusive rectangle <paramref name="n"/> generations as an isolated plane —
+        /// every cell outside it dead at the start — and clip the result to it; the outside and
+        /// the generation are untouched (spec/hashlife.md "Advancing part of the universe"). It
+        /// throws what <see cref="Step"/> throws, and then leaves the universe exactly as it was.
+        /// </summary>
+        public void AdvanceSelection(
+            long x0, long y0, long x1, long y1, BigInteger n, CancellationToken cancellationToken = default)
+            => AdvanceRegion(x0, y0, x1, y1, n, outside: false, cancellationToken);
+
+        /// <summary>
+        /// Evolve everything outside the inclusive rectangle <paramref name="n"/> generations as if
+        /// the rectangle were empty; the rectangle keeps its cells and the generation stays. It
+        /// throws what <see cref="Step"/> throws, and then leaves the universe exactly as it was.
+        /// </summary>
+        public void AdvanceOutside(
+            long x0, long y0, long x1, long y1, BigInteger n, CancellationToken cancellationToken = default)
+            => AdvanceRegion(x0, y0, x1, y1, n, outside: true, cancellationToken);
+
+        /// <summary>
+        /// The (s, d) of a quarter turn of the inclusive rectangle (spec/hashlife.md "Rectangle
+        /// transforms"): clockwise sends (x, y) to (s − y, x + d), counter-clockwise to
+        /// (y − d, s − x). The center itself when it is a cell or a cell corner; otherwise the
+        /// one of the two cells it lies between whose x + y is even, so turns never drift.
+        /// </summary>
+        internal static (long S, long D) TurnCenter(long x0, long y0, long x1, long y1)
+        {
+            long sx = x0 + x1, sy = y0 + y1; // twice the center
+            if (((sx - sy) & 1) == 0)
+                return ((sx + sy) >> 1, (sy - sx) >> 1);
+            long s = (sx + sy + 1) >> 1; // floor, then down to the even candidate
+            if ((s & 1) != 0)
+                s--;
+            return (sx & 1) != 0 ? (s, sy - s) : (s, s - sx);
         }
 
         /// <summary>Every cell dies; the generation stays.</summary>
@@ -1031,12 +1176,16 @@ namespace HeatonLife
                 _blocks!.TryGetValue(BlockKey(nx >> 3, ny >> 3), out ulong src);
                 ulong bits = _mode == HashLifePasteMode.Copy ? (old & ~LeafMask(nx, ny)) | src
                     : _mode == HashLifePasteMode.Or ? old | src
-                    : old ^ src;
+                    : _mode == HashLifePasteMode.Xor ? old ^ src
+                    : old & (src | ~LeafMask(nx, ny)); // And: in the rectangle only the source's cells stay
                 return s.Leaf(bits);
             }
             HashSet<long>? tier = k < _tiers!.Length ? _tiers[k] : null;
             if (tier != null && !tier.Contains(BlockKey(nx >> k, ny >> k)))
-                return _mode == HashLifePasteMode.Copy ? ClearIn(n, k, nx, ny) : n; // no source cells below
+            {
+                // No source cells below: copy and and clear the rectangle here, or and xor keep it.
+                return _mode == HashLifePasteMode.Copy || _mode == HashLifePasteMode.And ? ClearIn(n, k, nx, ny) : n;
+            }
             long half = size >> 1;
             int a = s.Kid(n, 0), b = s.Kid(n, 1), c = s.Kid(n, 2), d = s.Kid(n, 3);
             return s.Join(
@@ -1127,6 +1276,406 @@ namespace HeatonLife
             return total;
         }
 
+        // -- rectangle tools (spec/hashlife.md "Rectangle transforms", "Advancing part of the universe")
+
+        private const int TurnClockwise = 0, TurnCounterClockwise = 1, MirrorLeftRight = 2, MirrorTopBottom = 3;
+
+        // Which old child lands in each new quadrant (NW, NE, SW, SE) of a node turned or mirrored
+        // about its own center, by the kinds above.
+        private static readonly int[][] TransformOrder =
+        {
+            new[] { 2, 0, 3, 1 },
+            new[] { 1, 3, 0, 2 },
+            new[] { 1, 0, 3, 2 },
+            new[] { 2, 3, 0, 1 },
+        };
+
+        /// <summary>Throw unless the inclusive rectangle lies in the editing box and is not empty.</summary>
+        private static void CheckEditRect(long x0, long y0, long x1, long y1)
+        {
+            CheckBox(x0, y0, x1, y1);
+            if (x1 < x0 || y1 < y0)
+                throw new ArgumentException($"empty rectangle ({x0}, {y0})..({x1}, {y1})");
+        }
+
+        /// <summary>The inclusive tree rectangle the walks below test nodes against.</summary>
+        private void SetBounds(long x0, long y0, long x1, long y1)
+        {
+            _rx0 = x0;
+            _ry0 = y0;
+            _rx1 = x1;
+            _ry1 = y1;
+        }
+
+        /// <summary>
+        /// Lift the cells of the old rectangle (cell coordinates), turn or mirror them about the
+        /// box node's center, move them by (dx, dy) in tree coordinates onto the new rectangle, and
+        /// paste them there by copy; the rest of the old rectangle dies.
+        /// </summary>
+        private void MoveRect(
+            long x0, long y0, long x1, long y1, long nx0, long ny0, long nx1, long ny1, int kind, long dx, long dy)
+        {
+            const int k = WindowLevel + 1;
+            const long origin = -(1L << (k - 1));
+            int box = OpenBox();
+            SetBounds(x0, y0 - 1, x1, y1 - 1);
+            int lifted = KeepIn(box, k, origin, origin);
+            int rest = ClearIn(box, k, origin, origin);
+            int moved = Shifted(Transform(lifted, k, kind, new Dictionary<int, int>()), k, dx, dy);
+            SetBounds(nx0, ny0 - 1, nx1, ny1 - 1);
+            CloseBox(SpliceIn(moved, rest, k, origin, origin));
+        }
+
+        /// <summary>The centered level-32 node that holds the editing box, joined from the four
+        /// windows; the root first grows to level 33 if it is smaller.</summary>
+        private int OpenBox()
+        {
+            while (_store.Level < WindowLevel + 2)
+                Expand();
+            OpenWindow();
+            return _store.Join(_windowNode[0], _windowNode[1], _windowNode[2], _windowNode[3]);
+        }
+
+        /// <summary>Put an edited box node from <see cref="OpenBox"/> back into the tree.</summary>
+        private void CloseBox(int box)
+        {
+            for (int q = 0; q < 4; q++)
+                _windowNode[q] = _store.Kid(box, q);
+            CloseWindow();
+        }
+
+        /// <summary>The four level-31 windows of a centered root of level ≥ 33, as
+        /// <see cref="OpenWindow"/> finds them.</summary>
+        private void WindowsOf(int root, int level, int[] windows)
+        {
+            var s = _store;
+            int steps = level - 1 - WindowLevel;
+            for (int q = 0; q < 4; q++)
+            {
+                int n = s.Kid(root, q);
+                for (int i = 0; i < steps; i++)
+                    n = s.Kid(n, 3 - q);
+                windows[q] = n;
+            }
+        }
+
+        private void AdvanceRegion(
+            long x0, long y0, long x1, long y1, BigInteger n, bool outside, CancellationToken cancellationToken)
+        {
+            CheckEditRect(x0, y0, x1, y1);
+            if (n.Sign < 0)
+                throw new ArgumentOutOfRangeException(nameof(n), n, "cannot advance backward");
+            if (n.CompareTo(StepLimit) >= 0)
+                throw new ArgumentOutOfRangeException(
+                    nameof(n), n, $"a step of 2^{MaxLevel - 2} generations or more needs a tree deeper than level {MaxLevel}");
+            HashLifeSnapshot saved = Snapshot(); // a collection inside the step keeps the original's nodes
+            if (outside)
+                ClearRect(x0, y0, x1, y1);
+            else
+                ClearOutside(x0, y0, x1, y1);
+            try
+            {
+                Step(n, cancellationToken);
+            }
+            catch
+            {
+                Restore(saved);
+                throw;
+            }
+            var s = _store;
+            int grown = s.Root, grownLevel = s.Level;
+            Restore(saved);
+            int level = Math.Max(Math.Max(grownLevel, s.Level), WindowLevel + 2);
+            while (s.Level < level)
+                Expand();
+            while (grownLevel < level)
+                grown = ExpandNode(grown, grownLevel++);
+            // The tree outside the windows comes from the outside's source; the rectangle, which
+            // lies in the windows, from the inside's.
+            var inside = new int[4];
+            if (outside)
+            {
+                WindowsOf(s.Root, level, inside);
+                s.Root = grown;
+            }
+            else
+            {
+                WindowsOf(grown, level, inside);
+            }
+            OpenWindow();
+            SetBounds(x0, y0 - 1, x1, y1 - 1);
+            for (int w = 0; w < 4; w++)
+                _windowNode[w] = SpliceIn(inside[w], _windowNode[w], WindowLevel, _windowX[w], _windowY[w]);
+            CloseWindow();
+        }
+
+        /// <summary>Node n with every cell outside the bounds cleared.</summary>
+        private int KeepIn(int n, int k, long nx, long ny)
+        {
+            var s = _store;
+            long size = 1L << k;
+            int e = s.Empty(k);
+            if (n == e || Disjoint(nx, ny, size))
+                return e;
+            if (Covers(nx, ny, size))
+                return n;
+            if (k == 3)
+                return s.Leaf(s.Bits(n) & LeafMask(nx, ny));
+            long half = size >> 1;
+            int a = s.Kid(n, 0), b = s.Kid(n, 1), c = s.Kid(n, 2), d = s.Kid(n, 3);
+            return s.Join(
+                KeepIn(a, k - 1, nx, ny),
+                KeepIn(b, k - 1, nx + half, ny),
+                KeepIn(c, k - 1, nx, ny + half),
+                KeepIn(d, k - 1, nx + half, ny + half));
+        }
+
+        /// <summary>Two aligned level-k nodes made one: the inside's cells within the bounds, the
+        /// outside's everywhere else.</summary>
+        private int SpliceIn(int inside, int outside, int k, long nx, long ny)
+        {
+            if (inside == outside)
+                return inside;
+            long size = 1L << k;
+            if (Disjoint(nx, ny, size))
+                return outside;
+            if (Covers(nx, ny, size))
+                return inside;
+            var s = _store;
+            if (k == 3)
+            {
+                ulong mask = LeafMask(nx, ny);
+                return s.Leaf((s.Bits(inside) & mask) | (s.Bits(outside) & ~mask));
+            }
+            long half = size >> 1;
+            int ia = s.Kid(inside, 0), ib = s.Kid(inside, 1), ic = s.Kid(inside, 2), id = s.Kid(inside, 3);
+            int oa = s.Kid(outside, 0), ob = s.Kid(outside, 1), oc = s.Kid(outside, 2), od = s.Kid(outside, 3);
+            return s.Join(
+                SpliceIn(ia, oa, k - 1, nx, ny),
+                SpliceIn(ib, ob, k - 1, nx + half, ny),
+                SpliceIn(ic, oc, k - 1, nx, ny + half),
+                SpliceIn(id, od, k - 1, nx + half, ny + half));
+        }
+
+        /// <summary>Level-k node n turned or mirrored about its own center.</summary>
+        private int Transform(int n, int k, int kind, Dictionary<int, int> memo)
+        {
+            if (memo.TryGetValue(n, out int hit))
+                return hit;
+            var s = _store;
+            int r;
+            if (k == 3)
+            {
+                ulong b = s.Bits(n);
+                r = s.Leaf(kind == TurnClockwise ? HashLifeLeaves.TurnCw(b)
+                    : kind == TurnCounterClockwise ? HashLifeLeaves.TurnCcw(b)
+                    : kind == MirrorLeftRight ? HashLifeLeaves.MirrorColumns(b)
+                    : HashLifeLeaves.MirrorRows(b));
+            }
+            else if (n == s.Empty(k))
+            {
+                r = n;
+            }
+            else
+            {
+                int[] order = TransformOrder[kind];
+                int nw = Transform(s.Kid(n, order[0]), k - 1, kind, memo);
+                int ne = Transform(s.Kid(n, order[1]), k - 1, kind, memo);
+                int sw = Transform(s.Kid(n, order[2]), k - 1, kind, memo);
+                int se = Transform(s.Kid(n, order[3]), k - 1, kind, memo);
+                r = s.Join(nw, ne, sw, se);
+            }
+            memo[n] = r;
+            return r;
+        }
+
+        /// <summary>Centered level-k node n with every cell moved by (dx, dy),
+        /// |dx|, |dy| ≤ 2^(k−1). A cell moved past the node's edge is lost; callers leave room.</summary>
+        private int Shifted(int n, int k, long dx, long dy)
+        {
+            var s = _store;
+            int big = ExpandNode(n, k);
+            long half = 1L << (k - 1);
+            return Crop(
+                k, s.Kid(big, 0), s.Kid(big, 1), s.Kid(big, 2), s.Kid(big, 3), half - dx, half - dy,
+                new Dictionary<CropKey, int>());
+        }
+
+        /// <summary>The level-k node at offset (ox, oy), 0 ≤ ox, oy ≤ 2^k, in the square of the four
+        /// aligned level-k nodes a b over c d.</summary>
+        private int Crop(int k, int a, int b, int c, int d, long ox, long oy, Dictionary<CropKey, int> memo)
+        {
+            long size = 1L << k;
+            if ((ox == 0 || ox == size) && (oy == 0 || oy == size))
+                return ox == 0 ? (oy == 0 ? a : c) : (oy == 0 ? b : d);
+            var s = _store;
+            int e = s.Empty(k);
+            if (a == e && b == e && c == e && d == e)
+                return e;
+            var key = new CropKey(k, a, b, c, d, ox, oy);
+            if (memo.TryGetValue(key, out int hit))
+                return hit;
+            int r;
+            if (k == 3)
+            {
+                r = s.Leaf(HashLifeLeaves.Crop(s.Bits(a), s.Bits(b), s.Bits(c), s.Bits(d), (int)ox, (int)oy));
+            }
+            else
+            {
+                // The sixteen grandchildren, four rows of four.
+                Span<int> g = stackalloc int[16];
+                for (int q = 0; q < 4; q++)
+                {
+                    int row = 2 * (q >> 1), column = 2 * (q & 1);
+                    int parent = q == 0 ? a : q == 1 ? b : q == 2 ? c : d;
+                    g[row * 4 + column] = s.Kid(parent, 0);
+                    g[row * 4 + column + 1] = s.Kid(parent, 1);
+                    g[(row + 1) * 4 + column] = s.Kid(parent, 2);
+                    g[(row + 1) * 4 + column + 1] = s.Kid(parent, 3);
+                }
+                long half = size >> 1;
+                Span<int> kids = stackalloc int[4];
+                for (int j = 0; j < 2; j++)
+                {
+                    long py = oy + j * half;
+                    int gy = (int)(py / half);
+                    long ry = py - gy * half;
+                    if (gy == 3)
+                    {
+                        gy = 2;
+                        ry = half;
+                    }
+                    for (int i = 0; i < 2; i++)
+                    {
+                        long px = ox + i * half;
+                        int gx = (int)(px / half);
+                        long rx = px - gx * half;
+                        if (gx == 3)
+                        {
+                            gx = 2;
+                            rx = half;
+                        }
+                        kids[2 * j + i] = Crop(
+                            k - 1, g[gy * 4 + gx], g[gy * 4 + gx + 1], g[(gy + 1) * 4 + gx], g[(gy + 1) * 4 + gx + 1],
+                            rx, ry, memo);
+                    }
+                }
+                r = s.Join(kids[0], kids[1], kids[2], kids[3]);
+            }
+            memo[key] = r;
+            return r;
+        }
+
+        /// <summary>A <see cref="Crop"/> call's arguments, as its memo's key.</summary>
+        private readonly struct CropKey : IEquatable<CropKey>
+        {
+            private readonly int _k, _a, _b, _c, _d;
+            private readonly long _ox, _oy;
+
+            internal CropKey(int k, int a, int b, int c, int d, long ox, long oy)
+            {
+                _k = k;
+                _a = a;
+                _b = b;
+                _c = c;
+                _d = d;
+                _ox = ox;
+                _oy = oy;
+            }
+
+            public bool Equals(CropKey other)
+                => _a == other._a && _b == other._b && _c == other._c && _d == other._d
+                    && _k == other._k && _ox == other._ox && _oy == other._oy;
+
+            public override bool Equals(object? obj) => obj is CropKey other && Equals(other);
+
+            public override int GetHashCode() => HashCode.Combine(_k, _a, _b, _c, _d, _ox, _oy);
+        }
+
+        /// <summary>One extreme of node n's live cells inside the inclusive tree rectangle
+        /// (x0, y0)..(x1, y1), as a tree coordinate, or null when it holds none. The near half is
+        /// searched first: anything found there beats everything in the far half.</summary>
+        private BigInteger? ExtremeBig(
+            int n, int k, BigInteger nx, BigInteger ny, BigInteger x0, BigInteger y0, BigInteger x1, BigInteger y1, int edge)
+        {
+            var s = _store;
+            if (n == s.Empty(k))
+                return null;
+            BigInteger size = BigInteger.One << k;
+            if (nx > x1 || nx + size <= x0 || ny > y1 || ny + size <= y0)
+                return null;
+            BigInteger origin = edge < 2 ? nx : ny;
+            if (x0 <= nx && nx + size - 1 <= x1 && y0 <= ny && ny + size - 1 <= y1)
+                return origin + EdgeBig(n, k, edge);
+            if (k <= 62)
+            {
+                long rx0 = (long)BigInteger.Max(x0 - nx, BigInteger.Zero);
+                long ry0 = (long)BigInteger.Max(y0 - ny, BigInteger.Zero);
+                long rx1 = (long)BigInteger.Min(x1 - nx, size - 1);
+                long ry1 = (long)BigInteger.Min(y1 - ny, size - 1);
+                long offset = ExtremeLong(n, k, rx0, ry0, rx1, ry1, edge);
+                return offset < 0 ? (BigInteger?)null : origin + offset;
+            }
+            bool lowest = edge == 0 || edge == 2;
+            BigInteger half = size >> 1;
+            for (int pass = 0; pass < 2; pass++)
+            {
+                BigInteger? best = null;
+                foreach (int i in pass == 0 ? EdgeNear[edge] : EdgeFar[edge])
+                {
+                    BigInteger cx = (i & 1) != 0 ? nx + half : nx;
+                    BigInteger cy = (i & 2) != 0 ? ny + half : ny;
+                    BigInteger? got = ExtremeBig(s.Kid(n, i), k - 1, cx, cy, x0, y0, x1, y1, edge);
+                    if (got.HasValue && (!best.HasValue || (lowest ? got.Value < best.Value : got.Value > best.Value)))
+                        best = got;
+                }
+                if (best.HasValue)
+                    return best;
+            }
+            return null;
+        }
+
+        /// <summary>One extreme of the live cells of level-k node n (k ≤ 62) inside the inclusive
+        /// rectangle (x0, y0)..(x1, y1), relative to its origin and lying inside it, as an offset
+        /// from that origin, or −1 when it holds none.</summary>
+        private long ExtremeLong(int n, int k, long x0, long y0, long x1, long y1, int edge)
+        {
+            var s = _store;
+            if (n == s.Empty(k))
+                return -1;
+            long size = 1L << k;
+            if (x0 == 0 && y0 == 0 && x1 == size - 1 && y1 == size - 1)
+                return EdgeLong(n, k, edge);
+            if (k == 3)
+            {
+                ulong bits = s.Bits(n) & HashLifeLeaves.RectMask((int)x0, (int)x1, (int)y0, (int)y1);
+                return bits == 0 ? -1 : HashLifeLeaves.Edge(bits, edge);
+            }
+            bool lowest = edge == 0 || edge == 2;
+            long half = size >> 1;
+            for (int pass = 0; pass < 2; pass++)
+            {
+                long best = -1;
+                foreach (int i in pass == 0 ? EdgeNear[edge] : EdgeFar[edge])
+                {
+                    long qx = (i & 1) * half, qy = (i >> 1) * half;
+                    long cx0 = Math.Max(x0, qx) - qx, cx1 = Math.Min(x1, qx + half - 1) - qx;
+                    long cy0 = Math.Max(y0, qy) - qy, cy1 = Math.Min(y1, qy + half - 1) - qy;
+                    if (cx0 > cx1 || cy0 > cy1)
+                        continue;
+                    long got = ExtremeLong(s.Kid(n, i), k - 1, cx0, cy0, cx1, cy1, edge);
+                    if (got < 0)
+                        continue;
+                    got += edge < 2 ? qx : qy;
+                    if (best < 0 || (lowest ? got < best : got > best))
+                        best = got;
+                }
+                if (best >= 0)
+                    return best;
+            }
+            return -1;
+        }
+
         // -- the bounding box -------------------------------------------------------------------
 
         private CellBox? ComputeBox()
@@ -1176,16 +1725,7 @@ namespace HeatonLife
             long r;
             if (k == 3)
             {
-                ulong b = s.Bits(n);
-                if (edge < 2)
-                {
-                    ulong cols = (ulong)HashLifeLeaves.Columns(b);
-                    r = lowest ? HashLifeLeaves.LowestBit(cols) : HashLifeLeaves.HighestBit(cols);
-                }
-                else
-                {
-                    r = (lowest ? HashLifeLeaves.LowestBit(b) : HashLifeLeaves.HighestBit(b)) >> 3;
-                }
+                r = HashLifeLeaves.Edge(s.Bits(n), edge);
             }
             else
             {

@@ -1,0 +1,19 @@
+{
+  "family": "patterns",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      3,
+      4
+    ]
+  },
+  "kind": "transform",
+  "outputs": {
+    "flip_h": "flip_h.png",
+    "flip_v": "flip_v.png",
+    "rotate90": "rotate90.png",
+    "rotate90_ccw": "rotate90_ccw.png"
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

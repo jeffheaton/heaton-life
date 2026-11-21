@@ -1,0 +1,22 @@
+{
+  "density": 1.5,
+  "error": true,
+  "family": "patterns",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      16,
+      24
+    ]
+  },
+  "kind": "fill-random",
+  "region": [
+    0,
+    0,
+    3,
+    3
+  ],
+  "seed": 1,
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

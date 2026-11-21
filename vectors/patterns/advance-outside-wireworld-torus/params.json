@@ -1,0 +1,32 @@
+{
+  "expected": {
+    "file": "expected.png",
+    "shape": [
+      12,
+      20
+    ]
+  },
+  "family": "patterns",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      12,
+      20
+    ]
+  },
+  "kind": "advance",
+  "n": 13,
+  "outside": true,
+  "region": [
+    5,
+    0,
+    14,
+    4
+  ],
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "world": {
+    "boundary": "torus",
+    "family": "wireworld"
+  }
+}

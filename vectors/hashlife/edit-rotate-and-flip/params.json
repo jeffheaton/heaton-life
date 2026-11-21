@@ -1,0 +1,178 @@
+{
+  "bounding_box": [
+    "-44",
+    "-34",
+    "42",
+    "32"
+  ],
+  "family": "hashlife",
+  "generation": "9",
+  "kind": "edit",
+  "ops": [
+    {
+      "density": 0.5,
+      "op": "fill_random",
+      "seed": 77,
+      "x0": -40,
+      "x1": 39,
+      "y0": -30,
+      "y1": 29
+    },
+    {
+      "clockwise": true,
+      "expect": [
+        1,
+        -2,
+        4,
+        4
+      ],
+      "op": "rotate_rect",
+      "x0": 0,
+      "x1": 6,
+      "y0": 0,
+      "y1": 3
+    },
+    {
+      "clockwise": false,
+      "expect": [
+        -17,
+        -11,
+        -8,
+        -3
+      ],
+      "op": "rotate_rect",
+      "x0": -17,
+      "x1": -9,
+      "y0": -11,
+      "y1": -2
+    },
+    {
+      "clockwise": true,
+      "expect": [
+        1,
+        -18,
+        9,
+        -14
+      ],
+      "op": "rotate_rect",
+      "x0": 3,
+      "x1": 7,
+      "y0": -20,
+      "y1": -12
+    },
+    {
+      "clockwise": false,
+      "expect": [
+        -31,
+        5,
+        -25,
+        10
+      ],
+      "op": "rotate_rect",
+      "x0": -30,
+      "x1": -25,
+      "y0": 5,
+      "y1": 11
+    },
+    {
+      "clockwise": true,
+      "expect": [
+        -31,
+        5,
+        -25,
+        10
+      ],
+      "op": "rotate_rect",
+      "x0": -31,
+      "x1": -26,
+      "y0": 5,
+      "y1": 11
+    },
+    {
+      "clockwise": true,
+      "expect": [
+        10,
+        10,
+        14,
+        14
+      ],
+      "op": "rotate_rect",
+      "x0": 10,
+      "x1": 14,
+      "y0": 10,
+      "y1": 14
+    },
+    {
+      "clockwise": false,
+      "expect": [
+        13,
+        2,
+        27,
+        2
+      ],
+      "op": "rotate_rect",
+      "x0": 20,
+      "x1": 20,
+      "y0": -5,
+      "y1": 9
+    },
+    {
+      "clockwise": true,
+      "expect": [
+        -1,
+        -2,
+        1,
+        2
+      ],
+      "op": "rotate_rect",
+      "x0": -2,
+      "x1": 2,
+      "y0": -1,
+      "y1": 1
+    },
+    {
+      "horizontal": true,
+      "op": "flip_rect",
+      "x0": -35,
+      "x1": -10,
+      "y0": -25,
+      "y1": -3
+    },
+    {
+      "horizontal": false,
+      "op": "flip_rect",
+      "x0": 0,
+      "x1": 33,
+      "y0": -28,
+      "y1": 2
+    },
+    {
+      "clockwise": true,
+      "error": true,
+      "op": "rotate_rect",
+      "x0": 999999990,
+      "x1": 1000000000,
+      "y0": 0,
+      "y1": 100
+    },
+    {
+      "error": true,
+      "horizontal": true,
+      "op": "flip_rect",
+      "x0": 4,
+      "x1": 3,
+      "y0": 4,
+      "y1": 4
+    },
+    {
+      "n": "9",
+      "op": "step"
+    }
+  ],
+  "population": "1429",
+  "rule": "B36/S23",
+  "spec_version": "0.16.0",
+  "state_lines": 151,
+  "state_sha256": "784f7d3b5e6bcd945796b13e69424b527531816f60a0c602abf9c0fab2455ea2",
+  "tier": "bit-exact"
+}

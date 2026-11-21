@@ -41,9 +41,14 @@ never share draws:
 
 | seq | used by |
 |---|---|
-| 0 | simulation state: lattices, soups, particle starts (every family's seeding) |
+| 0 | simulation state: lattices, soups, particle starts (every family's seeding); the random fill of a rectangle, on a life-like grid ([patterns.md](patterns.md) "Editing a region") and in HashLife ([hashlife.md](hashlife.md) "Editing") |
 | 1 | the MergeLife trainer's own decisions ([evolve.md](evolve.md) "Determinism") |
 | 2 | the restart search's run seeds ([evolve.md](evolve.md) "Restart search") |
+
+A random fill is not a second feature on stream 0 but the soup itself: a rectangle fills
+with exactly the cells a world of its size would be seeded with, so a fill of a whole
+life-like grid with the grid's own seed reproduces its soup, and a grid and HashLife fill
+rectangles of the same size and seed with the same cells.
 
 ## Draw-order convention
 

@@ -8,11 +8,12 @@ from typing import cast
 import numpy as np
 from numpy.typing import NDArray
 
+from heaton_life.ca._advance import AdvanceRegion
 from heaton_life.ca.rulestring import canonical_rule, parse_rule
 from heaton_life.core.neighbors import Boundary, moore_sum
 from heaton_life.core.params import Params
 from heaton_life.init import blob, single, soup
-from heaton_life.init.patterns import clear
+from heaton_life.init.patterns import clear, fill_random
 
 
 @dataclasses.dataclass(frozen=True)
@@ -33,7 +34,7 @@ class LifeLikeParams(Params):
     boundary: str = dataclasses.field(default="torus", metadata={"choices": ["torus", "dead"]})
 
 
-class LifeLike:
+class LifeLike(AdvanceRegion):
     """A Life-like CA. State is uint8 0/1, shape (height, width), row-major."""
 
     def __init__(
@@ -130,6 +131,13 @@ class LifeLike:
         and Stamp as normative.
         """
         clear(self._state, x0, y0, x1, y1, 0)
+
+    def fill_random(self, x0: int, y0: int, x1: int, y1: int, density: float, seed: int) -> None:
+        """spec/patterns.md "Random fill": the region (x0, y0)..(x1, y1), inclusive, becomes
+        the soup of a world its size (PCG32 stream 0, row-major draws, alive iff
+        ``draw < floor(density * 2**32)``), the same cells HashLife's ``fill_random`` gives
+        a rectangle of that size and seed. The generation is untouched."""
+        fill_random(self._state, x0, y0, x1, y1, density=density, seed=seed)
 
     def frame(self) -> NDArray[np.uint8]:
         return self._state * np.uint8(255)
