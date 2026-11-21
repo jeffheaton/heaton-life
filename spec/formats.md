@@ -305,7 +305,8 @@ universe.
   |x|, |y| ≤ 10⁹, or the file is refused — except Macrocell, which carries anything.
 - **Rule.** The format's rule, or `B3/S23` without one, in any notation of
   [rules.md](rules.md). A rule the universe can't run (not a Life-like rule, or one with
-  B0) is an error.
+  B0) is an error, and so is a [preset name](rules.md#preset-names) such as `life`: a
+  file names its rule, never a preset.
 - **Generation.** RLE's `Gen`, Macrocell's `#G`, otherwise 0.
 
 An empty pattern gives an empty universe. Macrocell timelines have their own reader and

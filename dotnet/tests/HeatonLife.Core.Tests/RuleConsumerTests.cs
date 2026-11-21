@@ -135,6 +135,26 @@ namespace HeatonLife.Tests
         }
 
         [Theory]
+        [InlineData("life")]
+        [InlineData("highlife")]
+        [InlineData("Life")]
+        public void AFileNamesItsRuleNeverAPreset(string preset)
+        {
+            // spec/rules.md "Preset names": a grid read keeps a Life 1.0x rule as written, for the
+            // caller to compile; every reader that compiles a file's rule refuses a preset.
+            string life = $"#Life 1.05\n#R {preset}\n#P 0 0\n.*.\n..*\n***\n";
+            Assert.Equal(preset, PatternFiles.Read(life).Rule);
+            Assert.StartsWith("invalid rule", Assert.ThrowsAny<ArgumentException>(() => PatternFiles.ReadUniverse(life)).Message);
+            string mc = $"[M2] (example 1.0)\n#R {preset}\n.*$..*$***$\n";
+            Assert.Contains("invalid rule", Assert.Throws<FormatException>(() => PatternFiles.Read(mc)).Message);
+            Assert.Contains("invalid rule", Assert.Throws<FormatException>(() => PatternFiles.ReadUniverse(mc)).Message);
+            Assert.Contains("invalid rule", Assert.Throws<FormatException>(() => PatternFiles.Measure(mc)).Message);
+            string rle = $"x = 3, y = 3, rule = {preset}\nbo$2bo$3o!\n";
+            Assert.True(Patterns.RleMeasure(rle).Extended); // no rule, so the file is extended
+            Assert.Contains("extended", Assert.Throws<FormatException>(() => PatternFiles.ReadUniverse(rle)).Message);
+        }
+
+        [Theory]
         [MemberData(nameof(B0Rules))]
         public void AB0RuleReadsIntoAGridButNotAUniverse(string rule)
         {

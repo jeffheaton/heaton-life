@@ -251,7 +251,7 @@ class _StoreNodes:
         return self._store.join(nw, ne, sw, se)
 
     def rule(self, text: str) -> None:
-        self._universe.rule = text
+        self._universe.rule = _hashlife_rule(text, presets=False)  # a file names no preset
 
 
 def _parse(source: str | bytes, max_memory_mb: int) -> _Parsed:
@@ -308,7 +308,7 @@ class _BoxNodes:
         return len(self.boxes) - 1
 
     def rule(self, text: str) -> None:
-        self.canonical = _hashlife_rule(text)
+        self.canonical = _hashlife_rule(text, presets=False)
 
 
 def measure_macrocell(source: str | bytes) -> tuple[Box | None, str, int, PatternMetadata]:

@@ -10,7 +10,15 @@ from numpy.typing import NDArray
 
 from heaton_life.ca import LifeLike
 from heaton_life.ca.hashlife import HashLife, read_timeline, read_universe, write_timeline
-from heaton_life.init import read_pattern, rle_decode, rle_encode, soup
+from heaton_life.ca.rulestring import compile_rule
+from heaton_life.init import (
+    measure_pattern,
+    read_pattern,
+    rle_decode,
+    rle_encode,
+    rle_measure,
+    soup,
+)
 
 MOORE_MAP = (
     "MAPARYXfhZofugWaH7oaIDogBZofuhogOiA6IDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAA"
@@ -130,6 +138,26 @@ def test_a_b0_rule_reads_into_a_grid_but_not_a_universe(rule: str) -> None:
     with pytest.raises(ValueError, match="B0"):
         u.rule = rule
     assert u.rule == "B3/S2-i34q"
+
+
+@pytest.mark.parametrize("preset", ["life", "highlife", "Life"])
+def test_a_file_names_its_rule_never_a_preset(preset: str) -> None:
+    """spec/rules.md "Preset names": a preset is for rules people type. A grid read keeps a
+    Life 1.0x rule as written, for the caller to compile; every reader that compiles a file's
+    rule refuses a preset, while a typed HashLife still takes one."""
+    life = f"#Life 1.05\n#R {preset}\n#P 0 0\n.*.\n..*\n***\n"
+    assert read_pattern(life).rule == preset
+    with pytest.raises(ValueError, match="invalid rule"):
+        read_universe(life)
+    mc = f"[M2] (example 1.0)\n#R {preset}\n.*$..*$***$\n"
+    for reader in (read_pattern, read_universe, measure_pattern):
+        with pytest.raises(ValueError, match="invalid rule"):
+            reader(mc)
+    rle = f"x = 3, y = 3, rule = {preset}\nbo$2bo$3o!\n"
+    assert rle_measure(rle).extended  # no rule, so the file is extended
+    with pytest.raises(ValueError, match="extended"):
+        read_universe(rle)
+    assert HashLife(preset).rule == compile_rule(preset).canonical
 
 
 @pytest.mark.parametrize(("typed", "canonical"), RULES, ids=IDS)

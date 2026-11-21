@@ -11,7 +11,12 @@ import dataclasses
 
 from heaton_life.ca.hashlife.macrocell import read_macrocell_with_metadata
 from heaton_life.ca.hashlife.rle import add_run, read_rle
-from heaton_life.ca.hashlife.universe import DEFAULT_MEMORY_MB, HashLife, check_box
+from heaton_life.ca.hashlife.universe import (
+    DEFAULT_MEMORY_MB,
+    HashLife,
+    _hashlife_rule,
+    check_box,
+)
 from heaton_life.init.formats import (
     PatternFormat,
     Run,
@@ -65,6 +70,9 @@ def read_universe(
         universe.set_rect(0, 0, cells, "or")
         return PatternUniverse(fmt, universe, PatternMetadata())
     live = live_runs(found)
-    universe = HashLife(live.rule or "B3/S23", max_memory_mb=max_memory_mb)
+    # A file names its rule, never a preset (spec/formats.md "Reading into the unbounded
+    # universe"), so the rule is compiled with presets off before the universe takes it.
+    rule = "B3/S23" if live.rule is None else _hashlife_rule(live.rule, presets=False)
+    universe = HashLife(rule, max_memory_mb=max_memory_mb)
     _place(universe, live.runs)
     return PatternUniverse(fmt, universe, live.metadata)

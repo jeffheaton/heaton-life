@@ -124,7 +124,11 @@ makes the file two-state.
   runs on a grid and, without B0, on the unbounded plane. Each rule has one canonical
   spelling: letters in alphabetical order, the shorter of the plain and `-` forms, a full
   letter set as the bare digit, and MAP strings without padding and with their unused bits
-  zero. B0 rules still run as written on grids and are still refused by HashLife.
+  zero. B0 rules still run as written on grids and are still refused by HashLife. Preset
+  names such as `life` are for rules people type (the Python reference's `HashLife("life")`
+  still works): a file names its rule, so a Macrocell `#R life`, or a Life 1.05 or 1.06
+  `#R life` read into HashLife, is refused in both ports, as an RLE header's preset already
+  was.
 
 - **Measuring any pattern file before reading it** (`measure_pattern`, .NET
   `PatternFiles.Measure`, giving a `PatternExtent`; [spec/formats.md](spec/formats.md)

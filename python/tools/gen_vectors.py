@@ -975,6 +975,9 @@ def main() -> None:
     write_turned_rect_cases()
     write_reason_cases()
 
+    # -- A file names its rule, never a preset (spec/formats.md, spec/macrocell.md) -------
+    write_preset_rule_cases()
+
     print("done")
 
 
@@ -6837,6 +6840,52 @@ def write_reason_cases() -> None:
             "cases": cases,
         },
     )
+
+
+def write_preset_rule_cases() -> None:
+    """A preset name (spec/rules.md "Preset names") is no rule in a file: Macrocell's ``#R``
+    and Life 1.0x's ``#R`` read into the universe, and an RLE header, refuse one
+    (spec/formats.md "Reading into the unbounded universe", spec/macrocell.md "Reading").
+    Each file is checked here to read once its preset is replaced by the rule it stands for."""
+    from heaton_life.ca.hashlife import read_universe
+    from heaton_life.init import measure_pattern, read_pattern
+
+    root = VECTOR_ROOT / "formats"
+
+    def refused(name: str, kind: str, text: str, preset: str, rule: str, ext: str) -> None:
+        data = text.encode()
+        reader = {"read": read_pattern, "universe": read_universe, "measure": measure_pattern}[kind]
+        reader(text.replace(preset, rule).encode())  # the same file with its rule reads
+        try:
+            reader(data)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"{kind}-error-{name} was meant to be refused")
+        d = root / f"{kind}-error-{name}"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"input.{ext}").write_bytes(data)
+        meta: dict[str, Any] = {
+            "spec_version": GAPS_SPEC_VERSION,
+            "family": "formats",
+            "tier": "bit-exact",
+            "kind": kind,
+            "input": f"input.{ext}",
+            "error": True,
+        }
+        if kind == "read":
+            meta.update({"trim": False, "limit": "default"})
+        _gap_save(d, meta)
+
+    macrocell = "[M2] (example 1.0)\n#R life\n#N Glider\n.*$..*$***$\n"
+    for kind in ("read", "universe", "measure"):
+        refused("macrocell-preset-rule", kind, macrocell, "#R life", "#R B3/S23", "mc")
+    life106 = "#Life 1.06\n#R life\n0 -1\n1 0\n-1 1\n0 1\n1 1\n"
+    refused("life106-preset-rule", "universe", life106, "#R life", "#R B3/S23", "lif")
+    life105 = "#Life 1.05\n#R highlife\n#P 0 0\n.*.\n..*\n***\n"
+    refused("life105-preset-rule", "universe", life105, "#R highlife", "#R 23/36", "lif")
+    rle = "x = 3, y = 3, rule = life\nbo$2bo$3o!\n"
+    refused("rle-preset-rule", "universe", rle, "rule = life", "rule = B3/S23", "rle")
 
 
 if __name__ == "__main__":

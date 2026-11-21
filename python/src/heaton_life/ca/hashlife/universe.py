@@ -112,8 +112,12 @@ def _table(rule: str) -> tuple[int, ...]:
     return base_case(compile_rule(rule).table)
 
 
-def _hashlife_rule(rule: str) -> str:
-    compiled = compile_rule(rule)
+def _hashlife_rule(rule: str, *, presets: bool = True) -> str:
+    """The canonical form of a rule the universe can run: any Life-like rule without B0.
+    ``presets`` lets a preset name (``life``) stand for its rule, as where a person types
+    one; a rule read from a file passes ``presets=False``, since a file names its rule, never
+    a preset (spec/formats.md "Reading into the unbounded universe")."""
+    compiled = compile_rule(rule, presets=presets)
     if compiled.has_b0:
         raise ValueError(
             f"HashLife cannot run B0 rules ({compiled.canonical}): births with no live "
