@@ -123,16 +123,19 @@ meets.
 | Piece | State |
 |---|---|
 | `Pcg32` (`../spec/rng.md`, known-answer tested) | ✅ |
-| Life-like CA + soup init | ✅ bit-exact against `../vectors/lifelike/` |
+| Life-like CA + soup init, History and Super rules (`../spec/history.md`, `../spec/super.md`) | ✅ bit-exact against `../vectors/lifelike/`, `../vectors/lifelike-history/` and `../vectors/lifelike-super/` |
 | Elementary, Cyclic, Wireworld, MergeLife | ✅ bit-exact; MergeLife also replays `../vectors/mergelife-upstream/` (byte-identical with the upstream engines) |
+| Generations, Larger than Life, rule tables (`../spec/generations.md`, `../spec/ltl.md`, `../spec/ruletable.md`, `../spec/rule-files.md`) | ✅ bit-exact against `../vectors/generations/`, `../vectors/ltl/` and `../vectors/ruletable/`, and their rule texts and files against `../vectors/generations-rules/`, `../vectors/ltl-rules/` and `../vectors/ruletable-files/` |
+| Grid topologies and the bounded-grid suffix (`../spec/topology.md`) | ✅ bit-exact against `../vectors/topology/`; the Life-like, Generations, Larger than Life, rule-table and Wireworld grids run on them |
 | Gray-Scott, Lenia ×3, Boids (ε tier) | ✅ within ε (pure-C# radix-2/Bluestein FFT for Lenia) |
 | Fractals (T0 float64 + T1 perturbation) | ✅ bit-exact incl. the deep-zoom replays (Mandelbrot 1e14, 1e20 with a 256-place center, 1e280; Julia 1e13 with critical-orbit rebasing) and a deep Julia smooth render |
-| Colormaps / render (`../spec/render.md`) | ✅ byte-identical LUTs, frame indexing, per-family `WriteFrame` (incl. boids rasterizer + fractal smooth coloring), RGB/RGBA32 output |
+| Colormaps / render (`../spec/render.md`) | ✅ byte-identical LUTs, frame indexing, per-family `WriteFrame` (incl. boids rasterizer + fractal smooth coloring), RGB/RGBA32 output, state palettes and grid windows |
 | `ISimulation` + frame-source interfaces | ✅ the C# side of Python's `Simulation` protocol; the polymorphic surface a host (e.g. a Unity adapter) drives |
 | Evolve: paper objective + GA (`../spec/evolve.md`) | ✅ bit-exact, incl. a replayed end-to-end mini evolution run |
 | Patterns: RLE (both dialects), transforms, extract/stamp (`../spec/patterns.md`) | ✅ bit-exact; reads and writes the Life community's RLE dialects |
-| HashLife: the unbounded universe, Macrocell, sparse `#CXRLE` RLE, views and frames (`../spec/hashlife.md`, `../spec/macrocell.md`) | ✅ bit-exact against `../vectors/hashlife/`; the giant patterns behind `HEATON_LIFE_PATTERNS` |
-| Multi-state HashLife: state rules (Wireworld), the same engine on 2 × 2 state leaves, multi-state Macrocell and RLE, frames under a zoom order (`../spec/hashlife-multistate.md`) | ✅ bit-exact against `../vectors/hashlife-multistate/`, which also replay the grid Wireworld beside it |
+| Pattern files: detection, plaintext, Life 1.05 and 1.06, MCell, PNG and BMP (`../spec/formats.md`) | ✅ bit-exact against `../vectors/formats/` |
+| HashLife: the unbounded universe (B0 rules included), Macrocell, sparse `#CXRLE` RLE, views and frames (`../spec/hashlife.md`, `../spec/macrocell.md`) | ✅ bit-exact against `../vectors/hashlife/`; the giant patterns behind `HEATON_LIFE_PATTERNS` |
+| Multi-state HashLife: state rules (Wireworld, History and Super, Generations, rule tables), the same engine on 2 × 2 state leaves, multi-state Macrocell and RLE, frames under a zoom order (`../spec/hashlife-multistate.md`) | ✅ bit-exact against `../vectors/hashlife-multistate/`, which also replay each rule's grid family beside it |
 
 The port landed in the order RNG → Life-like → remaining discrete CAs → continuous
 grids → fractals → boids → render → evolve, each stage with its conformance replay

@@ -23,7 +23,7 @@ them:
 
 | Family | Systems |
 |---|---|
-| Cellular automata | MergeLife, Life-like (Conway's Life and every other two-state rule over the 3×3 neighborhood: B/S, isotropic non-totalistic, MAP, hexagonal and von Neumann), HashLife (Life-like rules on an unbounded plane: patterns of trillions of cells, any number of generations in one step; and rules of many states, Wireworld first), Elementary, Cyclic, Wireworld |
+| Cellular automata | MergeLife, Life-like (Conway's Life and every other two-state rule over the 3×3 neighborhood: B/S, isotropic non-totalistic, MAP, hexagonal and von Neumann, B0 rules included; and the History and Super variants of any of them, of 7 and 26 states), Generations, Larger than Life (neighborhoods of range 1 to 500), rule tables (any `.rule` file, up to 256 states; Langton's and Byl's loops, the evoloop and Langton's ant come with it), HashLife (Life-like rules on an unbounded plane: patterns of trillions of cells, any number of generations in one step; and rules of many states: Wireworld, History, Super, Generations and rule tables), Elementary, Cyclic, Wireworld. The Life-like, Generations, Larger than Life, rule-table and Wireworld grids run on the plane, a torus (shifted or not), a Klein bottle, a cross-surface or a sphere |
 | Lenia | Classic, Asymptotic, Flow |
 | Fractals | Newton's basins, and Mandelbrot, Julia, and Burning Ship with perturbation deep zoom far beyond float64 (Mandelbrot and Julia to 10⁹⁰⁰⁰) |
 | Boids | Reynolds flocking in 2D and 3D |
