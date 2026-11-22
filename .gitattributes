@@ -14,3 +14,8 @@ vectors/** -text
 
 # Same reasoning for pattern fixtures shipped inside the Unity package's tests.
 *.rle -text
+
+# And for the rule-table starter set (python/src/heaton_life/ca/rules/), which the
+# .NET build embeds as resources: converted, a Windows checkout gives RuleTable.Text
+# CRLF there and LF everywhere else.
+*.rule -text
