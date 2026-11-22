@@ -47,6 +47,15 @@ namespace HeatonLife.Tests
                 case "fractal-render":
                     RunFractalRender(caseName, caseDir, root);
                     break;
+                case "palette":
+                    RunPalette(caseName, caseDir, root);
+                    break;
+                case "palette-shade":
+                    RunShade(caseName, caseDir, root);
+                    break;
+                case "window":
+                    RunWindow(caseName, caseDir, root);
+                    break;
                 default:
                     throw new InvalidDataException($"unknown render kind in {caseName}");
             }
@@ -363,6 +372,184 @@ namespace HeatonLife.Tests
                         break;
                     }
             }
+        }
+
+        // State palettes and windows of grids (spec/render.md, 0.16.0): strict, every key known.
+
+        private static void RunPalette(string caseName, string caseDir, JsonElement root)
+        {
+            Assert.Equal("bit-exact", root.GetProperty("tier").GetString());
+            byte[] palette;
+            if (root.TryGetProperty("builder", out var builder))
+            {
+                AssertKeySet(root, caseName, "spec_version", "family", "tier", "kind", "builder", "output");
+                string name = builder.GetProperty("name").GetString()!;
+                switch (name)
+                {
+                    case "history":
+                        AssertKeySet(builder, caseName, "name");
+                        palette = StatePalettes.ForHistory();
+                        break;
+                    case "generations":
+                        AssertKeySet(builder, caseName, "name", "states");
+                        palette = StatePalettes.ForGenerations(builder.GetProperty("states").GetInt32());
+                        break;
+                    case "multistate":
+                        AssertKeySet(builder, caseName, "name", "states");
+                        palette = StatePalettes.ForMultiState(builder.GetProperty("states").GetInt32());
+                        break;
+                    case "gradient":
+                        AssertKeySet(builder, caseName, "name", "states", "first", "last", "background");
+                        palette = StatePalettes.Gradient(
+                            builder.GetProperty("states").GetInt32(),
+                            Color(builder.GetProperty("first")),
+                            Color(builder.GetProperty("last")),
+                            Color(builder.GetProperty("background")));
+                        break;
+                    default:
+                        throw new InvalidDataException($"render/{caseName}: unknown palette builder '{name}'");
+                }
+            }
+            else
+            {
+                bool hasCmap = root.TryGetProperty("cmap", out var cmap);
+                var keys = new List<string>
+                {
+                    "spec_version", "family", "tier", "kind", "world", "frame_values", "zoom_order", "output",
+                };
+                if (hasCmap)
+                    keys.Add("cmap");
+                AssertKeySet(root, caseName, keys.ToArray());
+                var world = root.GetProperty("world");
+                string family = world.GetProperty("family").GetString()!;
+                byte[] values, order;
+                switch (family)
+                {
+                    case "hashlife":
+                        {
+                            AssertKeySet(world, caseName, "family", "rule");
+                            var universe = new HashLife(world.GetProperty("rule").GetString()!);
+                            values = StatePalettes.FrameValues(universe);
+                            order = StatePalettes.DefaultZoomOrder(universe);
+                            palette = hasCmap
+                                ? StatePalettes.FromColormap(universe, Colormaps.Get(cmap.GetString()!))
+                                : StatePalettes.Default(universe);
+                            break;
+                        }
+                    case "hashlife-multistate":
+                        {
+                            AssertKeySet(world, caseName, "family", "rule");
+                            var universe = new MultiStateHashLife(world.GetProperty("rule").GetString()!);
+                            values = StatePalettes.FrameValues(universe);
+                            order = StatePalettes.DefaultZoomOrder(universe);
+                            palette = hasCmap
+                                ? StatePalettes.FromColormap(universe, Colormaps.Get(cmap.GetString()!))
+                                : StatePalettes.Default(universe);
+                            break;
+                        }
+                    default:
+                        {
+                            ISimulation sim = PaletteWorld(caseName, world, family);
+                            values = StatePalettes.FrameValues(sim);
+                            order = StatePalettes.DefaultZoomOrder(sim);
+                            palette = hasCmap
+                                ? StatePalettes.FromColormap(sim, Colormaps.Get(cmap.GetString()!))
+                                : StatePalettes.Default(sim);
+                            break;
+                        }
+                }
+                Assert.Equal(Ints(root.GetProperty("frame_values")), values);
+                Assert.Equal(Ints(root.GetProperty("zoom_order")), order);
+            }
+            var (width, height, channels, expected) = Png.Read(
+                Path.Combine(caseDir, root.GetProperty("output").GetProperty("file").GetString()!));
+            Assert.Equal(3, channels);
+            Assert.Equal(256, width * height);
+            Assert.True(palette.AsSpan().SequenceEqual(expected), $"render/{caseName}: palette mismatch");
+        }
+
+        private static ISimulation PaletteWorld(string caseName, JsonElement world, string family)
+        {
+            switch (family)
+            {
+                case "lifelike":
+                    AssertKeySet(world, caseName, "family", "rule");
+                    return new LifeLike(world.GetProperty("rule").GetString()!, 8, 8);
+                case "elementary":
+                    AssertKeySet(world, caseName, "family", "rule");
+                    return new Elementary(world.GetProperty("rule").GetInt32(), 8, 8);
+                case "cyclic":
+                    AssertKeySet(world, caseName, "family", "states");
+                    return new Cyclic(world.GetProperty("states").GetInt32(), 8, 8);
+                case "wireworld":
+                    AssertKeySet(world, caseName, "family");
+                    return new Wireworld(16, 16);
+                case "generations":
+                    AssertKeySet(world, caseName, "family", "rule");
+                    return new Generations(world.GetProperty("rule").GetString()!, 8, 8);
+                default:
+                    throw new InvalidDataException($"render/{caseName}: no palette world '{family}'");
+            }
+        }
+
+        private static void RunShade(string caseName, string caseDir, JsonElement root)
+        {
+            Assert.Equal("bit-exact", root.GetProperty("tier").GetString());
+            AssertKeySet(root, caseName, "spec_version", "family", "tier", "kind", "background", "color", "output");
+            byte[] shade = StatePalettes.Shade(Color(root.GetProperty("background")), Color(root.GetProperty("color")));
+            var (width, height, channels, expected) = Png.Read(
+                Path.Combine(caseDir, root.GetProperty("output").GetProperty("file").GetString()!));
+            Assert.Equal(3, channels);
+            Assert.Equal(256, width * height);
+            Assert.True(shade.AsSpan().SequenceEqual(expected), $"render/{caseName}: shade mismatch");
+        }
+
+        private static void RunWindow(string caseName, string caseDir, JsonElement root)
+        {
+            Assert.Equal("bit-exact", root.GetProperty("tier").GetString());
+            AssertKeySet(
+                root, caseName, "spec_version", "family", "tier", "kind", "x0", "y0", "width", "height",
+                "out_width", "out_height", "mode", "order", "input", "output");
+            var (gridWidth, gridHeight, channels, cells) = Png.Read(
+                Path.Combine(caseDir, root.GetProperty("input").GetProperty("file").GetString()!));
+            Assert.Equal(1, channels);
+            var shape = root.GetProperty("input").GetProperty("shape");
+            Assert.Equal((gridHeight, gridWidth), (shape[0].GetInt32(), shape[1].GetInt32()));
+            int outWidth = root.GetProperty("out_width").GetInt32();
+            int outHeight = root.GetProperty("out_height").GetInt32();
+            GridWindowMode mode = root.GetProperty("mode").GetString() switch
+            {
+                "nearest" => GridWindowMode.Nearest,
+                "state" => GridWindowMode.State,
+                "density" => GridWindowMode.Density,
+                var other => throw new InvalidDataException($"render/{caseName}: unknown window mode '{other}'"),
+            };
+            var output = new byte[outWidth * outHeight];
+            GridWindow.Sample(
+                cells, gridWidth, gridHeight,
+                root.GetProperty("x0").GetInt32(), root.GetProperty("y0").GetInt32(),
+                root.GetProperty("width").GetInt32(), root.GetProperty("height").GetInt32(),
+                output, outWidth, outHeight, mode, Ints(root.GetProperty("order")));
+            var (expectedWidth, expectedHeight, expectedChannels, expected) = Png.Read(
+                Path.Combine(caseDir, root.GetProperty("output").GetProperty("file").GetString()!));
+            Assert.Equal(1, expectedChannels);
+            Assert.Equal((outWidth, outHeight), (expectedWidth, expectedHeight));
+            Assert.True(output.AsSpan().SequenceEqual(expected), $"render/{caseName}: window mismatch");
+        }
+
+        private static (byte R, byte G, byte B) Color(JsonElement triple)
+        {
+            Assert.Equal(3, triple.GetArrayLength());
+            return ((byte)triple[0].GetInt32(), (byte)triple[1].GetInt32(), (byte)triple[2].GetInt32());
+        }
+
+        private static byte[] Ints(JsonElement array)
+        {
+            var values = new byte[array.GetArrayLength()];
+            int i = 0;
+            foreach (var item in array.EnumerateArray())
+                values[i++] = checked((byte)item.GetInt32());
+            return values;
         }
 
         /// <summary>A double from its IEEE-754 bit pattern ("0x" + 16 hex digits).</summary>

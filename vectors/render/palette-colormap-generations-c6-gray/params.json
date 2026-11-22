@@ -1,0 +1,27 @@
+{
+  "cmap": "gray",
+  "family": "render",
+  "frame_values": [
+    0,
+    255,
+    204,
+    153,
+    102,
+    51
+  ],
+  "kind": "palette",
+  "output": {
+    "file": "palette.png",
+    "shape": [
+      256,
+      3
+    ]
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "world": {
+    "family": "generations",
+    "rule": "B2/S345/C6"
+  },
+  "zoom_order": []
+}

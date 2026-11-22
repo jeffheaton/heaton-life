@@ -170,5 +170,11 @@ class Elementary:
     def generation(self) -> int:
         return self._generation
 
+    @property
+    def diagram(self) -> NDArray[np.uint8]:
+        """The space-time diagram, height × width cells of 0 or 1: the states the frame
+        shows, for a state palette (spec/render.md "State palettes")."""
+        return self._diagram
+
     def frame(self) -> NDArray[np.uint8]:
         return self._diagram * np.uint8(255)

@@ -1009,6 +1009,9 @@ def main() -> None:
     # -- Larger than Life: grid runs, rule texts, neighborhoods, files (spec/ltl.md) ---------
     write_ltl_cases()
 
+    # -- State palettes, the shade, and windows of grids (spec/render.md) ---------------------
+    write_palette_cases()
+
     print("done")
 
 
@@ -10230,6 +10233,280 @@ def write_ltl_cases() -> None:
     read("ltl-short-form", "x = 3, y = 3, rule = 5,34,45,34,58\nobo$3o$obo!\n")
     refused("error-ltl", "x = 3, y = 1, rule = R5,C0,M1,S34..58,B34..45,NM\n3o!\n", "rle")
     refused("error-ltl-macrocell", "[M2]\n#R 5,34,45,34,58\n$$$$$$$$.***$\n", "mc")
+
+
+PALETTE_SPEC_VERSION = "0.16.0"
+
+
+def write_palette_cases() -> None:
+    """State palettes (spec/render.md "State palettes"): each family's default palette with
+    its frame values and zoom order, a colormap's palette, the named palettes, the shade;
+    and windows of grids sampled by nearest cell, by state and by density ("Sampling a
+    window of a grid")."""
+    import io
+
+    from PIL import Image
+
+    from heaton_life.ca import Cyclic, Elementary, Generations, HashLife, LifeLike, Wireworld
+    from heaton_life.ca.hashlife import MultiStateHashLife
+    from heaton_life.render import (
+        HISTORY_ZOOM_ORDER,
+        colormap_palette,
+        default_palette,
+        default_zoom_order,
+        frame_values,
+        generations_palette,
+        gradient_palette,
+        history_palette,
+        multistate_palette,
+        sample_window,
+        shade_colormap,
+    )
+
+    def rgb_png(table: np.ndarray) -> bytes:
+        buf = io.BytesIO()
+        Image.fromarray(table.reshape(1, 256, 3), mode="RGB").save(buf, format="PNG")
+        return buf.getvalue()
+
+    def gray_png(arr: np.ndarray) -> bytes:
+        buf = io.BytesIO()
+        Image.fromarray(np.ascontiguousarray(arr, dtype=np.uint8), mode="L").save(buf, format="PNG")
+        return buf.getvalue()
+
+    def write(name: str, meta: dict[str, Any], files: dict[str, bytes]) -> None:
+        case_dir = VECTOR_ROOT / "render" / name
+        case_dir.mkdir(parents=True, exist_ok=True)
+        for file_name, data in files.items():
+            (case_dir / file_name).write_bytes(data)
+        full = {"spec_version": PALETTE_SPEC_VERSION, "family": "render", "tier": "bit-exact"}
+        full.update(meta)
+        (case_dir / "params.json").write_text(
+            json.dumps(full, indent=2, sort_keys=True) + "\n", newline="\n"
+        )
+        print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
+
+    def world_of(description: dict[str, Any]) -> object:
+        family = description["family"]
+        if family == "lifelike":
+            return LifeLike(description["rule"], size=(8, 8))
+        if family == "elementary":
+            return Elementary(description["rule"], size=(8, 8))
+        if family == "cyclic":
+            return Cyclic(description["states"], size=(8, 8))
+        if family == "wireworld":
+            return Wireworld(size=(16, 16))
+        if family == "generations":
+            return Generations(description["rule"], size=(8, 8))
+        if family == "hashlife":
+            return HashLife(description["rule"])
+        assert family == "hashlife-multistate", family
+        return MultiStateHashLife(description["rule"])
+
+    output = {"file": "palette.png", "shape": [256, 3]}
+
+    def world_case(name: str, description: dict[str, Any], cmap: str | None = None) -> None:
+        world = world_of(description)
+        palette = default_palette(world) if cmap is None else colormap_palette(world, cmap)
+        meta: dict[str, Any] = {
+            "kind": "palette",
+            "world": description,
+            "frame_values": list(frame_values(world)),
+            "zoom_order": list(default_zoom_order(world)),
+            "output": output,
+        }
+        if cmap is not None:
+            meta["cmap"] = cmap
+        write(name, meta, {"palette.png": rgb_png(palette)})
+
+    def builder_case(name: str, builder: dict[str, Any]) -> None:
+        kind = builder["name"]
+        if kind == "history":
+            palette = history_palette()
+        elif kind == "generations":
+            palette = generations_palette(builder["states"])
+        elif kind == "multistate":
+            palette = multistate_palette(builder["states"])
+        else:
+            assert kind == "gradient", kind
+            palette = gradient_palette(
+                builder["states"], builder["first"], builder["last"], builder["background"]
+            )
+        write(
+            name,
+            {"kind": "palette", "builder": builder, "output": output},
+            {"palette.png": rgb_png(palette)},
+        )
+
+    # Each family's default palette, its frame values and its zoom order.
+    world_case("palette-lifelike", {"family": "lifelike", "rule": "B3/S23"})
+    world_case("palette-lifelike-history", {"family": "lifelike", "rule": "B3/S23History"})
+    world_case(
+        "palette-lifelike-history-hexagonal", {"family": "lifelike", "rule": "B2/S34HHistory"}
+    )
+    world_case("palette-elementary", {"family": "elementary", "rule": 30})
+    world_case("palette-cyclic-3", {"family": "cyclic", "states": 3})
+    world_case("palette-cyclic-14", {"family": "cyclic", "states": 14})
+    world_case("palette-wireworld", {"family": "wireworld"})
+    world_case("palette-generations-c3", {"family": "generations", "rule": "B2/S/C3"})
+    world_case("palette-generations-c4", {"family": "generations", "rule": "B2/S345/C4"})
+    world_case("palette-generations-c256", {"family": "generations", "rule": "B3/S23/C256"})
+    world_case("palette-hashlife", {"family": "hashlife", "rule": "B3/S23"})
+    world_case(
+        "palette-multistate-wireworld", {"family": "hashlife-multistate", "rule": "WireWorld"}
+    )
+    world_case(
+        "palette-multistate-history", {"family": "hashlife-multistate", "rule": "B3/S23History"}
+    )
+    world_case(
+        "palette-multistate-generations-c5", {"family": "hashlife-multistate", "rule": "B2/S/C5"}
+    )
+    # A colormap's palette: the states as the colormap shows the frames.
+    world_case("palette-colormap-lifelike-fire", {"family": "lifelike", "rule": "B3/S23"}, "fire")
+    world_case(
+        "palette-colormap-history-violet", {"family": "lifelike", "rule": "B3/S23History"}, "violet"
+    )
+    world_case("palette-colormap-cyclic-5-ice", {"family": "cyclic", "states": 5}, "ice")
+    world_case(
+        "palette-colormap-generations-c6-gray",
+        {"family": "generations", "rule": "B2/S345/C6"},
+        "gray",
+    )
+    world_case(
+        "palette-colormap-elementary-rainbow", {"family": "elementary", "rule": 90}, "rainbow"
+    )
+    # The palettes made by name.
+    builder_case("palette-builder-history", {"name": "history"})
+    builder_case("palette-builder-generations-c2", {"name": "generations", "states": 2})
+    builder_case("palette-builder-generations-c17", {"name": "generations", "states": 17})
+    builder_case("palette-builder-multistate-2", {"name": "multistate", "states": 2})
+    builder_case("palette-builder-multistate-8", {"name": "multistate", "states": 8})
+    builder_case("palette-builder-multistate-256", {"name": "multistate", "states": 256})
+    builder_case(
+        "palette-builder-gradient-6",
+        {
+            "name": "gradient",
+            "states": 6,
+            "first": [255, 0, 0],
+            "last": [0, 0, 255],
+            "background": [0, 0, 0],
+        },
+    )
+    # Two steps: the middle state lands exactly halfway (0.5 and 1.5, half to even).
+    builder_case(
+        "palette-builder-gradient-ties",
+        {
+            "name": "gradient",
+            "states": 4,
+            "first": [0, 0, 3],
+            "last": [1, 3, 0],
+            "background": [9, 8, 7],
+        },
+    )
+    builder_case(
+        "palette-builder-gradient-2",
+        {
+            "name": "gradient",
+            "states": 2,
+            "first": [12, 34, 56],
+            "last": [200, 100, 0],
+            "background": [1, 2, 3],
+        },
+    )
+    builder_case(
+        "palette-builder-gradient-256",
+        {
+            "name": "gradient",
+            "states": 256,
+            "first": [255, 255, 220],
+            "last": [0, 40, 110],
+            "background": [8, 4, 16],
+        },
+    )
+
+    # The shade between two colors.
+    for name, background, color in (
+        ("palette-shade-phosphor", (6, 10, 6), (170, 255, 190)),
+        ("palette-shade-history", (0, 0, 0), (0, 255, 0)),
+        ("palette-shade-falling", (255, 255, 220), (0, 40, 110)),
+        ("palette-shade-flat", (77, 77, 77), (77, 77, 77)),
+    ):
+        write(
+            name,
+            {
+                "kind": "palette-shade",
+                "background": list(background),
+                "color": list(color),
+                "output": {"file": "lut.png", "shape": [256, 3]},
+            },
+            {"lut.png": rgb_png(shade_colormap(background, color))},
+        )
+
+    # Windows of grids.
+    def window_case(
+        name: str,
+        cells: np.ndarray,
+        window: tuple[int, int, int, int],
+        size: tuple[int, int],
+        mode: str,
+        order: tuple[int, ...] = (),
+    ) -> None:
+        x0, y0, width, height = window
+        out_width, out_height = size
+        got = sample_window(
+            cells, x0, y0, width, height, out_width, out_height, mode=mode, order=order
+        )
+        meta = {
+            "kind": "window",
+            "x0": x0,
+            "y0": y0,
+            "width": width,
+            "height": height,
+            "out_width": out_width,
+            "out_height": out_height,
+            "mode": mode,
+            "order": list(order),
+            "input": {"file": "cells.png", "shape": list(cells.shape)},
+            "output": {"file": "window.png", "shape": [out_height, out_width]},
+        }
+        write(name, meta, {"cells.png": gray_png(cells), "window.png": gray_png(got)})
+
+    # Lone live cells on a 97 x 61 grid, several of which no pixel center lands on.
+    lone = np.zeros((61, 97), dtype=np.uint8)
+    for y, x in ((0, 0), (3, 11), (30, 50), (31, 52), (44, 7), (60, 96), (17, 88), (52, 33)):
+        lone[y, x] = 1
+    window_case("window-lone-cells-state", lone, (0, 0, 97, 61), (13, 7), "state")
+    window_case("window-lone-cells-nearest", lone, (0, 0, 97, 61), (13, 7), "nearest")
+    window_case("window-lone-cells-density", lone, (0, 0, 97, 61), (13, 7), "density")
+    # A two-state frame (0 and 255): any live cell lights its pixel.
+    life = LifeLike("B3/S23", size=(150, 120), seed=11, density=0.08)
+    life.step(9)
+    window_case("window-life-frame-state", life.frame(), (0, 0, 150, 120), (37, 23), "state")
+    window_case("window-life-density", life.state, (0, 0, 150, 120), (37, 23), "density")
+    window_case("window-life-nearest-offset", life.state, (21, 13, 101, 89), (40, 31), "nearest")
+    # History states: the History zoom order keeps live and marked cells over the envelope.
+    history = LifeLike("B3/S23History", size=(90, 70), seed=4)
+    history.step(25)
+    cells = history.state.copy()
+    cells[10, 10:13] = 3  # marked on
+    cells[40, 60] = 5  # start on
+    cells[20:23, 70] = 6  # boundary
+    cells[55, 15] = 4  # marked off
+    window_case(
+        "window-history-order", cells, (0, 0, 90, 70), (17, 13), "state", HISTORY_ZOOM_ORDER
+    )
+    window_case("window-history-lowest-first", cells, (0, 0, 90, 70), (17, 13), "state")
+    # Generations: alive before dying, the younger dying before the older.
+    generations = Generations("B2/S345/C6", size=(64, 48), seed=8)
+    generations.step(12)
+    window_case("window-generations-state", generations.state, (5, 3, 57, 41), (11, 9), "state")
+    # Any byte values, a window inside the grid, and an order that lists two of them.
+    rng = np.random.default_rng(31)
+    mixed = rng.choice(
+        np.array([0, 0, 0, 0, 1, 2, 7, 128, 254, 255], dtype=np.uint8), size=(33, 45)
+    )
+    window_case("window-mixed-order", mixed, (4, 2, 39, 29), (10, 7), "state", (128, 7))
+    window_case("window-mixed-one-pixel", mixed, (0, 0, 45, 33), (1, 1), "state", (255,))
+    window_case("window-mixed-identity", mixed, (3, 5, 20, 11), (20, 11), "state")
 
 
 if __name__ == "__main__":

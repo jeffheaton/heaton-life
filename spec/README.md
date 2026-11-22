@@ -80,7 +80,7 @@ Elementary takes its space-time diagram too ([elementary.md](elementary.md#state
 - [locations.md](locations.md) — the framing conventions of heaton-life, Heaton Fractal, Kalles Fraktaler and Fraktaler-3, the conversions between them, and the importers for their files
 - [nucleus.md](nucleus.md) — discovery: the box period test, Newton's method for a minibrot's nucleus, and the atom size estimate (bit-exact tier, the size ε)
 - [navigation.md](navigation.md) — exact viewport arithmetic: pan, anchored zoom and pixel offsets on decimal centers, printed at the frame's places so the orbit's precision never ratchets (bit-exact tier)
-- [render.md](render.md) — colormap LUT construction and frame indexing, the cyclic palettes and the phase lookup (bit-exact tier)
+- [render.md](render.md) — colormap LUT construction and frame indexing, the cyclic palettes and the phase lookup, state palettes (a color per state, each family's default, the zoom order that goes with it) and sampling a window of a grid (bit-exact tier)
 - [fractal-color.md](fractal-color.md) — fractal color that holds still: stretch (and a frozen stretch), depth phase, frequency, distance shading (bit-exact given its inputs)
 - [self-check.md](self-check.md) — the platform self-check: embedded known answers a host runs on its own runtime (IL2CPP, Mono, a phone) to learn whether it reproduces the bit-exact contract, and what each failure invalidates
 - [zoom.md](zoom.md) — zoom movies: Heaton Fractal's schedule with its end pinned, each frame's zoom, the movie iteration budget and the survey that measures it (bit-exact tier); the frame renderer (Python presentation)

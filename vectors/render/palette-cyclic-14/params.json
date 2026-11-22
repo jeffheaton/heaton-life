@@ -1,0 +1,34 @@
+{
+  "family": "render",
+  "frame_values": [
+    0,
+    19,
+    39,
+    58,
+    78,
+    98,
+    117,
+    137,
+    156,
+    176,
+    196,
+    215,
+    235,
+    255
+  ],
+  "kind": "palette",
+  "output": {
+    "file": "palette.png",
+    "shape": [
+      256,
+      3
+    ]
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "world": {
+    "family": "cyclic",
+    "states": 14
+  },
+  "zoom_order": []
+}

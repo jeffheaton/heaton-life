@@ -1,0 +1,32 @@
+{
+  "builder": {
+    "background": [
+      9,
+      8,
+      7
+    ],
+    "first": [
+      0,
+      0,
+      3
+    ],
+    "last": [
+      1,
+      3,
+      0
+    ],
+    "name": "gradient",
+    "states": 4
+  },
+  "family": "render",
+  "kind": "palette",
+  "output": {
+    "file": "palette.png",
+    "shape": [
+      256,
+      3
+    ]
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

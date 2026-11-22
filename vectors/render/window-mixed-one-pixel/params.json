@@ -1,0 +1,30 @@
+{
+  "family": "render",
+  "height": 33,
+  "input": {
+    "file": "cells.png",
+    "shape": [
+      33,
+      45
+    ]
+  },
+  "kind": "window",
+  "mode": "state",
+  "order": [
+    255
+  ],
+  "out_height": 1,
+  "out_width": 1,
+  "output": {
+    "file": "window.png",
+    "shape": [
+      1,
+      1
+    ]
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "width": 45,
+  "x0": 0,
+  "y0": 0
+}

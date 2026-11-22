@@ -12,7 +12,8 @@ import pytest
 from PIL import Image
 
 from heaton_life.boids import Boids
-from heaton_life.ca import Cyclic, LifeLike, Wireworld
+from heaton_life.ca import Cyclic, Elementary, Generations, HashLife, LifeLike, Wireworld
+from heaton_life.ca.hashlife import MultiStateHashLife
 from heaton_life.conformance import bytes_to_state
 from heaton_life.core.viewport import Viewport
 from heaton_life.fractal import Julia, Mandelbrot, Newton
@@ -27,7 +28,21 @@ from heaton_life.fractal.coloring import (
     shade_distance,
 )
 from heaton_life.rd import GrayScott
-from heaton_life.render import apply_colormap, apply_phase, get_colormap
+from heaton_life.render import (
+    apply_colormap,
+    apply_phase,
+    colormap_palette,
+    default_palette,
+    default_zoom_order,
+    frame_values,
+    generations_palette,
+    get_colormap,
+    gradient_palette,
+    history_palette,
+    multistate_palette,
+    sample_window,
+    shade_colormap,
+)
 
 VECTOR_ROOT = Path(__file__).resolve().parents[2] / "vectors" / "render"
 
@@ -89,9 +104,124 @@ def _same_f64(got: np.ndarray, want: np.ndarray) -> bool:
     return got.shape == want.shape and bool(np.array_equal(got, want, equal_nan=True))
 
 
+# State palettes and windows of grids (spec/render.md, 0.16.0): strict as well.
+PALETTE_KEYS = {
+    "palette-shade": {"background", "color", "output"},
+    "window": {
+        "x0",
+        "y0",
+        "width",
+        "height",
+        "out_width",
+        "out_height",
+        "mode",
+        "order",
+        "input",
+        "output",
+    },
+}
+WORLD_PALETTE_KEYS = {"world", "frame_values", "zoom_order", "output"}
+BUILDER_KEYS = {
+    "history": {"name"},
+    "generations": {"name", "states"},
+    "multistate": {"name", "states"},
+    "gradient": {"name", "states", "first", "last", "background"},
+}
+
+
 def test_render_vectors_exist() -> None:
     kinds = {json.loads(c.read_text(encoding="utf-8"))["kind"] for c in CASES}
-    assert kinds == {"lut", "apply", "frame", "fractal-render", *STRICT_KEYS}
+    assert kinds == {
+        "lut",
+        "apply",
+        "frame",
+        "fractal-render",
+        "palette",
+        *STRICT_KEYS,
+        *PALETTE_KEYS,
+    }
+
+
+def _palette_world(description: dict[str, Any]) -> Any:
+    family = description["family"]
+    keys = set(description) - {"family"}
+    if family == "lifelike":
+        assert keys == {"rule"}
+        return LifeLike(description["rule"], size=(8, 8))
+    if family == "elementary":
+        assert keys == {"rule"}
+        return Elementary(description["rule"], size=(8, 8))
+    if family == "cyclic":
+        assert keys == {"states"}
+        return Cyclic(description["states"], size=(8, 8))
+    if family == "wireworld":
+        assert not keys
+        return Wireworld(size=(16, 16))
+    if family == "generations":
+        assert keys == {"rule"}
+        return Generations(description["rule"], size=(8, 8))
+    if family == "hashlife":
+        assert keys == {"rule"}
+        return HashLife(description["rule"])
+    assert family == "hashlife-multistate" and keys == {"rule"}, description
+    return MultiStateHashLife(description["rule"])
+
+
+def _palette_case(case: Path, meta: dict[str, Any]) -> None:
+    """The 0.16.0 kinds (spec/render.md "State palettes", "Sampling a window of a grid")."""
+    kind = meta["kind"]
+    here = case.parent
+    assert meta["tier"] == "bit-exact" and meta["family"] == "render"
+    extra = set(meta) - BASE_KEYS
+    if kind == "palette":
+        if "builder" in meta:
+            assert extra == {"builder", "output"}, f"{case}: unexpected keys {extra}"
+            builder = meta["builder"]
+            assert set(builder) == BUILDER_KEYS[builder["name"]], builder
+            if builder["name"] == "history":
+                palette = history_palette()
+            elif builder["name"] == "generations":
+                palette = generations_palette(builder["states"])
+            elif builder["name"] == "multistate":
+                palette = multistate_palette(builder["states"])
+            else:
+                palette = gradient_palette(
+                    builder["states"], builder["first"], builder["last"], builder["background"]
+                )
+        else:
+            assert extra in (WORLD_PALETTE_KEYS, WORLD_PALETTE_KEYS | {"cmap"}), extra
+            world = _palette_world(meta["world"])
+            assert list(frame_values(world)) == meta["frame_values"]
+            assert list(default_zoom_order(world)) == meta["zoom_order"]
+            if "cmap" in meta:
+                palette = colormap_palette(world, meta["cmap"])
+            else:
+                palette = default_palette(world)
+        expected = _png_rgb(here / meta["output"]["file"]).reshape(256, 3)
+        assert np.array_equal(palette, expected)
+        return
+    assert extra == PALETTE_KEYS[kind], f"{case}: runner does not understand {extra}"
+    if kind == "palette-shade":
+        shade = shade_colormap(meta["background"], meta["color"])
+        expected = _png_rgb(here / meta["output"]["file"]).reshape(256, 3)
+        assert np.array_equal(shade, expected)
+        return
+    cells = _png_gray(here / meta["input"]["file"])
+    assert list(cells.shape) == meta["input"]["shape"]
+    window = sample_window(
+        cells,
+        meta["x0"],
+        meta["y0"],
+        meta["width"],
+        meta["height"],
+        meta["out_width"],
+        meta["out_height"],
+        mode=meta["mode"],
+        order=meta["order"],
+    )
+    expected_w = _png_gray(here / meta["output"]["file"])
+    assert list(expected_w.shape) == meta["output"]["shape"]
+    assert np.array_equal(window, expected_w)
 
 
 def _color_case(case: Path, meta: dict[str, Any]) -> None:
@@ -220,6 +350,9 @@ def test_render_vector(case: Path) -> None:
     kind = meta["kind"]
     if meta["spec_version"] == "0.7.0":
         _color_case(case, meta)
+        return
+    if kind == "palette" or kind in PALETTE_KEYS:
+        _palette_case(case, meta)
         return
     if kind == "lut":
         assert meta["tier"] == "bit-exact"

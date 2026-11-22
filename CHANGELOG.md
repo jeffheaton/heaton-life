@@ -310,6 +310,24 @@ and an RLE header naming any Life-like rule making the file two-state.
 - The new `generations/` and `generations-rules/` vectors, and Generations cases in
   `patterns/`, `formats/` and `hashlife-multistate/`: on the plane a pattern evolves cell
   for cell as on a grid with dead edges, for as long as it stays inside the grid.
+- **State palettes** ([spec/render.md](spec/render.md#state-palettes)): a color for each
+  state of a world, a 256-entry table indexed by state, so the colormap lookup colors a
+  world's states (`heaton_life.render`; .NET `StatePalettes`). Each family has a default
+  (`default_palette` / `StatePalettes.Default`): History's seven colors for a History
+  rule, a `fire` fade for Generations, a multi-state universe its rule's (any other rule
+  the new multi-state palette), and elsewhere the palette of the colormap the family is
+  shown with, so nothing looks different. `frame_values` and `colormap_palette` /
+  `FromColormap` turn a colormap into an editable palette that shows the states as the
+  colormap shows the frames; `gradient_palette` / `Gradient` is the form a rule file's
+  `@COLORS` gradient takes; `shade_colormap` / `Shade` colors frames that count live cells.
+  `default_zoom_order` / `DefaultZoomOrder` gives the zoom order that goes with a palette:
+  History's keeps live and marked cells over the envelope, for a host to set. Python's
+  `Elementary` gains `diagram`, as .NET's has.
+- **Sampling a window of a grid** ([spec/render.md](spec/render.md#sampling-a-window-of-a-grid)):
+  `sample_window` / `GridWindow.Sample` read a window of a grid's states into fewer pixels,
+  by nearest cell, by the zoom order (a lone live cell never vanishes) or by density, with
+  exact integer bounds; the .NET one allocates nothing.
+- The new `render/palette-*`, `palette-shade-*` and `window-*` vectors.
 
 - **Larger than Life** ([spec/ltl.md](spec/ltl.md); `LargerThanLife`, `LtlRule`,
   `parse_ltl_rule` / `try_parse_ltl_rule`, .NET `LargerThanLife` and `LtlRule.Parse` /

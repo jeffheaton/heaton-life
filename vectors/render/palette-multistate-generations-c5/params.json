@@ -1,0 +1,25 @@
+{
+  "family": "render",
+  "frame_values": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "kind": "palette",
+  "output": {
+    "file": "palette.png",
+    "shape": [
+      256,
+      3
+    ]
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "world": {
+    "family": "hashlife-multistate",
+    "rule": "B2/S/C5"
+  },
+  "zoom_order": []
+}

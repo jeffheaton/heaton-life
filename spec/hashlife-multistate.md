@@ -177,9 +177,10 @@ mode:
 distinct states from 1 to 255, set on the universe (`zoom_order`, .NET `ZoomOrder`). The
 listed states come first, in the list's order, and every state not listed follows them in
 increasing order, so the default, the empty list, shows the lowest non-zero state a block
-holds. Per-state colors, and whatever other choices a renderer makes, belong to the host;
-the frame gives states. The zoom order changes `state` frames and nothing else: snapshots
-and files don't carry it.
+holds. The frame gives states, and the host colors them:
+[render.md](render.md#state-palettes) gives each rule's default palette and the zoom order
+that goes with it (`default_zoom_order`), which the host sets. The zoom order changes
+`state` frames and nothing else: snapshots and files don't carry it.
 
 ## Parameters
 

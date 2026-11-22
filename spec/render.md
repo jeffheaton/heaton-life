@@ -161,6 +161,154 @@ stays 0, and the final frame is `sqrt(values)`. Percentiles use linear
 interpolation on the sorted escaped values. Newton's shade:
 `(root + 1 - 0.7 * iters / max_iter) / degree`, clipped; unconverged pixels 0.
 
+## State palettes
+
+A **state palette** gives each state of a world a color of its own. It has a colormap's
+shape, 256 RGB entries, but is indexed by state instead of by frame value, so a world's
+colors are the indexed path of [Applying a colormap](#applying-a-colormap) over a byte
+frame of its **states**: a grid world's state (Elementary's, its diagram), or a
+[multi-state universe](hashlife-multistate.md#view-and-render)'s `state` frame. Entry s
+is state s's color; in a world of S states the entries from S on are black, (0, 0, 0),
+and unused. A host that lets a person choose the color of each state edits the entries.
+
+**Frame values.** Each byte frame of [Frames](#frames) is a function of the cell's state
+alone, f(s), with f(0) = 0. A world's frame values are f(0) … f(S − 1) (`frame_values`,
+.NET `StatePalettes.FrameValues`): for the two-state universe 0 and 255, its frames'
+live cell ([hashlife.md](hashlife.md#view-and-render)), and for a multi-state universe
+the states themselves, f(s) = s, as its `state` frames give them.
+
+**A colormap's palette** for a world (`colormap_palette(world, cmap)`, .NET
+`StatePalettes.FromColormap`) has entry s = lut[f(s)]. It shows the world's states as the
+colormap shows its frames, `apply(states, colormap_palette(world, lut)) =
+apply(frame, lut)`, so it is where a host starts when the colors it shows today are to
+be edited state by state.
+
+### Default palettes
+
+`default_palette(world)` (.NET `StatePalettes.Default`) is the palette of the table:
+
+| World | Default palette |
+|---|---|
+| Life-like, a two-state rule | `phosphor`'s: (6, 10, 6) and (170, 255, 190) |
+| Life-like, a [History](history.md) rule | History's |
+| Elementary | `gray`'s |
+| Cyclic | `rainbow`'s |
+| Wireworld | `wireworld`'s: the classic empty, head, tail and conductor colors |
+| Generations | Generations' of its C |
+| the two-state universe | `phosphor`'s |
+| a multi-state universe | its rule's on a grid: History's, Generations' of its C, `wireworld`'s for `WireWorld`; for any other rule, the multi-state palette of its S |
+
+A colormap's palette there keeps the look of the frames through the colormap the app
+and the playground give that family. The rest are defined here:
+
+- **History's** (`history_palette`, .NET `StatePalettes.ForHistory`) are the colors
+  LifeHistory pictures are known by, in shades chosen here:
+
+  | State | | Color |
+  |---|---|---|
+  | 0 | off | black (0, 0, 0) |
+  | 1 | on | green (0, 255, 0) |
+  | 2 | envelope | blue (0, 0, 160) |
+  | 3 | marked on | white (255, 255, 255) |
+  | 4 | marked off | red (255, 0, 0) |
+  | 5 | start on | yellow (255, 255, 0) |
+  | 6 | boundary | gray (128, 128, 128) |
+
+- **Generations'** (`generations_palette(C)`, .NET `ForGenerations`) is `fire`'s palette
+  of a Generations world of C states: entry 0 is `fire`'s entry 0, and entry s ≥ 1 is
+  `fire`'s entry ⌊255 · (C − s) / (C − 1)⌋, the frame value. A live cell is pale yellow,
+  and the dying states fade through orange and red toward the black of the dead.
+- **The multi-state palette** (`multistate_palette(S)`, .NET `ForMultiState`), for a rule
+  with no palette of its own: entry 0 black, and entry s from 1 to S − 1 `rainbow`'s entry
+  ⌊255 · (s − 1) / (S − 1)⌋, S − 1 hues and none twice.
+- **A gradient** (`gradient_palette(S, first, last, background)`, .NET `Gradient`):
+  entry 0 the background, black unless given, and states 1 to S − 1 from `first` to
+  `last`. Entry s is, channel by channel, (first · (S − 1 − s) + last · (s − 1)) / (S − 2)
+  rounded half to even, in exact integer arithmetic; with S = 2, state 1 is `first`.
+
+**Still to come.** Each of these takes its place in the table when its family lands:
+
+- *Larger than Life*: with two states, `phosphor`'s palette; with C of three or more,
+  Generations' of its C, since its dying cells are Generations' dying cells.
+- *Rule tables*: the multi-state palette of the rule's S with its rule file's `@COLORS`
+  applied in the file's order: a gradient sets states 1 to S − 1 as `gradient_palette`
+  sets them (entry 0 stays), and a state color sets its state.
+- *Super* rules (26 states): states 0 to 6 take History's colors; the other 19, and
+  Super's zoom order, are defined with Super.
+
+### Zoomed out
+
+Zoomed out, a pixel shows one of the states it covers: on the plane by the universe's
+[zoom order](hashlife-multistate.md#view-and-render), and on a grid by the order given to
+its [window](#sampling-a-window-of-a-grid). `default_zoom_order(world)` (.NET
+`StatePalettes.DefaultZoomOrder`) is the order that keeps what matters in view:
+
+- a History rule: (3, 5, 1, 4, 6, 2). The on states come first, marked ones before plain
+  ones; then marked off and the boundary; and last the envelope, which covers everything
+  a pattern has touched and would otherwise hide the cells alive in it.
+- every other world: the empty order, the lowest non-zero state first. A Generations cell
+  alive shows before one dying, and the younger dying before the older; a Wireworld
+  electron's head before its tail, and both before the wire.
+
+A host sets the order on a universe (`zoom_order`) or passes it to a window. Nothing sets
+it for the host, so no frame changes unless the host asks.
+
+A frame whose pixels count live cells, any frame of the two-state universe (255 or 0 for
+a cell or an `any` block, or a block's density) and every `density` frame, is colored by
+the **shade** from state 0's color to state 1's (`shade_colormap(background, color)`,
+.NET `StatePalettes.Shade`): entry v is, channel by channel, b + (c − b) · v / 255
+rounded half to even, in exact integer arithmetic. It is the
+[LUT construction](#lut-construction) of those two anchors, so the shade from black to
+white is `gray`.
+
+### Inverted colors
+
+A host's "invert colors" shows each color by its complement, each byte v as 255 − v. It
+is the display's to do, not the library's: the app inverts in its shader, which reaches
+its grid lines and swatches too, where no table holds the colors, and keeps a world's own
+colors in its pictures and exports. The library stores no inverted table and has no
+function for it, since a table's complement is the one expression 255 − v, the same bytes
+whoever computes it.
+
+## Sampling a window of a grid
+
+A grid world too big to show whole is shown a window at a time, with fewer pixels than
+cells. `sample_window(cells, x0, y0, width, height, out_width, out_height, mode, order)`
+(.NET `GridWindow.Sample`) reads the window of `width` × `height` cells whose top-left
+cell is (x0, y0) from a grid of bytes, a world's states or one of its frames, and writes
+an `out_height` × `out_width` array of bytes, row-major. The window lies inside the grid,
+with 1 ≤ out_width ≤ width and 1 ≤ out_height ≤ height.
+
+- **The cells a pixel covers** are those whose centers lie in its share of the window.
+  For pixel (i, j), with W, H the window's width and height and w, h the output's: the
+  columns x0 + c for ⌊(2iW + w − 1) / (2w)⌋ ≤ c < ⌊(2(i + 1)W + w − 1) / (2w)⌋, and the
+  rows y0 + r for ⌊(2jH + h − 1) / (2h)⌋ ≤ r < ⌊(2(j + 1)H + h − 1) / (2h)⌋. The pixels
+  share out the window, each covering a cell or more; with as many pixels as cells, a
+  pixel is a cell.
+- **Its nearest cell** is the one under its center: column x0 + ⌊(2i + 1) · W / (2w)⌋,
+  row y0 + ⌊(2j + 1) · H / (2h)⌋. It is always among the cells the pixel covers.
+
+The mode says what a pixel holds:
+
+- **`nearest`**: its nearest cell's value.
+- **`state`** (the default): of the non-zero values among its cells, the one first in the
+  zoom order `order`, or 0 when every one is 0. A zoom order lists distinct values from 1
+  to 255; they come first, in the list's order, and every value not listed follows them
+  in increasing order ([hashlife-multistate.md](hashlife-multistate.md#view-and-render)),
+  so the empty order shows the lowest. In a two-state grid a pixel is live when any cell
+  it covers is: a lone live cell never vanishes, and a pixel live under `nearest` is live
+  here too.
+- **`density`**: ⌈255 · p / n⌉ for a pixel that covers n cells, p of them not 0, in
+  integer arithmetic, (255p + n − 1) div n.
+
+A window outside the grid, an output size out of range, or a list that is no zoom order
+is an error, and nothing is written. Arithmetic on the bounds is exact (64-bit integers
+in .NET).
+
+So a host gives a world's states with its zoom order (`default_zoom_order`) and colors
+the result with its palette, or colors a `density` result with the shade; a two-state
+frame (0 and 255) works as it is, any live cell lighting its pixel.
+
 ## Conformance
 
 Vectors in [`../vectors/render/`](../vectors/render/):
@@ -172,6 +320,16 @@ Vectors in [`../vectors/render/`](../vectors/render/):
 - `apply-half-rainbow/` — a 16×32 float frame (values `i/512`) applied through
   `rainbow`: round-to-nearest indices. Its one exact tie (127.5) rounds to 128 under
   half-even and half-away alike; `phase-apply-halfway` is the case that pins half-even.
+- `palette-<case>/` — a state palette as a 1×256 RGB PNG (`palette.png`): a world's
+  default palette (`world`: its family and what its palette depends on, a `rule` or a
+  number of `states`), with its `frame_values` and `zoom_order`; with a `cmap` as well,
+  that colormap's palette for the world instead; or a palette made by name (`builder`:
+  `history`, `generations`, `multistate` or `gradient`, with their arguments).
+- `palette-shade-<case>/` — the shade between a `background` and a `color`, as a 1×256
+  RGB PNG (`lut.png`).
+- `window-<case>/` — a grid of bytes (`cells.png`, 8-bit grayscale, the values as they
+  are) and the window, the output size, the `mode` and the `order` in `params.json`;
+  `window.png` out. The palette, shade and window cases are strict (every key known).
 - `frame-<family>/` — an explicit input state (family codec encoding) and the
   expected frame (bit-exact). Inputs are explicit so the frame contract stays
   decoupled from the ε of evolved states.

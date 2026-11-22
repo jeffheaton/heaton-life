@@ -1,0 +1,23 @@
+{
+  "background": [
+    6,
+    10,
+    6
+  ],
+  "color": [
+    170,
+    255,
+    190
+  ],
+  "family": "render",
+  "kind": "palette-shade",
+  "output": {
+    "file": "lut.png",
+    "shape": [
+      256,
+      3
+    ]
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

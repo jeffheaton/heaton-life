@@ -203,7 +203,7 @@ class LifeLike(AdvanceRegion):
 
     def frame(self) -> NDArray[np.uint8]:
         """spec/render.md: ``state * 255``, and under a History rule the state itself (0–6),
-        for a color per state (the host's palette, until multi-state rendering)."""
+        for a color per state (History's palette, spec/render.md "State palettes")."""
         if self._rule.variant:
             return self._state.copy()
         return self._state * np.uint8(255)

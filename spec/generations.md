@@ -115,7 +115,8 @@ there, every live cell state 1; no cell starts out dying.
 
 A frame ([render.md](render.md#frames)) is palette-index bytes: 0 for a dead cell, and
 ⌊255 · (C − s) / (C − 1)⌋ for state s ≥ 1, so a live cell is 255 and the dying states fade
-toward the background. Per-state palettes come later; this is the minimal frame.
+toward the background. Through `fire` it shows the colors of Generations' state palette
+([render.md](render.md#default-palettes)), which colors the states themselves the same way.
 
 ## Editing and patterns
 

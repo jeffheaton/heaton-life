@@ -1,0 +1,26 @@
+{
+  "cmap": "ice",
+  "family": "render",
+  "frame_values": [
+    0,
+    63,
+    127,
+    191,
+    255
+  ],
+  "kind": "palette",
+  "output": {
+    "file": "palette.png",
+    "shape": [
+      256,
+      3
+    ]
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "world": {
+    "family": "cyclic",
+    "states": 5
+  },
+  "zoom_order": []
+}

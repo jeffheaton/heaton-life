@@ -321,7 +321,8 @@ class Generations(AdvanceRegion):
 
     def frame(self) -> NDArray[np.uint8]:
         """spec/render.md "Frames": 0 for a dead cell, ⌊255 · (C − s) / (C − 1)⌋ for state
-        s ≥ 1, so a live cell is 255 and a dying one fades. (Per-state palettes come later.)"""
+        s ≥ 1, so a live cell is 255 and a dying one fades: through ``fire``, the colors of
+        Generations' state palette (spec/render.md "State palettes")."""
         count = self._rule.states
         state = self._state.astype(np.int32)
         fade = (count - state) * 255 // (count - 1)

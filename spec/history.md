@@ -86,7 +86,8 @@ is 0. The step reads on and off from them as above. The two-state rules run as b
   base rule, states 0 and 1. `array`, `set_state` and `set_cell` take any state 0–6; a
   larger one is an error.
 - **Frames** ([render.md](render.md)) are the states themselves, 0–6, for a palette of a
-  color per state; the host's palette, until multi-state rendering defines History's.
+  color per state: History's own ([render.md](render.md#default-palettes)), with History's
+  zoom order for pixels that cover several cells ([render.md](render.md#zoomed-out)).
 - **Editing** ([patterns.md](patterns.md#editing-a-region)): stamps paste states (`copy`
   and `or`; `xor` and `and` take 0 and 1 only, as in every world of more states);
   transforms move them; `clear_rect` and the blank of Advance Selection and Advance
