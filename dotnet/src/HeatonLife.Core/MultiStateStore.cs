@@ -74,6 +74,7 @@ namespace HeatonLife
         // (spec/hashlife-multistate.md "Observables"); levels 1 to 3 are counted when asked.
         private readonly Dictionary<int, long> _oddPop = new Dictionary<int, long>();
         private readonly Dictionary<int, BigInteger> _bigOddPop = new Dictionary<int, BigInteger>();
+        private int[] _walk = new int[64]; // (node, level) pairs: the deep walks' own stack
 
         /// <summary>The rule whose cell function the base case runs.</summary>
         internal StateRule Rule;
@@ -585,13 +586,59 @@ namespace HeatonLife
                 return BigInteger.Zero;
             if (_bigPop.TryGetValue(n, out BigInteger cached))
                 return cached;
-            int o = n * Stride;
-            int[] nodes = Nodes;
-            int k1 = k - 1;
-            BigInteger sum = PopBig(nodes[o], k1) + PopBig(nodes[o + Ne], k1)
-                + PopBig(nodes[o + Sw], k1) + PopBig(nodes[o + Se], k1);
-            _bigPop[n] = sum;
-            return sum;
+            // A node of any level: the renderers ask for blocks past the root, up to the frame's
+            // scale, so the walk keeps its own stack (a 1 MB thread overflowed at level 4,400).
+            // Each node's children come first, every sum is kept, and a node met twice is summed
+            // once.
+            int sp = 0;
+            Push(ref _walk, ref sp, n, k);
+            while (sp > 0)
+            {
+                int node = _walk[sp - 2], level = _walk[sp - 1];
+                if (_bigPop.ContainsKey(node))
+                {
+                    sp -= 2;
+                    continue;
+                }
+                int o = node * Stride, k1 = level - 1;
+                bool ready = true;
+                if (k1 > 31)
+                {
+                    int empty = Empty(k1);
+                    for (int q = 0; q < 4; q++)
+                    {
+                        int child = Nodes[o + q];
+                        if (child != empty && !_bigPop.ContainsKey(child))
+                        {
+                            Push(ref _walk, ref sp, child, k1);
+                            ready = false;
+                        }
+                    }
+                }
+                if (!ready)
+                    continue;
+                BigInteger sum = BigInteger.Zero;
+                for (int q = 0; q < 4; q++)
+                {
+                    int child = Nodes[o + q];
+                    if (k1 <= 31)
+                        sum += PopLong(child, k1);
+                    else if (_bigPop.TryGetValue(child, out BigInteger part))
+                        sum += part;
+                }
+                _bigPop[node] = sum;
+                sp -= 2;
+            }
+            return _bigPop[n];
+        }
+
+        /// <summary>Push (node, level) on a walk's own stack, growing it as needed.</summary>
+        private static void Push(ref int[] stack, ref int sp, int node, int level)
+        {
+            if (sp + 2 > stack.Length)
+                Array.Resize(ref stack, stack.Length * 2);
+            stack[sp++] = node;
+            stack[sp++] = level;
         }
 
         /// <summary>A leaf's odd states: a History or Super rule's on cells.</summary>
@@ -627,13 +674,50 @@ namespace HeatonLife
                 return BigInteger.Zero;
             if (_bigOddPop.TryGetValue(n, out BigInteger cached))
                 return cached;
-            int o = n * Stride;
-            int[] nodes = Nodes;
-            int k1 = k - 1;
-            BigInteger sum = OddBig(nodes[o], k1) + OddBig(nodes[o + Ne], k1)
-                + OddBig(nodes[o + Sw], k1) + OddBig(nodes[o + Se], k1);
-            _bigOddPop[n] = sum;
-            return sum;
+            // A node of any level: the renderers ask for blocks past the root, up to the frame's
+            // scale, so the walk keeps its own stack (a 1 MB thread overflowed at level 4,400).
+            // Each node's children come first, every sum is kept, and a node met twice is summed
+            // once.
+            int sp = 0;
+            Push(ref _walk, ref sp, n, k);
+            while (sp > 0)
+            {
+                int node = _walk[sp - 2], level = _walk[sp - 1];
+                if (_bigOddPop.ContainsKey(node))
+                {
+                    sp -= 2;
+                    continue;
+                }
+                int o = node * Stride, k1 = level - 1;
+                bool ready = true;
+                if (k1 > 31)
+                {
+                    int empty = Empty(k1);
+                    for (int q = 0; q < 4; q++)
+                    {
+                        int child = Nodes[o + q];
+                        if (child != empty && !_bigOddPop.ContainsKey(child))
+                        {
+                            Push(ref _walk, ref sp, child, k1);
+                            ready = false;
+                        }
+                    }
+                }
+                if (!ready)
+                    continue;
+                BigInteger sum = BigInteger.Zero;
+                for (int q = 0; q < 4; q++)
+                {
+                    int child = Nodes[o + q];
+                    if (k1 <= 31)
+                        sum += OddLong(child, k1);
+                    else if (_bigOddPop.TryGetValue(child, out BigInteger part))
+                        sum += part;
+                }
+                _bigOddPop[node] = sum;
+                sp -= 2;
+            }
+            return _bigOddPop[n];
         }
 
         /// <summary>⌈255 · population / 4^s⌉ for a level-s node, s ≥ 1, exactly.</summary>
@@ -674,39 +758,76 @@ namespace HeatonLife
         }
 
         /// <summary>The state level-k node n shows zoomed out: of its non-zero states, the first in
-        /// the zoom order, or 0 when it has none. Cached in the node's info word.</summary>
+        /// the zoom order, or 0 when it has none. Cached in the node's info word. Any level: the
+        /// renderer asks for blocks past the root, up to the frame's scale, so the walk keeps its own
+        /// stack, as <see cref="PopBig"/> does.</summary>
         internal int Shown(int n, int k)
         {
-            int[] nodes = Nodes;
-            int o = n * Stride;
-            int[] ranks = Ranks;
             if (k == 1)
-            {
-                int states = nodes[o];
-                int best = 0;
-                for (int i = 0; i < 4; i++)
-                {
-                    int state = (states >> (8 * i)) & 0xFF;
-                    if (ranks[state] < ranks[best])
-                        best = state;
-                }
-                return best;
-            }
-            int cached = (nodes[o + Info] & ShownMask) >> ShownShift;
+                return LeafShown(Nodes[n * Stride]);
+            int cached = (Nodes[n * Stride + Info] & ShownMask) >> ShownShift;
             if (cached != 0)
                 return cached - 1;
-            int shown = 0;
-            if (n != Empty(k))
+            int sp = 0;
+            Push(ref _walk, ref sp, n, k);
+            while (sp > 0)
             {
-                for (int q = 0; q < 4; q++)
+                int node = _walk[sp - 2], level = _walk[sp - 1];
+                int o = node * Stride;
+                if ((Nodes[o + Info] & ShownMask) != 0)
                 {
-                    int state = Shown(nodes[o + q], k - 1);
-                    if (ranks[state] < ranks[shown])
-                        shown = state;
+                    sp -= 2;
+                    continue;
                 }
+                int shown = 0;
+                if (node != Empty(level))
+                {
+                    int k1 = level - 1;
+                    int empty = k1 > 1 ? Empty(k1) : -1;
+                    bool ready = true;
+                    if (k1 > 1)
+                    {
+                        for (int q = 0; q < 4; q++)
+                        {
+                            int child = Nodes[o + q];
+                            if (child != empty && (Nodes[child * Stride + Info] & ShownMask) == 0)
+                            {
+                                Push(ref _walk, ref sp, child, k1);
+                                ready = false;
+                            }
+                        }
+                    }
+                    if (!ready)
+                        continue;
+                    int[] ranks = Ranks;
+                    for (int q = 0; q < 4; q++)
+                    {
+                        int child = Nodes[o + q];
+                        int state = k1 == 1
+                            ? LeafShown(Nodes[child * Stride])
+                            : child == empty ? 0 : ((Nodes[child * Stride + Info] & ShownMask) >> ShownShift) - 1;
+                        if (ranks[state] < ranks[shown])
+                            shown = state;
+                    }
+                }
+                Nodes[o + Info] = (Nodes[o + Info] & ~ShownMask) | ((shown + 1) << ShownShift);
+                sp -= 2;
             }
-            nodes[o + Info] = (nodes[o + Info] & ~ShownMask) | ((shown + 1) << ShownShift);
-            return shown;
+            return ((Nodes[n * Stride + Info] & ShownMask) >> ShownShift) - 1;
+        }
+
+        /// <summary>A leaf's shown state: of its four states, the first in the zoom order, or 0.</summary>
+        private int LeafShown(int states)
+        {
+            int[] ranks = Ranks;
+            int best = 0;
+            for (int i = 0; i < 4; i++)
+            {
+                int state = (states >> (8 * i)) & 0xFF;
+                if (ranks[state] < ranks[best])
+                    best = state;
+            }
+            return best;
         }
 
         // -- collection -------------------------------------------------------------------------

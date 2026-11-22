@@ -221,10 +221,11 @@ namespace HeatonLife.Tests
             var frame = new byte[64 * 48];
             world.Step(2); // warm up
             world.WriteFrame(frame);
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            world.Step(20);
-            world.WriteFrame(frame);
-            Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+            Assert.Equal(0, Allocations.Least(() =>
+            {
+                world.Step(20);
+                world.WriteFrame(frame);
+            }));
         }
 
         // -- RLE ----------------------------------------------------------------------------------

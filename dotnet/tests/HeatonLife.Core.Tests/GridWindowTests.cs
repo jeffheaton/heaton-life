@@ -226,10 +226,11 @@ namespace HeatonLife.Tests
             var modes = new[] { GridWindowMode.Nearest, GridWindowMode.State, GridWindowMode.Density };
             foreach (GridWindowMode mode in modes)
                 GridWindow.Sample(grid, 300, 200, 10, 7, 280, 190, output, 70, 41, mode, order); // warm up
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            foreach (GridWindowMode mode in modes)
-                GridWindow.Sample(grid, 300, 200, 10, 7, 280, 190, output, 70, 41, mode, order);
-            Assert.Equal(before, GC.GetAllocatedBytesForCurrentThread());
+            Assert.Equal(0, Allocations.Least(() =>
+            {
+                foreach (GridWindowMode mode in modes)
+                    GridWindow.Sample(grid, 300, 200, 10, 7, 280, 190, output, 70, 41, mode, order);
+            }));
         }
 
         [Theory]

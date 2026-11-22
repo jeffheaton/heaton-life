@@ -370,6 +370,7 @@ namespace HeatonLife
         private int[] _markStack = new int[1024];
         private readonly Dictionary<int, long> _longPop = new Dictionary<int, long>();
         private readonly Dictionary<int, BigInteger> _bigPop = new Dictionary<int, BigInteger>();
+        private int[] _walk = new int[64]; // (node, level) pairs: PopBig's own stack
         private readonly Dictionary<int, byte> _bigDensity = new Dictionary<int, byte>();
 
         /// <summary>The base cases of the generations that start at an even and at an odd
@@ -948,13 +949,59 @@ namespace HeatonLife
                 return BigInteger.Zero;
             if (_bigPop.TryGetValue(n, out BigInteger cached))
                 return cached;
-            int o = n * Stride;
-            int[] nodes = Nodes;
-            int k1 = k - 1;
-            BigInteger sum = PopBig(nodes[o], k1) + PopBig(nodes[o + Ne], k1)
-                + PopBig(nodes[o + Sw], k1) + PopBig(nodes[o + Se], k1);
-            _bigPop[n] = sum;
-            return sum;
+            // A node of any level: the renderers ask for blocks past the root, up to the frame's
+            // scale, so the walk keeps its own stack (a 1 MB thread overflowed at level 4,400).
+            // Each node's children come first, every sum is kept, and a node met twice is summed
+            // once.
+            int sp = 0;
+            Push(ref _walk, ref sp, n, k);
+            while (sp > 0)
+            {
+                int node = _walk[sp - 2], level = _walk[sp - 1];
+                if (_bigPop.ContainsKey(node))
+                {
+                    sp -= 2;
+                    continue;
+                }
+                int o = node * Stride, k1 = level - 1;
+                bool ready = true;
+                if (k1 > 31)
+                {
+                    int empty = Empty(k1);
+                    for (int q = 0; q < 4; q++)
+                    {
+                        int child = Nodes[o + q];
+                        if (child != empty && !_bigPop.ContainsKey(child))
+                        {
+                            Push(ref _walk, ref sp, child, k1);
+                            ready = false;
+                        }
+                    }
+                }
+                if (!ready)
+                    continue;
+                BigInteger sum = BigInteger.Zero;
+                for (int q = 0; q < 4; q++)
+                {
+                    int child = Nodes[o + q];
+                    if (k1 <= 31)
+                        sum += PopLong(child, k1);
+                    else if (_bigPop.TryGetValue(child, out BigInteger part))
+                        sum += part;
+                }
+                _bigPop[node] = sum;
+                sp -= 2;
+            }
+            return _bigPop[n];
+        }
+
+        /// <summary>Push (node, level) on a walk's own stack, growing it as needed.</summary>
+        private static void Push(ref int[] stack, ref int sp, int node, int level)
+        {
+            if (sp + 2 > stack.Length)
+                Array.Resize(ref stack, stack.Length * 2);
+            stack[sp++] = node;
+            stack[sp++] = level;
         }
 
         /// <summary>⌈255 · population / 4^s⌉ for a level-s node, s ≥ 3, exactly.</summary>

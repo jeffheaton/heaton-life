@@ -31,7 +31,8 @@ and an RLE header naming any Life-like rule making the file two-state.
 - **Views and frames** (`LifeView`): exact integer pan, zoom at a pixel, fit, and center
   readouts, and frames from 32 pixels per cell to any distance out, in `any` or `density`
   mode, at a cost that does not grow with the population. .NET: `Step` and `WriteFrame`
-  allocate nothing once warm.
+  allocate nothing once warm; frames however far out, and the populations, counts, boxes,
+  files and conversions of a tree of the deepest level, run on a thread of 1 MB.
 - **The giants:** the Caterpillar and Annelid (2026) load, run, and return to their own
   shape after one period. .NET runs a period of either in about 5 seconds; the Python
   reference needs a 2–8 GB budget and about a minute. `python/tools/fetch_patterns.py`

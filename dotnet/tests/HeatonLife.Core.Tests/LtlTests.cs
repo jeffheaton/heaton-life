@@ -300,10 +300,11 @@ namespace HeatonLife.Tests
             var frame = new byte[64 * 48];
             world.Step(4);
             world.WriteFrame(frame);
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            world.Step(10);
-            world.WriteFrame(frame);
-            Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+            Assert.Equal(0, Allocations.Least(() =>
+            {
+                world.Step(10);
+                world.WriteFrame(frame);
+            }));
         }
 
         // -- files and the universes --------------------------------------------------------------

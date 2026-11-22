@@ -446,8 +446,11 @@ namespace HeatonLife.Tests
         [Fact]
         public void StepAllocatesNothingOnceWarm()
         {
+            // Rounds 0 and 1 grow the arena and the stacks; one of the rounds after must allocate
+            // nothing (up to three, as Allocations.Least measures).
             var u = new MultiStateHashLife(new BriansBrain(), maxMemoryMb: 10);
-            for (int round = 0; round < 3; round++)
+            long least = long.MaxValue;
+            for (int round = 0; round < 5 && least != 0; round++)
             {
                 u.Clear();
                 u.SetRect(-128, -128, Noise(256, 256, (uint)(21 + round), 3), 256, 256);
@@ -458,9 +461,10 @@ namespace HeatonLife.Tests
                     u.Step(1);
                 long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
                 Assert.Equal(aborts, u.Store.Aborts);
-                if (round == 2) // rounds 0 and 1 grew the arena and the stacks
-                    Assert.Equal(0, allocated);
+                if (round >= 2)
+                    least = Math.Min(least, allocated);
             }
+            Assert.Equal(0, least);
         }
 
         [Fact]
@@ -485,13 +489,8 @@ namespace HeatonLife.Tests
                 u.WriteFrame(frame, 128, 96, view, MultiStateRenderMode.State);
                 u.WriteFrame(frame, 128, 96, view, MultiStateRenderMode.Density);
             }
-            // Up to three measured batches, one of which must allocate nothing: a frame that
-            // allocates does so in every batch, while the runtime's one-off work under a loaded
-            // machine (tiering up the warm methods) does not repeat.
-            long allocated = -1;
-            for (int attempt = 0; attempt < 3 && allocated != 0; attempt++)
+            Assert.Equal(0, Allocations.Least(() =>
             {
-                long before = GC.GetAllocatedBytesForCurrentThread();
                 for (int round = 0; round < 5; round++)
                 {
                     foreach (LifeView view in views)
@@ -500,9 +499,7 @@ namespace HeatonLife.Tests
                         u.WriteFrame(frame, 128, 96, view, MultiStateRenderMode.Density);
                     }
                 }
-                allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            }
-            Assert.Equal(0, allocated);
+            }));
         }
 
         // -- editing --------------------------------------------------------------------------------

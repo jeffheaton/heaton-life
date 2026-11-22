@@ -40,8 +40,9 @@ namespace HeatonLife
             var output = new MultiStateHashLife(target, maxMemoryMb ?? universe.MaxMemoryMb);
             HashLifeStore src = universe.Store;
             MultiStateStore dst = output.Store;
-            var memo = new Dictionary<int, int>();
-            int root = FromTwoState(src, dst, src.Root, src.Level, memo);
+            int root = Walk(
+                src.Root, src.Level, 3, (n, k) => n == src.Empty(k), dst.Empty,
+                n => MultiStateMacrocell.BitsNode(dst, src.Bits(n)), src.Kid, dst.Join);
             output.Adopt(root, src.Level, universe.Generation);
             return output;
         }
@@ -63,8 +64,10 @@ namespace HeatonLife
                 root = universe.Expand(root, level);
                 level++;
             }
-            var memo = new Dictionary<int, int>();
-            output.Adopt(ToTwoState(src, dst, root, level, memo), level, generation);
+            int converted = Walk(
+                root, level, 3, (n, k) => n == src.Empty(k), dst.Empty, n => dst.Leaf(OddBits(src, n)), src.Kid,
+                dst.Join);
+            output.Adopt(converted, level, generation);
             return output;
         }
 
@@ -79,63 +82,69 @@ namespace HeatonLife
                 table[state] = (byte)(state < target.States ? state : state & 1);
             MultiStateStore src = universe.Store;
             MultiStateStore dst = output.Store;
-            var memo = new Dictionary<int, int>();
-            output.Adopt(Mapped(src, dst, src.Root, src.Level, table, memo), src.Level, universe.Generation);
+            int mapped = Walk(
+                src.Root, src.Level, 1, (n, k) => n == src.Empty(k), dst.Empty,
+                n =>
+                {
+                    int states = src.States(n);
+                    return dst.Leaf(table[states & 0xFF] | table[(states >> 8) & 0xFF] << 8
+                        | table[(states >> 16) & 0xFF] << 16 | table[(states >> 24) & 0xFF] << 24);
+                },
+                src.Kid, dst.Join);
+            output.Adopt(mapped, src.Level, universe.Generation);
             return output;
         }
 
-        private static int FromTwoState(HashLifeStore src, MultiStateStore dst, int n, int k, Dictionary<int, int> memo)
+        /// <summary>
+        /// The old tree from (<paramref name="root"/>, <paramref name="level"/>) rebuilt in the new
+        /// store, each distinct node once: an empty node as the new store's empty node of its level,
+        /// a node of <paramref name="baseLevel"/> by <paramref name="convertBase"/>, and any other as
+        /// the join of its converted children. The nodes wait on the walk's own stack, not the
+        /// thread's, so a tree of any level converts on any thread.
+        /// </summary>
+        private static int Walk(
+            int root, int level, int baseLevel, Func<int, int, bool> emptyIn, Func<int, int> emptyOut,
+            Func<int, int> convertBase, Func<int, int, int> kid, Func<int, int, int, int, int> join)
         {
-            if (n == src.Empty(k))
-                return dst.Empty(k);
-            if (memo.TryGetValue(n, out int hit))
-                return hit;
-            int r = k == 3
-                ? MultiStateMacrocell.BitsNode(dst, src.Bits(n))
-                : dst.Join(
-                    FromTwoState(src, dst, src.Kid(n, 0), k - 1, memo), FromTwoState(src, dst, src.Kid(n, 1), k - 1, memo),
-                    FromTwoState(src, dst, src.Kid(n, 2), k - 1, memo), FromTwoState(src, dst, src.Kid(n, 3), k - 1, memo));
-            memo[n] = r;
-            return r;
-        }
-
-        private static int ToTwoState(MultiStateStore src, HashLifeStore dst, int n, int k, Dictionary<int, int> memo)
-        {
-            if (n == src.Empty(k))
-                return dst.Empty(k);
-            if (memo.TryGetValue(n, out int hit))
-                return hit;
-            int r = k == 3
-                ? dst.Leaf(OddBits(src, n))
-                : dst.Join(
-                    ToTwoState(src, dst, src.Kid(n, 0), k - 1, memo), ToTwoState(src, dst, src.Kid(n, 1), k - 1, memo),
-                    ToTwoState(src, dst, src.Kid(n, 2), k - 1, memo), ToTwoState(src, dst, src.Kid(n, 3), k - 1, memo));
-            memo[n] = r;
-            return r;
-        }
-
-        private static int Mapped(
-            MultiStateStore src, MultiStateStore dst, int n, int k, byte[] table, Dictionary<int, int> memo)
-        {
-            if (n == src.Empty(k))
-                return dst.Empty(k);
-            if (memo.TryGetValue(n, out int hit))
-                return hit;
-            int r;
-            if (k == 1)
+            var memo = new Dictionary<int, int>();
+            var pending = new Stack<(int Node, int Level)>();
+            pending.Push((root, level));
+            while (pending.Count > 0)
             {
-                int states = src.States(n);
-                r = dst.Leaf(table[states & 0xFF] | table[(states >> 8) & 0xFF] << 8
-                    | table[(states >> 16) & 0xFF] << 16 | table[(states >> 24) & 0xFF] << 24);
+                (int n, int k) = pending.Peek();
+                if (memo.ContainsKey(n))
+                {
+                    pending.Pop();
+                    continue;
+                }
+                if (emptyIn(n, k))
+                {
+                    memo[n] = emptyOut(k);
+                    pending.Pop();
+                    continue;
+                }
+                if (k == baseLevel)
+                {
+                    memo[n] = convertBase(n);
+                    pending.Pop();
+                    continue;
+                }
+                bool ready = true;
+                for (int q = 0; q < 4; q++)
+                {
+                    int child = kid(n, q);
+                    if (!memo.ContainsKey(child))
+                    {
+                        pending.Push((child, k - 1));
+                        ready = false;
+                    }
+                }
+                if (!ready)
+                    continue;
+                memo[n] = join(memo[kid(n, 0)], memo[kid(n, 1)], memo[kid(n, 2)], memo[kid(n, 3)]);
+                pending.Pop();
             }
-            else
-            {
-                r = dst.Join(
-                    Mapped(src, dst, src.Kid(n, 0), k - 1, table, memo), Mapped(src, dst, src.Kid(n, 1), k - 1, table, memo),
-                    Mapped(src, dst, src.Kid(n, 2), k - 1, table, memo), Mapped(src, dst, src.Kid(n, 3), k - 1, table, memo));
-            }
-            memo[n] = r;
-            return r;
+            return memo[root];
         }
 
         /// <summary>A level-3 node of states as a two-state 8 × 8 leaf (bit 8r + c is row r, column

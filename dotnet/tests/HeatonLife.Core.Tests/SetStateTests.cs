@@ -90,10 +90,11 @@ namespace HeatonLife.Tests
                 sim.Step(2);
                 byte[] frame = StateCodec.Save(sim);
                 StateCodec.Load(sim, frame, 2, keepStart: true); // warm up
-                long before = GC.GetAllocatedBytesForCurrentThread();
-                for (int i = 0; i < 10; i++)
-                    StateCodec.Load(sim, frame, 2 + i, keepStart: true);
-                long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+                long allocated = Allocations.Least(() =>
+                {
+                    for (int i = 0; i < 10; i++)
+                        StateCodec.Load(sim, frame, 2 + i, keepStart: true);
+                });
                 Assert.True(allocated == 0, $"{sim.GetType().Name} allocated {allocated} bytes showing ten frames");
             }
         }

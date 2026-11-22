@@ -489,8 +489,12 @@ namespace HeatonLife.Tests
             // At the floor budget the arena reaches its cap and collects, between sub-steps and
             // in flight; from then on a step builds nodes but never touches the managed heap.
             // (Only an abandoned sub-step allocates: it unwinds with an exception.)
+            // Rounds 0 and 1 grow the arena and the stacks; one of the rounds after must allocate
+            // nothing (up to three, as Allocations.Least measures: the runtime's own one-off work
+            // can land in any one of them).
             var u = new HashLife(maxMemoryMb: 10);
-            for (int round = 0; round < 3; round++)
+            long least = long.MaxValue;
+            for (int round = 0; round < 5 && least != 0; round++)
             {
                 // A fresh soup each round (pasting allocates, so it happens before the clock).
                 u.Clear();
@@ -503,9 +507,10 @@ namespace HeatonLife.Tests
                 long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
                 Assert.True(u.Store.InFlightCollections > inFlight, $"round {round} never collected in flight");
                 Assert.Equal(aborts, u.Store.Aborts);
-                if (round == 2) // rounds 0 and 1 grew the arena and the stacks
-                    Assert.Equal(0, allocated);
+                if (round >= 2)
+                    least = Math.Min(least, allocated);
             }
+            Assert.Equal(0, least);
         }
 
         [Fact]
@@ -528,16 +533,17 @@ namespace HeatonLife.Tests
                 u.WriteFrame(frame, 128, 96, view, HashLifeRenderMode.Any);
                 u.WriteFrame(frame, 128, 96, view, HashLifeRenderMode.Density);
             }
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (int round = 0; round < 5; round++)
+            Assert.Equal(0, Allocations.Least(() =>
             {
-                foreach (LifeView view in views)
+                for (int round = 0; round < 5; round++)
                 {
-                    u.WriteFrame(frame, 128, 96, view, HashLifeRenderMode.Any);
-                    u.WriteFrame(frame, 128, 96, view, HashLifeRenderMode.Density);
+                    foreach (LifeView view in views)
+                    {
+                        u.WriteFrame(frame, 128, 96, view, HashLifeRenderMode.Any);
+                        u.WriteFrame(frame, 128, 96, view, HashLifeRenderMode.Density);
+                    }
                 }
-            }
-            Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+            }));
         }
 
         // -- files ------------------------------------------------------------------------------

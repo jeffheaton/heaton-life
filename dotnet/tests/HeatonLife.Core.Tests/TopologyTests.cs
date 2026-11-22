@@ -298,10 +298,11 @@ namespace HeatonLife.Tests
             var wire = new Wireworld(48, 48, new byte[48 * 48], new Topology(Boundary.Sphere));
             life.Step(2); // warm up
             wire.Step(2);
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            life.Step(20);
-            wire.Step(20);
-            Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+            Assert.Equal(0, Allocations.Least(() =>
+            {
+                life.Step(20);
+                wire.Step(20);
+            }));
         }
 
         // ---- RLE --------------------------------------------------------------------------------

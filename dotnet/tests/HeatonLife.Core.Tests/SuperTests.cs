@@ -366,16 +366,19 @@ namespace HeatonLife.Tests
             var frame = new byte[64 * 48];
             w.Step(2); // warm up
             w.WriteFrame(frame);
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            w.Step(20);
-            w.WriteFrame(frame);
-            Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+            Assert.Equal(0, Allocations.Least(() =>
+            {
+                w.Step(20);
+                w.WriteFrame(frame);
+            }));
             byte[] cells = w.State.ToArray();
+            int generation = w.Generation; // 22, or 20 more for each batch the measure took
+            Assert.Equal(2, generation % 20);
             using var source = new CancellationTokenSource();
             source.Cancel();
             Assert.Throws<OperationCanceledException>(() => w.AdvanceSelection(4, 4, 40, 30, 5, source.Token));
             Assert.Equal(cells, w.State.ToArray()); // a canceled advance leaves the world as it was
-            Assert.Equal(22, w.Generation);
+            Assert.Equal(generation, w.Generation);
         }
 
         // -- files ---------------------------------------------------------------------------------

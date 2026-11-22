@@ -1534,31 +1534,43 @@ namespace HeatonLife
             ExtractIn(s.Kid(n, 3), k - 1, nx + half, ny + half);
         }
 
+        /// <summary>The live cells of level-k node n, its top-left at tree
+        /// position (nx, ny), in the inclusive tree rectangle. Nodes above level 31 wait on the
+        /// walk's own stack: their sum doesn't depend on the order they're counted in.</summary>
         private BigInteger CountBig(
             int n, int k, BigInteger nx, BigInteger ny, BigInteger x0, BigInteger y0, BigInteger x1, BigInteger y1)
         {
             var s = _store;
-            if (n == s.Empty(k))
-                return BigInteger.Zero;
-            BigInteger size = BigInteger.One << k;
-            if (nx > x1 || nx + size <= x0 || ny > y1 || ny + size <= y0)
-                return BigInteger.Zero;
-            if (x0 <= nx && nx + size - 1 <= x1 && y0 <= ny && ny + size - 1 <= y1)
-                return s.PopBig(n, k);
-            if (k <= 31)
+            BigInteger total = BigInteger.Zero;
+            var pending = new Stack<(int Node, int Level, BigInteger X, BigInteger Y)>();
+            pending.Push((n, k, nx, ny));
+            while (pending.Count > 0)
             {
-                long rx0 = (long)BigInteger.Max(x0 - nx, BigInteger.Zero);
-                long ry0 = (long)BigInteger.Max(y0 - ny, BigInteger.Zero);
-                long rx1 = (long)BigInteger.Min(x1 - nx, size - 1);
-                long ry1 = (long)BigInteger.Min(y1 - ny, size - 1);
-                return CountLong(n, k, rx0, ry0, rx1, ry1);
+                (int node, int level, BigInteger x, BigInteger y) = pending.Pop();
+                if (node == s.Empty(level))
+                    continue;
+                BigInteger size = BigInteger.One << level;
+                if (x > x1 || x + size <= x0 || y > y1 || y + size <= y0)
+                    continue;
+                if (x0 <= x && x + size - 1 <= x1 && y0 <= y && y + size - 1 <= y1)
+                {
+                    total += s.PopBig(node, level);
+                    continue;
+                }
+                if (level <= 31)
+                {
+                    long rx0 = (long)BigInteger.Max(x0 - x, BigInteger.Zero);
+                    long ry0 = (long)BigInteger.Max(y0 - y, BigInteger.Zero);
+                    long rx1 = (long)BigInteger.Min(x1 - x, size - 1);
+                    long ry1 = (long)BigInteger.Min(y1 - y, size - 1);
+                    total += CountLong(node, level, rx0, ry0, rx1, ry1);
+                    continue;
+                }
+                BigInteger half = size >> 1;
+                for (int q = 0; q < 4; q++)
+                    pending.Push((s.Kid(node, q), level - 1, (q & 1) != 0 ? x + half : x, (q & 2) != 0 ? y + half : y));
             }
-            BigInteger half = size >> 1;
-            int a = s.Kid(n, 0), b = s.Kid(n, 1), c = s.Kid(n, 2), d = s.Kid(n, 3);
-            return CountBig(a, k - 1, nx, ny, x0, y0, x1, y1)
-                + CountBig(b, k - 1, nx + half, ny, x0, y0, x1, y1)
-                + CountBig(c, k - 1, nx, ny + half, x0, y0, x1, y1)
-                + CountBig(d, k - 1, nx + half, ny + half, x0, y0, x1, y1);
+            return total;
         }
 
         /// <summary>Live cells of level-k node n (k ≤ 31) in the inclusive rectangle relative to
@@ -1913,10 +1925,71 @@ namespace HeatonLife
 
         /// <summary>One extreme of node n's live cells inside the inclusive tree rectangle
         /// (x0, y0)..(x1, y1), as a tree coordinate, or null when it holds none. The near half is
-        /// searched first: anything found there beats everything in the far half.</summary>
+        /// searched first: anything found there beats everything in the far half. Nodes above level
+        /// 62 wait on the search's own stack, each a frame of where it has got to.</summary>
         private BigInteger? ExtremeBig(
             int n, int k, BigInteger nx, BigInteger ny, BigInteger x0, BigInteger y0, BigInteger x1, BigInteger y1, int edge)
         {
+            BigInteger? settled = ExtremeSettled(n, k, nx, ny, x0, y0, x1, y1, edge, out bool open);
+            if (!open)
+                return settled;
+            var s = _store;
+            bool lowest = edge == 0 || edge == 2;
+            var frames = new List<ExtremeFrame> { new ExtremeFrame(n, k, nx, ny) };
+            BigInteger? returned = null;
+            while (true)
+            {
+                int top = frames.Count - 1;
+                ExtremeFrame f = frames[top];
+                int[] order = f.Pass == 0 ? EdgeNear[edge] : EdgeFar[edge];
+                if (f.Index == order.Length)
+                {
+                    if (f.Best.HasValue || f.Pass == 1)
+                    {
+                        returned = f.Best;
+                        frames.RemoveAt(top);
+                        if (top == 0)
+                            return returned;
+                        ExtremeFrame parent = frames[top - 1];
+                        if (returned.HasValue && (!parent.Best.HasValue
+                            || (lowest ? returned.Value < parent.Best.Value : returned.Value > parent.Best.Value)))
+                            parent.Best = returned;
+                        parent.Index++;
+                        frames[top - 1] = parent;
+                        continue;
+                    }
+                    f.Pass = 1;
+                    f.Index = 0;
+                    frames[top] = f;
+                    continue;
+                }
+                int i = order[f.Index];
+                BigInteger half = BigInteger.One << (f.Level - 1);
+                BigInteger cx = (i & 1) != 0 ? f.X + half : f.X;
+                BigInteger cy = (i & 2) != 0 ? f.Y + half : f.Y;
+                int kid = s.Kid(f.Node, i);
+                BigInteger? got = ExtremeSettled(kid, f.Level - 1, cx, cy, x0, y0, x1, y1, edge, out bool deeper);
+                if (deeper)
+                {
+                    frames.Add(new ExtremeFrame(kid, f.Level - 1, cx, cy));
+                    continue;
+                }
+                if (got.HasValue && (!f.Best.HasValue || (lowest ? got.Value < f.Best.Value : got.Value > f.Best.Value)))
+                    f.Best = got;
+                f.Index++;
+                frames[top] = f;
+            }
+        }
+
+        /// <summary><see cref="ExtremeBig"/>'s answer for a node it needn't open: none for an empty
+        /// node or one outside the rectangle, the node's own edge when the rectangle covers it, the
+        /// long search at level 62 and below; <paramref name="open"/> when the search must go into
+        /// its children.</summary>
+        private BigInteger? ExtremeSettled(
+            int n, int k, BigInteger nx, BigInteger ny, BigInteger x0, BigInteger y0, BigInteger x1, BigInteger y1, int edge,
+            out bool open)
+        {
+            open = false;
             var s = _store;
             if (n == s.Empty(k))
                 return null;
@@ -1935,23 +2008,32 @@ namespace HeatonLife
                 long offset = ExtremeLong(n, k, rx0, ry0, rx1, ry1, edge);
                 return offset < 0 ? (BigInteger?)null : origin + offset;
             }
-            bool lowest = edge == 0 || edge == 2;
-            BigInteger half = size >> 1;
-            for (int pass = 0; pass < 2; pass++)
-            {
-                BigInteger? best = null;
-                foreach (int i in pass == 0 ? EdgeNear[edge] : EdgeFar[edge])
-                {
-                    BigInteger cx = (i & 1) != 0 ? nx + half : nx;
-                    BigInteger cy = (i & 2) != 0 ? ny + half : ny;
-                    BigInteger? got = ExtremeBig(s.Kid(n, i), k - 1, cx, cy, x0, y0, x1, y1, edge);
-                    if (got.HasValue && (!best.HasValue || (lowest ? got.Value < best.Value : got.Value > best.Value)))
-                        best = got;
-                }
-                if (best.HasValue)
-                    return best;
-            }
+            open = true;
             return null;
+        }
+
+        /// <summary>Where <see cref="ExtremeBig"/> has got to in one node: its pass (near half, then
+        /// far) and child, and the best edge found in this pass so far.</summary>
+        private struct ExtremeFrame
+        {
+            public ExtremeFrame(int node, int level, BigInteger x, BigInteger y)
+            {
+                Node = node;
+                Level = level;
+                X = x;
+                Y = y;
+                Pass = 0;
+                Index = 0;
+                Best = null;
+            }
+
+            public int Node;
+            public int Level;
+            public BigInteger X;
+            public BigInteger Y;
+            public int Pass;
+            public int Index;
+            public BigInteger? Best;
         }
 
         /// <summary>One extreme of the live cells of level-k node n (k ≤ 62) inside the inclusive
@@ -2083,6 +2165,9 @@ namespace HeatonLife
             return r;
         }
 
+        /// <summary>One extreme of the live cells of non-empty level-k node n, any k, as an offset
+        /// from its origin. Nodes above level 62 wait on the walk's own stack, each computed once
+        /// (<c>_edgeMemoBig</c>): the near children decide when any is live, else the far ones.</summary>
         private BigInteger EdgeBig(int n, int k, int edge)
         {
             if (k <= 62)
@@ -2091,39 +2176,55 @@ namespace HeatonLife
                 return hit;
             var s = _store;
             bool lowest = edge == 0 || edge == 2;
-            int e = s.Empty(k - 1);
-            BigInteger half = BigInteger.One << (k - 1);
-            bool any = false;
-            BigInteger best = BigInteger.Zero;
-            foreach (int i in EdgeNear[edge])
+            var pending = new Stack<(int Node, int Level)>();
+            pending.Push((n, k));
+            while (pending.Count > 0)
             {
-                int kid = s.Kid(n, i);
-                if (kid == e)
-                    continue;
-                BigInteger v = EdgeBig(kid, k - 1, edge);
-                best = !any ? v : lowest ? BigInteger.Min(best, v) : BigInteger.Max(best, v);
-                any = true;
-            }
-            BigInteger r;
-            if (any)
-            {
-                r = lowest ? best : best + half;
-            }
-            else
-            {
-                foreach (int i in EdgeFar[edge])
+                (int node, int level) = pending.Peek();
+                if (_edgeMemoBig.ContainsKey(node))
                 {
-                    int kid = s.Kid(n, i);
+                    pending.Pop();
+                    continue;
+                }
+                int e = s.Empty(level - 1);
+                bool near = false;
+                foreach (int i in EdgeNear[edge])
+                {
+                    if (s.Kid(node, i) != e)
+                        near = true;
+                }
+                int[] side = near ? EdgeNear[edge] : EdgeFar[edge];
+                bool ready = true;
+                if (level - 1 > 62)
+                {
+                    foreach (int i in side)
+                    {
+                        int kid = s.Kid(node, i);
+                        if (kid != e && !_edgeMemoBig.ContainsKey(kid))
+                        {
+                            pending.Push((kid, level - 1));
+                            ready = false;
+                        }
+                    }
+                }
+                if (!ready)
+                    continue;
+                bool any = false;
+                BigInteger best = BigInteger.Zero;
+                foreach (int i in side)
+                {
+                    int kid = s.Kid(node, i);
                     if (kid == e)
                         continue;
-                    BigInteger v = EdgeBig(kid, k - 1, edge);
+                    BigInteger v = level - 1 <= 62 ? EdgeLong(kid, level - 1, edge) : _edgeMemoBig[kid];
                     best = !any ? v : lowest ? BigInteger.Min(best, v) : BigInteger.Max(best, v);
                     any = true;
                 }
-                r = lowest ? best + half : best;
+                BigInteger half = BigInteger.One << (level - 1);
+                _edgeMemoBig[node] = near ? (lowest ? best : best + half) : (lowest ? best + half : best);
+                pending.Pop();
             }
-            _edgeMemoBig[n] = r;
-            return r;
+            return _edgeMemoBig[n];
         }
 
         // -- frames -----------------------------------------------------------------------------
@@ -2187,6 +2288,8 @@ namespace HeatonLife
             }
         }
 
+        private int[] _topStack = new int[64]; // (node, level, relX, relY): VisitTop's own stack
+
         private void RenderFrame()
         {
             var s = _store;
@@ -2242,32 +2345,54 @@ namespace HeatonLife
 
         /// <summary>The walk while nodes span more than 2^30 blocks: per axis the node's index
         /// relative to the target's start is 0 or 1, and a child's follows from one bit of the
-        /// target (rel' = 2·rel + c − bit(d − 1)), so no coordinate is ever formed.</summary>
+        /// target (rel' = 2·rel + c − bit(d − 1)), so no coordinate is ever formed. The nodes wait
+        /// on the frame's own stack, not the thread's: a tree reaches level 512, and a frame's
+        /// walk starts at its root.</summary>
         private void VisitTop(int n, int m, int relX, int relY)
         {
             var s = _store;
-            if (n == s.Empty(m))
-                return;
-            int d = m - _fs;
-            int dc = d - 1;
-            int bitX = _cx.Bit(dc), bitY = _cy.Bit(dc);
-            for (int q = 0; q < 4; q++)
+            int sp = 0;
+            PushTop(ref sp, n, m, relX, relY);
+            while (sp > 0)
             {
-                int rx = 2 * relX + (q & 1) - bitX, ry = 2 * relY + (q >> 1) - bitY;
-                int kid = s.Kid(n, q);
-                if (dc > Phase2Bits)
+                sp -= 4;
+                int node = _topStack[sp], level = _topStack[sp + 1];
+                int nodeX = _topStack[sp + 2], nodeY = _topStack[sp + 3];
+                if (node == s.Empty(level))
+                    continue;
+                int dc = level - _fs - 1;
+                int bitX = _cx.Bit(dc), bitY = _cy.Bit(dc);
+                for (int q = 0; q < 4; q++)
                 {
-                    if (InTop(ref _cx, rx, dc, _ftw) && InTop(ref _cy, ry, dc, _fth))
-                        VisitTop(kid, m - 1, rx, ry);
-                }
-                else
-                {
-                    long size = 1L << dc;
-                    long ox = rx * size - _cx.Low(dc), oy = ry * size - _cy.Low(dc);
-                    if (ox < _ftw && ox + size > 0 && oy < _fth && oy + size > 0)
-                        VisitNear(kid, m - 1, ox, oy);
+                    int rx = 2 * nodeX + (q & 1) - bitX, ry = 2 * nodeY + (q >> 1) - bitY;
+                    int kid = s.Kid(node, q);
+                    if (dc > Phase2Bits)
+                    {
+                        if (InTop(ref _cx, rx, dc, _ftw) && InTop(ref _cy, ry, dc, _fth))
+                            PushTop(ref sp, kid, level - 1, rx, ry);
+                    }
+                    else
+                    {
+                        long size = 1L << dc;
+                        long ox = rx * size - _cx.Low(dc), oy = ry * size - _cy.Low(dc);
+                        if (ox < _ftw && ox + size > 0 && oy < _fth && oy + size > 0)
+                            VisitNear(kid, level - 1, ox, oy);
+                    }
                 }
             }
+        }
+
+        /// <summary>Push a node on <see cref="VisitTop"/>'s stack, which grows once and is kept, so
+        /// a warm frame allocates nothing.</summary>
+        private void PushTop(ref int sp, int node, int level, int relX, int relY)
+        {
+            if (sp + 4 > _topStack.Length)
+                Array.Resize(ref _topStack, _topStack.Length * 2);
+            _topStack[sp] = node;
+            _topStack[sp + 1] = level;
+            _topStack[sp + 2] = relX;
+            _topStack[sp + 3] = relY;
+            sp += 4;
         }
 
         /// <summary>The walk once nodes span at most 2^30 blocks: (ox, oy) is the node's first

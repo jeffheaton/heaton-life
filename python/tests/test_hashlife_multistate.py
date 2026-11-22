@@ -5,6 +5,7 @@ frames with the zoom order, and the multi-state Macrocell and RLE files."""
 from __future__ import annotations
 
 import gzip
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -1053,3 +1054,40 @@ def test_a_carried_rule_has_one_text_whichever_file_carries_it() -> None:
             decoded = carrier if isinstance(carrier, str) else gzip.decompress(carrier).decode()
             found = embedded_rule(decoded)
             assert found is not None and found.text == want
+
+
+def test_deep_trees_stay_inside_the_recursion_limit() -> None:
+    """Every walk over a tree of the deepest level, 512, and frames far past the root, which the
+    renderers draw from the root's quarters without building past it, stay well inside
+    Python's recursion limit: they run under 800 here (the default is 1000). The .NET suite
+    runs the same walks on a thread of 1 MB (DeepTreeTests)."""
+    lines = ["[M2]", "#R B3/S23History", "1 0 3 0 1"]
+    lines += [f"{k} {k - 1} 0 0 {k - 1 if k == 512 else 0}" for k in range(2, 513)]
+    text = "\n".join(lines) + "\n"
+    limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(800)
+    try:
+        multi = MultiStateHashLife.from_macrocell(text)
+        box = multi.bounding_box()
+        assert box is not None
+        x0, y0, x1, y1 = box
+        assert (multi.population, multi.live_population) == (4, 4)
+        assert multi.population_in(x0 + 1, y0, x1, y1) == multi.live_population_in(
+            x0 + 1, y0, x1, y1
+        )
+        assert multi.bounding_box_in(x0 + 1, y0, x1, y1) is not None
+        multi.measure_snapshots([multi.snapshot()])
+        two = multi.to_two_state("B3/S23")
+        assert two.bounding_box() == box and two.bounding_box_in(x0 + 1, y0, x1, y1) is not None
+        assert two.to_multistate("B3/S23Super").to_multistate("B3/S23History").population == 4
+        assert read_multistate_universe(text).universe.to_macrocell() == multi.to_macrocell()
+        assert measure_multistate_pattern(text).width == x1 - x0 + 1
+        two.to_macrocell()
+        for view in (LifeView(x0, y0, 2), LifeView(0, 0, -5000), LifeView(0, 0, -100000)):
+            for mode in ("state", "density"):
+                multi.render(view, (8, 8), mode)  # type: ignore[arg-type]
+            for two_mode in ("any", "density"):
+                two.render(view, (8, 8), two_mode)  # type: ignore[arg-type]
+        multi.rule = "B3/S23/C4"  # a rule change looks for the largest state
+    finally:
+        sys.setrecursionlimit(limit)
