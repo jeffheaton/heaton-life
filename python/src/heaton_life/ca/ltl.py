@@ -111,12 +111,19 @@ def try_parse_ltl_rule(text: str) -> tuple[LtlRule, None] | tuple[None, str]:
 def ltl_refusal(text: str) -> str | None:
     """Why the unbounded universe refuses ``text`` (spec/ltl.md "Topologies"): a message when
     it names a Larger than Life rule, or None when it doesn't."""
+    reason = _plane_reason(text)
+    return None if reason is None else f"{reason} (spec/ltl.md)"
+
+
+def _plane_reason(text: str) -> str | None:
+    """``ltl_refusal`` without the page: the reason spec/hashlife-multistate.md "Names"
+    gives for a Larger than Life rule, or None for text that names none."""
     rule, _ = try_parse_ltl_rule(text) if isinstance(text, str) else (None, None)
     if rule is None:
         return None
     return (
         f"{rule.canonical} is a Larger than Life rule: it runs on a bounded grid, never on "
-        "the unbounded plane (spec/ltl.md)"
+        "the unbounded plane"
     )
 
 

@@ -19,7 +19,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from heaton_life.ca.rulestring import LifeRule, Neighborhood, compile_rule
-from heaton_life.ca.state_rules import StateRule
+from heaton_life.ca.state_rules import StateRule, _b0_reason, _StateRuleError
 from heaton_life.core.topology import Halo
 
 STATES: Final = 7
@@ -96,10 +96,8 @@ class HistoryRule(StateRule):
     def __init__(self, rule: LifeRule) -> None:
         self.rule = _check(rule)
         if rule.has_b0:
-            raise ValueError(
-                f"{rule.canonical} has B0: its first generation would turn the whole "
-                "plane on, and the unbounded universe's background must stay 0 "
-                '(spec/history.md "On the unbounded plane"); a grid runs it'
+            raise _StateRuleError(
+                _b0_reason(rule.canonical), 'spec/history.md "On the unbounded plane"'
             )
         self.canonical = rule.canonical
         self.states = STATES

@@ -68,7 +68,10 @@ namespace HeatonLife.Tests
                 Assert.True(entry.GetProperty("life").GetString() == rule.Life.Canonical, text);
                 Assert.True(entry.GetProperty("table").GetString() == RuleConformanceTests.Hex(rule.Life.Table), text);
                 Assert.Equal(rule, GenerationsRule.Compile(rule.Canonical)); // the canonical form is a fixed point
-                Assert.Equal<StateRule>(rule, StateRules.Compile(text)); // a name multi-state HashLife accepts
+                if (rule.HasB0) // the plane refuses it at its name (spec/hashlife-multistate.md "Names")
+                    Assert.False(StateRules.TryCompile(text, out _, out _), text);
+                else
+                    Assert.Equal<StateRule>(rule, StateRules.Compile(text)); // a name multi-state HashLife accepts
             }
         }
 

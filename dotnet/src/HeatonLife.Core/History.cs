@@ -44,6 +44,14 @@ namespace HeatonLife
         /// at index n.</summary>
         public const string Letters = ".ABCDEF";
 
+        /// <summary>Each state's name, state n at index n: the table of spec/history.md "States"
+        /// ("off", "on", "envelope", "marked on", "marked off", "start on", "boundary"). The
+        /// Python reference's <c>heaton_life.ca.history.NAMES</c>.</summary>
+        public static IReadOnlyList<string> Names { get; } = Array.AsReadOnly(new[]
+        {
+            "off", "on", "envelope", "marked on", "marked off", "start on", "boundary",
+        });
+
         /// <summary><c>Next[2 * state + on]</c>: a cell's next state from its state and whether it
         /// is on next (spec/history.md "Evolution").</summary>
         private static readonly byte[] Next = { 0, 1, 2, 1, 2, 1, 4, 3, 4, 3, 4, 5, 6, 6 };
@@ -110,10 +118,7 @@ namespace HeatonLife
                 throw new ArgumentException($"{rule.Canonical} is not a History rule (spec/history.md)", nameof(rule));
             if (rule.HasB0)
                 throw new ArgumentException(
-                    $"{rule.Canonical} has B0: its first generation would turn the whole plane on, and the "
-                    + "unbounded universe's background must stay 0 (spec/history.md \"On the unbounded plane\"); "
-                    + "a grid runs it",
-                    nameof(rule));
+                    $"{StateRules.B0Reason(rule.Canonical)} ({StateRules.HistoryB0Page})", nameof(rule));
             lock (Cache)
             {
                 if (!Cache.TryGetValue(rule.Canonical, out HistoryRule? found))
@@ -125,16 +130,6 @@ namespace HeatonLife
                 }
                 return found;
             }
-        }
-
-        /// <summary>The state rule a History rule's text names (<c>B3/S23History</c>,
-        /// <c>LifeHistory</c>, any notation of spec/rules.md), or null for text that is no History
-        /// rule. Throws for a History rule the universe can't run (a base with B0).</summary>
-        internal static HistoryRule? FromText(string text)
-        {
-            if (!RuleString.TryCompile(text, true, out LifeRule? rule, out _) || rule.Variant != RuleVariant.History)
-                return null;
-            return For(rule);
         }
 
         /// <inheritdoc />

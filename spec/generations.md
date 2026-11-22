@@ -140,7 +140,9 @@ A Generations rule is a [state rule](hashlife-multistate.md#state-rules): its S 
 canonical name is its canonical form, and its cell function is the table above. So
 [multi-state HashLife](hashlife-multistate.md) runs every Generations rule, of any count,
 and its name is one of the names a multi-state universe and its files accept, in either
-spelling. A rule with B0 is refused there, its background being one that changes.
+spelling. A rule with B0 is refused there, its background being one that changes: its text
+names no state rule, for the first reason hashlife-multistate.md gives
+([Names](hashlife-multistate.md#state-rules)), though a grid runs it.
 Random fill there is the grid's: the life-like soup, each live cell state 1
 ([hashlife-multistate.md](hashlife-multistate.md#editing)). The two-state
 [HashLife](hashlife.md) refuses a Generations rule, saying that it is one and that the

@@ -21,7 +21,7 @@ to other rules (rules.md, "Variants").
 |---|---|---|---|
 | 0 | off | no | `.` (also `b`) |
 | 1 | on | yes | `A` (also `o`) |
-| 2 | envelope: off, once on | no | `B` |
+| 2 | envelope | no | `B` |
 | 3 | marked on | yes | `C` |
 | 4 | marked off | no | `D` |
 | 5 | start on | yes | `E` |
@@ -48,7 +48,9 @@ to other rules (rules.md, "Variants").
 
 A cell is **on** when its state is odd and **off** when it is even. The tags are the
 extended dialect of RLE ([patterns.md](patterns.md)): state n is the n-th letter, and 25
-the two-letter tag `pA`, so files shared as LifeSuper read as they were written.
+the two-letter tag `pA`, so files shared as LifeSuper read as they were written. The names
+are the table's in every port (Python `heaton_life.ca.super_rules.NAMES`, .NET
+`Super.Names`), state n the n-th; states 0–6 are History's.
 
 Three groups recur below: the **no-trail states** 13, 15, 17, 19, 21, 23 and 25; the
 **trail states** 9 and 11; and the **labels** 14, 16, 18, 20, 22 and 24.
@@ -178,8 +180,9 @@ blank past a dead edge is 0, and the step reads them as above.
 - The [multi-state universe](hashlife-multistate.md) runs a Super rule as a state rule of
   26 states, named by the rule's canonical name. Its cell function is the evolution above.
 - A Super rule whose base has B0 can't run there: its first generation would light the
-  whole plane, and the plane's background must stay 0. The universe refuses it with the
-  reason that the background would change. A grid runs it as written.
+  whole plane, and the plane's background must stay 0. Its text names no state rule, for
+  the first reason hashlife-multistate.md gives ([Names](hashlife-multistate.md#state-rules)).
+  A grid runs it as written.
 - Random fill there is the grid's: states 1 and 0, the draws of the two-state universe's
   `fill_random`.
 

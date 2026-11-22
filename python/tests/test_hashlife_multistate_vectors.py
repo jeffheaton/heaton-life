@@ -26,6 +26,7 @@ from heaton_life.ca.hashlife.multistate import (
 )
 from heaton_life.ca.rulestring import try_compile_rule
 from heaton_life.ca.ruletable import RuleTableCA, starter_rule_or_none
+from heaton_life.ca.state_rules import check_state_rule, state_rule, try_state_rule
 from heaton_life.ca.wireworld import Wireworld
 from heaton_life.init import PatternMetadata
 
@@ -43,6 +44,7 @@ _KEYS = {
     "render": _COMMON | {"input", "generation", "frames"},
     "snapshots": _COMMON | {"rule", "ops"} | _STATE,
     "timeline": _COMMON | {"input", "generations", "metadata", "timeline", "frames"},
+    "names": _COMMON | {"cases"},
 }
 _EDIT_OPS = {
     "set_cell": {"x", "y", "state"},
@@ -290,6 +292,24 @@ def test_multistate_vector(case: Path) -> None:
         for frame, entry in zip(back.frames, meta["frames"], strict=True):
             back.universe.restore(frame)
             _expect_state(d, back.universe, entry)
+    elif kind == "names":
+        # Each text names a rule the universe runs, or gives its reason (spec/hashlife-multistate.md
+        # "Names"); the error's message is the reason and the page that says why.
+        for entry in meta["cases"]:
+            text = entry["input"]
+            rule, reason = try_state_rule(text)
+            if entry.get("error"):
+                assert set(entry) == {"input", "error", "reason"}, entry
+                assert (rule, reason) == (None, entry["reason"]), text
+                with pytest.raises(ValueError) as error:
+                    state_rule(text)
+                message = str(error.value)
+                assert message.startswith(f"{reason} (spec/") and message.endswith(")"), text
+            else:
+                assert set(entry) == {"input", "canonical", "states"}, entry
+                assert reason is None and rule is not None, text
+                assert (rule.canonical, rule.states) == (entry["canonical"], entry["states"]), text
+                assert check_state_rule(rule) is rule
     else:  # edit
         u = _scripted(d, meta, _apply)
         _expect_state(d, u, meta)

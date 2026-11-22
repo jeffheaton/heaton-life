@@ -153,10 +153,18 @@ namespace HeatonLife
         /// "Topologies"): a message when it names a Larger than Life rule, else null.</summary>
         internal static string? Refusal(string? text)
         {
+            string? reason = PlaneReason(text);
+            return reason == null ? null : reason + " (spec/ltl.md)";
+        }
+
+        /// <summary><see cref="Refusal"/> without the page: the reason spec/hashlife-multistate.md
+        /// "Names" gives for a Larger than Life rule, or null for text that names none.</summary>
+        internal static string? PlaneReason(string? text)
+        {
             if (text == null || !TryParse(text, out LtlRule? rule, out _))
                 return null;
             return $"{rule!.Canonical} is a Larger than Life rule: it runs on a bounded grid, never on the "
-                + "unbounded plane (spec/ltl.md)";
+                + "unbounded plane";
         }
 
         private static string Text(int value) => value.ToString(CultureInfo.InvariantCulture);

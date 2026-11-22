@@ -252,6 +252,6 @@ def test_the_two_state_universe_refuses_generations_rules() -> None:
     u = HashLife()
     with pytest.raises(ValueError, match="MultiStateHashLife"):
         u.rule = "/2/3"
-    with pytest.raises(ValueError, match="background would change"):
+    with pytest.raises(ValueError, match="has B0: its first generation"):
         MultiStateHashLife("B0/S/C3")
     assert MultiStateHashLife("345/2/4").rule == "B2/S345/C4"

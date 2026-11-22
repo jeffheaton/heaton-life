@@ -19,15 +19,17 @@ states to other rules (rules.md, "Variants").
 |---|---|---|---|
 | 0 | off | no | `.` (also `b`) |
 | 1 | on | yes | `A` (also `o`) |
-| 2 | envelope: off, once on | no | `B` |
+| 2 | envelope | no | `B` |
 | 3 | marked on | yes | `C` |
 | 4 | marked off | no | `D` |
 | 5 | start on | yes | `E` |
 | 6 | boundary | no | `F` |
 
 A cell is **on** when its state is odd (1, 3, 5) and **off** when it is even (0, 2, 4, 6).
-The letters are the extended dialect of RLE ([patterns.md](patterns.md)), state n the
-n-th letter, so files shared as LifeHistory read as they were written.
+The envelope is the off cells that were once on. The letters are the extended dialect of
+RLE ([patterns.md](patterns.md)), state n the n-th letter, so files shared as LifeHistory
+read as they were written. The names are the table's in every port (Python
+`heaton_life.ca.history.NAMES`, .NET `History.Names`), state n the n-th.
 
 ## Evolution
 
@@ -117,8 +119,9 @@ is 0. The step reads on and off from them as above. The two-state rules run as b
   of seven states, named by the rule's canonical name. Its cell function is the evolution
   above.
 - A History rule whose base has B0 can't run there: its first generation would light the
-  whole plane, and the plane's background must stay 0. The universe refuses it with the
-  reason that the background would change. A grid runs it as written.
+  whole plane, and the plane's background must stay 0. Its text names no state rule, for
+  the first reason hashlife-multistate.md gives ([Names](hashlife-multistate.md#state-rules)).
+  A grid runs it as written.
 - Random fill there is the grid's: states 1 and 0, the draws of the two-state universe's
   `fill_random`.
 

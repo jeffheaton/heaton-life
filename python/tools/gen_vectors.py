@@ -1025,6 +1025,9 @@ def main() -> None:
     # -- MCell files: Life, Generations and Larger than Life (spec/formats.md "MCell") ------
     write_mcell_cases()
 
+    # -- State-rule names and their reasons (spec/hashlife-multistate.md "Names") ----------
+    write_state_rule_name_cases()
+
     print("done")
 
 
@@ -12512,6 +12515,92 @@ def write_mcell_cases() -> None:
         "evolve-generations-from-mcell",
         {"kind": "evolve", "input": "input.mcl", "checkpoints": checkpoints},
     )
+
+
+STATE_RULE_NAMES_SPEC_VERSION = "0.16.0"
+
+
+def write_state_rule_name_cases() -> None:
+    """State-rule names (spec/hashlife-multistate.md "Names"), under
+    vectors/hashlife-multistate/names: each text gives the rule it names (its canonical name
+    and states) or the reason it names none, Generations rules with B0 among the refused."""
+    from heaton_life.ca.state_rules import try_state_rule
+
+    texts = [
+        # The fixed names, ASCII case and end whitespace ignored.
+        "WireWorld",
+        " wireworld\t",
+        "\u3000WIREWORLD\u2028",
+        "Langtons-Loops",
+        "byl-loop",
+        "EVOLOOP",
+        "Langtons-Ant",
+        "ant-llrr",
+        "Ant-RLR",
+        # History and Super rules, in every notation.
+        "B3/S23History",
+        "LifeHistory",
+        " lifehistory ",
+        "B36/S23History",
+        "B2/S34HHistory",
+        "b2/s013vhistory",
+        "B3/S2-i34qHistory",
+        "B3/S23Super",
+        "LifeSuper",
+        "B2/S34HSuper",
+        "MAPARYXfhZofugWaH7oaIDogBZofuhogOiA6IDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAASuper",
+        # Generations rules, in either spelling.
+        "B2/S345/C4",
+        "345/2/4",
+        "/2/3",
+        "B2/S/C256",
+        "b2a/s23/c5",
+        "B2/S34H/C5",
+        # Reason 1: B0, in each family.
+        "B03/S23History",
+        "B0/S8Super",
+        "B0/S6HHistory",
+        "B03/S23/C3",
+        "23/03/3",
+        "B0/S/C256",
+        "B0123478/S01234678/C5",
+        # Reason 2: Larger than Life.
+        "R2,C0,M1,S2..3,B3..3",
+        "5,34,45,34,58",
+        "r1,c3,m0,s2..3,b3..3,nn",
+        # Reason 3: anything else, quoted as given.
+        "",
+        "B3/S23",
+        "B03/S23",
+        "Life",
+        "Wire World",
+        "WireWorld!",
+        " it's\t",
+        "\u212aireworld",
+        "B3/S23/C257",
+        "B2/S345/C1",
+        "LifeHistory2",
+        "B3/S23HistorySuper",
+        "Langtons-Loops.rule",
+    ]
+    cases: list[dict[str, Any]] = []
+    for text in texts:
+        rule, reason = try_state_rule(text)
+        if rule is None:
+            cases.append({"input": text, "error": True, "reason": reason})
+        else:
+            cases.append({"input": text, "canonical": rule.canonical, "states": rule.states})
+    assert sum(1 for c in cases if " has B0: " in c.get("reason", "")) == 7
+    d = VECTOR_ROOT / "hashlife-multistate" / "names"
+    d.mkdir(parents=True, exist_ok=True)
+    meta = {
+        "spec_version": STATE_RULE_NAMES_SPEC_VERSION,
+        "family": "hashlife-multistate",
+        "tier": "bit-exact",
+        "kind": "names",
+        "cases": cases,
+    }
+    _gap_save(d, meta)
 
 
 if __name__ == "__main__":

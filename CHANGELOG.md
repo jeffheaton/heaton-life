@@ -419,7 +419,27 @@ and an RLE header naming any Life-like rule making the file two-state.
   in both ports. MCell has no History rules: its "history" is the Generations families'
   dying states.
 
+- **Why a name names no state rule** (`try_state_rule`, .NET `StateRules.TryCompile`;
+  [spec/hashlife-multistate.md](spec/hashlife-multistate.md) "Names"). Like
+  `try_compile_rule`, it gives the rule, or the reason without raising: a bare phrase, the
+  same in both ports, with no page in parentheses and no .NET note of the parameter. A host
+  can show it as it stands. `state_rule` (`StateRules.Compile`) still raises (throws), its
+  message the reason and the page that says why. New vectors:
+  `hashlife-multistate/names`.
+- .NET: `History.Names` and `Super.Names`, each state's name, as Python's `NAMES` and the
+  tables of spec/history.md and spec/super.md give them.
+
 ### Changed
+
+- **A Generations rule with B0 names no state rule** (`state_rule`, `StateRules.Compile`):
+  it is refused at its name, with the reason History and Super rules with B0 are given
+  (`B03/S23/C3 has B0: its first generation would turn the whole plane on, …`). It used to
+  compile, and then the universe's check refused it, so a host that asked only the name
+  took a rule the universe would not run. Every rule a name gives now runs. A grid still
+  runs such a rule as written.
+- State-rule refusals end with the page that says why, in parentheses (History's and
+  Super's B0 refusal used to carry it mid-sentence), and Python quotes a text that names
+  no rule as written, not as a Python literal, as .NET always has.
 
 - **Canonical RLE writes a run of k ≥ 2 row ends as one `k$`** (`rle_encode`,
   `Patterns.RleEncode`), so empty rows cost one token however many there are. Files read

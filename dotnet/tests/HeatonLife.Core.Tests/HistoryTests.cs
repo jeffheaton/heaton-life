@@ -58,6 +58,16 @@ namespace HeatonLife.Tests
         // -- the rule ------------------------------------------------------------------------------
 
         [Fact]
+        public void TheStatesAreNamedAsTheSpecNamesThem()
+        {
+            // spec/history.md "States": the names are the table's (Python's history.NAMES pins the
+            // same table).
+            Assert.Equal(TestPaths.SpecStateNames("history.md"), History.Names);
+            Assert.Equal(History.States, History.Names.Count);
+            Assert.Throws<NotSupportedException>(() => ((System.Collections.Generic.IList<string>)History.Names)[0] = "x");
+        }
+
+        [Fact]
         public void HistoryRulesCompileOnlyWhereVariantsAreAskedFor()
         {
             LifeRule rule = RuleString.Compile("b36 / s23history", variants: true);

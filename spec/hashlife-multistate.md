@@ -69,6 +69,34 @@ Super rule, then as a Generations rule in either of its spellings (`345/2/4` nam
 A [Larger than Life](ltl.md) rule names no state rule: it is refused with the reason that it
 runs on bounded grids only.
 
+**Reasons.** A text that names no rule the universe runs has a **reason**, the same in
+every port, the first of these that applies:
+
+1. A History or Super rule whose base has B0, or a Generations rule with B0: `<rule> has
+   B0: its first generation would turn the whole plane on, and the unbounded universe's
+   background must stay 0; a grid runs it`, `<rule>` the rule's canonical name.
+2. A Larger than Life rule: `<rule> is a Larger than Life rule: it runs on a bounded grid,
+   never on the unbounded plane`, `<rule>` its canonical form ([ltl.md](ltl.md#rules)).
+3. Any other text: `'<text>' is not a state rule (known: WireWorld, Langtons-Loops,
+   Byl-Loop, Evoloop, Langtons-Ant, Ant-LLRR, Ant-RLR, History rules such as
+   B3/S23History, Super rules such as B3/S23Super, and Generations rules such as
+   B2/S345/C4)`, `<text>` the text as given.
+
+So a name gives only rules the engine runs, rules that the check of a rule given as an
+object (below) passes: `B03/S23/C3` names no rule, for the first reason, as
+`B03/S23History` names none.
+
+**API.** `state_rule(text)` (.NET `StateRules.Compile(text)`) gives the rule, or raises
+(throws) an error whose message is the reason followed by the page that says why, in
+parentheses: `(spec/history.md "On the unbounded plane")`, `(spec/super.md "On the
+unbounded plane")` or `(spec/generations.md "The unbounded plane")` for the first reason,
+`(spec/ltl.md)` for the second, and `(spec/hashlife-multistate.md "Names")` for the third.
+`try_state_rule(text)` gives the rule and no reason, or no rule and the reason, without
+raising; .NET's `StateRules.TryCompile(text, out rule, out reason)` answers true or false
+likewise, and reads null as empty text. A rule given as an object is checked as the
+universe checks it (`check_state_rule`, .NET `StateRules.Check`): 2 to 256 states, a
+canonical name a file can carry, and f of the all-0 block 0.
+
 A port may also take a state rule as an object (Python a `StateRule`, .NET a `StateRule`),
 for a family's own rules; files still name a rule by its canonical name (Pattern I/O,
 below). Any [rule file](rule-files.md)'s rule is one (`RuleTable`); there is no registry
@@ -252,6 +280,7 @@ and `state_lines`.
 | `render` | `input`, stepped to `generation`; each frame's `view`, `size`, `mode`, and `order` (the zoom order) | each frame's 8-bit grayscale PNG of pixel values (compared by decoded pixels) |
 | `snapshots` | `rule`, then `ops`: every `edit` op, and `snapshot`, `release`, `restore` (`expect`: the state), `read` (`input`, `name`, `frames`; `expect`: `format`, `rule`, `metadata`, `step`) and `measure` (`names`; `expect`: `universe_nodes`, `added`, `nodes`) as in [hashlife.md](hashlife.md#vector-encoding) | the final state; an op with `error: true` must raise and change nothing |
 | `timeline` | `input` (a pattern), `generations` (a frame at each, from the input's own), `metadata` | `timeline`: the file [macrocell.md](macrocell.md#timelines) writes; reading it back gives each frame's state (`frames`) again |
+| `names` | `cases`, a list of texts, each an `input` | for each, the rule's `canonical` and `states`; or `error: true` and the `reason` (Names, "Reasons") |
 
 Runners are strict: an unknown key, kind, op, or `spec_version` fails the case.
 

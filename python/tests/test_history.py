@@ -5,6 +5,8 @@ and runs on grids, in RLE and on the unbounded plane (the multi-state universe).
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -27,6 +29,13 @@ TOPOLOGIES += [("cross", 0, "x"), ("sphere", 0, "x")]
 
 
 # -- the rule ----------------------------------------------------------------------------
+
+
+def test_the_states_are_named_as_the_spec_names_them() -> None:
+    """spec/history.md "States": the names are the table's (the .NET port's History.Names
+    pins the same table)."""
+    assert hist.NAMES == _spec_state_names("history.md")
+    assert len(hist.NAMES) == hist.STATES
 
 
 def test_history_rules_compile_only_where_variants_are_asked_for() -> None:
@@ -279,3 +288,13 @@ def test_a_life_pattern_pastes_into_history_and_back() -> None:
     assert np.array_equal(history.convert_cells(glider), glider)  # unchanged
     marked = np.array([[2, 3, 4], [5, 6, 1]], np.uint8)
     assert life.convert_cells(marked).tolist() == [[0, 1, 0], [1, 0, 1]]
+
+
+def _spec_state_names(page: str) -> tuple[str, ...]:
+    """The Name column of a spec page's "## States" table, state n the n-th row."""
+    text = (Path(__file__).resolve().parents[2] / "spec" / page).read_text(encoding="utf-8")
+    table = text.split("## States", 1)[1].split("\n\n", 2)[1]
+    rows = [line.split("|") for line in table.splitlines() if line.startswith("| ")]
+    states = [row for row in rows if row[1].strip().isdigit()]
+    assert [int(row[1]) for row in states] == list(range(len(states)))
+    return tuple(row[2].strip() for row in states)

@@ -67,6 +67,16 @@ namespace HeatonLife.Tests
         // -- the rule ------------------------------------------------------------------------------
 
         [Fact]
+        public void TheStatesAreNamedAsTheSpecNamesThem()
+        {
+            // spec/super.md "States": the names are the table's, states 0-6 History's (Python's
+            // super_rules.NAMES pins the same table).
+            Assert.Equal(TestPaths.SpecStateNames("super.md"), Super.Names);
+            Assert.Equal(Super.States, Super.Names.Count);
+            Assert.Equal(History.Names, Super.Names.Take(History.States));
+        }
+
+        [Fact]
         public void SuperRulesCompileOnlyWhereVariantsAreAskedFor()
         {
             LifeRule rule = RuleString.Compile("b36 / s23super", variants: true);

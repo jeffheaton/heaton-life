@@ -19,6 +19,18 @@ namespace HeatonLife
         /// <summary>A Super rule's states (spec/super.md "States").</summary>
         public const int States = LifeRule.SuperStates;
 
+        /// <summary>Each state's name, state n at index n: the table of spec/super.md "States",
+        /// states 0–6 History's (<see cref="History.Names"/>). The Python reference's
+        /// <c>heaton_life.ca.super_rules.NAMES</c>.</summary>
+        public static IReadOnlyList<string> Names { get; } = Array.AsReadOnly(new[]
+        {
+            "off", "on", "envelope", "marked on", "marked off", "start on", "boundary",
+            "marked on, no trail", "marked off, no trail", "second trail: on", "second trail: envelope",
+            "third trail: on", "third trail: envelope", "no trail 1", "vanishing label", "no trail 2",
+            "clearable label", "no trail 3", "cycling label 1", "no trail 4", "cycling label 2",
+            "no trail 5", "cycling label 3", "no trail 6", "hidden label", "no trail 7",
+        });
+
         /// <summary>State 3: marked on, as History's.</summary>
         public const byte MarkedOn = 3;
 
@@ -246,10 +258,7 @@ namespace HeatonLife
                 throw new ArgumentException($"{rule.Canonical} is not a Super rule (spec/super.md)", nameof(rule));
             if (rule.HasB0)
                 throw new ArgumentException(
-                    $"{rule.Canonical} has B0: its first generation would turn the whole plane on, and the "
-                    + "unbounded universe's background must stay 0 (spec/super.md \"On the unbounded plane\"); "
-                    + "a grid runs it",
-                    nameof(rule));
+                    $"{StateRules.B0Reason(rule.Canonical)} ({StateRules.SuperB0Page})", nameof(rule));
             lock (Cache)
             {
                 if (!Cache.TryGetValue(rule.Canonical, out SuperRule? found))
@@ -261,16 +270,6 @@ namespace HeatonLife
                 }
                 return found;
             }
-        }
-
-        /// <summary>The state rule a Super rule's text names (<c>B3/S23Super</c>, <c>LifeSuper</c>,
-        /// any notation of spec/rules.md), or null for text that is no Super rule. Throws for a Super
-        /// rule the universe can't run (a base with B0).</summary>
-        internal static SuperRule? FromText(string text)
-        {
-            if (!RuleString.TryCompile(text, true, out LifeRule? rule, out _) || rule.Variant != RuleVariant.Super)
-                return null;
-            return For(rule);
         }
 
         /// <inheritdoc />

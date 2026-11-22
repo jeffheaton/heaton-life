@@ -41,6 +41,7 @@ namespace HeatonLife.Tests
                 ["render"] = Of(common, new[] { "input", "generation", "frames" }),
                 ["snapshots"] = Of(common, new[] { "rule", "ops" }, state),
                 ["timeline"] = Of(common, new[] { "input", "generations", "metadata", "timeline", "frames" }),
+                ["names"] = Of(common, new[] { "cases" }),
             };
         }
 
@@ -284,6 +285,35 @@ namespace HeatonLife.Tests
                         {
                             back.Universe.Restore(back.Frames[i]);
                             ExpectState(dir, back.Universe, expected[i]);
+                        }
+                        break;
+                    }
+                case "names":
+                    {
+                        // Each text names a rule the universe runs, or gives its reason
+                        // (spec/hashlife-multistate.md "Names"); the error's message is the reason
+                        // and the page that says why.
+                        foreach (JsonElement entry in meta.GetProperty("cases").EnumerateArray())
+                        {
+                            string text = Text(entry, "input");
+                            bool named = StateRules.TryCompile(text, out StateRule? rule, out string? reason);
+                            var keys = new HashSet<string>(entry.EnumerateObject().Select(p => p.Name));
+                            if (entry.TryGetProperty("error", out JsonElement error) && error.GetBoolean())
+                            {
+                                Assert.True(keys.SetEquals(new[] { "input", "error", "reason" }), text);
+                                Assert.False(named, text);
+                                Assert.Equal(Text(entry, "reason"), reason);
+                                ArgumentException thrown = Assert.Throws<ArgumentException>(() => StateRules.Compile(text));
+                                Assert.StartsWith($"{reason} (spec/", thrown.Message, StringComparison.Ordinal);
+                            }
+                            else
+                            {
+                                Assert.True(keys.SetEquals(new[] { "input", "canonical", "states" }), text);
+                                Assert.True(named, $"{text}: {reason}");
+                                Assert.Equal(Text(entry, "canonical"), rule!.Canonical);
+                                Assert.Equal(entry.GetProperty("states").GetInt32(), rule.States);
+                                Assert.Same(rule, StateRules.Check(rule));
+                            }
                         }
                         break;
                     }

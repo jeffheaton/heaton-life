@@ -5,6 +5,8 @@ the rule reads, writes and runs on grids, in RLE and on the unbounded plane."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -42,6 +44,16 @@ def _world(rule: str, cells: np.ndarray, boundary: str = "dead") -> LifeLike:
 
 
 # -- the rule ----------------------------------------------------------------------------
+
+
+def test_the_states_are_named_as_the_spec_names_them() -> None:
+    """spec/super.md "States": the names are the table's, states 0-6 History's (the .NET
+    port's Super.Names pins the same table)."""
+    from heaton_life.ca import history as hist
+
+    assert sup.NAMES == _spec_state_names("super.md")
+    assert len(sup.NAMES) == sup.STATES
+    assert sup.NAMES[: hist.STATES] == hist.NAMES
 
 
 def test_super_rules_compile_only_where_variants_are_asked_for() -> None:
@@ -348,3 +360,13 @@ def test_a_soup_runs_the_same_on_the_plane() -> None:
     assert box is not None
     x0, y0, x1, y1 = box
     assert np.array_equal(u.get_rect(x0, y0, x1, y1) & 1, two.get_rect(x0, y0, x1, y1))
+
+
+def _spec_state_names(page: str) -> tuple[str, ...]:
+    """The Name column of a spec page's "## States" table, state n the n-th row."""
+    text = (Path(__file__).resolve().parents[2] / "spec" / page).read_text(encoding="utf-8")
+    table = text.split("## States", 1)[1].split("\n\n", 2)[1]
+    rows = [line.split("|") for line in table.splitlines() if line.startswith("| ")]
+    states = [row for row in rows if row[1].strip().isdigit()]
+    assert [int(row[1]) for row in states] == list(range(len(states)))
+    return tuple(row[2].strip() for row in states)

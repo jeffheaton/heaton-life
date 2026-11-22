@@ -25,7 +25,7 @@ from heaton_life.ca.hashlife import (
 )
 from heaton_life.ca.hashlife.multistate import read_timeline, write_timeline
 from heaton_life.ca.rulestring import compile_rule
-from heaton_life.ca.state_rules import StateRule, check_state_rule, state_rule
+from heaton_life.ca.state_rules import StateRule, check_state_rule, state_rule, try_state_rule
 from heaton_life.ca.wireworld import WIREWORLD_RULE, Wireworld, clock_loop, wireworld_from_text
 from heaton_life.init import BUILTIN_PATTERNS, PatternMetadata
 
@@ -124,6 +124,66 @@ def test_names_ignore_ascii_case_and_end_whitespace() -> None:
         with pytest.raises(ValueError, match="not a state rule"):
             state_rule(text)
     assert MultiStateHashLife(" wireWORLD ").rule == "WireWorld"
+
+
+_KNOWN = (
+    "known: WireWorld, Langtons-Loops, Byl-Loop, Evoloop, Langtons-Ant, Ant-LLRR, Ant-RLR, "
+    "History rules such as B3/S23History, Super rules such as B3/S23Super, and Generations "
+    "rules such as B2/S345/C4"
+)
+_B0 = (
+    " has B0: its first generation would turn the whole plane on, and the unbounded "
+    "universe's background must stay 0; a grid runs it"
+)
+
+
+def test_names_give_reasons() -> None:
+    """spec/hashlife-multistate.md "Names", "Reasons": the reason without its page, and the
+    error's message the reason and its page."""
+    cases = {
+        "B03/S23History": ("B03/S23History" + _B0, 'spec/history.md "On the unbounded plane"'),
+        " b0/s8super ": ("B0/S8Super" + _B0, 'spec/super.md "On the unbounded plane"'),
+        "B03/S23/C3": ("B03/S23/C3" + _B0, 'spec/generations.md "The unbounded plane"'),
+        "23/03/3": ("B03/S23/C3" + _B0, 'spec/generations.md "The unbounded plane"'),
+        "R2,C0,M1,S2..3,B3..3": (
+            (
+                "R2,C0,M1,S2..3,B3..3,NM is a Larger than Life rule: it runs on a bounded grid, "
+                "never on the unbounded plane"
+            ),
+            "spec/ltl.md",
+        ),
+        "B3/S23": (
+            f"'B3/S23' is not a state rule ({_KNOWN})",
+            'spec/hashlife-multistate.md "Names"',
+        ),
+        " it's\t": (
+            f"' it's\t' is not a state rule ({_KNOWN})",
+            'spec/hashlife-multistate.md "Names"',
+        ),
+        "": (f"'' is not a state rule ({_KNOWN})", 'spec/hashlife-multistate.md "Names"'),
+    }
+    for text, (reason, page) in cases.items():
+        assert try_state_rule(text) == (None, reason), text
+        with pytest.raises(ValueError) as error:
+            state_rule(text)
+        assert str(error.value) == f"{reason} ({page})", text
+    for text in ("WireWorld", "evoloop", "B3/S23History", "LifeSuper", "345/2/4", "B2/S/C3"):
+        rule, reason = try_state_rule(text)
+        assert reason is None and rule is state_rule(text), text
+    with pytest.raises(TypeError):
+        try_state_rule(None)  # type: ignore[arg-type]
+
+
+def test_every_named_rule_runs() -> None:
+    """A name gives only rules that check_state_rule passes: a Generations rule with B0 is
+    refused at its name, as History and Super rules are (spec/hashlife-multistate.md "Names")."""
+    for text in ("B0/S/C3", "B03/S23/C3", "B0/S8History", "B0/S8Super", "B0123478/S01234678/C5"):
+        rule, reason = try_state_rule(text)
+        assert rule is None and reason is not None and " has B0: " in reason, text
+        with pytest.raises(ValueError, match="has B0"):
+            MultiStateHashLife(text)
+    for text in ("WireWorld", "Byl-Loop", "B2/S/C3", "B36/S23History", "B2/S34HSuper"):
+        assert check_state_rule(state_rule(text)) is state_rule(text)
 
 
 def test_rules_that_cannot_run_are_refused() -> None:

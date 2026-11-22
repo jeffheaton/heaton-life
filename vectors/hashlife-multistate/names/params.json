@@ -1,0 +1,253 @@
+{
+  "cases": [
+    {
+      "canonical": "WireWorld",
+      "input": "WireWorld",
+      "states": 4
+    },
+    {
+      "canonical": "WireWorld",
+      "input": " wireworld\t",
+      "states": 4
+    },
+    {
+      "canonical": "WireWorld",
+      "input": "　WIREWORLD ",
+      "states": 4
+    },
+    {
+      "canonical": "Langtons-Loops",
+      "input": "Langtons-Loops",
+      "states": 8
+    },
+    {
+      "canonical": "Byl-Loop",
+      "input": "byl-loop",
+      "states": 6
+    },
+    {
+      "canonical": "Evoloop",
+      "input": "EVOLOOP",
+      "states": 9
+    },
+    {
+      "canonical": "Langtons-Ant",
+      "input": "Langtons-Ant",
+      "states": 10
+    },
+    {
+      "canonical": "Ant-LLRR",
+      "input": "ant-llrr",
+      "states": 20
+    },
+    {
+      "canonical": "Ant-RLR",
+      "input": "Ant-RLR",
+      "states": 15
+    },
+    {
+      "canonical": "B3/S23History",
+      "input": "B3/S23History",
+      "states": 7
+    },
+    {
+      "canonical": "B3/S23History",
+      "input": "LifeHistory",
+      "states": 7
+    },
+    {
+      "canonical": "B3/S23History",
+      "input": " lifehistory ",
+      "states": 7
+    },
+    {
+      "canonical": "B36/S23History",
+      "input": "B36/S23History",
+      "states": 7
+    },
+    {
+      "canonical": "B2/S34HHistory",
+      "input": "B2/S34HHistory",
+      "states": 7
+    },
+    {
+      "canonical": "B2/S013VHistory",
+      "input": "b2/s013vhistory",
+      "states": 7
+    },
+    {
+      "canonical": "B3/S2-i34qHistory",
+      "input": "B3/S2-i34qHistory",
+      "states": 7
+    },
+    {
+      "canonical": "B3/S23Super",
+      "input": "B3/S23Super",
+      "states": 26
+    },
+    {
+      "canonical": "B3/S23Super",
+      "input": "LifeSuper",
+      "states": 26
+    },
+    {
+      "canonical": "B2/S34HSuper",
+      "input": "B2/S34HSuper",
+      "states": 26
+    },
+    {
+      "canonical": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiA6IDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAASuper",
+      "input": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiA6IDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAASuper",
+      "states": 26
+    },
+    {
+      "canonical": "B2/S345/C4",
+      "input": "B2/S345/C4",
+      "states": 4
+    },
+    {
+      "canonical": "B2/S345/C4",
+      "input": "345/2/4",
+      "states": 4
+    },
+    {
+      "canonical": "B2/S/C3",
+      "input": "/2/3",
+      "states": 3
+    },
+    {
+      "canonical": "B2/S/C256",
+      "input": "B2/S/C256",
+      "states": 256
+    },
+    {
+      "canonical": "B2a/S23/C5",
+      "input": "b2a/s23/c5",
+      "states": 5
+    },
+    {
+      "canonical": "B2/S34H/C5",
+      "input": "B2/S34H/C5",
+      "states": 5
+    },
+    {
+      "error": true,
+      "input": "B03/S23History",
+      "reason": "B03/S23History has B0: its first generation would turn the whole plane on, and the unbounded universe's background must stay 0; a grid runs it"
+    },
+    {
+      "error": true,
+      "input": "B0/S8Super",
+      "reason": "B0/S8Super has B0: its first generation would turn the whole plane on, and the unbounded universe's background must stay 0; a grid runs it"
+    },
+    {
+      "error": true,
+      "input": "B0/S6HHistory",
+      "reason": "B0/S6HHistory has B0: its first generation would turn the whole plane on, and the unbounded universe's background must stay 0; a grid runs it"
+    },
+    {
+      "error": true,
+      "input": "B03/S23/C3",
+      "reason": "B03/S23/C3 has B0: its first generation would turn the whole plane on, and the unbounded universe's background must stay 0; a grid runs it"
+    },
+    {
+      "error": true,
+      "input": "23/03/3",
+      "reason": "B03/S23/C3 has B0: its first generation would turn the whole plane on, and the unbounded universe's background must stay 0; a grid runs it"
+    },
+    {
+      "error": true,
+      "input": "B0/S/C256",
+      "reason": "B0/S/C256 has B0: its first generation would turn the whole plane on, and the unbounded universe's background must stay 0; a grid runs it"
+    },
+    {
+      "error": true,
+      "input": "B0123478/S01234678/C5",
+      "reason": "B0123478/S01234678/C5 has B0: its first generation would turn the whole plane on, and the unbounded universe's background must stay 0; a grid runs it"
+    },
+    {
+      "error": true,
+      "input": "R2,C0,M1,S2..3,B3..3",
+      "reason": "R2,C0,M1,S2..3,B3..3,NM is a Larger than Life rule: it runs on a bounded grid, never on the unbounded plane"
+    },
+    {
+      "error": true,
+      "input": "5,34,45,34,58",
+      "reason": "R5,C0,M1,S34..58,B34..45,NM is a Larger than Life rule: it runs on a bounded grid, never on the unbounded plane"
+    },
+    {
+      "error": true,
+      "input": "r1,c3,m0,s2..3,b3..3,nn",
+      "reason": "R1,C3,M0,S2..3,B3..3,NN is a Larger than Life rule: it runs on a bounded grid, never on the unbounded plane"
+    },
+    {
+      "error": true,
+      "input": "",
+      "reason": "'' is not a state rule (known: WireWorld, Langtons-Loops, Byl-Loop, Evoloop, Langtons-Ant, Ant-LLRR, Ant-RLR, History rules such as B3/S23History, Super rules such as B3/S23Super, and Generations rules such as B2/S345/C4)"
+    },
+    {
+      "error": true,
+      "input": "B3/S23",
+      "reason": "'B3/S23' is not a state rule (known: WireWorld, Langtons-Loops, Byl-Loop, Evoloop, Langtons-Ant, Ant-LLRR, Ant-RLR, History rules such as B3/S23History, Super rules such as B3/S23Super, and Generations rules such as B2/S345/C4)"
+    },
+    {
+      "error": true,
+      "input": "B03/S23",
+      "reason": "'B03/S23' is not a state rule (known: WireWorld, Langtons-Loops, Byl-Loop, Evoloop, Langtons-Ant, Ant-LLRR, Ant-RLR, History rules such as B3/S23History, Super rules such as B3/S23Super, and Generations rules such as B2/S345/C4)"
+    },
+    {
+      "error": true,
+      "input": "Life",
+      "reason": "'Life' is not a state rule (known: WireWorld, Langtons-Loops, Byl-Loop, Evoloop, Langtons-Ant, Ant-LLRR, Ant-RLR, History rules such as B3/S23History, Super rules such as B3/S23Super, and Generations rules such as B2/S345/C4)"
+    },
+    {
+      "error": true,
+      "input": "Wire World",
+      "reason": "'Wire World' is not a state rule (known: WireWorld, Langtons-Loops, Byl-Loop, Evoloop, Langtons-Ant, Ant-LLRR, Ant-RLR, History rules such as B3/S23History, Super rules such as B3/S23Super, and Generations rules such as B2/S345/C4)"
+    },
+    {
+      "error": true,
+      "input": "WireWorld!",
+      "reason": "'WireWorld!' is not a state rule (known: WireWorld, Langtons-Loops, Byl-Loop, Evoloop, Langtons-Ant, Ant-LLRR, Ant-RLR, History rules such as B3/S23History, Super rules such as B3/S23Super, and Generations rules such as B2/S345/C4)"
+    },
+    {
+      "error": true,
+      "input": " it's\t",
+      "reason": "' it's\t' is not a state rule (known: WireWorld, Langtons-Loops, Byl-Loop, Evoloop, Langtons-Ant, Ant-LLRR, Ant-RLR, History rules such as B3/S23History, Super rules such as B3/S23Super, and Generations rules such as B2/S345/C4)"
+    },
+    {
+      "error": true,
+      "input": "Kireworld",
+      "reason": "'Kireworld' is not a state rule (known: WireWorld, Langtons-Loops, Byl-Loop, Evoloop, Langtons-Ant, Ant-LLRR, Ant-RLR, History rules such as B3/S23History, Super rules such as B3/S23Super, and Generations rules such as B2/S345/C4)"
+    },
+    {
+      "error": true,
+      "input": "B3/S23/C257",
+      "reason": "'B3/S23/C257' is not a state rule (known: WireWorld, Langtons-Loops, Byl-Loop, Evoloop, Langtons-Ant, Ant-LLRR, Ant-RLR, History rules such as B3/S23History, Super rules such as B3/S23Super, and Generations rules such as B2/S345/C4)"
+    },
+    {
+      "error": true,
+      "input": "B2/S345/C1",
+      "reason": "'B2/S345/C1' is not a state rule (known: WireWorld, Langtons-Loops, Byl-Loop, Evoloop, Langtons-Ant, Ant-LLRR, Ant-RLR, History rules such as B3/S23History, Super rules such as B3/S23Super, and Generations rules such as B2/S345/C4)"
+    },
+    {
+      "error": true,
+      "input": "LifeHistory2",
+      "reason": "'LifeHistory2' is not a state rule (known: WireWorld, Langtons-Loops, Byl-Loop, Evoloop, Langtons-Ant, Ant-LLRR, Ant-RLR, History rules such as B3/S23History, Super rules such as B3/S23Super, and Generations rules such as B2/S345/C4)"
+    },
+    {
+      "error": true,
+      "input": "B3/S23HistorySuper",
+      "reason": "'B3/S23HistorySuper' is not a state rule (known: WireWorld, Langtons-Loops, Byl-Loop, Evoloop, Langtons-Ant, Ant-LLRR, Ant-RLR, History rules such as B3/S23History, Super rules such as B3/S23Super, and Generations rules such as B2/S345/C4)"
+    },
+    {
+      "error": true,
+      "input": "Langtons-Loops.rule",
+      "reason": "'Langtons-Loops.rule' is not a state rule (known: WireWorld, Langtons-Loops, Byl-Loop, Evoloop, Langtons-Ant, Ant-LLRR, Ant-RLR, History rules such as B3/S23History, Super rules such as B3/S23Super, and Generations rules such as B2/S345/C4)"
+    }
+  ],
+  "family": "hashlife-multistate",
+  "kind": "names",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

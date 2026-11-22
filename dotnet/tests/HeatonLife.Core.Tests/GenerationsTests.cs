@@ -302,7 +302,7 @@ namespace HeatonLife.Tests
                 Assert.Contains("Generations rule", Assert.Throws<ArgumentException>(() => new HashLife(text)).Message);
             var u = new HashLife();
             Assert.Contains("MultiStateHashLife", Assert.Throws<ArgumentException>(() => u.Rule = "/2/3").Message);
-            Assert.Contains("background would change", Assert.Throws<ArgumentException>(() => new MultiStateHashLife("B0/S/C3")).Message);
+            Assert.Contains("has B0: its first generation", Assert.Throws<ArgumentException>(() => new MultiStateHashLife("B0/S/C3")).Message);
             Assert.Equal("B2/S345/C4", new MultiStateHashLife("345/2/4").Rule);
             Assert.Equal(BigInteger.Zero, u.Population);
         }

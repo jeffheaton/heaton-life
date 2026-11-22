@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace HeatonLife
 {
@@ -8,9 +9,9 @@ namespace HeatonLife
     /// to 256, a <see cref="Canonical"/> name that files give it, and a cell function,
     /// <see cref="NextState"/>, from the 3 × 3 block of states around a cell to its next state.
     /// The engine computes nothing else from a rule, so a family plugs in by deriving from this
-    /// class: Wireworld today (<see cref="WireworldRule"/>), and the Generations, History and
-    /// Super, and rule-table families as their pages add them. The cell function must map an
-    /// all-0 block to 0, or the infinite background would change.
+    /// class: Wireworld (<see cref="WireworldRule"/>), the Generations, History and Super
+    /// families, and rule tables. The cell function must map an all-0 block to 0, or the
+    /// infinite background would change.
     /// The Python reference's heaton_life.ca.state_rules.StateRule.
     /// </summary>
     public abstract class StateRule
@@ -44,38 +45,100 @@ namespace HeatonLife
 
         /// <summary>The rule a name gives: <c>WireWorld</c> or a rule of the rule-table starter set
         /// (spec/ruletable.md), a History rule (spec/history.md), a Super rule (spec/super.md), or a
-        /// Generations rule in either spelling (spec/generations.md "Rules"). Any text that names no
-        /// rule throws <see cref="ArgumentException"/>, a Larger than Life rule with the reason that
-        /// it runs on grids only (spec/ltl.md).</summary>
+        /// Generations rule in either spelling (spec/generations.md "Rules"). Every rule it gives is
+        /// one the engine runs (<see cref="Check"/> passes it). Any other text throws
+        /// <see cref="ArgumentException"/>, its message the reason <see cref="TryCompile"/> gives and
+        /// the page that says why (spec/hashlife-multistate.md "Names").</summary>
         public static StateRule Compile(string name)
         {
             if (name == null)
                 throw new ArgumentNullException(nameof(name));
+            StateRule? rule = Resolve(name, out string reason, out string page);
+            if (rule == null)
+                throw new ArgumentException($"{reason} ({page})", nameof(name));
+            return rule;
+        }
+
+        /// <summary>
+        /// Like <see cref="Compile"/>, but answers false instead of throwing, with the reason
+        /// (spec/hashlife-multistate.md "Names", "Reasons"): the phrase for why the text names no
+        /// rule the universe runs, such as "B03/S23/C3 has B0: its first generation would turn the
+        /// whole plane on, …", with no page in parentheses and no note of a parameter. The reason is
+        /// null when the text names a rule. Null text reads as empty text.
+        /// </summary>
+        public static bool TryCompile(
+            string? name, [NotNullWhen(true)] out StateRule? rule, [NotNullWhen(false)] out string? reason)
+        {
+            rule = Resolve(name ?? "", out string why, out _);
+            reason = rule == null ? why : null;
+            return rule != null;
+        }
+
+        /// <summary>The reason a History, Super or Generations rule with B0 names no rule the
+        /// universe runs (spec/hashlife-multistate.md "Names", reason 1).</summary>
+        internal static string B0Reason(string canonical)
+            => $"{canonical} has B0: its first generation would turn the whole plane on, and the "
+                + "unbounded universe's background must stay 0; a grid runs it";
+
+        /// <summary>The page that says why a History rule with B0 can't run on the plane.</summary>
+        internal const string HistoryB0Page = "spec/history.md \"On the unbounded plane\"";
+
+        /// <summary>The page that says why a Super rule with B0 can't run on the plane.</summary>
+        internal const string SuperB0Page = "spec/super.md \"On the unbounded plane\"";
+
+        /// <summary>
+        /// The rule <paramref name="name"/> gives, or null with the reason and the page that says
+        /// why (spec/hashlife-multistate.md "Names"): the fixed names, then History and Super
+        /// rules, Generations rules and the rule-table starter set, then Larger than Life's
+        /// refusal. <paramref name="reason"/> and <paramref name="page"/> are empty when a rule is
+        /// found.
+        /// </summary>
+        private static StateRule? Resolve(string name, out string reason, out string page)
+        {
+            reason = "";
+            page = "";
             if (Names(name, WireworldRule.Instance))
                 return WireworldRule.Instance;
-            // History rules, a family named by any Life-like rule's text (spec/history.md).
-            HistoryRule? history = HistoryRule.FromText(name);
-            if (history != null)
-                return history;
-            // Super rules, the same for the Super variant (spec/super.md).
-            SuperRule? super = SuperRule.FromText(name);
-            if (super != null)
-                return super;
-            // Generations rules, in either spelling (spec/generations.md).
+            // History and Super rules, families named by any Life-like rule's text with its
+            // variant (spec/history.md, spec/super.md); a base with B0 is refused (reason 1).
+            if (RuleString.TryCompile(name, true, out LifeRule? life, out _) && life.Variant != RuleVariant.None)
+            {
+                bool history = life.Variant == RuleVariant.History;
+                if (life.HasB0)
+                {
+                    reason = B0Reason(life.Canonical);
+                    page = history ? HistoryB0Page : SuperB0Page;
+                    return null;
+                }
+                return history ? (StateRule)HistoryRule.For(life) : SuperRule.For(life);
+            }
+            // Generations rules, in either spelling (spec/generations.md); B0 is refused (reason 1).
             if (GenerationsRule.TryCompile(name, out GenerationsRule? generations, out _))
+            {
+                if (generations.HasB0)
+                {
+                    reason = B0Reason(generations.Canonical);
+                    page = "spec/generations.md \"The unbounded plane\"";
+                    return null;
+                }
                 return generations;
+            }
             // The rule-table starter set (spec/ruletable.md "The starter set"), read when named.
             RuleTable? starter = RuleTables.StarterOrNull(Trimmed(name));
             if (starter != null)
                 return starter;
-            string? ltl = LtlRule.Refusal(name); // Larger than Life: grids only (spec/ltl.md)
+            string? ltl = LtlRule.PlaneReason(name); // Larger than Life: grids only (reason 2)
             if (ltl != null)
-                throw new ArgumentException(ltl, nameof(name));
-            throw new ArgumentException(
-                $"'{name}' is not a state rule (known: {WireworldRule.Instance.Canonical}, "
+            {
+                reason = ltl;
+                page = "spec/ltl.md";
+                return null;
+            }
+            reason = $"'{name}' is not a state rule (known: {WireworldRule.Instance.Canonical}, "
                 + $"{string.Join(", ", RuleTables.StarterNames)}, History rules such as B3/S23History, "
-                + "Super rules such as B3/S23Super, and Generations rules such as B2/S345/C4)",
-                nameof(name));
+                + "Super rules such as B3/S23Super, and Generations rules such as B2/S345/C4)";
+            page = "spec/hashlife-multistate.md \"Names\"";
+            return null;
         }
 
         /// <summary>Whether <paramref name="text"/> names <paramref name="rule"/>: its canonical

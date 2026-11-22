@@ -161,6 +161,78 @@ namespace HeatonLife.Tests
         public void OtherTextNamesNoRule(string name)
             => Assert.Throws<ArgumentException>(() => StateRules.Compile(name));
 
+        private const string Known =
+            "known: WireWorld, Langtons-Loops, Byl-Loop, Evoloop, Langtons-Ant, Ant-LLRR, Ant-RLR, "
+            + "History rules such as B3/S23History, Super rules such as B3/S23Super, and Generations "
+            + "rules such as B2/S345/C4";
+
+        private const string B0 =
+            " has B0: its first generation would turn the whole plane on, and the unbounded "
+            + "universe's background must stay 0; a grid runs it";
+
+        [Theory]
+        [InlineData("B03/S23History", "B03/S23History" + B0, "spec/history.md \"On the unbounded plane\"")]
+        [InlineData(" b0/s8super ", "B0/S8Super" + B0, "spec/super.md \"On the unbounded plane\"")]
+        [InlineData("B03/S23/C3", "B03/S23/C3" + B0, "spec/generations.md \"The unbounded plane\"")]
+        [InlineData("23/03/3", "B03/S23/C3" + B0, "spec/generations.md \"The unbounded plane\"")]
+        [InlineData(
+            "R2,C0,M1,S2..3,B3..3",
+            "R2,C0,M1,S2..3,B3..3,NM is a Larger than Life rule: it runs on a bounded grid, never on the unbounded plane",
+            "spec/ltl.md")]
+        [InlineData("B3/S23", "'B3/S23' is not a state rule (" + Known + ")", "spec/hashlife-multistate.md \"Names\"")]
+        [InlineData(" it's\t", "' it's\t' is not a state rule (" + Known + ")", "spec/hashlife-multistate.md \"Names\"")]
+        [InlineData("", "'' is not a state rule (" + Known + ")", "spec/hashlife-multistate.md \"Names\"")]
+        public void NamesGiveReasons(string name, string reason, string page)
+        {
+            // spec/hashlife-multistate.md "Names", "Reasons": the reason bare, and the message the
+            // reason and the page that says why (and .NET's note of the parameter).
+            Assert.False(StateRules.TryCompile(name, out StateRule? rule, out string? why));
+            Assert.Null(rule);
+            Assert.Equal(reason, why);
+            ArgumentException error = Assert.Throws<ArgumentException>(() => StateRules.Compile(name));
+            Assert.StartsWith($"{reason} ({page})", error.Message, StringComparison.Ordinal);
+            Assert.Equal("name", error.ParamName);
+        }
+
+        [Theory]
+        [InlineData("WireWorld")]
+        [InlineData("evoloop")]
+        [InlineData("B3/S23History")]
+        [InlineData("LifeSuper")]
+        [InlineData("345/2/4")]
+        [InlineData("B2/S/C3")]
+        public void NamedRulesHaveNoReason(string name)
+        {
+            Assert.True(StateRules.TryCompile(name, out StateRule? rule, out string? reason));
+            Assert.Null(reason);
+            Assert.Equal(StateRules.Compile(name), rule); // the same object, or for Generations an equal one
+            Assert.Same(rule, StateRules.Check(rule));
+        }
+
+        [Fact]
+        public void NullReadsAsEmptyText()
+        {
+            Assert.False(StateRules.TryCompile(null, out _, out string? reason));
+            Assert.Equal("'' is not a state rule (" + Known + ")", reason);
+            Assert.Throws<ArgumentNullException>(() => StateRules.Compile(null!));
+        }
+
+        [Theory]
+        [InlineData("B0/S/C3")]
+        [InlineData("B03/S23/C3")]
+        [InlineData("B0/S8History")]
+        [InlineData("B0/S8Super")]
+        [InlineData("B0123478/S01234678/C5")]
+        public void EveryNamedRuleRuns(string name)
+        {
+            // A name gives only rules Check passes: a Generations rule with B0 is refused at its
+            // name, as History and Super rules are (spec/hashlife-multistate.md "Names").
+            Assert.False(StateRules.TryCompile(name, out _, out string? reason));
+            Assert.Contains(" has B0: ", reason, StringComparison.Ordinal);
+            ArgumentException error = Assert.Throws<ArgumentException>(() => new MultiStateHashLife(name));
+            Assert.Contains(" has B0: ", error.Message, StringComparison.Ordinal);
+        }
+
         [Fact]
         public void RulesThatCannotRunAreRefused()
         {
