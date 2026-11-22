@@ -1,0 +1,96 @@
+{
+  "colors": [
+    {
+      "rgb": [
+        10,
+        20,
+        30
+      ],
+      "state": 0
+    },
+    {
+      "rgb": [
+        255,
+        0,
+        0
+      ],
+      "state": 1
+    },
+    {
+      "rgb": [
+        0,
+        255,
+        0
+      ],
+      "state": 2
+    },
+    {
+      "from": [
+        0,
+        0,
+        0
+      ],
+      "to": [
+        255,
+        255,
+        255
+      ]
+    }
+  ],
+  "description": "A table with colors, names and icons, CRLF line ends and a byte-order mark.",
+  "family": "ruletable-files",
+  "icons": {
+    "sets": [
+      {
+        "colors": [
+          [
+            ".",
+            "#000000"
+          ],
+          [
+            "A",
+            "#FFFFFF"
+          ]
+        ],
+        "rows": [
+          ".......",
+          "..AAA..",
+          ".A...A.",
+          ".A...A.",
+          ".A...A.",
+          "..AAA..",
+          ".......",
+          "AAAAAAA",
+          "A.....A",
+          "A.....A",
+          "A.....A",
+          "A.....A",
+          "A.....A",
+          "AAAAAAA"
+        ],
+        "width": 7
+      }
+    ]
+  },
+  "input": "input.rule",
+  "kind": "compile",
+  "name": "Data-Sections",
+  "names": [
+    {
+      "name": "nothing",
+      "state": 0
+    },
+    {
+      "name": "first one",
+      "state": 1
+    }
+  ],
+  "neighborhood": "vonNeumann",
+  "neighbors": 4,
+  "source": "table",
+  "spec_version": "0.16.0",
+  "states": 4,
+  "symmetries": "none",
+  "tier": "bit-exact",
+  "tree": "tree.txt"
+}

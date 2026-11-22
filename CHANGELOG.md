@@ -341,6 +341,39 @@ and an RLE header naming any Life-like rule making the file two-state.
   naming an LtL rule (with a bounded-grid suffix or not) read into it, a world past 24
   states writing its dying states with RLE's two-letter tags, and both HashLife universes
   refuse an LtL rule with that reason. .NET's `Step` and `WriteFrame` allocate nothing.
+- **Rule tables** ([spec/ruletable.md](spec/ruletable.md),
+  [spec/rule-files.md](spec/rule-files.md)). Any rule a `.rule` file defines, up to 256
+  states, runs on grids of every topology and on the unbounded plane.
+  - Rule files read in full (`parse_rule_file`, .NET `RuleTable.Parse` and `TryParse`):
+    `@RULE`, `@TABLE` (von Neumann, Moore, hexagonal and one-dimensional neighborhoods,
+    every symmetry, bound variables, first match wins, unlisted blocks keep their state),
+    `@TREE`, and `@COLORS`, `@NAMES` and `@ICONS` (XPM) kept for showing. A table is
+    compiled to its canonical tree, so both kinds evaluate the same way and a function
+    has one tree text (`tree_text`, .NET `TreeText`). A text that is no rule file is
+    refused with one of the page's reasons and its line (`RuleFileError`, .NET
+    `RuleFileException`).
+  - The grid family `RuleTableCA` (inits `starter`, `blank`, `soup`, `array`; frames are
+    the states; editing and cancelable Advance as for the other grid families). Python
+    walks the tree for all cells at once; .NET's `Step` and `WriteFrame` allocate
+    nothing.
+  - A rule table is a state rule, so `MultiStateHashLife` runs it; the starter set's
+    names resolve wherever a state rule's name does. No registry: other rules are given
+    as objects, and an RLE file may carry its own (`embedded_rule` and `append_rule`,
+    .NET `RuleTables.Embedded` and `Append`; the multi-state RLE reader takes a rule
+    appended under the header's name).
+  - A starter set re-authored from the original publications, each with its starter
+    pattern: `Langtons-Loops` (Langton 1984, Table I and Fig. 6), `Byl-Loop` (Byl 1989,
+    Table II, with the one transition Fig. 3 needs), `Evoloop` (Sayama 2004, Appendix
+    A.1), and the ants `Langtons-Ant`, `Ant-LLRR` and `Ant-RLR`, generated from their
+    definitions by `python/tools/gen_rule_tables.py`. Their runs reproduce the
+    publications' figures (Langton's Fig. 9 at generation 151, every generation of
+    Byl's Fig. 3) and the ant's highway after step 9,976.
+  - A rule table's default state palette ([spec/render.md](spec/render.md#default-palettes))
+    is the multi-state palette of its S with its file's `@COLORS` applied in order
+    (`rule_table_palette`, .NET `StatePalettes.ForRuleTable`), on its grid and on the plane;
+    `frame_values` and `default_palette` take a `RuleTableCA` world.
+  - New vectors: the `ruletable/` and `ruletable-files/` families,
+    `hashlife-multistate/*-ruletable-*`, and `render/palette-*ruletable*`.
 
 ### Changed
 

@@ -95,9 +95,9 @@ def _known() -> tuple[StateRule, ...]:
 
 def state_rule(text: str) -> StateRule:
     """The state rule a text gives (spec/hashlife-multistate.md "Names"): a name, with
-    whitespace at the two ends allowed and ASCII case ignored, a History rule
-    (spec/history.md), or a Generations rule in either spelling (spec/generations.md).
-    Raises ValueError for any other text."""
+    whitespace at the two ends allowed and ASCII case ignored (WireWorld and the rule-table
+    starter set, spec/ruletable.md), a History rule (spec/history.md), or a Generations rule
+    in either spelling (spec/generations.md). Raises ValueError for any other text."""
     if not isinstance(text, str):
         raise TypeError(f"a rule name is text, not {type(text).__name__}")
     key = _ascii_lower(_trimmed(text))
@@ -116,12 +116,18 @@ def state_rule(text: str) -> StateRule:
     generations, _ = try_compile_generations_rule(text)
     if generations is not None:
         return generations
+    # The rule-table starter set (spec/ruletable.md "The starter set"), read when named.
+    from heaton_life.ca.ruletable import STARTER_RULES, starter_rule_or_none
+
+    starter = starter_rule_or_none(_trimmed(text))
+    if starter is not None:
+        return starter
     from heaton_life.ca.ltl import ltl_refusal  # Larger than Life: grids only (spec/ltl.md)
 
     refusal = ltl_refusal(text)
     if refusal is not None:
         raise ValueError(refusal)
-    names = ", ".join(rule.canonical for rule in _known())
+    names = ", ".join([*(rule.canonical for rule in _known()), *STARTER_RULES])
     raise ValueError(
         f"{text!r} is not a state rule (known: {names}, History rules such as B3/S23History, "
         "and Generations rules such as B2/S345/C4)"

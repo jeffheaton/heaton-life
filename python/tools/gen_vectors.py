@@ -1012,6 +1012,10 @@ def main() -> None:
     # -- State palettes, the shade, and windows of grids (spec/render.md) ---------------------
     write_palette_cases()
 
+    # -- Rule tables: rule files run on grids and the plane (spec/ruletable.md) -------------
+    write_ruletable_cases()
+    write_ruletable_palette_cases()
+
     print("done")
 
 
@@ -10507,6 +10511,858 @@ def write_palette_cases() -> None:
     window_case("window-mixed-order", mixed, (4, 2, 39, 29), (10, 7), "state", (128, 7))
     window_case("window-mixed-one-pixel", mixed, (0, 0, 45, 33), (1, 1), "state", (255,))
     window_case("window-mixed-identity", mixed, (3, 5, 20, 11), (20, 11), "state")
+
+
+RULETABLE_SPEC_VERSION = "0.16.0"
+
+# Rule files the rule-table vectors run besides the starter set (spec/ruletable.md "Vector
+# encoding"); each restates a family the library has, so the suites can check the run.
+RULETABLE_TEXTS: dict[str, str] = {
+    "Life-Table": """@RULE Life-Table
+Conway's Life as a rule table: Moore, permute.
+@TABLE
+n_states:2
+neighborhood:Moore
+symmetries:permute
+var a={0,1}
+var b={a}
+var c={a}
+var d={a}
+var e={a}
+var f={a}
+var g={a}
+var h={a}
+0,1,1,1,0,0,0,0,0,1  # birth on three
+1,1,1,0,0,0,0,0,0,1  # survival on two
+1,1,1,1,0,0,0,0,0,1  # and three
+1,a,b,c,d,e,f,g,h,0  # death otherwise
+""",
+    "WireWorld-Table": """@RULE WireWorld-Table
+Wireworld as a rule table: Moore, permute.
+@TABLE
+n_states:4
+neighborhood:Moore
+symmetries:permute
+var a={0,1,2,3}
+var b={a}
+var c={a}
+var d={a}
+var e={a}
+var f={a}
+var g={a}
+var h={a}
+var n={0,2,3}
+var o={n}
+var p={n}
+var q={n}
+var r={n}
+var s={n}
+var t={n}
+1,a,b,c,d,e,f,g,h,2
+2,a,b,c,d,e,f,g,h,3
+3,1,n,o,p,q,r,s,t,1
+3,1,1,n,o,p,q,r,s,1
+@COLORS
+0 0 0 0
+1 0 128 255
+2 255 255 255
+3 255 128 0
+""",
+    "Hex-B2-S34": """@RULE Hex-B2-S34
+The hexagonal Life-like rule B2/S34H as a rule table: hexagonal, permute.
+@TABLE
+n_states:2
+neighborhood:hexagonal
+symmetries:permute
+var a={0,1}
+var b={a}
+var c={a}
+var d={a}
+var e={a}
+var f={a}
+0,1,1,0,0,0,0,1
+1,1,1,1,0,0,0,1
+1,1,1,1,1,0,0,1
+1,a,b,c,d,e,f,0
+@ICONS
+hexagons
+""",
+    "Rule30-Rows": """@RULE Rule30-Rows
+Wolfram's rule 30 run on every row: oneDimensional, written without commas.
+@TABLE
+n_states:2
+neighborhood:oneDimensional
+symmetries:none
+# C W E C'
+0101
+0011
+1100
+1110
+""",
+    "Bound-Order": """@RULE Bound-Order
+Outputs bound by neighbors under rotate4reflect: where two variants of one transition
+match a block with different bindings, the earlier one counts.
+@TABLE
+n_states:4
+neighborhood:vonNeumann
+symmetries:rotate4reflect
+var a={1,2,3}
+var b={1,2,3}
+var c={0,1,2,3}
+var d={c}
+0,a,b,0,0,a
+0,a,a,b,c,b
+1,a,b,c,d,b
+2,a,0,0,0,3
+3,c,c,d,d,0
+""",
+    "Flash": """@RULE Flash
+A blank block turns on and every on cell turns off: the all-0 block changes, so this runs
+on grids only.
+@TABLE
+n_states:2
+neighborhood:vonNeumann
+symmetries:none
+var a={0,1}
+var b={a}
+var c={a}
+var d={a}
+0,0,0,0,0,1
+1,a,b,c,d,0
+""",
+}
+
+
+def _rule_summary(rule: Any) -> dict[str, Any]:
+    """What a ruletable-files ``compile`` case expects besides the tree (spec/rule-files.md
+    "Vector encoding")."""
+    from heaton_life.ca.rulefile import Gradient
+
+    colors: list[dict[str, Any]] = []
+    for entry in rule.colors:
+        if isinstance(entry, Gradient):
+            colors.append({"from": list(entry.start), "to": list(entry.end)})
+        else:
+            colors.append({"state": entry.state, "rgb": list(entry.rgb)})
+    icons: dict[str, Any] | None = None
+    if rule.icons is not None:
+        if rule.icons.style is not None:
+            icons = {"style": rule.icons.style}
+        else:
+            icons = {
+                "sets": [
+                    {
+                        "width": s.width,
+                        "colors": [[key, value] for key, value in s.colors],
+                        "rows": list(s.rows),
+                    }
+                    for s in rule.icons.sets
+                ]
+            }
+    return {
+        "name": rule.name,
+        "states": rule.states,
+        "neighbors": rule.neighbors,
+        "neighborhood": rule.neighborhood,
+        "symmetries": rule.symmetries,
+        "source": rule.source,
+        "description": rule.description,
+        "colors": colors,
+        "names": [{"state": n.state, "name": n.name} for n in rule.names],
+        "icons": icons,
+    }
+
+
+# Files the compile cases read besides the starter set and RULETABLE_TEXTS: every symmetry
+# kind, a tree to make canonical, and every section's data.
+_RULE_FILE_CASES: dict[str, str] = {
+    "moore-rotate8reflect": """@RULE Moore-Turns
+@TABLE
+n_states:3
+neighborhood:Moore
+symmetries:rotate8reflect
+var a={1,2}
+var b={0,1,2}
+0,1,2,0,0,0,0,0,0,1
+0,a,0,a,0,0,0,0,b,2
+1,2,a,0,0,0,0,0,0,a
+2,b,b,b,0,0,0,0,0,0
+""",
+    "moore-rotate4-reflect": """@RULE Moore-Quarter
+@TABLE
+n_states:3
+neighborhood:Moore
+symmetries:rotate4
+0,1,2,0,0,0,0,0,0,1
+1,0,0,2,0,0,0,0,1,2
+@RULE ignored-second-rule
+@TABLE
+n_states:2
+""",
+    "moore-reflect": """@RULE Moore-Mirror
+@TABLE
+N_STATES : 3
+Neighborhood: MOORE
+symmetries: reflect
+0,1,0,0,0,0,0,0,2,1
+2,0,1,1,0,0,0,0,0,0
+""",
+    "vonneumann-permute": """@RULE VN-Count
+@TABLE
+n_states:3
+neighborhood:vonNeumann
+symmetries:permute
+var a={1,2}
+var b={a}
+0,a,b,0,0,1
+0,2,2,2,0,2
+1,a,a,a,a,0
+""",
+    "vonneumann-reflect": """@RULE VN-Mirror
+@TABLE
+n_states:3
+neighborhood:vonNeumann
+symmetries:reflect_horizontal
+0,1,2,0,0,2
+0 2 0 0 1 1
+""",
+    "hexagonal-rotations": """@RULE Hex-Turns
+@TABLE
+n_states:3
+neighborhood:hexagonal
+symmetries:rotate6reflect
+0,1,2,0,0,0,0,1
+1,2,0,2,0,0,0,2
+@TREE
+num_states=2
+""",
+    "hexagonal-rotate2": """@RULE Hex-Half
+@TABLE
+n_states:2
+neighborhood:Hexagonal
+symmetries:rotate2
+0,1,1,0,0,0,0,1
+""",
+    "hexagonal-rotate3": """@RULE Hex-Third
+@TABLE
+n_states:2
+neighborhood:hexagonal
+symmetries:rotate3
+0,1,0,1,0,0,0,1
+""",
+    "one-dimensional-reflect": """@RULE Row-Mirror
+@TABLE
+n_states:3
+neighborhood:oneDimensional
+symmetries:reflect
+var a={1,2}
+0,1,2,1
+0,a,0,a
+2,a,a,0
+""",
+    "one-dimensional-permute": """@RULE Row-Count
+@TABLE
+n_states:2
+neighborhood:onedimensional
+symmetries:permute
+0,1,0,1
+""",
+    "tree-made-canonical": """@RULE Tree-Canon
+A tree with alike nodes and one the root can't reach.
+@TREE
+num_states = 2
+num_neighbors = 4
+num_nodes = 9
+1 0 1
+1 0 1
+1 1 1
+2 0 1
+2 1 0
+3 3 4
+4 5 5
+2 2 2
+5 6 6
+""",
+    "tree-first-then-table": """@RULE Tree-First
+@TREE
+num_states=2
+num_neighbors=8
+num_nodes=10
+1 0 1
+1 1 0
+2 0 1
+3 2 2
+4 3 3
+5 4 4
+6 5 5
+7 6 6
+8 7 7
+9 8 8
+@TABLE
+this table is never read
+""",
+    "data-sections": """\N{BYTE ORDER MARK}@RULE Data-Sections\r
+\r
+A table with colors, names and icons, CRLF line ends and a byte-order mark.\r
+\r
+@TABLE\r
+n_states:4\r
+neighborhood:vonNeumann\r
+symmetries:none\r
+012333 # a transition written as one word of digits\r
+012300\r
+@UNKNOWN\r
+anything at all\r
+@COLORS\r
+# a comment\r
+0 10 20 30\r
+1 255 0 0 red\r
+2 0 255 0 note 3 4\r
+48 255 255 255\r
+0 0 0 255 255 255\r
+@NAMES\r
+0 nothing\r
+1   first one  \r
+9 not a state here\r
+@COLORS\r
+1 1 1 1\r
+@ICONS\r
+/* XPM-style comment */\r
+XPM\r
+/* width height colors chars_per_pixel */\r
+"7 14 2 1"\r
+". c #000000"\r
+"A c #ffFFff"\r
+".......",\r
+"..AAA.."\r
+".A...A."\r
+".A...A."\r
+".A...A."\r
+"..AAA.."\r
+"......."\r
+"AAAAAAA"\r
+"A.....A"\r
+"A.....A"\r
+"A.....A"\r
+"A.....A"\r
+"A.....A"\r
+"AAAAAAA"\r
+"an extra string, ignored"\r
+XPM\r
+"8 8 1 2"\r
+"aa c None"\r
+"aaaaaaaaaaaaaaaa"\r
+"aaaaaaaaaaaaaaaa"\r
+"aaaaaaaaaaaaaaaa"\r
+"aaaaaaaaaaaaaaaa"\r
+"aaaaaaaaaaaaaaaa"\r
+"aaaaaaaaaaaaaaaa"\r
+"aaaaaaaaaaaaaaaa"\r
+"aaaaaaaaaaaaaaaa"\r
+""",
+    "icon-style": """@RULE Icon-Style
+@TABLE
+n_states:2
+neighborhood:Moore
+symmetries:none
+@ICONS
+# the style may be any case
+Diamonds
+""",
+}
+
+
+def _rule_reason_texts() -> list[str]:
+    """Texts that are no rule file, one or more for every reason of spec/rule-files.md."""
+    table = "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n"
+    tree = "@RULE X\n@TREE\nnum_states=2\nnum_neighbors=4\nnum_nodes=5\n"
+    xpm = "@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nsymmetries:none\n@ICONS\nXPM\n"
+    return [
+        "",
+        "\n  \n\t\n",
+        "\n# a comment first\n@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nsymmetries:none\n",
+        "@rule X\n",
+        "@RULEX\n",
+        "@RULE\n@TABLE\n",
+        "@RULE   \n",
+        "@RULE A B\n",
+        "@RULE A,B\n",
+        "@RULE A:B\n",
+        "@RULE A\N{LATIN SMALL LETTER E WITH ACUTE}\n",
+        "@RULE X\n@COLORS\n0 0 0 0\n",
+        "@RULE X\n@UNKNOWN\n@TABLE x\n",
+        "@RULE X\n@TABLE\nfoo:1\n",
+        "@RULE X\n@TABLE\nneighbors:Moore\n",
+        "@RULE X\n@TABLE\nn_states:2\nN_States:3\n",
+        table + "0,0,0,0,0,0\nn_states:3\n",
+        table + "var a={1}\nsymmetries:none\n",
+        "@RULE X\n@TABLE\nneighborhood:Moore\nsymmetries:none\n0,0,0,0,0,0,0,0,0,0\n",
+        "@RULE X\n@TABLE\nn_states:2\nsymmetries:none\n",
+        "@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nvar a={1}\n",
+        "@RULE X\n@TABLE\nn_states:1\n",
+        "@RULE X\n@TABLE\nn_states:257\n",
+        "@RULE X\n@TABLE\nn_states:0000000000000000000000002\nn_states:x\n",
+        "@RULE X\n@TABLE\nn_states:two\n",
+        "@RULE X\n@TABLE\nn_states:\n",
+        "@RULE X\n@TABLE\nneighborhood:hex\n",
+        "@RULE X\n@TABLE\nneighborhood:Margolus\n",
+        "@RULE X\n@TABLE\nsymmetries:rotate8\nneighborhood:vonNeumann\nn_states:2\n",
+        "@RULE X\n@TABLE\nn_states:2\nneighborhood:hexagonal\nsymmetries:rotate4\n",
+        "@RULE X\n@TABLE\nn_states:2\nneighborhood:oneDimensional\nsymmetries:rotate2\n",
+        "@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nsymmetries:rotate6\n0,0,0,0,0,0,0,0,0,0\n",
+        table + "var\n",
+        table + "var a\n",
+        table + "var a b={1}\n",
+        table + "var a={1\n",
+        table + "var a=1\n",
+        table + "var a={1,,2}\n",
+        table + "var a={1}}\n",
+        table + "var 12={1}\n",
+        table + "var a{={1}\n",
+        table + "var a:b={1}\n",
+        table + "var a={1}\nvar a={2}\n",
+        table + "var a={}\n",
+        table + "var a={ }\n",
+        table + "var a={b}\n",
+        table + "var a={9}\n",
+        table + "var a={0,8}\n",
+        table + "0,,0,0,0,0\n",
+        table + "0,0,0,0,0,0,\n",
+        table + ",0,0,0,0,0,0\n",
+        table + "0,0,0,0,0\n",
+        table + "0,0,0,0,0,0,0\n",
+        table + "00000\n",
+        table + "0000000\n",
+        "@RULE X\n@TABLE\nn_states:11\nneighborhood:vonNeumann\nsymmetries:none\n000000\n",
+        table + "0,0,0,0,0,q\n",
+        table + "0,0,0,0,0,08\n",
+        table + "0,0,0,0,0,99999999999999999999\n",
+        table + "var b={1,2}\n0,0,0,0,0,b\n",
+        "@RULE X\n@TREE\nfoo=1\n",
+        "@RULE X\n@TREE\nnum_states 2\n",
+        "@RULE X\n@TREE\nnum_states=2\nnum_states=2\n",
+        "@RULE X\n@TREE\nnum_states=1\n",
+        "@RULE X\n@TREE\nnum_states=300\n",
+        "@RULE X\n@TREE\nnum_neighbors=6\n",
+        "@RULE X\n@TREE\nnum_nodes=0\n",
+        "@RULE X\n@TREE\nnum_nodes=-1\n",
+        "@RULE X\n@TREE\nnum_states=2\nnum_neighbors=4\n1 0 1\n",
+        "@RULE X\n@TREE\nnum_states=2\nnum_neighbors=4\n",
+        tree + "1 0\n",
+        tree + "1 0 1 1\n",
+        tree + "1 0 x\n",
+        tree + "6 0 0\n",
+        tree + "0 0 0\n",
+        tree + "1 0 2\n",
+        tree + "2 0 0\n",
+        tree + "1 0 1\n2 0 5\n",
+        tree + "1 0 1\n2 0 0\n3 0 1\n",
+        tree + "1 0 1\n2 0 0\n3 1 1\n4 2 2\n5 3 3\n1 0 0\n",
+        tree + "1 0 1\n2 0 0\n3 1 1\n4 2 2\n",
+        tree + "1 0 1\n2 0 0\n3 1 1\n4 2 2\n1 1 1\n",
+        table + "@COLORS\n1 2 3\n",
+        table + "@COLORS\nred 1 2 3\n",
+        table + "@COLORS\n1 256 0 0\n",
+        table + "@COLORS\n0 0 0 0 0 1000\n",
+        table + "@NAMES\nfoo\n",
+        table + "@NAMES\n3\n",
+        table + "@NAMES\n3x name\n",
+        table + "@ICONS\nsquares\n",
+        table + "@ICONS\ncircles\ndiamonds\n",
+        table + '@ICONS\n"7 7 1 1"\n',
+        xpm.replace("XPM\n", "circles\nXPM\n"),
+        xpm + '"7 7 1 1"\n". c #000000"\n".......\n',
+        xpm,
+        xpm + '"7 7 1"\n',
+        xpm + '"7 6 1 1"\n',
+        xpm + '"7 7 1 3"\n',
+        xpm + '"0 0 1 1"\n',
+        xpm + '"7 7 1 1"\n". x #000000"\n',
+        xpm + '"7 7 1 1"\n". c #00000"\n',
+        xpm + '"7 7 2 1"\n". c #000000"\n". c #FFFFFF"\n',
+        xpm + '"7 7 1 1"\n". c black"\n',
+        xpm + '"7 7 1 1"\n". c #000000"\n"......"\n',
+        xpm + '"7 7 1 1"\n". c #000000"\n"..x...."\n',
+        xpm + '"7 7 1 1"\n". c #000000"\n"......."\n"......."\n',
+        xpm + '"7 7 1 2"\n".. c #000000"\n"......."\n',
+    ]
+
+
+def write_ruletable_cases() -> None:
+    """Rule tables (spec/ruletable.md, spec/rule-files.md): grid runs of the starter set and
+    of tables that restate other families (vectors/ruletable/), rule files read and compiled,
+    and the reasons a text is none (vectors/ruletable-files/), and rule tables on the
+    unbounded plane (vectors/hashlife-multistate/*-ruletable-*). Every case is new."""
+    from PIL import Image
+
+    from heaton_life.ca.hashlife.multistate import MultiStateHashLife, read_multistate_universe
+    from heaton_life.ca.rulefile import parse_rule_file, try_parse_rule_file
+    from heaton_life.ca.ruletable import (
+        STARTER_RULES,
+        RuleTableCA,
+        append_rule,
+        starter_pattern,
+        starter_rule,
+    )
+    from heaton_life.init import rle_encode
+
+    def directory(family: str, name: str) -> Path:
+        d = VECTOR_ROOT / family / name
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def save(d: Path, family: str, meta: dict[str, Any]) -> None:
+        full = {"spec_version": RULETABLE_SPEC_VERSION, "family": family, "tier": "bit-exact"}
+        full.update(meta)
+        _gap_save(d, full)
+
+    def gray_png(arr: Any) -> bytes:
+        buf = io.BytesIO()
+        Image.fromarray(np.asarray(arr).astype(np.uint8), mode="L").save(buf, format="PNG")
+        return buf.getvalue()
+
+    def placed(pattern: NDArray[np.uint8], size: tuple[int, int], at: tuple[int, int]) -> Any:
+        width, height = size
+        grid = np.zeros((height, width), np.uint8)
+        x, y = at
+        grid[y : y + pattern.shape[0], x : x + pattern.shape[1]] = pattern
+        return grid
+
+    # -- grid runs ------------------------------------------------------------------------
+    def grid_case(name: str, world: RuleTableCA, steps: list[int], text: str | None) -> None:
+        d = directory("ruletable", name)
+        checkpoints = []
+        current = 0
+        for step in steps:
+            world.step(step - current)
+            current = step
+            file = f"state_{step:05d}.png"
+            (d / file).write_bytes(gray_png(world.state))
+            checkpoints.append({"step": step, "file": file})
+        params = world.params.to_dict()
+        if text is not None:
+            params["rule_text"] = text
+        save(d, "ruletable", {"params": params, "checkpoints": checkpoints})
+
+    def custom(name: str) -> Any:
+        return parse_rule_file(RULETABLE_TEXTS[name])
+
+    loop = starter_pattern("Langtons-Loops")
+    grid_case(
+        "langtons-loops",
+        RuleTableCA("Langtons-Loops", size=(64, 64), init=placed(loop, (64, 64), (10, 30))),
+        [0, 35, 70, 105, 120, 151, 300],
+        None,
+    )
+    byl = starter_pattern("Byl-Loop")
+    grid_case(
+        "byl-loop",
+        RuleTableCA("Byl-Loop", size=(32, 32), init=placed(byl, (32, 32), (14, 14))),
+        [*range(28), 60, 120],
+        None,
+    )
+    grid_case(
+        "byl-loop-starter", RuleTableCA("Byl-Loop", size=(24, 20), init="starter"), [0, 25], None
+    )
+    grid_case(
+        "evoloop",
+        RuleTableCA("Evoloop", size=(96, 96), init=placed(loop, (96, 96), (30, 40))),
+        [0, 128, 203, 400],
+        None,
+    )
+    grid_case(
+        "evoloop-soup",
+        RuleTableCA("Evoloop", size=(32, 32), init="soup", density=0.3, seed=7),
+        [0, 1, 10, 40],
+        None,
+    )
+    grid_case(
+        "langtons-ant",
+        RuleTableCA("Langtons-Ant", size=(80, 56), init="starter"),
+        [0, 500, 9976, 10080, 11000],
+        None,
+    )
+    grid_case(
+        "ant-llrr", RuleTableCA("Ant-LLRR", size=(32, 32), init="starter"), [0, 1000, 4000], None
+    )
+    grid_case(
+        "ant-rlr", RuleTableCA("Ant-RLR", size=(40, 40), init="starter"), [0, 1000, 3000], None
+    )
+    grid_case(
+        "life-table-klein",
+        RuleTableCA(
+            custom("Life-Table"),
+            size=(48, 40),
+            init="soup",
+            density=0.4,
+            seed=11,
+            boundary="klein",
+            shift=2,
+            axis="y",
+        ),
+        [0, 1, 10, 50],
+        RULETABLE_TEXTS["Life-Table"],
+    )
+    from heaton_life.ca.wireworld import clock_loop
+
+    grid_case(
+        "wireworld-table-torus",
+        RuleTableCA(
+            custom("WireWorld-Table"), size=(24, 24), init=clock_loop((24, 24)), boundary="torus"
+        ),
+        [0, 1, 7, 40],
+        RULETABLE_TEXTS["WireWorld-Table"],
+    )
+    grid_case(
+        "hex-table-shifted-torus",
+        RuleTableCA(
+            custom("Hex-B2-S34"),
+            size=(40, 40),
+            init="soup",
+            density=0.3,
+            seed=5,
+            boundary="torus",
+            shift=3,
+        ),
+        [0, 1, 10, 30],
+        RULETABLE_TEXTS["Hex-B2-S34"],
+    )
+    grid_case(
+        "rule30-rows-torus",
+        RuleTableCA(
+            custom("Rule30-Rows"),
+            size=(64, 32),
+            init="soup",
+            density=0.1,
+            seed=3,
+            boundary="torus",
+        ),
+        [0, 1, 16, 31],
+        RULETABLE_TEXTS["Rule30-Rows"],
+    )
+    grid_case(
+        "bound-order-sphere",
+        RuleTableCA(
+            custom("Bound-Order"),
+            size=(24, 24),
+            init="soup",
+            density=0.5,
+            seed=13,
+            boundary="sphere",
+        ),
+        [0, 1, 5, 20],
+        RULETABLE_TEXTS["Bound-Order"],
+    )
+    tree_text = (
+        "@RULE Byl-Tree\nByl's loop given as its canonical tree.\n@TREE\n"
+        + starter_rule("Byl-Loop").tree_text()
+    )
+    grid_case(
+        "byl-tree-cross",
+        RuleTableCA(
+            parse_rule_file(tree_text),
+            size=(24, 24),
+            init=placed(byl, (24, 24), (10, 10)),
+            boundary="cross",
+        ),
+        [0, 10, 25],
+        tree_text,
+    )
+    grid_case(
+        "flash-blank",
+        RuleTableCA(custom("Flash"), size=(16, 12), init="blank"),
+        [0, 1, 2, 3],
+        RULETABLE_TEXTS["Flash"],
+    )
+
+    # -- files ----------------------------------------------------------------------------
+    def compile_case(name: str, text: str) -> None:
+        d = directory("ruletable-files", f"compile-{name}")
+        (d / "input.rule").write_bytes(text.encode("utf-8"))
+        rule = parse_rule_file(text)
+        (d / "tree.txt").write_text(rule.tree_text(), encoding="utf-8", newline="\n")
+        save(
+            d,
+            "ruletable-files",
+            {"kind": "compile", "input": "input.rule", "tree": "tree.txt", **_rule_summary(rule)},
+        )
+
+    for name in STARTER_RULES:
+        compile_case(name.lower(), starter_rule(name).text)
+    for name, text in RULETABLE_TEXTS.items():
+        compile_case(name.lower(), text)
+    compile_case("byl-tree", tree_text)
+    for name, text in _RULE_FILE_CASES.items():
+        compile_case(name, text)
+
+    reasons = []
+    for text in _rule_reason_texts():
+        rule, error = try_parse_rule_file(text)
+        assert rule is None and error is not None, text
+        reasons.append({"text": text, "reason": error.reason, "line": error.line})
+    d = directory("ruletable-files", "reasons")
+    save(d, "ruletable-files", {"kind": "reasons", "cases": reasons})
+
+    # -- the unbounded plane --------------------------------------------------------------
+    root = VECTOR_ROOT / "hashlife-multistate"
+    full = {
+        "spec_version": RULETABLE_SPEC_VERSION,
+        "family": "hashlife-multistate",
+        "tier": "bit-exact",
+    }
+
+    def multistate(name: str, kind: str) -> tuple[Path, dict[str, Any]]:
+        d = root / name
+        d.mkdir(parents=True, exist_ok=True)
+        return d, {**full, "kind": kind}
+
+    d, meta = multistate("grid-ruletable-langtons-loops", "grid")
+    grid = placed(loop, (64, 64), (10, 30))
+    (d / "grid.png").write_bytes(gray_png(grid))
+    origin = (-20, 7)
+    u = MultiStateHashLife("Langtons-Loops")
+    u.set_rect(origin[0], origin[1], grid)
+    w = RuleTableCA("Langtons-Loops", size=(64, 64), init=grid)
+    checkpoints = []
+    for gen in [0, 1, 151, 300]:
+        u.step(gen - u.generation)
+        w.step(gen - w.generation)
+        assert np.array_equal(
+            u.get_rect(origin[0], origin[1], origin[0] + 63, origin[1] + 63), w.state
+        )
+        assert u.population == int(np.count_nonzero(w.state))
+        entry = _hashlife_entry(d, u, f"state-{gen}")
+        (d / f"cells-{gen}.png").write_bytes(gray_png(w.state))
+        entry["cells"] = f"cells-{gen}.png"
+        checkpoints.append(entry)
+    meta.update(
+        {
+            "rule": "Langtons-Loops",
+            "grid": "grid.png",
+            "origin": [_signed_text(origin[0]), _signed_text(origin[1])],
+            "checkpoints": checkpoints,
+        }
+    )
+    _gap_save(d, meta)
+
+    d, meta = multistate("evolve-ruletable-evoloop", "evolve")
+    data = rle_encode(loop, "Evoloop").encode("utf-8")
+    (d / "input.rle").write_bytes(data)
+    u = read_multistate_universe(data).universe
+    checkpoints = []
+    for gen in [0, 128, 203, 400]:
+        u.step(gen - u.generation)
+        checkpoints.append(_hashlife_entry(d, u, f"state-{gen}"))
+    meta.update({"input": "input.rle", "checkpoints": checkpoints})
+    _gap_save(d, meta)
+
+    d, meta = multistate("rle-ruletable-appended", "rle")
+    mine = parse_rule_file(
+        starter_rule("Byl-Loop").text.replace("@RULE Byl-Loop", "@RULE My-Byl", 1)
+    )
+    text = append_rule(rle_encode(byl, "My-Byl"), mine)
+    (d / "input.rle").write_text(text, encoding="utf-8", newline="\n")
+    u = MultiStateHashLife.from_rle(text)
+    assert u.rule == "My-Byl"
+    entry = _hashlife_entry(d, u, "state")
+    (d / "output.rle").write_text(u.to_rle(), encoding="utf-8", newline="\n")
+    meta.update({"input": "input.rle", **entry, "rle": "output.rle"})
+    _gap_save(d, meta)
+
+
+# Rule files whose @COLORS the palette cases apply (spec/render.md "Default palettes").
+RULETABLE_PALETTE_TEXTS: dict[str, str] = {
+    "Palette-Colors": """@RULE Palette-Colors
+State colors and a gradient, in an order that matters: the gradient overrides the state
+colors before it (but not state 0's), and the state color after it overrides the gradient.
+@TABLE
+n_states:6
+neighborhood:vonNeumann
+symmetries:none
+@COLORS
+0 16 24 32
+1 255 0 0
+2 9 9 9
+0 0 255 255 255 0
+5 0 255 0
+""",
+    "Palette-Two": """@RULE Palette-Two
+Two states and a gradient: state 1 is the gradient's first color.
+@TABLE
+n_states:2
+neighborhood:Moore
+symmetries:none
+@COLORS
+10 20 30 200 210 220
+""",
+}
+
+
+def write_ruletable_palette_cases() -> None:
+    """Rule tables' default palettes (spec/render.md "Default palettes", spec/ruletable.md
+    "Frames"): their @COLORS over the multi-state palette, on a grid and on the plane, under
+    vectors/render/palette-*ruletable*/. Every case is new."""
+    from PIL import Image
+
+    from heaton_life.ca.hashlife import MultiStateHashLife
+    from heaton_life.ca.rulefile import parse_rule_file
+    from heaton_life.ca.ruletable import RuleTableCA, starter_rule
+    from heaton_life.render import (
+        colormap_palette,
+        default_palette,
+        default_zoom_order,
+        frame_values,
+    )
+
+    def write(name: str, world: Any, description: dict[str, Any], cmap: str | None) -> None:
+        palette = default_palette(world) if cmap is None else colormap_palette(world, cmap)
+        buf = io.BytesIO()
+        Image.fromarray(palette.reshape(1, 256, 3), mode="RGB").save(buf, format="PNG")
+        case_dir = VECTOR_ROOT / "render" / name
+        case_dir.mkdir(parents=True, exist_ok=True)
+        (case_dir / "palette.png").write_bytes(buf.getvalue())
+        meta: dict[str, Any] = {
+            "spec_version": RULETABLE_SPEC_VERSION,
+            "family": "render",
+            "tier": "bit-exact",
+            "kind": "palette",
+            "world": description,
+            "frame_values": list(frame_values(world)),
+            "zoom_order": list(default_zoom_order(world)),
+            "output": {"file": "palette.png", "shape": [256, 3]},
+        }
+        if cmap is not None:
+            meta["cmap"] = cmap
+        (case_dir / "params.json").write_text(
+            json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
+        )
+        print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
+
+    def grid(name: str, cmap: str | None = None) -> tuple[Any, dict[str, Any]]:
+        if name in RULETABLE_PALETTE_TEXTS:
+            text = RULETABLE_PALETTE_TEXTS[name]
+            rule = parse_rule_file(text)
+            return RuleTableCA(rule, size=(8, 8), init="blank"), {
+                "family": "ruletable",
+                "rule": name,
+                "rule_text": text,
+            }
+        world = RuleTableCA(starter_rule(name), size=(8, 8), init="blank")
+        return world, {"family": "ruletable", "rule": name}
+
+    def plane(name: str) -> tuple[Any, dict[str, Any]]:
+        if name in RULETABLE_PALETTE_TEXTS:
+            text = RULETABLE_PALETTE_TEXTS[name]
+            universe = MultiStateHashLife(parse_rule_file(text))
+            return universe, {"family": "hashlife-multistate", "rule": name, "rule_text": text}
+        return MultiStateHashLife(name), {"family": "hashlife-multistate", "rule": name}
+
+    write("palette-ruletable-langtons-loops", *grid("Langtons-Loops"), None)
+    write("palette-ruletable-colors", *grid("Palette-Colors"), None)
+    write("palette-ruletable-two-states", *grid("Palette-Two"), None)
+    write("palette-ruletable-cmap-rainbow", *grid("Palette-Colors"), "rainbow")
+    write("palette-multistate-ruletable-evoloop", *plane("Evoloop"), None)
+    write("palette-multistate-ruletable-colors", *plane("Palette-Colors"), None)
 
 
 if __name__ == "__main__":

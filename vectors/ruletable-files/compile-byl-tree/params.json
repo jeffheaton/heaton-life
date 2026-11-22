@@ -1,0 +1,18 @@
+{
+  "colors": [],
+  "description": "Byl's loop given as its canonical tree.",
+  "family": "ruletable-files",
+  "icons": null,
+  "input": "input.rule",
+  "kind": "compile",
+  "name": "Byl-Tree",
+  "names": [],
+  "neighborhood": null,
+  "neighbors": 4,
+  "source": "tree",
+  "spec_version": "0.16.0",
+  "states": 6,
+  "symmetries": null,
+  "tier": "bit-exact",
+  "tree": "tree.txt"
+}

@@ -1,0 +1,30 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_01000.png",
+      "step": 1000
+    },
+    {
+      "file": "state_03000.png",
+      "step": 3000
+    }
+  ],
+  "family": "ruletable",
+  "params": {
+    "axis": "x",
+    "boundary": "dead",
+    "density": 0.35,
+    "height": 40,
+    "init": "starter",
+    "rule": "Ant-RLR",
+    "seed": 0,
+    "shift": 0,
+    "width": 40
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

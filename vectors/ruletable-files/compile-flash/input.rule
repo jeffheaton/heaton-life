@@ -1,0 +1,13 @@
+@RULE Flash
+A blank block turns on and every on cell turns off: the all-0 block changes, so this runs
+on grids only.
+@TABLE
+n_states:2
+neighborhood:vonNeumann
+symmetries:none
+var a={0,1}
+var b={a}
+var c={a}
+var d={a}
+0,0,0,0,0,1
+1,a,b,c,d,0

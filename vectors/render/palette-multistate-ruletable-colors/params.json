@@ -1,0 +1,27 @@
+{
+  "family": "render",
+  "frame_values": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "kind": "palette",
+  "output": {
+    "file": "palette.png",
+    "shape": [
+      256,
+      3
+    ]
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "world": {
+    "family": "hashlife-multistate",
+    "rule": "Palette-Colors",
+    "rule_text": "@RULE Palette-Colors\nState colors and a gradient, in an order that matters: the gradient overrides the state\ncolors before it (but not state 0's), and the state color after it overrides the gradient.\n@TABLE\nn_states:6\nneighborhood:vonNeumann\nsymmetries:none\n@COLORS\n0 16 24 32\n1 255 0 0\n2 9 9 9\n0 0 255 255 255 0\n5 0 255 0\n"
+  },
+  "zoom_order": []
+}

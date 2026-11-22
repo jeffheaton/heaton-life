@@ -15,7 +15,7 @@ from heaton_life.ca.hashlife.multistate.macrocell import fallback_rule, file_rul
 from heaton_life.ca.hashlife.multistate.store import unpack
 from heaton_life.ca.hashlife.multistate.universe import MultiStateHashLife
 from heaton_life.ca.hashlife.universe import DEFAULT_MEMORY_MB, EDIT_LIMIT, check_box
-from heaton_life.ca.state_rules import StateRule
+from heaton_life.ca.state_rules import StateRule, check_state_rule, names_rule
 from heaton_life.core.decimal_text import digits_of
 from heaton_life.init.metadata import PatternMetadata, metadata_lines
 from heaton_life.init.rle import rle_runs, state_tag
@@ -39,6 +39,21 @@ def read_rle(
     return universe
 
 
+def _header_rule(name: str, given: StateRule, text: str) -> StateRule:
+    """The rule an RLE header names: ``given`` when the name is its canonical name, else a
+    rule file appended to the pattern under that name (spec/ruletable.md "Files"), else the
+    rule of that name."""
+    if names_rule(name, given):
+        return file_rule(name, given)
+    # Imported here: heaton_life.ca, the rule-table module's package, imports this one.
+    from heaton_life.ca.ruletable import embedded_rule
+
+    appended = embedded_rule(text)
+    if appended is not None and names_rule(name, appended):
+        return check_state_rule(appended)
+    return file_rule(name, given)
+
+
 def build_rle(
     universe: MultiStateHashLife, text: str, fallback: StateRule
 ) -> tuple[int, int, int, StateRule]:
@@ -51,7 +66,7 @@ def build_rle(
             f"the unbounded universe has no bounded grid ('{info.bounded_grid.suffix}' "
             "in the rule): open the file in a grid world (spec/topology.md)"
         )
-    rule = fallback if info.rule is None else file_rule(info.rule, fallback)
+    rule = fallback if info.rule is None else _header_rule(info.rule, fallback, text)
     x0, y0 = info.position or (0, 0)
     blocks: dict[tuple[int, int], int] = {}
     width = height = top = 0

@@ -1,0 +1,4 @@
+#N Ant-RLR
+#C One ant facing north on color 0.
+x = 1, y = 1, rule = Ant-RLR
+C!

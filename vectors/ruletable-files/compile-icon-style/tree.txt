@@ -1,0 +1,12 @@
+num_states=2
+num_neighbors=8
+num_nodes=9
+1 0 1
+2 0 0
+3 1 1
+4 2 2
+5 3 3
+6 4 4
+7 5 5
+8 6 6
+9 7 7

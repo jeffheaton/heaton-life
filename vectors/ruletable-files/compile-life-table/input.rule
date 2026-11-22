@@ -1,0 +1,18 @@
+@RULE Life-Table
+Conway's Life as a rule table: Moore, permute.
+@TABLE
+n_states:2
+neighborhood:Moore
+symmetries:permute
+var a={0,1}
+var b={a}
+var c={a}
+var d={a}
+var e={a}
+var f={a}
+var g={a}
+var h={a}
+0,1,1,1,0,0,0,0,0,1  # birth on three
+1,1,1,0,0,0,0,0,0,1  # survival on two
+1,1,1,1,0,0,0,0,0,1  # and three
+1,a,b,c,d,e,f,g,h,0  # death otherwise

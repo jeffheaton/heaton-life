@@ -1,0 +1,5 @@
+#N Byl-Loop
+#C The loop of Fig. 3 of J. Byl, Physica D 34 (1989) 295-299, mirrored
+#C left to right (spec/ruletable.md, "Byl's loop").
+x = 4, y = 4, rule = Byl-Loop
+.2B$BACB$BDCB$.EB!

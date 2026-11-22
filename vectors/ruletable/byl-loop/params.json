@@ -1,0 +1,138 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_00001.png",
+      "step": 1
+    },
+    {
+      "file": "state_00002.png",
+      "step": 2
+    },
+    {
+      "file": "state_00003.png",
+      "step": 3
+    },
+    {
+      "file": "state_00004.png",
+      "step": 4
+    },
+    {
+      "file": "state_00005.png",
+      "step": 5
+    },
+    {
+      "file": "state_00006.png",
+      "step": 6
+    },
+    {
+      "file": "state_00007.png",
+      "step": 7
+    },
+    {
+      "file": "state_00008.png",
+      "step": 8
+    },
+    {
+      "file": "state_00009.png",
+      "step": 9
+    },
+    {
+      "file": "state_00010.png",
+      "step": 10
+    },
+    {
+      "file": "state_00011.png",
+      "step": 11
+    },
+    {
+      "file": "state_00012.png",
+      "step": 12
+    },
+    {
+      "file": "state_00013.png",
+      "step": 13
+    },
+    {
+      "file": "state_00014.png",
+      "step": 14
+    },
+    {
+      "file": "state_00015.png",
+      "step": 15
+    },
+    {
+      "file": "state_00016.png",
+      "step": 16
+    },
+    {
+      "file": "state_00017.png",
+      "step": 17
+    },
+    {
+      "file": "state_00018.png",
+      "step": 18
+    },
+    {
+      "file": "state_00019.png",
+      "step": 19
+    },
+    {
+      "file": "state_00020.png",
+      "step": 20
+    },
+    {
+      "file": "state_00021.png",
+      "step": 21
+    },
+    {
+      "file": "state_00022.png",
+      "step": 22
+    },
+    {
+      "file": "state_00023.png",
+      "step": 23
+    },
+    {
+      "file": "state_00024.png",
+      "step": 24
+    },
+    {
+      "file": "state_00025.png",
+      "step": 25
+    },
+    {
+      "file": "state_00026.png",
+      "step": 26
+    },
+    {
+      "file": "state_00027.png",
+      "step": 27
+    },
+    {
+      "file": "state_00060.png",
+      "step": 60
+    },
+    {
+      "file": "state_00120.png",
+      "step": 120
+    }
+  ],
+  "family": "ruletable",
+  "params": {
+    "axis": "x",
+    "boundary": "dead",
+    "density": 0.35,
+    "height": 32,
+    "init": "array",
+    "rule": "Byl-Loop",
+    "seed": 0,
+    "shift": 0,
+    "width": 32
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

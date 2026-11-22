@@ -42,8 +42,9 @@ namespace HeatonLife
         /// <summary>Wireworld (spec/wireworld.md), named <c>WireWorld</c>.</summary>
         public static StateRule Wireworld => WireworldRule.Instance;
 
-        /// <summary>The rule a name gives: <c>WireWorld</c>, a History rule (spec/history.md), or
-        /// a Generations rule in either spelling (spec/generations.md "Rules"). Any text that
+        /// <summary>The rule a name gives: <c>WireWorld</c> or a rule of the rule-table starter set
+        /// (spec/ruletable.md), a History rule (spec/history.md), or a Generations rule in either
+        /// spelling (spec/generations.md "Rules"). Any text that
         /// names no rule throws <see cref="ArgumentException"/>, a Larger than Life rule with the
         /// reason that it runs on grids only (spec/ltl.md).</summary>
         public static StateRule Compile(string name)
@@ -59,12 +60,17 @@ namespace HeatonLife
             // Generations rules, in either spelling (spec/generations.md).
             if (GenerationsRule.TryCompile(name, out GenerationsRule? generations, out _))
                 return generations;
+            // The rule-table starter set (spec/ruletable.md "The starter set"), read when named.
+            RuleTable? starter = RuleTables.StarterOrNull(Trimmed(name));
+            if (starter != null)
+                return starter;
             string? ltl = LtlRule.Refusal(name); // Larger than Life: grids only (spec/ltl.md)
             if (ltl != null)
                 throw new ArgumentException(ltl, nameof(name));
             throw new ArgumentException(
-                $"'{name}' is not a state rule (known: {WireworldRule.Instance.Canonical}, History rules "
-                + "such as B3/S23History, and Generations rules such as B2/S345/C4)",
+                $"'{name}' is not a state rule (known: {WireworldRule.Instance.Canonical}, "
+                + $"{string.Join(", ", RuleTables.StarterNames)}, History rules such as B3/S23History, "
+                + "and Generations rules such as B2/S345/C4)",
                 nameof(name));
         }
 
@@ -125,6 +131,17 @@ namespace HeatonLife
         }
 
         private static char AsciiLower(char c) => c >= 'A' && c <= 'Z' ? (char)(c + ('a' - 'A')) : c;
+
+        /// <summary><paramref name="text"/> without spec/rules.md's whitespace at its two ends.</summary>
+        private static string Trimmed(string text)
+        {
+            int start = 0, end = text.Length;
+            while (start < end && RuleString.IsSpace(text[start]))
+                start++;
+            while (end > start && RuleString.IsSpace(text[end - 1]))
+                end--;
+            return text.Substring(start, end - start);
+        }
     }
 
     /// <summary>

@@ -207,12 +207,13 @@ def compatible(
 ) -> str | None:
     """Spec compatibility check: the rejection reason, or None when stampable.
 
-    Patterns are family-bound (a glider cannot enter Wireworld); cyclic, generations and
-    Larger than Life (ltl) additionally require every cell below the target's state count.
+    Patterns are family-bound (a glider cannot enter Wireworld); cyclic, generations,
+    Larger than Life (ltl) and rule tables additionally require every cell below the
+    target's state count.
     """
     if pattern_family != target_family:
         return f"{pattern_family!r} patterns cannot be stamped into {target_family!r}"
-    if target_family in ("cyclic", "generations", "ltl") and target_states is not None:
+    if target_family in ("cyclic", "generations", "ltl", "ruletable") and target_states is not None:
         top = int(pattern.max(initial=0))
         if top >= target_states:
             return f"pattern uses state {top}, target has only {target_states} states"

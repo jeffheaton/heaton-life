@@ -1,0 +1,7 @@
+@RULE VN-Mirror
+@TABLE
+n_states:3
+neighborhood:vonNeumann
+symmetries:reflect_horizontal
+0,1,2,0,0,2
+0 2 0 0 1 1

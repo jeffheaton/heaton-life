@@ -1,0 +1,35 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_00001.png",
+      "step": 1
+    },
+    {
+      "file": "state_00010.png",
+      "step": 10
+    },
+    {
+      "file": "state_00030.png",
+      "step": 30
+    }
+  ],
+  "family": "ruletable",
+  "params": {
+    "axis": "x",
+    "boundary": "torus",
+    "density": 0.3,
+    "height": 40,
+    "init": "soup",
+    "rule": "Hex-B2-S34",
+    "rule_text": "@RULE Hex-B2-S34\nThe hexagonal Life-like rule B2/S34H as a rule table: hexagonal, permute.\n@TABLE\nn_states:2\nneighborhood:hexagonal\nsymmetries:permute\nvar a={0,1}\nvar b={a}\nvar c={a}\nvar d={a}\nvar e={a}\nvar f={a}\n0,1,1,0,0,0,0,1\n1,1,1,1,0,0,0,1\n1,1,1,1,1,0,0,1\n1,a,b,c,d,e,f,0\n@ICONS\nhexagons\n",
+    "seed": 5,
+    "shift": 3,
+    "width": 40
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

@@ -1,0 +1,9 @@
+@RULE Row-Mirror
+@TABLE
+n_states:3
+neighborhood:oneDimensional
+symmetries:reflect
+var a={1,2}
+0,1,2,1
+0,a,0,a
+2,a,a,0

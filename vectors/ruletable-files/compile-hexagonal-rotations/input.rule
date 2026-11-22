@@ -1,0 +1,9 @@
+@RULE Hex-Turns
+@TABLE
+n_states:3
+neighborhood:hexagonal
+symmetries:rotate6reflect
+0,1,2,0,0,0,0,1
+1,2,0,2,0,0,0,2
+@TREE
+num_states=2

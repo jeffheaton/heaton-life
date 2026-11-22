@@ -16,7 +16,7 @@ namespace HeatonLife.Tests
     {
         /// <summary>Bit-exact families the C# port implements; cases are auto-discovered.</summary>
         private static readonly string[] ByteFamilies =
-            { "lifelike", "lifelike-history", "elementary", "cyclic", "wireworld", "mergelife", "generations", "ltl" };
+            { "lifelike", "lifelike-history", "elementary", "cyclic", "wireworld", "mergelife", "generations", "ltl", "ruletable" };
 
         /// <summary>ε-tier (float64) families the C# port implements.</summary>
         private static readonly string[] FloatFamilies =
@@ -255,6 +255,7 @@ namespace HeatonLife.Tests
                 case "lifelike-history": // a History rule's states 0–6, raw (spec/history.md)
                 case "generations": // states 0 … C − 1, raw (spec/generations.md)
                 case "ltl": // a Larger than Life rule's states, raw (spec/ltl.md "Vector encoding")
+                case "ruletable": // a rule table's states, raw (spec/ruletable.md)
                     return pixels;
                 case "wireworld": // pixel = state * 85
                     {
@@ -393,6 +394,24 @@ namespace HeatonLife.Tests
                             sim.SeedSingle();
                         else
                             throw new InvalidDataException($"unsupported ltl init '{init}'");
+                        return new Sim(sim.Step, () => sim.State.ToArray());
+                    }
+                case "ruletable":
+                    {
+                        // A rule outside the starter set carries its file (spec/ruletable.md).
+                        RuleTable rule = p.TryGetProperty("rule_text", out JsonElement text)
+                            ? RuleTable.Parse(text.GetString()!)
+                            : RuleTables.Starter(p.GetProperty("rule").GetString()!);
+                        Assert.Equal(p.GetProperty("rule").GetString(), rule.Name);
+                        var sim = new RuleTableCA(rule, width, height, new byte[width * height], ParseTopology(p));
+                        if (initial != null)
+                            sim.SetState(initial);
+                        else if (init == "starter")
+                            sim.SeedStarter();
+                        else if (init == "soup")
+                            sim.SeedSoup(p.GetProperty("seed").GetUInt32(), p.GetProperty("density").GetDouble());
+                        else if (init != "blank")
+                            throw new InvalidDataException($"unsupported ruletable init '{init}'");
                         return new Sim(sim.Step, () => sim.State.ToArray());
                     }
                 default:

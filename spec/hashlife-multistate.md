@@ -56,6 +56,7 @@ family's. Any other text is an error. The names so far:
 | Name | Rule | States |
 |---|---|---|
 | `WireWorld` | Wireworld ([wireworld.md](wireworld.md)): 0 empty, 1 electron head, 2 electron tail, 3 conductor | 4 |
+| `Langtons-Loops`, `Byl-Loop`, `Evoloop`, `Langtons-Ant`, `Ant-LLRR`, `Ant-RLR` | the [rule-table](ruletable.md) starter set: each rule's function is its canonical tree ([rule-files.md](rule-files.md)) | 8, 6, 9, 10, 20, 15 |
 | a [History rule](history.md), `B3/S23History` or `LifeHistory`, any rule of [rules.md](rules.md) with the `History` variant | its cell function is history.md's evolution; canonical name and spellings as rules.md gives them (`LifeHistory` is `B3/S23History`). A base rule with B0 is refused: its background would change | 7 |
 | a Generations rule, `B…/S…/C…` or survival/birth/count | Generations ([generations.md](generations.md#rules)): 0 dead, 1 alive, 2 … C − 1 dying; canonical name its canonical form. A rule with B0 is refused: its background would change | C |
 
@@ -67,7 +68,8 @@ runs on bounded grids only.
 
 A port may also take a state rule as an object (Python a `StateRule`, .NET a `StateRule`),
 for a family's own rules; files still name a rule by its canonical name (Pattern I/O,
-below).
+below). Any [rule file](rule-files.md)'s rule is one (`RuleTable`); there is no registry
+of names beyond the table above ([ruletable.md](ruletable.md#on-the-unbounded-plane)).
 
 **Changing the rule.** The cells stay and every cached result goes. A rule with fewer
 states than the largest state present is an error that changes nothing.
@@ -214,7 +216,9 @@ that goes with it (`default_zoom_order`), which the host sets. The zoom order ch
   also takes that rule where the file's name matches its canonical name, ignoring ASCII
   case. A file that names no rule takes the rule the reader is given (default
   `WireWorld`); `read_snapshot` gives it the universe's rule. A state at or above the
-  rule's S is an error.
+  rule's S is an error. An RLE file may carry its rule: a [rule file appended after the
+  pattern](ruletable.md#files) is taken when the header names it and the reader's rule
+  object doesn't, before the name is looked up.
 - **Into a universe that exists**: `read_snapshot(source)` reads any file that loading by
   content reads into the universe's own store, as
   [formats.md](formats.md#reading-into-a-universe-that-exists) says: a snapshot of its
@@ -233,7 +237,7 @@ and `state_lines`.
 | kind | inputs | expected |
 |---|---|---|
 | `evolve` | `input` (an `.rle` or `.mc` file, loaded by content) | `checkpoints`: states in order; a runner steps by each difference |
-| `grid` | `rule`, `grid` (an 8-bit grayscale PNG of the states as the rule's grid family stores them: × 85 for `WireWorld`, as the [wireworld](wireworld.md#vector-encoding) vectors do; the state itself for a [History rule](history.md#vector-encoding) and for a [Generations](generations.md#vector-encoding) rule), `origin` (`[x, y]`, the cell the grid's top-left lands on) | `checkpoints`: each a state, and `cells` (a PNG like `grid`): the rule's grid family (Wireworld, Life-like under the History rule, or Generations under the case's rule) run from `grid` with dead edges to that generation, which the universe's rectangle under the grid must equal, every non-zero cell of the universe lying in it |
+| `grid` | `rule`, `grid` (an 8-bit grayscale PNG of the states as the rule's grid family stores them: × 85 for `WireWorld`, as the [wireworld](wireworld.md#vector-encoding) vectors do; the state itself for a [History rule](history.md#vector-encoding), a [Generations](generations.md#vector-encoding) rule and a [rule table](ruletable.md#vector-encoding) of the starter set), `origin` (`[x, y]`, the cell the grid's top-left lands on) | `checkpoints`: each a state, and `cells` (a PNG like `grid`): the rule's grid family (Wireworld, Life-like under the History rule, Generations under the case's rule, or the rule-table family) run from `grid` with dead edges to that generation, which the universe's rectangle under the grid must equal, every non-zero cell of the universe lying in it |
 | `macrocell` | `input.mc`, and `rule` (the reader's rule) when given | the state, and `rle` (the RLE file) or `rle_error: true`; or `error: true` |
 | `rle` | `input.rle`, and `rule` when given | the state and `rle`; or `error: true` |
 | `edit` | `rule`, then `ops` in order on an empty universe: `set_cell` (`x`, `y`, `state`), `set_rect` (`x`, `y`, `mode`, `cells` as rows of state digits, `0`–`9` then `a`–`z` for 10–35), `clear_rect`, `clear_outside`, `rotate_rect` (with `expect`), `flip_rect`, `advance_selection`, `advance_outside` (`n`), `set_generation` (`n`), `step` (`n`), `clear`, `set_rule` (`rule`), `fill_random` (`x0`…`y1`, `density`, `seed`; History rules only), and the queries `get_rect` (`x0`…`y1`; `expect`: rows of state digits) and `bounding_box_in` (`expect`) — coordinates as in [hashlife.md](hashlife.md#vector-encoding) | the final state; an op with `error: true` must raise and change nothing |

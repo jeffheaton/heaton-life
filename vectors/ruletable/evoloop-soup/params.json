@@ -1,0 +1,34 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_00001.png",
+      "step": 1
+    },
+    {
+      "file": "state_00010.png",
+      "step": 10
+    },
+    {
+      "file": "state_00040.png",
+      "step": 40
+    }
+  ],
+  "family": "ruletable",
+  "params": {
+    "axis": "x",
+    "boundary": "dead",
+    "density": 0.3,
+    "height": 32,
+    "init": "soup",
+    "rule": "Evoloop",
+    "seed": 7,
+    "shift": 0,
+    "width": 32
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

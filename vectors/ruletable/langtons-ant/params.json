@@ -1,0 +1,38 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_00500.png",
+      "step": 500
+    },
+    {
+      "file": "state_09976.png",
+      "step": 9976
+    },
+    {
+      "file": "state_10080.png",
+      "step": 10080
+    },
+    {
+      "file": "state_11000.png",
+      "step": 11000
+    }
+  ],
+  "family": "ruletable",
+  "params": {
+    "axis": "x",
+    "boundary": "dead",
+    "density": 0.35,
+    "height": 56,
+    "init": "starter",
+    "rule": "Langtons-Ant",
+    "seed": 0,
+    "shift": 0,
+    "width": 80
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

@@ -473,6 +473,19 @@ namespace HeatonLife
 
         internal static StateRule Fallback(StateRule? rule) => StateRules.Check(rule ?? StateRules.Compile(DefaultRule));
 
+        /// <summary>The rule an RLE header names: <paramref name="given"/> when the name is its
+        /// canonical name, else a rule file appended to the pattern under that name
+        /// (spec/ruletable.md "Files"), else the rule of that name.</summary>
+        private static StateRule HeaderRule(string name, StateRule given, string text)
+        {
+            if (StateRules.Names(name, given))
+                return FileRule(name, given);
+            RuleTable? appended = RuleTables.Embedded(text);
+            if (appended != null && StateRules.Names(name, appended))
+                return StateRules.Check(appended);
+            return FileRule(name, given);
+        }
+
         /// <summary>The rule a file names: <paramref name="given"/> when the name is its canonical
         /// name, ignoring ASCII case, else the rule of that name.</summary>
         internal static StateRule FileRule(string text, StateRule given)
@@ -663,7 +676,7 @@ namespace HeatonLife
                 if (Patterns.MarksExtended(c))
                     extended = true;
             }
-            StateRule rule = named == null ? fallback : FileRule(named, fallback);
+            StateRule rule = named == null ? fallback : HeaderRule(named, fallback, text);
 
             const long limit = HashLife.EditLimit;
             bool placed = BigInteger.Abs(posX) <= limit && BigInteger.Abs(posY) <= limit;

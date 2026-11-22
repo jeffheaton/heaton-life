@@ -1,0 +1,141 @@
+@RULE Ant-LLRR
+
+The ant LLRR, of the many-color ants of Greg Turk and Jim Propp (D. Gale,
+J. Propp, S. Sutherland and S. Troubetzkoy, "Further travels with my ant",
+Mathematical Intelligencer 17:3 (1995) 48-56). On color k it turns as the
+name's k-th letter says (L left, R right), sets the cell to color k + 1
+(mod 4) and steps forward. Its pattern grows symmetrically.
+
+The starter pattern (Ant-LLRR.rle) is one ant facing north on color 0.
+
+States: a cell is its color c (0 to 3), or 4 + 4c + d where the ant
+stands on it with heading d (0 north, 1 east, 2 south, 3 west). Each
+generation the ant's cell takes its next color and the ant appears on the
+neighbor its new heading points to, facing that way. Two ants that would
+land on one cell: the one from the north wins, then east, south, west.
+
+Generated from the definition by python/tools/gen_rule_tables.py for
+heaton-life (spec/ruletable.md).
+
+@TABLE
+n_states:20
+neighborhood:vonNeumann
+symmetries:none
+
+var a={0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19}
+var b={a}
+var c={a}
+var e={a}
+var next0={0,16,17,18,19}
+var next1={1,4,5,6,7}
+var next2={2,8,9,10,11}
+var next3={3,12,13,14,15}
+
+# C N E S W C'
+# An ant steps on from the north, now heading S.
+next0,7,a,b,c,6
+next1,7,a,b,c,10
+next2,7,a,b,c,14
+next3,7,a,b,c,18
+next0,11,a,b,c,6
+next1,11,a,b,c,10
+next2,11,a,b,c,14
+next3,11,a,b,c,18
+next0,13,a,b,c,6
+next1,13,a,b,c,10
+next2,13,a,b,c,14
+next3,13,a,b,c,18
+next0,17,a,b,c,6
+next1,17,a,b,c,10
+next2,17,a,b,c,14
+next3,17,a,b,c,18
+# An ant steps on from the east, now heading W.
+next0,a,4,b,c,7
+next1,a,4,b,c,11
+next2,a,4,b,c,15
+next3,a,4,b,c,19
+next0,a,8,b,c,7
+next1,a,8,b,c,11
+next2,a,8,b,c,15
+next3,a,8,b,c,19
+next0,a,14,b,c,7
+next1,a,14,b,c,11
+next2,a,14,b,c,15
+next3,a,14,b,c,19
+next0,a,18,b,c,7
+next1,a,18,b,c,11
+next2,a,18,b,c,15
+next3,a,18,b,c,19
+# An ant steps on from the south, now heading N.
+next0,a,b,5,c,4
+next1,a,b,5,c,8
+next2,a,b,5,c,12
+next3,a,b,5,c,16
+next0,a,b,9,c,4
+next1,a,b,9,c,8
+next2,a,b,9,c,12
+next3,a,b,9,c,16
+next0,a,b,15,c,4
+next1,a,b,15,c,8
+next2,a,b,15,c,12
+next3,a,b,15,c,16
+next0,a,b,19,c,4
+next1,a,b,19,c,8
+next2,a,b,19,c,12
+next3,a,b,19,c,16
+# An ant steps on from the west, now heading E.
+next0,a,b,c,6,5
+next1,a,b,c,6,9
+next2,a,b,c,6,13
+next3,a,b,c,6,17
+next0,a,b,c,10,5
+next1,a,b,c,10,9
+next2,a,b,c,10,13
+next3,a,b,c,10,17
+next0,a,b,c,12,5
+next1,a,b,c,12,9
+next2,a,b,c,12,13
+next3,a,b,c,12,17
+next0,a,b,c,16,5
+next1,a,b,c,16,9
+next2,a,b,c,16,13
+next3,a,b,c,16,17
+# The ant leaves: its cell takes its next color.
+4,a,b,c,e,1
+5,a,b,c,e,1
+6,a,b,c,e,1
+7,a,b,c,e,1
+8,a,b,c,e,2
+9,a,b,c,e,2
+10,a,b,c,e,2
+11,a,b,c,e,2
+12,a,b,c,e,3
+13,a,b,c,e,3
+14,a,b,c,e,3
+15,a,b,c,e,3
+16,a,b,c,e,0
+17,a,b,c,e,0
+18,a,b,c,e,0
+19,a,b,c,e,0
+
+@NAMES
+0 color 0
+1 color 1
+2 color 2
+3 color 3
+4 ant on color 0 heading north
+5 ant on color 0 heading east
+6 ant on color 0 heading south
+7 ant on color 0 heading west
+8 ant on color 1 heading north
+9 ant on color 1 heading east
+10 ant on color 1 heading south
+11 ant on color 1 heading west
+12 ant on color 2 heading north
+13 ant on color 2 heading east
+14 ant on color 2 heading south
+15 ant on color 2 heading west
+16 ant on color 3 heading north
+17 ant on color 3 heading east
+18 ant on color 3 heading south
+19 ant on color 3 heading west

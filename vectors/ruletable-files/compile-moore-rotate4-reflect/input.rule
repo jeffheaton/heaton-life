@@ -1,0 +1,10 @@
+@RULE Moore-Quarter
+@TABLE
+n_states:3
+neighborhood:Moore
+symmetries:rotate4
+0,1,2,0,0,0,0,0,0,1
+1,0,0,2,0,0,0,0,1,2
+@RULE ignored-second-rule
+@TABLE
+n_states:2

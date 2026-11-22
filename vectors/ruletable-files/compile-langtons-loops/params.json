@@ -1,0 +1,51 @@
+{
+  "colors": [],
+  "description": "Langton's self-reproducing loop.\n\nSource: C. G. Langton, \"Self-reproduction in cellular automata\", Physica D 10\n(1984) 135-144. The transitions are the paper's Table I as printed, all 219,\nin its order. The paper writes each as CTRBL->I (the center, its top, right,\nbottom and left neighbors, and the center's next state) and lists no\nrotations; here each is the six digits C N E S W C', and the rotations are the\ntable's rotate4 symmetry. The paper says nothing of a neighborhood the table\ndoesn't list; such a cell keeps its state, as in every rule table.\n\nThe starter pattern (Langtons-Loops.rle) is the loop of the paper's Fig. 6.\nAt generation 151 the run holds the loop and its offspring of Fig. 9.\n\nRe-authored for heaton-life from the paper (spec/ruletable.md).",
+  "family": "ruletable-files",
+  "icons": null,
+  "input": "input.rule",
+  "kind": "compile",
+  "name": "Langtons-Loops",
+  "names": [
+    {
+      "name": "empty",
+      "state": 0
+    },
+    {
+      "name": "core",
+      "state": 1
+    },
+    {
+      "name": "sheath",
+      "state": 2
+    },
+    {
+      "name": "signal 3",
+      "state": 3
+    },
+    {
+      "name": "signal 4 (left turn)",
+      "state": 4
+    },
+    {
+      "name": "signal 5",
+      "state": 5
+    },
+    {
+      "name": "signal 6",
+      "state": 6
+    },
+    {
+      "name": "signal 7 (extend)",
+      "state": 7
+    }
+  ],
+  "neighborhood": "vonNeumann",
+  "neighbors": 4,
+  "source": "table",
+  "spec_version": "0.16.0",
+  "states": 8,
+  "symmetries": "rotate4",
+  "tier": "bit-exact",
+  "tree": "tree.txt"
+}

@@ -1,0 +1,35 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_00001.png",
+      "step": 1
+    },
+    {
+      "file": "state_00016.png",
+      "step": 16
+    },
+    {
+      "file": "state_00031.png",
+      "step": 31
+    }
+  ],
+  "family": "ruletable",
+  "params": {
+    "axis": "x",
+    "boundary": "torus",
+    "density": 0.1,
+    "height": 32,
+    "init": "soup",
+    "rule": "Rule30-Rows",
+    "rule_text": "@RULE Rule30-Rows\nWolfram's rule 30 run on every row: oneDimensional, written without commas.\n@TABLE\nn_states:2\nneighborhood:oneDimensional\nsymmetries:none\n# C W E C'\n0101\n0011\n1100\n1110\n",
+    "seed": 3,
+    "shift": 0,
+    "width": 64
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

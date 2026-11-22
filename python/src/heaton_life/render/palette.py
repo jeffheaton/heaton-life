@@ -79,9 +79,11 @@ def _generations_values(count: int) -> tuple[int, ...]:
 def frame_values(world: object) -> tuple[int, ...]:
     """Each state's frame value f(s), state 0 first (spec/render.md "State palettes"): the
     byte a world's frame gives a cell in that state. For the two-state universe 0 and 255
-    (its frames' live cell), for a multi-state universe the states themselves."""
+    (its frames' live cell), for a multi-state universe and a rule table's grid the states
+    themselves."""
     from heaton_life.ca import Cyclic, Elementary, Generations, HashLife, LifeLike, Wireworld
     from heaton_life.ca.hashlife import MultiStateHashLife
+    from heaton_life.ca.ruletable import RuleTableCA
 
     if isinstance(world, LifeLike):
         return tuple(range(world.states)) if world.rule.variant else (0, 255)
@@ -95,7 +97,7 @@ def frame_values(world: object) -> tuple[int, ...]:
         return (0, 85, 170, 255)
     if isinstance(world, Generations):
         return _generations_values(world.states)
-    if isinstance(world, MultiStateHashLife):
+    if isinstance(world, MultiStateHashLife | RuleTableCA):
         return tuple(range(world.states))
     raise TypeError(f"{type(world).__name__} has no byte states to color")
 
@@ -156,6 +158,25 @@ def gradient_palette(
     return palette
 
 
+def rule_table_palette(rule: object) -> NDArray[np.uint8]:
+    """A rule table's palette (spec/render.md "Default palettes"): the multi-state palette
+    of its S, then its rule file's ``@COLORS`` entries in the file's order (spec/rule-files.md
+    "@COLORS"). A gradient sets states 1 to S − 1 as ``gradient_palette`` sets them, entry 0
+    staying as it is; a state color sets its state, 0 among them."""
+    from heaton_life.ca.rulefile import Gradient, RuleTable
+
+    if not isinstance(rule, RuleTable):
+        raise TypeError(f"expected a RuleTable, got {type(rule).__name__}")
+    states = rule.states
+    palette = multistate_palette(states)
+    for entry in rule.colors:
+        if isinstance(entry, Gradient):
+            palette[1:states] = gradient_palette(states, entry.start, entry.end)[1:states]
+        else:
+            palette[entry.state] = entry.rgb
+    return palette
+
+
 def shade_colormap(background: Iterable[int], color: Iterable[int]) -> NDArray[np.uint8]:
     """The shade from state 0's color to state 1's, for frames whose pixels count live cells
     (spec/render.md "Zoomed out"): entry v is b + (c − b) · v / 255 per channel, rounded
@@ -172,6 +193,7 @@ def _rule_palette(rule: object) -> NDArray[np.uint8]:
     """A multi-state universe's palette, by its rule: the palette the rule has on a grid."""
     from heaton_life.ca.generations import GenerationsRule
     from heaton_life.ca.history import HistoryRule
+    from heaton_life.ca.rulefile import RuleTable
     from heaton_life.ca.state_rules import StateRule
     from heaton_life.ca.wireworld import WireworldRule
 
@@ -181,20 +203,23 @@ def _rule_palette(rule: object) -> NDArray[np.uint8]:
         return generations_palette(rule.states)
     if isinstance(rule, WireworldRule):
         return _sampled(get_colormap("wireworld"), (0, 85, 170, 255))
-    # Rule tables (their @COLORS over the multi-state palette) and Super rules plug in
-    # here when they land (spec/render.md "Still to come").
+    if isinstance(rule, RuleTable):
+        return rule_table_palette(rule)
+    # Super rules plug in here when they land (spec/render.md "Still to come").
     assert isinstance(rule, StateRule)
     return multistate_palette(rule.states)
 
 
 def default_palette(world: object) -> NDArray[np.uint8]:
     """A world's default palette (spec/render.md "Default palettes"): History's under a
-    History rule, Generations' for Generations, the rule's own on a multi-state universe,
-    and otherwise the palette of the colormap its family is shown with (``phosphor`` for
+    History rule, Generations' for Generations, a rule table's (its ``@COLORS`` over the
+    multi-state palette) on its grid, the rule's own on a multi-state universe, and
+    otherwise the palette of the colormap its family is shown with (``phosphor`` for
     two-state Life-like worlds and the two-state universe, ``gray`` for Elementary,
     ``rainbow`` for Cyclic, ``wireworld`` for Wireworld)."""
     from heaton_life.ca import Cyclic, Elementary, Generations, HashLife, LifeLike, Wireworld
     from heaton_life.ca.hashlife import MultiStateHashLife
+    from heaton_life.ca.ruletable import RuleTableCA
 
     if isinstance(world, LifeLike):
         # Super rules (26 states) plug in here when they land.
@@ -213,6 +238,8 @@ def default_palette(world: object) -> NDArray[np.uint8]:
         return generations_palette(world.states)
     if isinstance(world, MultiStateHashLife):
         return _rule_palette(world.state_rule)
+    if isinstance(world, RuleTableCA):
+        return rule_table_palette(world.rule)
     raise TypeError(f"{type(world).__name__} has no byte states to color")
 
 

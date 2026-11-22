@@ -1,0 +1,10 @@
+@RULE VN-Count
+@TABLE
+n_states:3
+neighborhood:vonNeumann
+symmetries:permute
+var a={1,2}
+var b={a}
+0,a,b,0,0,1
+0,2,2,2,0,2
+1,a,a,a,a,0

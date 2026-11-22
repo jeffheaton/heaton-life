@@ -1,0 +1,7 @@
+@RULE Moore-Mirror
+@TABLE
+N_STATES : 3
+Neighborhood: MOORE
+symmetries: reflect
+0,1,0,0,0,0,0,0,2,1
+2,0,1,1,0,0,0,0,0,0

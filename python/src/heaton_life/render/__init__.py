@@ -22,6 +22,7 @@ from heaton_life.render.palette import (
     gradient_palette,
     history_palette,
     multistate_palette,
+    rule_table_palette,
     shade_colormap,
 )
 from heaton_life.render.window import WINDOW_MODES, WindowMode, sample_window, zoom_ranks
@@ -47,6 +48,7 @@ __all__ = [
     "list_colormaps",
     "list_cyclic_colormaps",
     "multistate_palette",
+    "rule_table_palette",
     "sample_window",
     "shade_colormap",
     "to_image",

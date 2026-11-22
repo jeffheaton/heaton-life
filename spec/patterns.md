@@ -22,6 +22,7 @@ A pattern is `(family, width, height, cells, rule)`:
 | cyclic | byte 0..states−1 | 0 | 0 |
 | generations | byte 0..C−1 ([generations.md](generations.md)) | 0 (dead) | 0 (dead) |
 | ltl | byte 0..S−1 ([ltl.md](ltl.md), Larger than Life) | 0 (dead) | 0 (dead) |
+| ruletable ([ruletable.md](ruletable.md)) | byte 0..S−1 | 0 | 0 |
 | mergelife | RGB byte triple | — (opaque only) | (0, 0, 0) black |
 | lenia (each variant its own family) | float64 [0,1] | 0.0 | 0.0 |
 | gray-scott | (u, v) float64 pair | — (opaque only) | (1.0, 0.0) substrate |
@@ -38,6 +39,7 @@ A pattern is `(family, width, height, cells, rule)`:
 1. Pattern family == target family, else reject.
 2. Cyclic and Generations: `max(cells) < target.states` (a Generations world's C), else
    reject (values outside the target state range would corrupt the world).
+   Rule tables ([ruletable.md](ruletable.md)) check the same against the target rule's S.
 3. Life-like: a pattern holding states the target's rule lacks (a
    [History](history.md) pattern under a two-state rule) is converted first, each such
    cell 1 or 0 by its parity (`convert_cells`, [history.md](history.md#two-states-and-seven));

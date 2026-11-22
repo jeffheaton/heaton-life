@@ -1,0 +1,11 @@
+@RULE Moore-Turns
+@TABLE
+n_states:3
+neighborhood:Moore
+symmetries:rotate8reflect
+var a={1,2}
+var b={0,1,2}
+0,1,2,0,0,0,0,0,0,1
+0,a,0,a,0,0,0,0,b,2
+1,2,a,0,0,0,0,0,0,a
+2,b,b,b,0,0,0,0,0,0

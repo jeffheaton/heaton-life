@@ -1,0 +1,43 @@
+{
+  "colors": [],
+  "description": "Byl's self-reproducing loop of twelve cells.\n\nSource: J. Byl, \"Self-reproduction in small cellular automata\", Physica D 34\n(1989) 295-299: Table II, the transition function for Fig. 3. As in the paper,\neach transition is CTRBL->I (center, top, right, bottom and left, then the\ncenter's next state), here the six digits C N E S W C'; rotations are not\nlisted (the rotate4 symmetry), and a group's default \"C----\", which applies\nto any other neighborhood of that center, is the line with variables at the\nend of the group.\n\nTable II prints 56 entries, its defaults among them, where the paper's text\ncounts 57. With them alone, the run follows Fig. 3 until generation 22 and\nthen differs in one cell; the transition 31523 -> 1 makes every generation of\nFig. 3 come out, so it is added, marked, in its place among the 3s.\n\nFig. 3 is drawn as the mirror image (left and right swapped) of what Table II\ngives under the paper's reading of the neighbors. The starter pattern\n(Byl-Loop.rle) is therefore Fig. 3's loop mirrored, and its run is Fig. 3's,\nmirrored: at generation 25 an exact copy of the loop of generation 0 stands\nbeside its parent.\n\nRe-authored for heaton-life from the paper (spec/ruletable.md).",
+  "family": "ruletable-files",
+  "icons": null,
+  "input": "input.rule",
+  "kind": "compile",
+  "name": "Byl-Loop",
+  "names": [
+    {
+      "name": "quiescent",
+      "state": 0
+    },
+    {
+      "name": "data path",
+      "state": 1
+    },
+    {
+      "name": "outer wall",
+      "state": 2
+    },
+    {
+      "name": "extend",
+      "state": 3
+    },
+    {
+      "name": "turn left",
+      "state": 4
+    },
+    {
+      "name": "disconnect and copy",
+      "state": 5
+    }
+  ],
+  "neighborhood": "vonNeumann",
+  "neighbors": 4,
+  "source": "table",
+  "spec_version": "0.16.0",
+  "states": 6,
+  "symmetries": "rotate4",
+  "tier": "bit-exact",
+  "tree": "tree.txt"
+}

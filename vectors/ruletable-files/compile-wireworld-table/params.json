@@ -1,0 +1,51 @@
+{
+  "colors": [
+    {
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "state": 0
+    },
+    {
+      "rgb": [
+        0,
+        128,
+        255
+      ],
+      "state": 1
+    },
+    {
+      "rgb": [
+        255,
+        255,
+        255
+      ],
+      "state": 2
+    },
+    {
+      "rgb": [
+        255,
+        128,
+        0
+      ],
+      "state": 3
+    }
+  ],
+  "description": "Wireworld as a rule table: Moore, permute.",
+  "family": "ruletable-files",
+  "icons": null,
+  "input": "input.rule",
+  "kind": "compile",
+  "name": "WireWorld-Table",
+  "names": [],
+  "neighborhood": "Moore",
+  "neighbors": 8,
+  "source": "table",
+  "spec_version": "0.16.0",
+  "states": 4,
+  "symmetries": "permute",
+  "tier": "bit-exact",
+  "tree": "tree.txt"
+}

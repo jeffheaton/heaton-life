@@ -1,0 +1,324 @@
+@RULE Evoloop
+
+Sayama's evoloop: a self-reproducing loop that dissolves and evolves.
+
+Source: H. Sayama, "Self-protection and diversity in self-replicating cellular
+automata", Artificial Life 10 (2004) 83-98, Appendix A.1, "Transition rules of
+the original evoloop" (the evoloop itself is from H. Sayama, Artificial Life 5
+(1999) 343-365). The rules are Table 2 of that appendix, its 258 entries
+CTRBL->I in their order (here the six digits C N E S W C') with their
+rotations (rotate4), and then the appendix's steps 2 to 4, in order:
+
+  2. 8 becomes 0.
+  3. Where a neighbor is 8: 0 and 1 become 8 if a neighbor is 2 to 7, and
+     stay otherwise; 2, 3 and 5 become 0; 4, 6 and 7 become 1.
+  4. Anything else: 0 stays 0, and 1 to 7 become 8.
+
+The starter pattern (Evoloop.rle) is Langton's loop (C. G. Langton, Physica D
+10 (1984), Fig. 6), whose structure the evoloop keeps. It reproduces: its
+first offspring separates at generation 128, and the offspring's offspring
+follow.
+
+Re-authored for heaton-life from the paper (spec/ruletable.md).
+
+@TABLE
+n_states:9
+neighborhood:vonNeumann
+symmetries:rotate4
+
+var a={0,1,2,3,4,5,6,7,8}
+var b={a}
+var c={a}
+var d={a}
+var o={0,1}
+var x={2,3,4,5,6,7}
+var t={2,3,5}
+var u={4,6,7}
+var v={1,2,3,4,5,6,7}
+
+# Step 1: Table 2. C N E S W C'
+000012
+000043
+000122
+000152
+000212
+000242
+000422
+000452
+000752
+001022
+002141
+002171
+002322
+011221
+012121
+012321
+012421
+012451
+012526
+012626
+012721
+012751
+013421
+013721
+014221
+014251
+014321
+014351
+014421
+014621
+017221
+017251
+017561
+017621
+017721
+100011
+100121
+100211
+100244
+100277
+101211
+101244
+101277
+102021
+102111
+102121
+102131
+102211
+102244
+102277
+102324
+102414
+102424
+102434
+102511
+102527
+102543
+102577
+102717
+102727
+102735
+105121
+105424
+105727
+106211
+106244
+106277
+111121
+111221
+111244
+111251
+111277
+111621
+112121
+112131
+112151
+112221
+112244
+112277
+112321
+112424
+112434
+112527
+112543
+112577
+112626
+112727
+112735
+113221
+113321
+115424
+115727
+116244
+116277
+122244
+122277
+122434
+122737
+123244
+123277
+124266
+124333
+126276
+200012
+200022
+200042
+200052
+200060
+200071
+200122
+200152
+200212
+200222
+200232
+200242
+200260
+200272
+200324
+200423
+200452
+200545
+200575
+200620
+200722
+200752
+201022
+201122
+201222
+201422
+201722
+202022
+202032
+202052
+202065
+202073
+202122
+202152
+202212
+202222
+202232
+202323
+202422
+202452
+202525
+202620
+202650
+202722
+202752
+203122
+203222
+203422
+203452
+203722
+204122
+204222
+204422
+205122
+205425
+205725
+206125
+206212
+206425
+206725
+207122
+207222
+207722
+211222
+212222
+212232
+212242
+212272
+212323
+213222
+214222
+216222
+217222
+222242
+222272
+222342
+222372
+222432
+222442
+222732
+222772
+223243
+223273
+300013
+300022
+300032
+300043
+300074
+300123
+300322
+300421
+301021
+301250
+302123
+302423
+302521
+302723
+303321
+312123
+312423
+312521
+312723
+324243
+324251
+324273
+325271
+327273
+400001
+400021
+401020
+401120
+401220
+401250
+401620
+402120
+402150
+402221
+402321
+402626
+403120
+403221
+500025
+500125
+500215
+500232
+500245
+500275
+500425
+500725
+502022
+502052
+502125
+502152
+502425
+502725
+503120
+602022
+602122
+602220
+602422
+602722
+612220
+622240
+622270
+701020
+701120
+701220
+701250
+701620
+702120
+702150
+702221
+702320
+702626
+703120
+
+# Step 2: 8 becomes 0.
+8,a,b,c,d,0
+
+# Step 3: a neighbor is 8 (no transition of Table 2 has one).
+# 0 and 1 become 8 when a neighbor is 2 to 7: with the 8 to the north, the other
+# neighbor is to the east, the south or the west (rotations do the rest).
+o,8,x,b,c,8
+o,8,b,x,c,8
+o,8,b,c,x,8
+o,8,b,c,d,o
+t,8,b,c,d,0
+u,8,b,c,d,1
+
+# Step 4: anything else. 0 stays 0 (no transition needed), 1 to 7 become 8.
+v,a,b,c,d,8
+
+@NAMES
+0 background
+1 core
+2 sheath
+3 left indicator, bonder, sprout generator, capper or finisher
+4 gene (left turn), sprout guide
+5 messenger
+6 umbilical cord dissolver
+7 gene (straight)
+8 dissolving state

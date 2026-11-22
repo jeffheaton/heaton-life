@@ -1,0 +1,18 @@
+{
+  "colors": [],
+  "description": "Outputs bound by neighbors under rotate4reflect: where two variants of one transition\nmatch a block with different bindings, the earlier one counts.",
+  "family": "ruletable-files",
+  "icons": null,
+  "input": "input.rule",
+  "kind": "compile",
+  "name": "Bound-Order",
+  "names": [],
+  "neighborhood": "vonNeumann",
+  "neighbors": 4,
+  "source": "table",
+  "spec_version": "0.16.0",
+  "states": 4,
+  "symmetries": "rotate4reflect",
+  "tier": "bit-exact",
+  "tree": "tree.txt"
+}

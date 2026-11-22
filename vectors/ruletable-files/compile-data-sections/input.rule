@@ -1,0 +1,58 @@
+﻿@RULE Data-Sections
+
+A table with colors, names and icons, CRLF line ends and a byte-order mark.
+
+@TABLE
+n_states:4
+neighborhood:vonNeumann
+symmetries:none
+012333 # a transition written as one word of digits
+012300
+@UNKNOWN
+anything at all
+@COLORS
+# a comment
+0 10 20 30
+1 255 0 0 red
+2 0 255 0 note 3 4
+48 255 255 255
+0 0 0 255 255 255
+@NAMES
+0 nothing
+1   first one  
+9 not a state here
+@COLORS
+1 1 1 1
+@ICONS
+/* XPM-style comment */
+XPM
+/* width height colors chars_per_pixel */
+"7 14 2 1"
+". c #000000"
+"A c #ffFFff"
+".......",
+"..AAA.."
+".A...A."
+".A...A."
+".A...A."
+"..AAA.."
+"......."
+"AAAAAAA"
+"A.....A"
+"A.....A"
+"A.....A"
+"A.....A"
+"A.....A"
+"AAAAAAA"
+"an extra string, ignored"
+XPM
+"8 8 1 2"
+"aa c None"
+"aaaaaaaaaaaaaaaa"
+"aaaaaaaaaaaaaaaa"
+"aaaaaaaaaaaaaaaa"
+"aaaaaaaaaaaaaaaa"
+"aaaaaaaaaaaaaaaa"
+"aaaaaaaaaaaaaaaa"
+"aaaaaaaaaaaaaaaa"
+"aaaaaaaaaaaaaaaa"

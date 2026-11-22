@@ -1,0 +1,26 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_00025.png",
+      "step": 25
+    }
+  ],
+  "family": "ruletable",
+  "params": {
+    "axis": "x",
+    "boundary": "dead",
+    "density": 0.35,
+    "height": 20,
+    "init": "starter",
+    "rule": "Byl-Loop",
+    "seed": 0,
+    "shift": 0,
+    "width": 24
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

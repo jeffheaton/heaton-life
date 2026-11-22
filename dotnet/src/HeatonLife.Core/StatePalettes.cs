@@ -61,6 +61,8 @@ namespace HeatonLife
                     return (byte[])WireworldValues.Clone();
                 case Generations generations:
                     return GenerationsValues(generations.States);
+                case RuleTableCA table:
+                    return Identity(table.States);
                 default:
                     throw NoByteStates(world);
             }
@@ -99,7 +101,8 @@ namespace HeatonLife
 
         /// <summary>
         /// A world's default palette (spec/render.md "Default palettes"): History's under a
-        /// History rule, Generations' for Generations, and otherwise the palette of the
+        /// History rule, Generations' for Generations, a rule table's (<see cref="ForRuleTable"/>)
+        /// on its grid, and otherwise the palette of the
         /// colormap the family is shown with: phosphor for a two-state Life-like world, gray
         /// for Elementary, rainbow for Cyclic, wireworld for Wireworld.
         /// </summary>
@@ -122,6 +125,8 @@ namespace HeatonLife
                     return FromColormap(wire, Colormaps.Get("wireworld"));
                 case Generations generations:
                     return ForGenerations(generations.States);
+                case RuleTableCA table:
+                    return ForRuleTable(table.Rule);
                 default:
                     throw NoByteStates(world);
             }
@@ -132,8 +137,8 @@ namespace HeatonLife
 
         /// <summary>
         /// A multi-state universe's default palette: the one its rule has on a grid (History's,
-        /// Generations' of its C, wireworld's for WireWorld), or for any other rule the
-        /// multi-state palette of its S.
+        /// Generations' of its C, wireworld's for WireWorld, a rule table's with its
+        /// <c>@COLORS</c>), or for any other rule the multi-state palette of its S.
         /// </summary>
         public static byte[] Default(MultiStateHashLife universe)
         {
@@ -147,9 +152,10 @@ namespace HeatonLife
                     return ForGenerations(generations.States);
                 case WireworldRule _:
                     return Sampled(Colormaps.Get("wireworld"), WireworldValues);
+                case RuleTable table:
+                    return ForRuleTable(table);
                 default:
-                    // Rule tables (their @COLORS over the multi-state palette) and Super rules
-                    // plug in here when they land (spec/render.md "Still to come").
+                    // Super rules plug in here when they land (spec/render.md "Still to come").
                     return ForMultiState(universe.States);
             }
         }
@@ -220,6 +226,29 @@ namespace HeatonLife
                 palette[s * 3] = rainbow[entry * 3];
                 palette[s * 3 + 1] = rainbow[entry * 3 + 1];
                 palette[s * 3 + 2] = rainbow[entry * 3 + 2];
+            }
+            return palette;
+        }
+
+        /// <summary>
+        /// A rule table's palette (spec/render.md "Default palettes"): the multi-state palette
+        /// of its S, then its rule file's <c>@COLORS</c> entries in the file's order
+        /// (spec/rule-files.md "@COLORS"). A gradient sets states 1 to S − 1 as
+        /// <see cref="Gradient"/> sets them, entry 0 staying as it is; a state color sets its
+        /// state, 0 among them.
+        /// </summary>
+        public static byte[] ForRuleTable(RuleTable rule)
+        {
+            if (rule == null)
+                throw new ArgumentNullException(nameof(rule));
+            int states = rule.States;
+            byte[] palette = ForMultiState(states);
+            foreach (RuleColor entry in rule.Colors)
+            {
+                if (entry.IsGradient)
+                    Array.Copy(Gradient(states, entry.Start, entry.End!.Value), 3, palette, 3, 3 * (states - 1));
+                else
+                    Put(palette, entry.State, entry.Start);
             }
             return palette;
         }

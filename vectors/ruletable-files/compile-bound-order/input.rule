@@ -1,0 +1,16 @@
+@RULE Bound-Order
+Outputs bound by neighbors under rotate4reflect: where two variants of one transition
+match a block with different bindings, the earlier one counts.
+@TABLE
+n_states:4
+neighborhood:vonNeumann
+symmetries:rotate4reflect
+var a={1,2,3}
+var b={1,2,3}
+var c={0,1,2,3}
+var d={c}
+0,a,b,0,0,a
+0,a,a,b,c,b
+1,a,b,c,d,b
+2,a,0,0,0,3
+3,c,c,d,d,0

@@ -25,6 +25,7 @@ from heaton_life.ca.hashlife.multistate import (
     write_timeline,
 )
 from heaton_life.ca.rulestring import try_compile_rule
+from heaton_life.ca.ruletable import RuleTableCA, starter_rule_or_none
 from heaton_life.ca.wireworld import Wireworld
 from heaton_life.init import PatternMetadata
 
@@ -210,21 +211,24 @@ def test_multistate_vector(case: Path) -> None:
             _expect_state(d, u, entry)
     elif kind == "grid":
         # Wireworld's grid PNGs are states × 85. A History rule's grid is Life-like
-        # (spec/history.md) and a Generations rule's is its own family (spec/generations.md),
-        # their PNGs the states themselves.
+        # (spec/history.md), and a Generations rule's (spec/generations.md) and a rule
+        # table's (spec/ruletable.md) are their own families, their PNGs the states themselves.
         wire = meta["rule"] == "WireWorld"
         history = _is_history(meta["rule"])
+        table = starter_rule_or_none(meta["rule"])  # a rule table (spec/ruletable.md)
         scale = 85 if wire else 1
         grid = _states_png(d / meta["grid"], scale)
         height, width = grid.shape
         x, y = (int(v) for v in meta["origin"])
         u = MultiStateHashLife(meta["rule"])
         u.set_rect(x, y, grid)
-        w: Wireworld | LifeLike | Generations
+        w: Wireworld | LifeLike | Generations | RuleTableCA
         if wire:
             w = Wireworld(size=(width, height), init=grid)
         elif history:
             w = LifeLike(meta["rule"], size=(width, height), init=grid, boundary="dead")
+        elif table is not None:
+            w = RuleTableCA(table, size=(width, height), init=grid)
         else:
             w = Generations(meta["rule"], size=(width, height), init=grid, boundary="dead")
         for entry in meta["checkpoints"]:

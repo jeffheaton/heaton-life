@@ -1,0 +1,18 @@
+{
+  "colors": [],
+  "description": "",
+  "family": "ruletable-files",
+  "icons": null,
+  "input": "input.rule",
+  "kind": "compile",
+  "name": "Row-Count",
+  "names": [],
+  "neighborhood": "oneDimensional",
+  "neighbors": 4,
+  "source": "table",
+  "spec_version": "0.16.0",
+  "states": 2,
+  "symmetries": "permute",
+  "tier": "bit-exact",
+  "tree": "tree.txt"
+}

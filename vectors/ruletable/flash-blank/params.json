@@ -1,0 +1,35 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_00001.png",
+      "step": 1
+    },
+    {
+      "file": "state_00002.png",
+      "step": 2
+    },
+    {
+      "file": "state_00003.png",
+      "step": 3
+    }
+  ],
+  "family": "ruletable",
+  "params": {
+    "axis": "x",
+    "boundary": "dead",
+    "density": 0.35,
+    "height": 12,
+    "init": "blank",
+    "rule": "Flash",
+    "rule_text": "@RULE Flash\nA blank block turns on and every on cell turns off: the all-0 block changes, so this runs\non grids only.\n@TABLE\nn_states:2\nneighborhood:vonNeumann\nsymmetries:none\nvar a={0,1}\nvar b={a}\nvar c={a}\nvar d={a}\n0,0,0,0,0,1\n1,a,b,c,d,0\n",
+    "seed": 0,
+    "shift": 0,
+    "width": 16
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

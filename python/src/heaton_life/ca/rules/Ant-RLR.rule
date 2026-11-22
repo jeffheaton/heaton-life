@@ -1,0 +1,103 @@
+@RULE Ant-RLR
+
+The ant RLR, of the many-color ants of Greg Turk and Jim Propp (D. Gale,
+J. Propp, S. Sutherland and S. Troubetzkoy, "Further travels with my ant",
+Mathematical Intelligencer 17:3 (1995) 48-56). On color k it turns as the
+name's k-th letter says (L left, R right), sets the cell to color k + 1
+(mod 3) and steps forward. Its pattern grows chaotically.
+
+The starter pattern (Ant-RLR.rle) is one ant facing north on color 0.
+
+States: a cell is its color c (0 to 2), or 3 + 4c + d where the ant
+stands on it with heading d (0 north, 1 east, 2 south, 3 west). Each
+generation the ant's cell takes its next color and the ant appears on the
+neighbor its new heading points to, facing that way. Two ants that would
+land on one cell: the one from the north wins, then east, south, west.
+
+Generated from the definition by python/tools/gen_rule_tables.py for
+heaton-life (spec/ruletable.md).
+
+@TABLE
+n_states:15
+neighborhood:vonNeumann
+symmetries:none
+
+var a={0,1,2,3,4,5,6,7,8,9,10,11,12,13,14}
+var b={a}
+var c={a}
+var e={a}
+var next0={0,11,12,13,14}
+var next1={1,3,4,5,6}
+var next2={2,7,8,9,10}
+
+# C N E S W C'
+# An ant steps on from the north, now heading S.
+next0,4,a,b,c,5
+next1,4,a,b,c,9
+next2,4,a,b,c,13
+next0,10,a,b,c,5
+next1,10,a,b,c,9
+next2,10,a,b,c,13
+next0,12,a,b,c,5
+next1,12,a,b,c,9
+next2,12,a,b,c,13
+# An ant steps on from the east, now heading W.
+next0,a,5,b,c,6
+next1,a,5,b,c,10
+next2,a,5,b,c,14
+next0,a,7,b,c,6
+next1,a,7,b,c,10
+next2,a,7,b,c,14
+next0,a,13,b,c,6
+next1,a,13,b,c,10
+next2,a,13,b,c,14
+# An ant steps on from the south, now heading N.
+next0,a,b,6,c,3
+next1,a,b,6,c,7
+next2,a,b,6,c,11
+next0,a,b,8,c,3
+next1,a,b,8,c,7
+next2,a,b,8,c,11
+next0,a,b,14,c,3
+next1,a,b,14,c,7
+next2,a,b,14,c,11
+# An ant steps on from the west, now heading E.
+next0,a,b,c,3,4
+next1,a,b,c,3,8
+next2,a,b,c,3,12
+next0,a,b,c,9,4
+next1,a,b,c,9,8
+next2,a,b,c,9,12
+next0,a,b,c,11,4
+next1,a,b,c,11,8
+next2,a,b,c,11,12
+# The ant leaves: its cell takes its next color.
+3,a,b,c,e,1
+4,a,b,c,e,1
+5,a,b,c,e,1
+6,a,b,c,e,1
+7,a,b,c,e,2
+8,a,b,c,e,2
+9,a,b,c,e,2
+10,a,b,c,e,2
+11,a,b,c,e,0
+12,a,b,c,e,0
+13,a,b,c,e,0
+14,a,b,c,e,0
+
+@NAMES
+0 color 0
+1 color 1
+2 color 2
+3 ant on color 0 heading north
+4 ant on color 0 heading east
+5 ant on color 0 heading south
+6 ant on color 0 heading west
+7 ant on color 1 heading north
+8 ant on color 1 heading east
+9 ant on color 1 heading south
+10 ant on color 1 heading west
+11 ant on color 2 heading north
+12 ant on color 2 heading east
+13 ant on color 2 heading south
+14 ant on color 2 heading west

@@ -438,8 +438,11 @@ namespace HeatonLife.Tests
                         }
                     case "hashlife-multistate":
                         {
-                            AssertKeySet(world, caseName, "family", "rule");
-                            var universe = new MultiStateHashLife(world.GetProperty("rule").GetString()!);
+                            // A rule table's universe may carry its rule file (spec/ruletable.md).
+                            RuleTable? table = PaletteRuleTable(caseName, world);
+                            var universe = table == null
+                                ? new MultiStateHashLife(world.GetProperty("rule").GetString()!)
+                                : new MultiStateHashLife(table);
                             values = StatePalettes.FrameValues(universe);
                             order = StatePalettes.DefaultZoomOrder(universe);
                             palette = hasCmap
@@ -487,9 +490,30 @@ namespace HeatonLife.Tests
                 case "generations":
                     AssertKeySet(world, caseName, "family", "rule");
                     return new Generations(world.GetProperty("rule").GetString()!, 8, 8);
+                case "ruletable":
+                    {
+                        RuleTable rule = PaletteRuleTable(caseName, world)
+                            ?? RuleTables.Starter(world.GetProperty("rule").GetString()!);
+                        return new RuleTableCA(rule, 8, 8, new byte[64]);
+                    }
                 default:
                     throw new InvalidDataException($"render/{caseName}: no palette world '{family}'");
             }
+        }
+
+        /// <summary>A palette world's rule file (<c>rule_text</c>, spec/ruletable.md), checked
+        /// against the world's <c>rule</c>; null when the world names its rule only.</summary>
+        private static RuleTable? PaletteRuleTable(string caseName, JsonElement world)
+        {
+            if (!world.TryGetProperty("rule_text", out JsonElement text))
+            {
+                AssertKeySet(world, caseName, "family", "rule");
+                return null;
+            }
+            AssertKeySet(world, caseName, "family", "rule", "rule_text");
+            RuleTable table = RuleTable.Parse(text.GetString()!);
+            Assert.Equal(world.GetProperty("rule").GetString(), table.Name);
+            return table;
         }
 
         private static void RunShade(string caseName, string caseDir, JsonElement root)

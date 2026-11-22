@@ -1,0 +1,6 @@
+@RULE Hex-Third
+@TABLE
+n_states:2
+neighborhood:hexagonal
+symmetries:rotate3
+0,1,0,1,0,0,0,1

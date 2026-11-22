@@ -1,0 +1,20 @@
+{
+  "colors": [],
+  "description": "The hexagonal Life-like rule B2/S34H as a rule table: hexagonal, permute.",
+  "family": "ruletable-files",
+  "icons": {
+    "style": "hexagons"
+  },
+  "input": "input.rule",
+  "kind": "compile",
+  "name": "Hex-B2-S34",
+  "names": [],
+  "neighborhood": "hexagonal",
+  "neighbors": 8,
+  "source": "table",
+  "spec_version": "0.16.0",
+  "states": 2,
+  "symmetries": "permute",
+  "tier": "bit-exact",
+  "tree": "tree.txt"
+}

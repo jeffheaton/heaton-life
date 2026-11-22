@@ -1,0 +1,18 @@
+{
+  "colors": [],
+  "description": "",
+  "family": "ruletable-files",
+  "icons": null,
+  "input": "input.rule",
+  "kind": "compile",
+  "name": "VN-Count",
+  "names": [],
+  "neighborhood": "vonNeumann",
+  "neighbors": 4,
+  "source": "table",
+  "spec_version": "0.16.0",
+  "states": 3,
+  "symmetries": "permute",
+  "tier": "bit-exact",
+  "tree": "tree.txt"
+}

@@ -1,0 +1,15 @@
+@RULE Tree-Canon
+A tree with alike nodes and one the root can't reach.
+@TREE
+num_states = 2
+num_neighbors = 4
+num_nodes = 9
+1 0 1
+1 0 1
+1 1 1
+2 0 1
+2 1 0
+3 3 4
+4 5 5
+2 2 2
+5 6 6

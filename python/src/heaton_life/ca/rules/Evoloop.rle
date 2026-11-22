@@ -1,0 +1,6 @@
+#N Evoloop
+#C Langton's loop (C. G. Langton, Physica D 10 (1984), Fig. 6), whose
+#C structure the evoloop keeps.
+x = 15, y = 10, rule = Evoloop
+.8B$BAG.AD.ADB$B.6B.B$BGB4.BAB$BAB4.BAB$B.B4.BAB$BGB4.BAB$BA6BA5B$B.GA
+.GA.G5AB$.13B!

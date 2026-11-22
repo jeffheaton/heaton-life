@@ -132,12 +132,14 @@ namespace HeatonLife.Tests
                 case "grid":
                     {
                         // Wireworld's grid PNGs are states × 85. A History rule's grid is Life-like
-                        // (spec/history.md) and a Generations rule's is its own family
-                        // (spec/generations.md), their PNGs the states themselves.
+                        // (spec/history.md), and a Generations rule's (spec/generations.md) and a
+                        // rule table's (spec/ruletable.md) are their own families, their PNGs the
+                        // states themselves.
                         string rule = Text(meta, "rule");
                         bool wire = rule == "WireWorld";
                         bool history = RuleString.TryCompile(rule, true, out LifeRule? life, out _)
                             && life.Variant == RuleVariant.History;
+                        RuleTable? table = RuleTables.StarterOrNull(rule);
                         int scale = wire ? 85 : 1;
                         var (width, height, grid) = StatesPng(Path.Combine(dir, Text(meta, "grid")), scale);
                         long x = long.Parse(meta.GetProperty("origin")[0].GetString()!);
@@ -156,6 +158,11 @@ namespace HeatonLife.Tests
                             var lifeLike = new LifeLike(rule, width, height, Boundary.Dead);
                             lifeLike.SetState(grid);
                             (w, state) = (lifeLike, () => lifeLike.State.ToArray());
+                        }
+                        else if (table != null)
+                        {
+                            var tableGrid = new RuleTableCA(table, width, height, grid);
+                            (w, state) = (tableGrid, () => tableGrid.State.ToArray());
                         }
                         else
                         {

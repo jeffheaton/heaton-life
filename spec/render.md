@@ -141,6 +141,7 @@ indexing rule), or raw RGB (passed through).
 | cyclic | `state * 255 / max(states - 1, 1)` (integer math) | index bytes |
 | wireworld | `state * 85` (hits the `wireworld` anchors exactly) | index bytes |
 | generations | 0 for state 0, `(C - state) * 255 / (C - 1)` (integer math) otherwise: alive 255, the dying states fading | index bytes |
+| ruletable | the state itself, 0 to S − 1 ([ruletable.md](ruletable.md)), for a color per state | index bytes |
 | mergelife | the RGB state itself | RGB |
 | gray-scott | `clip(V * 2.5, 0, 1)` | float |
 | lenia (all three) | the state itself | float |
@@ -175,7 +176,8 @@ and unused. A host that lets a person choose the color of each state edits the e
 alone, f(s), with f(0) = 0. A world's frame values are f(0) … f(S − 1) (`frame_values`,
 .NET `StatePalettes.FrameValues`): for the two-state universe 0 and 255, its frames'
 live cell ([hashlife.md](hashlife.md#view-and-render)), and for a multi-state universe
-the states themselves, f(s) = s, as its `state` frames give them.
+and a [rule table](ruletable.md)'s grid the states themselves, f(s) = s, as their frames
+give them.
 
 **A colormap's palette** for a world (`colormap_palette(world, cmap)`, .NET
 `StatePalettes.FromColormap`) has entry s = lut[f(s)]. It shows the world's states as the
@@ -195,8 +197,9 @@ be edited state by state.
 | Cyclic | `rainbow`'s |
 | Wireworld | `wireworld`'s: the classic empty, head, tail and conductor colors |
 | Generations | Generations' of its C |
+| a [rule table](ruletable.md)'s grid | the rule table's |
 | the two-state universe | `phosphor`'s |
-| a multi-state universe | its rule's on a grid: History's, Generations' of its C, `wireworld`'s for `WireWorld`; for any other rule, the multi-state palette of its S |
+| a multi-state universe | its rule's on a grid: History's, Generations' of its C, `wireworld`'s for `WireWorld`, a rule table's; for any other rule, the multi-state palette of its S |
 
 A colormap's palette there keeps the look of the frames through the colormap the app
 and the playground give that family. The rest are defined here:
@@ -225,14 +228,16 @@ and the playground give that family. The rest are defined here:
   entry 0 the background, black unless given, and states 1 to S − 1 from `first` to
   `last`. Entry s is, channel by channel, (first · (S − 1 − s) + last · (s − 1)) / (S − 2)
   rounded half to even, in exact integer arithmetic; with S = 2, state 1 is `first`.
+- **A rule table's** (`rule_table_palette(rule)`, .NET `ForRuleTable`): the multi-state
+  palette of the rule's S, then its rule file's [`@COLORS`](rule-files.md#colors) entries
+  in the file's order. A gradient sets states 1 to S − 1 as `gradient_palette` sets them,
+  entry 0 staying as it is; a state color sets its state, state 0 among them. A rule file
+  without `@COLORS` keeps the multi-state palette.
 
 **Still to come.** Each of these takes its place in the table when its family lands:
 
 - *Larger than Life*: with two states, `phosphor`'s palette; with C of three or more,
   Generations' of its C, since its dying cells are Generations' dying cells.
-- *Rule tables*: the multi-state palette of the rule's S with its rule file's `@COLORS`
-  applied in the file's order: a gradient sets states 1 to S − 1 as `gradient_palette`
-  sets them (entry 0 stays), and a state color sets its state.
 - *Super* rules (26 states): states 0 to 6 take History's colors; the other 19, and
   Super's zoom order, are defined with Super.
 
@@ -322,7 +327,9 @@ Vectors in [`../vectors/render/`](../vectors/render/):
   half-even and half-away alike; `phase-apply-halfway` is the case that pins half-even.
 - `palette-<case>/` — a state palette as a 1×256 RGB PNG (`palette.png`): a world's
   default palette (`world`: its family and what its palette depends on, a `rule` or a
-  number of `states`), with its `frame_values` and `zoom_order`; with a `cmap` as well,
+  number of `states`; a [rule table](ruletable.md)'s world, family `ruletable` or
+  `hashlife-multistate`, carries its rule file as `rule_text` unless the `rule` is in the
+  starter set), with its `frame_values` and `zoom_order`; with a `cmap` as well,
   that colormap's palette for the world instead; or a palette made by name (`builder`:
   `history`, `generations`, `multistate` or `gradient`, with their arguments).
 - `palette-shade-<case>/` — the shade between a `background` and a `color`, as a 1×256

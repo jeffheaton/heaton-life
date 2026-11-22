@@ -36,6 +36,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The rule-table starter set (spec/ruletable.md): the Python package's files, one copy. -->
+    <EmbeddedResource Include="../../../python/src/heaton_life/ca/rules/*.rule;../../../python/src/heaton_life/ca/rules/*.rle"
+                      LogicalName="HeatonLife.Rules.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="../../README.md" Pack="true" PackagePath="\" />
     <None Include="../../../docs/heaton_life_icon.png" Pack="true" PackagePath="\" />
   </ItemGroup>

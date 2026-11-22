@@ -1,0 +1,543 @@
+{
+  "cases": [
+    {
+      "line": null,
+      "reason": "a rule file starts with '@RULE' and the rule's name",
+      "text": ""
+    },
+    {
+      "line": null,
+      "reason": "a rule file starts with '@RULE' and the rule's name",
+      "text": "\n  \n\t\n"
+    },
+    {
+      "line": 2,
+      "reason": "a rule file starts with '@RULE' and the rule's name",
+      "text": "\n# a comment first\n@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nsymmetries:none\n"
+    },
+    {
+      "line": 1,
+      "reason": "a rule file starts with '@RULE' and the rule's name",
+      "text": "@rule X\n"
+    },
+    {
+      "line": 1,
+      "reason": "a rule file starts with '@RULE' and the rule's name",
+      "text": "@RULEX\n"
+    },
+    {
+      "line": 1,
+      "reason": "'@RULE' has no name",
+      "text": "@RULE\n@TABLE\n"
+    },
+    {
+      "line": 1,
+      "reason": "'@RULE' has no name",
+      "text": "@RULE   \n"
+    },
+    {
+      "line": 1,
+      "reason": "a rule's name has no spaces",
+      "text": "@RULE A B\n"
+    },
+    {
+      "line": 1,
+      "reason": "a rule's name is printable ASCII without ',' or ':'",
+      "text": "@RULE A,B\n"
+    },
+    {
+      "line": 1,
+      "reason": "a rule's name is printable ASCII without ',' or ':'",
+      "text": "@RULE A:B\n"
+    },
+    {
+      "line": 1,
+      "reason": "a rule's name is printable ASCII without ',' or ':'",
+      "text": "@RULE Aé\n"
+    },
+    {
+      "line": null,
+      "reason": "no '@TABLE' or '@TREE' section",
+      "text": "@RULE X\n@COLORS\n0 0 0 0\n"
+    },
+    {
+      "line": null,
+      "reason": "'n_states' is missing",
+      "text": "@RULE X\n@UNKNOWN\n@TABLE x\n"
+    },
+    {
+      "line": 3,
+      "reason": "unknown setting 'foo'",
+      "text": "@RULE X\n@TABLE\nfoo:1\n"
+    },
+    {
+      "line": 3,
+      "reason": "unknown setting 'neighbors'",
+      "text": "@RULE X\n@TABLE\nneighbors:Moore\n"
+    },
+    {
+      "line": 4,
+      "reason": "'n_states' is set twice",
+      "text": "@RULE X\n@TABLE\nn_states:2\nN_States:3\n"
+    },
+    {
+      "line": 7,
+      "reason": "'n_states' comes before the variables and transitions",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n0,0,0,0,0,0\nn_states:3\n"
+    },
+    {
+      "line": 7,
+      "reason": "'symmetries' comes before the variables and transitions",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\nvar a={1}\nsymmetries:none\n"
+    },
+    {
+      "line": 5,
+      "reason": "'n_states' is missing",
+      "text": "@RULE X\n@TABLE\nneighborhood:Moore\nsymmetries:none\n0,0,0,0,0,0,0,0,0,0\n"
+    },
+    {
+      "line": null,
+      "reason": "'neighborhood' is missing",
+      "text": "@RULE X\n@TABLE\nn_states:2\nsymmetries:none\n"
+    },
+    {
+      "line": 5,
+      "reason": "'symmetries' is missing",
+      "text": "@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nvar a={1}\n"
+    },
+    {
+      "line": 3,
+      "reason": "n_states is a whole number from 2 to 256",
+      "text": "@RULE X\n@TABLE\nn_states:1\n"
+    },
+    {
+      "line": 3,
+      "reason": "n_states is a whole number from 2 to 256",
+      "text": "@RULE X\n@TABLE\nn_states:257\n"
+    },
+    {
+      "line": 4,
+      "reason": "'n_states' is set twice",
+      "text": "@RULE X\n@TABLE\nn_states:0000000000000000000000002\nn_states:x\n"
+    },
+    {
+      "line": 3,
+      "reason": "n_states is a whole number from 2 to 256",
+      "text": "@RULE X\n@TABLE\nn_states:two\n"
+    },
+    {
+      "line": 3,
+      "reason": "n_states is a whole number from 2 to 256",
+      "text": "@RULE X\n@TABLE\nn_states:\n"
+    },
+    {
+      "line": 3,
+      "reason": "unknown neighborhood 'hex': expected vonNeumann, Moore, hexagonal or oneDimensional",
+      "text": "@RULE X\n@TABLE\nneighborhood:hex\n"
+    },
+    {
+      "line": 3,
+      "reason": "unknown neighborhood 'Margolus': expected vonNeumann, Moore, hexagonal or oneDimensional",
+      "text": "@RULE X\n@TABLE\nneighborhood:Margolus\n"
+    },
+    {
+      "line": 3,
+      "reason": "the vonNeumann neighborhood has no 'rotate8' symmetries: expected none, rotate4, rotate4reflect, reflect_horizontal, reflect, permute",
+      "text": "@RULE X\n@TABLE\nsymmetries:rotate8\nneighborhood:vonNeumann\nn_states:2\n"
+    },
+    {
+      "line": 5,
+      "reason": "the hexagonal neighborhood has no 'rotate4' symmetries: expected none, rotate2, rotate3, rotate6, rotate6reflect, permute",
+      "text": "@RULE X\n@TABLE\nn_states:2\nneighborhood:hexagonal\nsymmetries:rotate4\n"
+    },
+    {
+      "line": 5,
+      "reason": "the oneDimensional neighborhood has no 'rotate2' symmetries: expected none, reflect, reflect_horizontal, permute",
+      "text": "@RULE X\n@TABLE\nn_states:2\nneighborhood:oneDimensional\nsymmetries:rotate2\n"
+    },
+    {
+      "line": 5,
+      "reason": "the Moore neighborhood has no 'rotate6' symmetries: expected none, rotate4, rotate8, rotate4reflect, rotate8reflect, reflect_horizontal, reflect, permute",
+      "text": "@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nsymmetries:rotate6\n0,0,0,0,0,0,0,0,0,0\n"
+    },
+    {
+      "line": 6,
+      "reason": "expected 'var name = {states}'",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\nvar\n"
+    },
+    {
+      "line": 6,
+      "reason": "expected 'var name = {states}'",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\nvar a\n"
+    },
+    {
+      "line": 6,
+      "reason": "expected 'var name = {states}'",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\nvar a b={1}\n"
+    },
+    {
+      "line": 6,
+      "reason": "expected 'var name = {states}'",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\nvar a={1\n"
+    },
+    {
+      "line": 6,
+      "reason": "expected 'var name = {states}'",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\nvar a=1\n"
+    },
+    {
+      "line": 6,
+      "reason": "expected 'var name = {states}'",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\nvar a={1,,2}\n"
+    },
+    {
+      "line": 6,
+      "reason": "expected 'var name = {states}'",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\nvar a={1}}\n"
+    },
+    {
+      "line": 6,
+      "reason": "a variable's name can't be a number",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\nvar 12={1}\n"
+    },
+    {
+      "line": 6,
+      "reason": "a variable's name is printable ASCII without ',', '{', '}', '=' or ':'",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\nvar a{={1}\n"
+    },
+    {
+      "line": 6,
+      "reason": "a variable's name is printable ASCII without ',', '{', '}', '=' or ':'",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\nvar a:b={1}\n"
+    },
+    {
+      "line": 7,
+      "reason": "variable 'a' is defined twice",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\nvar a={1}\nvar a={2}\n"
+    },
+    {
+      "line": 6,
+      "reason": "variable 'a' has no states",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\nvar a={}\n"
+    },
+    {
+      "line": 6,
+      "reason": "variable 'a' has no states",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\nvar a={ }\n"
+    },
+    {
+      "line": 6,
+      "reason": "unknown variable 'b'",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\nvar a={b}\n"
+    },
+    {
+      "line": 6,
+      "reason": "state 9 is not below n_states 8",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\nvar a={9}\n"
+    },
+    {
+      "line": 6,
+      "reason": "state 8 is not below n_states 8",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\nvar a={0,8}\n"
+    },
+    {
+      "line": 6,
+      "reason": "a transition has an empty field",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n0,,0,0,0,0\n"
+    },
+    {
+      "line": 6,
+      "reason": "a transition has an empty field",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n0,0,0,0,0,0,\n"
+    },
+    {
+      "line": 6,
+      "reason": "a transition has an empty field",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n,0,0,0,0,0,0\n"
+    },
+    {
+      "line": 6,
+      "reason": "a vonNeumann transition has 6 fields, not 5",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n0,0,0,0,0\n"
+    },
+    {
+      "line": 6,
+      "reason": "a vonNeumann transition has 6 fields, not 7",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n0,0,0,0,0,0,0\n"
+    },
+    {
+      "line": 6,
+      "reason": "a vonNeumann transition has 6 fields, not 1",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n00000\n"
+    },
+    {
+      "line": 6,
+      "reason": "a vonNeumann transition has 6 fields, not 1",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n0000000\n"
+    },
+    {
+      "line": 6,
+      "reason": "a vonNeumann transition has 6 fields, not 1",
+      "text": "@RULE X\n@TABLE\nn_states:11\nneighborhood:vonNeumann\nsymmetries:none\n000000\n"
+    },
+    {
+      "line": 6,
+      "reason": "unknown variable 'q'",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n0,0,0,0,0,q\n"
+    },
+    {
+      "line": 6,
+      "reason": "state 08 is not below n_states 8",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n0,0,0,0,0,08\n"
+    },
+    {
+      "line": 6,
+      "reason": "state 99999999999999999999 is not below n_states 8",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n0,0,0,0,0,99999999999999999999\n"
+    },
+    {
+      "line": 7,
+      "reason": "the output 'b' has several states and no input binds it",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\nvar b={1,2}\n0,0,0,0,0,b\n"
+    },
+    {
+      "line": 3,
+      "reason": "expected 'num_states', 'num_neighbors' or 'num_nodes' and '='",
+      "text": "@RULE X\n@TREE\nfoo=1\n"
+    },
+    {
+      "line": 3,
+      "reason": "'num_states' is missing",
+      "text": "@RULE X\n@TREE\nnum_states 2\n"
+    },
+    {
+      "line": 4,
+      "reason": "'num_states' is set twice",
+      "text": "@RULE X\n@TREE\nnum_states=2\nnum_states=2\n"
+    },
+    {
+      "line": 3,
+      "reason": "num_states is a whole number from 2 to 256",
+      "text": "@RULE X\n@TREE\nnum_states=1\n"
+    },
+    {
+      "line": 3,
+      "reason": "num_states is a whole number from 2 to 256",
+      "text": "@RULE X\n@TREE\nnum_states=300\n"
+    },
+    {
+      "line": 3,
+      "reason": "num_neighbors is 4 or 8",
+      "text": "@RULE X\n@TREE\nnum_neighbors=6\n"
+    },
+    {
+      "line": 3,
+      "reason": "num_nodes is a positive whole number",
+      "text": "@RULE X\n@TREE\nnum_nodes=0\n"
+    },
+    {
+      "line": 3,
+      "reason": "num_nodes is a positive whole number",
+      "text": "@RULE X\n@TREE\nnum_nodes=-1\n"
+    },
+    {
+      "line": 5,
+      "reason": "'num_nodes' is missing",
+      "text": "@RULE X\n@TREE\nnum_states=2\nnum_neighbors=4\n1 0 1\n"
+    },
+    {
+      "line": null,
+      "reason": "'num_nodes' is missing",
+      "text": "@RULE X\n@TREE\nnum_states=2\nnum_neighbors=4\n"
+    },
+    {
+      "line": 6,
+      "reason": "a node is its level and 2 children, all whole numbers",
+      "text": "@RULE X\n@TREE\nnum_states=2\nnum_neighbors=4\nnum_nodes=5\n1 0\n"
+    },
+    {
+      "line": 6,
+      "reason": "a node is its level and 2 children, all whole numbers",
+      "text": "@RULE X\n@TREE\nnum_states=2\nnum_neighbors=4\nnum_nodes=5\n1 0 1 1\n"
+    },
+    {
+      "line": 6,
+      "reason": "a node is its level and 2 children, all whole numbers",
+      "text": "@RULE X\n@TREE\nnum_states=2\nnum_neighbors=4\nnum_nodes=5\n1 0 x\n"
+    },
+    {
+      "line": 6,
+      "reason": "a node's level is 1 to 5",
+      "text": "@RULE X\n@TREE\nnum_states=2\nnum_neighbors=4\nnum_nodes=5\n6 0 0\n"
+    },
+    {
+      "line": 6,
+      "reason": "a node's level is 1 to 5",
+      "text": "@RULE X\n@TREE\nnum_states=2\nnum_neighbors=4\nnum_nodes=5\n0 0 0\n"
+    },
+    {
+      "line": 6,
+      "reason": "a level-1 node's children are states below 2",
+      "text": "@RULE X\n@TREE\nnum_states=2\nnum_neighbors=4\nnum_nodes=5\n1 0 2\n"
+    },
+    {
+      "line": 6,
+      "reason": "a level-2 node's children are earlier nodes of level 1",
+      "text": "@RULE X\n@TREE\nnum_states=2\nnum_neighbors=4\nnum_nodes=5\n2 0 0\n"
+    },
+    {
+      "line": 7,
+      "reason": "a level-2 node's children are earlier nodes of level 1",
+      "text": "@RULE X\n@TREE\nnum_states=2\nnum_neighbors=4\nnum_nodes=5\n1 0 1\n2 0 5\n"
+    },
+    {
+      "line": 8,
+      "reason": "a level-3 node's children are earlier nodes of level 2",
+      "text": "@RULE X\n@TREE\nnum_states=2\nnum_neighbors=4\nnum_nodes=5\n1 0 1\n2 0 0\n3 0 1\n"
+    },
+    {
+      "line": 11,
+      "reason": "the tree has more than num_nodes nodes",
+      "text": "@RULE X\n@TREE\nnum_states=2\nnum_neighbors=4\nnum_nodes=5\n1 0 1\n2 0 0\n3 1 1\n4 2 2\n5 3 3\n1 0 0\n"
+    },
+    {
+      "line": null,
+      "reason": "the tree has 4 nodes, not num_nodes 5",
+      "text": "@RULE X\n@TREE\nnum_states=2\nnum_neighbors=4\nnum_nodes=5\n1 0 1\n2 0 0\n3 1 1\n4 2 2\n"
+    },
+    {
+      "line": null,
+      "reason": "the root, the last node, is at level 5",
+      "text": "@RULE X\n@TREE\nnum_states=2\nnum_neighbors=4\nnum_nodes=5\n1 0 1\n2 0 0\n3 1 1\n4 2 2\n1 1 1\n"
+    },
+    {
+      "line": 7,
+      "reason": "a '@COLORS' line is 'state r g b' or 'r1 g1 b1 r2 g2 b2'",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n@COLORS\n1 2 3\n"
+    },
+    {
+      "line": 7,
+      "reason": "a '@COLORS' line is 'state r g b' or 'r1 g1 b1 r2 g2 b2'",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n@COLORS\nred 1 2 3\n"
+    },
+    {
+      "line": 7,
+      "reason": "a color component is 0 to 255",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n@COLORS\n1 256 0 0\n"
+    },
+    {
+      "line": 7,
+      "reason": "a color component is 0 to 255",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n@COLORS\n0 0 0 0 0 1000\n"
+    },
+    {
+      "line": 7,
+      "reason": "a '@NAMES' line is a state and its name",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n@NAMES\nfoo\n"
+    },
+    {
+      "line": 7,
+      "reason": "a '@NAMES' line is a state and its name",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n@NAMES\n3\n"
+    },
+    {
+      "line": 7,
+      "reason": "a '@NAMES' line is a state and its name",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n@NAMES\n3x name\n"
+    },
+    {
+      "line": 7,
+      "reason": "an '@ICONS' line is 'XPM', a quoted string, or circles, diamonds, hexagons or triangles",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n@ICONS\nsquares\n"
+    },
+    {
+      "line": 8,
+      "reason": "'@ICONS' holds one style or XPM sets, not both",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n@ICONS\ncircles\ndiamonds\n"
+    },
+    {
+      "line": 7,
+      "reason": "an '@ICONS' line is 'XPM', a quoted string, or circles, diamonds, hexagons or triangles",
+      "text": "@RULE X\n@TABLE\nn_states:8\nneighborhood:vonNeumann\nsymmetries:none\n@ICONS\n\"7 7 1 1\"\n"
+    },
+    {
+      "line": 8,
+      "reason": "'@ICONS' holds one style or XPM sets, not both",
+      "text": "@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nsymmetries:none\n@ICONS\ncircles\nXPM\n"
+    },
+    {
+      "line": 10,
+      "reason": "a quoted string has no closing '\"'",
+      "text": "@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nsymmetries:none\n@ICONS\nXPM\n\"7 7 1 1\"\n\". c #000000\"\n\".......\n"
+    },
+    {
+      "line": 7,
+      "reason": "an XPM set's first string is its width, height, colors and characters per pixel",
+      "text": "@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nsymmetries:none\n@ICONS\nXPM\n"
+    },
+    {
+      "line": 8,
+      "reason": "an XPM set's first string is its width, height, colors and characters per pixel",
+      "text": "@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nsymmetries:none\n@ICONS\nXPM\n\"7 7 1\"\n"
+    },
+    {
+      "line": 8,
+      "reason": "an XPM set's first string is its width, height, colors and characters per pixel",
+      "text": "@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nsymmetries:none\n@ICONS\nXPM\n\"7 6 1 1\"\n"
+    },
+    {
+      "line": 8,
+      "reason": "an XPM set's first string is its width, height, colors and characters per pixel",
+      "text": "@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nsymmetries:none\n@ICONS\nXPM\n\"7 7 1 3\"\n"
+    },
+    {
+      "line": 8,
+      "reason": "an XPM set's first string is its width, height, colors and characters per pixel",
+      "text": "@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nsymmetries:none\n@ICONS\nXPM\n\"0 0 1 1\"\n"
+    },
+    {
+      "line": 9,
+      "reason": "an XPM color is a key, 'c' and #RRGGBB or None",
+      "text": "@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nsymmetries:none\n@ICONS\nXPM\n\"7 7 1 1\"\n\". x #000000\"\n"
+    },
+    {
+      "line": 9,
+      "reason": "an XPM color is a key, 'c' and #RRGGBB or None",
+      "text": "@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nsymmetries:none\n@ICONS\nXPM\n\"7 7 1 1\"\n\". c #00000\"\n"
+    },
+    {
+      "line": 10,
+      "reason": "an XPM color is a key, 'c' and #RRGGBB or None",
+      "text": "@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nsymmetries:none\n@ICONS\nXPM\n\"7 7 2 1\"\n\". c #000000\"\n\". c #FFFFFF\"\n"
+    },
+    {
+      "line": 9,
+      "reason": "an XPM color is a key, 'c' and #RRGGBB or None",
+      "text": "@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nsymmetries:none\n@ICONS\nXPM\n\"7 7 1 1\"\n\". c black\"\n"
+    },
+    {
+      "line": 10,
+      "reason": "an XPM row is 7 characters, a color's key for each of its 7 pixels",
+      "text": "@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nsymmetries:none\n@ICONS\nXPM\n\"7 7 1 1\"\n\". c #000000\"\n\"......\"\n"
+    },
+    {
+      "line": 10,
+      "reason": "an XPM row is 7 characters, a color's key for each of its 7 pixels",
+      "text": "@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nsymmetries:none\n@ICONS\nXPM\n\"7 7 1 1\"\n\". c #000000\"\n\"..x....\"\n"
+    },
+    {
+      "line": 7,
+      "reason": "the XPM set has 4 strings, not 9",
+      "text": "@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nsymmetries:none\n@ICONS\nXPM\n\"7 7 1 1\"\n\". c #000000\"\n\".......\"\n\".......\"\n"
+    },
+    {
+      "line": 10,
+      "reason": "an XPM row is 14 characters, a color's key for each of its 7 pixels",
+      "text": "@RULE X\n@TABLE\nn_states:2\nneighborhood:Moore\nsymmetries:none\n@ICONS\nXPM\n\"7 7 1 2\"\n\".. c #000000\"\n\".......\"\n"
+    }
+  ],
+  "family": "ruletable-files",
+  "kind": "reasons",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

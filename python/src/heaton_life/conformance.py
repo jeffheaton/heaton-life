@@ -6,6 +6,7 @@ the .NET implementation mirrors it. Encodings are per-family and spec'd:
 
 - lifelike:        PNG, pixel = state * 255                       (bit-exact)
 - lifelike-history: PNG, pixel = raw state (0–6), a History rule  (bit-exact)
+- ruletable:       PNG, pixel = raw state; rule_text for a rule file (bit-exact)
 - elementary:      PNG, 1 x width, pixel = tape * 255             (bit-exact)
 - cyclic:          PNG, pixel = raw state                         (bit-exact)
 - wireworld:       PNG, pixel = state * 85                        (bit-exact)
@@ -46,9 +47,12 @@ from heaton_life.ca import (
     LifeLikeParams,
     MergeLife,
     MergeLifeParams,
+    RuleTableCA,
+    RuleTableParams,
     Wireworld,
     WireworldParams,
 )
+from heaton_life.ca.rulefile import parse_rule_file
 from heaton_life.core.protocols import Simulation
 from heaton_life.lenia import (
     AsymptoticLenia,
@@ -225,6 +229,37 @@ class _Ltl:
         return LargerThanLife.from_params(p)
 
 
+class _RuleTable:
+    """Rule-table grids (spec/ruletable.md): states as the raw pixel values of a grayscale
+    PNG. Params are the family's, every key written, and ``rule_text``, the rule file, for
+    a rule outside the starter set."""
+
+    ext = "png"
+
+    def encode(self, state: StateArray) -> bytes:
+        return _png_bytes(Image.fromarray(np.asarray(state, dtype=np.uint8), mode="L"))
+
+    def decode(self, data: bytes, shape: Sequence[int] | None) -> StateArray:
+        with Image.open(io.BytesIO(data)) as img:
+            return np.asarray(img.convert("L")).astype(np.uint8)
+
+    def build(self, params: dict[str, Any], initial: StateArray | None) -> Simulation:
+        params = dict(params)
+        text = params.pop("rule_text", None)
+        rule = None if text is None else parse_rule_file(text)
+        p = RuleTableParams.from_dict(params)
+        if initial is not None:
+            return RuleTableCA(
+                p.rule if rule is None else rule,
+                size=(p.width, p.height),
+                init=initial,
+                boundary=p.boundary,  # type: ignore[arg-type]
+                shift=p.shift,
+                axis=p.axis,  # type: ignore[arg-type]
+            )
+        return RuleTableCA.from_params(p, rule=rule)
+
+
 class _Rgb:
     ext = "png"
 
@@ -270,6 +305,7 @@ class _Float64:
 CODECS: dict[str, Codec] = {
     "lifelike": _Binary("lifelike"),
     "lifelike-history": _History(),
+    "ruletable": _RuleTable(),
     "elementary": _Binary("elementary"),
     "cyclic": _Indexed("cyclic", scale=1),
     "wireworld": _Indexed("wireworld", scale=85),
@@ -287,6 +323,7 @@ CODECS: dict[str, Codec] = {
 TIERS: dict[str, tuple[str, float | None]] = {
     "lifelike": ("bit-exact", None),
     "lifelike-history": ("bit-exact", None),
+    "ruletable": ("bit-exact", None),
     "elementary": ("bit-exact", None),
     "cyclic": ("bit-exact", None),
     "wireworld": ("bit-exact", None),

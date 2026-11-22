@@ -1240,7 +1240,8 @@ namespace HeatonLife
         {
             if (patternFamily != targetFamily)
                 return $"'{patternFamily}' patterns cannot be stamped into '{targetFamily}'";
-            bool counted = targetFamily == "cyclic" || targetFamily == "generations" || targetFamily == "ltl";
+            bool counted = targetFamily == "cyclic" || targetFamily == "generations" || targetFamily == "ltl"
+                || targetFamily == "ruletable";
             if (counted && targetStates > 0)
             {
                 int top = 0;

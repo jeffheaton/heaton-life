@@ -1,0 +1,35 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_00001.png",
+      "step": 1
+    },
+    {
+      "file": "state_00005.png",
+      "step": 5
+    },
+    {
+      "file": "state_00020.png",
+      "step": 20
+    }
+  ],
+  "family": "ruletable",
+  "params": {
+    "axis": "x",
+    "boundary": "sphere",
+    "density": 0.5,
+    "height": 24,
+    "init": "soup",
+    "rule": "Bound-Order",
+    "rule_text": "@RULE Bound-Order\nOutputs bound by neighbors under rotate4reflect: where two variants of one transition\nmatch a block with different bindings, the earlier one counts.\n@TABLE\nn_states:4\nneighborhood:vonNeumann\nsymmetries:rotate4reflect\nvar a={1,2,3}\nvar b={1,2,3}\nvar c={0,1,2,3}\nvar d={c}\n0,a,b,0,0,a\n0,a,a,b,c,b\n1,a,b,c,d,b\n2,a,0,0,0,3\n3,c,c,d,d,0\n",
+    "seed": 13,
+    "shift": 0,
+    "width": 24
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

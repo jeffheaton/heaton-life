@@ -1,0 +1,35 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_00001.png",
+      "step": 1
+    },
+    {
+      "file": "state_00007.png",
+      "step": 7
+    },
+    {
+      "file": "state_00040.png",
+      "step": 40
+    }
+  ],
+  "family": "ruletable",
+  "params": {
+    "axis": "x",
+    "boundary": "torus",
+    "density": 0.35,
+    "height": 24,
+    "init": "array",
+    "rule": "WireWorld-Table",
+    "rule_text": "@RULE WireWorld-Table\nWireworld as a rule table: Moore, permute.\n@TABLE\nn_states:4\nneighborhood:Moore\nsymmetries:permute\nvar a={0,1,2,3}\nvar b={a}\nvar c={a}\nvar d={a}\nvar e={a}\nvar f={a}\nvar g={a}\nvar h={a}\nvar n={0,2,3}\nvar o={n}\nvar p={n}\nvar q={n}\nvar r={n}\nvar s={n}\nvar t={n}\n1,a,b,c,d,e,f,g,h,2\n2,a,b,c,d,e,f,g,h,3\n3,1,n,o,p,q,r,s,t,1\n3,1,1,n,o,p,q,r,s,1\n@COLORS\n0 0 0 0\n1 0 128 255\n2 255 255 255\n3 255 128 0\n",
+    "seed": 0,
+    "shift": 0,
+    "width": 24
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

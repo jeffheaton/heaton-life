@@ -1,0 +1,59 @@
+{
+  "colors": [],
+  "description": "Langton's ant.\n\nSource: C. G. Langton, \"Studying artificial life with cellular automata\",\nPhysica D 22 (1986) 120-149. On a white cell (0) the ant turns right, on a\nblack one (1) left; it flips the cell's color and steps forward. From one ant\non an all-white plane its path looks random until step 9,977, and then it\nbuilds a highway that repeats every 104 steps.\n\nThe starter pattern (Langtons-Ant.rle) is one ant facing north on color 0.\n\nStates: a cell is its color c (0 to 1), or 2 + 4c + d where the ant\nstands on it with heading d (0 north, 1 east, 2 south, 3 west). Each\ngeneration the ant's cell takes its next color and the ant appears on the\nneighbor its new heading points to, facing that way. Two ants that would\nland on one cell: the one from the north wins, then east, south, west.\n\nGenerated from the definition by python/tools/gen_rule_tables.py for\nheaton-life (spec/ruletable.md).",
+  "family": "ruletable-files",
+  "icons": null,
+  "input": "input.rule",
+  "kind": "compile",
+  "name": "Langtons-Ant",
+  "names": [
+    {
+      "name": "color 0",
+      "state": 0
+    },
+    {
+      "name": "color 1",
+      "state": 1
+    },
+    {
+      "name": "ant on color 0 heading north",
+      "state": 2
+    },
+    {
+      "name": "ant on color 0 heading east",
+      "state": 3
+    },
+    {
+      "name": "ant on color 0 heading south",
+      "state": 4
+    },
+    {
+      "name": "ant on color 0 heading west",
+      "state": 5
+    },
+    {
+      "name": "ant on color 1 heading north",
+      "state": 6
+    },
+    {
+      "name": "ant on color 1 heading east",
+      "state": 7
+    },
+    {
+      "name": "ant on color 1 heading south",
+      "state": 8
+    },
+    {
+      "name": "ant on color 1 heading west",
+      "state": 9
+    }
+  ],
+  "neighborhood": "vonNeumann",
+  "neighbors": 4,
+  "source": "table",
+  "spec_version": "0.16.0",
+  "states": 10,
+  "symmetries": "none",
+  "tier": "bit-exact",
+  "tree": "tree.txt"
+}
