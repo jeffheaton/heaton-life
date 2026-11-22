@@ -2,28 +2,31 @@ using System;
 
 namespace HeatonLife
 {
-    public enum Boundary
-    {
-        Torus,
-        Dead,
-    }
-
     /// <summary>
     /// Life-like cellular automaton (spec/lifelike.md). State is a flat row-major
     /// byte grid (0/1), index = y * Width + x — the same memory layout as the
     /// Python implementation and the conformance vectors. Bit-exact tier. The rule is any
-    /// Life-like rule (spec/rules.md), run through its 512-entry table.
+    /// Life-like rule (spec/rules.md), run through its 512-entry table, on any topology
+    /// (spec/topology.md), read through the grid's halo.
     /// </summary>
     public sealed class LifeLike : IIndexedFrameSource
     {
         private readonly byte[] _table; // next state by 3×3 neighborhood index (spec/rules.md)
+        private readonly Halo _halo; // the cells past the edges (spec/topology.md "The halo")
+        private readonly byte[] _padded; // the halo each generation reads
         private byte[] _cells;
         private byte[] _scratch;
 
         public int Width { get; }
         public int Height { get; }
         public string Rule { get; }
-        public Boundary Boundary { get; }
+
+        /// <summary>The topology's boundary: <see cref="Topology"/>.Boundary.</summary>
+        public Boundary Boundary => Topology.Boundary;
+
+        /// <summary>How the grid's edges join (spec/topology.md).</summary>
+        public Topology Topology { get; }
+
         public int Generation { get; private set; }
 
         public ReadOnlySpan<byte> State => _cells;
@@ -33,13 +36,22 @@ namespace HeatonLife
             int width,
             int height,
             Boundary boundary = Boundary.Torus)
+            : this(rule, width, height, new Topology(boundary))
+        {
+        }
+
+        /// <summary>A world on any topology (spec/topology.md); throws
+        /// <see cref="TopologyException"/> for one the size can't have.</summary>
+        public LifeLike(string rule, int width, int height, Topology topology)
         {
             LifeRule compiled = RuleString.Compile(rule);
             Rule = compiled.Canonical;
             _table = compiled.Table.ToArray();
+            _halo = new Halo(topology, width, height);
+            _padded = new byte[_halo.Length];
             Width = width;
             Height = height;
-            Boundary = boundary;
+            Topology = topology;
             _cells = new byte[width * height];
             _scratch = new byte[width * height];
             SeedSoup(0.35, 0); // the Python constructor's default init
@@ -215,40 +227,25 @@ namespace HeatonLife
 
         private void StepOnce()
         {
-            int w = Width, h = Height;
-            bool torus = Boundary == Boundary.Torus;
+            int w = Width, h = Height, stride = _halo.Columns;
+            byte[] p = _padded;
+            _halo.Fill(_cells, p, 0);
             for (int y = 0; y < h; y++)
             {
-                int up = y - 1, down = y + 1;
-                if (torus)
-                {
-                    up = (up + h) % h;
-                    down = down % h;
-                }
+                // Halo indices of (0, y - 1), (0, y) and (0, y + 1): row y + 1 of the halo is the
+                // grid's row y, and its column x + 1 the grid's column x.
+                int up = y * stride + 1, mid = up + stride, down = mid + stride, row = y * w;
                 for (int x = 0; x < w; x++)
                 {
-                    int left = x - 1, right = x + 1;
-                    if (torus)
-                    {
-                        left = (left + w) % w;
-                        right = right % w;
-                    }
                     // The neighborhood index (spec/rules.md): NW 256, N 128, NE 64, W 32,
                     // the cell 16, E 8, SW 4, S 2, SE 1.
-                    int index = (Cell(left, up) << 8) | (Cell(x, up) << 7) | (Cell(right, up) << 6)
-                        | (Cell(left, y) << 5) | (_cells[y * w + x] << 4) | (Cell(right, y) << 3)
-                        | (Cell(left, down) << 2) | (Cell(x, down) << 1) | Cell(right, down);
-                    _scratch[y * w + x] = _table[index];
+                    int index = (p[up + x - 1] << 8) | (p[up + x] << 7) | (p[up + x + 1] << 6)
+                        | (p[mid + x - 1] << 5) | (p[mid + x] << 4) | (p[mid + x + 1] << 3)
+                        | (p[down + x - 1] << 2) | (p[down + x] << 1) | p[down + x + 1];
+                    _scratch[row + x] = _table[index];
                 }
             }
             (_cells, _scratch) = (_scratch, _cells);
-        }
-
-        private int Cell(int x, int y)
-        {
-            if (Boundary == Boundary.Dead && (x < 0 || x >= Width || y < 0 || y >= Height))
-                return 0;
-            return _cells[y * Width + x];
         }
     }
 }

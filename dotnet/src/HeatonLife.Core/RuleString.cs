@@ -276,7 +276,7 @@ namespace HeatonLife
 
         /// <summary>spec/rules.md "Grammar": the whitespace allowed at the ends and around the
         /// slash, listed by code point so every runtime agrees.</summary>
-        private static bool IsSpace(char c)
+        internal static bool IsSpace(char c)
         {
             int u = c;
             return (u >= 0x09 && u <= 0x0D) || u == 0x20 || u == 0x85 || u == 0xA0 || u == 0x1680

@@ -1,0 +1,21 @@
+{
+  "bounded_grid": ":T30,20",
+  "family": "formats",
+  "format": "rle",
+  "generation": "0",
+  "height": "20",
+  "input": "input.rle",
+  "kind": "measure",
+  "metadata": {
+    "author": null,
+    "comments": [],
+    "name": null
+  },
+  "rule": "B3/S23",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "two_state": true,
+  "width": "30",
+  "x": "-15",
+  "y": "-10"
+}

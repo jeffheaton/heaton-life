@@ -93,7 +93,10 @@ map     = "MAP" payload [ "==" ]
   U+2000–U+200A, U+2028, U+2029, U+202F, U+205F or U+3000. It may appear only at the two
   ends and on either side of the `/`.
 - Nothing may follow the rule. Variants that give these rules more states will be named by
-  a word after the rule; until one is specified, any such suffix is an error.
+  a word after the rule; until one is specified, any such suffix is an error. A
+  [bounded-grid suffix](topology.md#the-bounded-grid-suffix) (`B3/S23:T30,20`) names a
+  world, not a rule: where a text may carry one, it is taken off at its `:` before the
+  rule is read.
 
 ### Birth and survival
 

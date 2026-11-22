@@ -1,0 +1,16 @@
+{
+  "canonical": "canonical.rle",
+  "family": "patterns",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      1,
+      3
+    ]
+  },
+  "input": "input.rle",
+  "kind": "rle",
+  "rule": "WireWorld",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

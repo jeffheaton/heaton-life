@@ -107,6 +107,21 @@ exactly the canonical text their own pages describe.
 of `Patterns.RleEncode`, `HashLife.ToRle`, `HashLife.ToMacrocell`, `HashLife.EncodeFile`
 and `Macrocell.Write` that take one; and `Metadata` on every result.
 
+## Rules in survival/birth order
+
+Older programs write a Life-like rule with its survival digits first: `23/3` is Conway's
+Life, `B3/S23`. Text of the form `<digits>/<digits>`, every digit `0`–`8` and either side
+possibly empty, reads as `B<birth>/S<survival>`, each side's digits sorted and repeats
+dropped: `23/3` is `B3/S23`, `/2` is `B2/S`, and `3/` is `B/S3`. Any other text is left as
+written. Life 1.05's `#R` line and an RLE header's rule are read this way.
+
+In an RLE header the [bounded-grid suffix](topology.md#the-bounded-grid-suffix) comes off
+first, and the rest is read this way: `rule = 23/3:T30,20` is `B3/S23` on a 30 × 20 torus.
+A rule so read is a Life-like rule, so it makes the file two-state
+([patterns.md](patterns.md#rle-text-encoding-life-like-wireworld-cyclic)), and it is the
+rule the reader reports. Writers write the `B…/S…` form, canonical RLE included: an RLE
+read from `rule = 23/3` writes `rule = B3/S23`.
+
 ## Plaintext
 
 A line that starts with `!` once stripped is a comment ([Metadata](#metadata)). Every other
@@ -129,10 +144,8 @@ stripped. Each line is one of:
 - `#D <text>` or `#C <text>` — a comment ([Metadata](#metadata)).
 - `#N` — the rule is `B3/S23`.
 - `#R <rule>` — the rule. Life 1.05 writes rules as survival/birth, so `#R 23/3` is
-  Conway's Life. Text of the form `<digits>/<digits>`, every digit `0`–`8` and either
-  side possibly empty, becomes `B<birth>/S<survival>` with each side's digits sorted and
-  repeats dropped; any other text is the rule as written, and an `#R` with nothing after
-  it is ignored. The last `#N` or `#R` line counts.
+  Conway's Life: the text is read in [survival/birth order](#rules-in-survivalbirth-order).
+  An `#R` with nothing after it is ignored. The last `#N` or `#R` line counts.
 - `#P <x> <y>` — begins a block whose top-left cell is (x, y): two integers, each an
   optional `-` and one or more ASCII digits, any size, separated by whitespace, with
   nothing else on the line. Any other form is an error.
@@ -225,7 +238,7 @@ none), the generation, and the metadata.
 
 | format | grid | x, y | rule | generation |
 |---|---|---|---|---|
-| `rle` | the RLE decode of [patterns.md](patterns.md#rle-text-encoding-life-like-wireworld-cyclic): the declared size, either dialect, states up to 24 | `#CXRLE Pos`, or (0, 0) | the header's, as written, or none | `#CXRLE Gen`, or 0 |
+| `rle` | the RLE decode of [patterns.md](patterns.md#rle-text-encoding-life-like-wireworld-cyclic): the declared size, either dialect, states up to 24; for a [bounded grid](#bounded-grids), its whole world | `#CXRLE Pos`, or (0, 0); for a bounded grid, the world's top-left | the header's, without a [bounded-grid suffix](topology.md#the-bounded-grid-suffix), as written or, [in survival/birth order](#rules-in-survivalbirth-order), as `B…/S…`; or none | `#CXRLE Gen`, or 0 |
 | `macrocell` | the live cells' bounding box | the box's top-left | `#R` in [canonical form](rules.md#canonical-form), or `B3/S23` | `#G`, or 0 |
 | `plaintext` | the rows: the longest row's width × the number of rows | (0, 0) | none | 0 |
 | `life-1.05`, `life-1.06` | the live cells' bounding box | the box's top-left | from `#N` or `#R`, or none | 0 |
@@ -247,6 +260,36 @@ none), and a grid past it is refused before memory is asked for. An image is ref
 trimmed or not, when the image itself is past the limit, since all of its pixels must be
 read. Positions, sizes, and generations are exact integers of any size.
 
+The result also gives the file's `bounded_grid`: the world a bounded file names, or none.
+
+### Bounded grids
+
+An RLE file whose header rule carries a [bounded-grid
+suffix](topology.md#the-bounded-grid-suffix) (`rule = B3/S23:T30,20`) is a pattern in a
+world of `W × H` cells with the suffix's topology, and reading it into a grid gives that
+world:
+
+- The world's top-left cell sits at `(−⌊W/2⌋, −⌊H/2⌋)` in the file's coordinates: the
+  world is centered on the origin.
+- The pattern's top-left cell sits at `#CXRLE Pos`, or, without one, at
+  `(−⌊w/2⌋, −⌊h/2⌋)`, where `w × h` is its decoded size
+  ([patterns.md](patterns.md#rle-text-encoding-life-like-wireworld-cyclic) "Extent"): the
+  pattern is centered on the origin too. A pattern written whole, its `x` and `y` the
+  world's size, fills its world exactly, wherever a reader centers it.
+- The grid is the world, `W × H` cells at the world's top-left: the pattern's cells where
+  they land, every other cell 0. Every non-zero cell must land in the world; a pattern
+  with one outside it is an error.
+- The rule is the header's without the suffix, and `bounded_grid` is the suffix's world.
+- With `trim`, the grid is cut to the world's live cells' box like any other. The decode
+  limit applies to the world, or, trimmed, to the box.
+
+Measuring a bounded file gives the world's size and top-left and its `bounded_grid`, and
+refuses a pattern that reaches past its world, from the pattern's live box (no cell is
+decoded).
+
+Bounded grids are RLE's alone: a Macrocell, Life 1.05 or Life 1.06 rule with a suffix is
+read as written, which no rule compiler accepts.
+
 ## Measuring
 
 `measure_pattern(source)` (.NET `PatternFiles.Measure`) detects the format and gives a
@@ -265,7 +308,9 @@ a reader asks for memory. The extent holds:
 - `rule`, `generation` and `metadata`, as the table gives them;
 - `two_state`: false for an RLE file in the extended dialect, whatever states it uses,
   and true for every other file. Only a two-state file can be read into the unbounded
-  universe.
+  universe;
+- `bounded_grid`: the world a [bounded file](#bounded-grids) names, or none. Only a file
+  without one can be read into the unbounded universe.
 
 Each format is measured without a cell being kept:
 
@@ -315,6 +360,9 @@ universe.
   that is not a Life-like rule is an error, and so is a
   [preset name](rules.md#preset-names) such as `life`: a file names its rule, never a
   preset.
+- **Bounded grids.** An RLE file whose rule carries a [bounded-grid
+  suffix](topology.md#the-bounded-grid-suffix) is an error, whatever its topology: the
+  universe has no edges to give it.
 - **Generation.** RLE's `Gen`, Macrocell's `#G`, otherwise 0.
 
 An empty pattern gives an empty universe.
@@ -359,10 +407,10 @@ are decimal strings; metadata is `{"name", "author", "comments"}` with `null` fo
 
 | kind | inputs | expected |
 |---|---|---|
-| `read` | `input` (a file in any format, perhaps gzip-compressed); `trim`; `limit` (`"default"`, a number, or `null`) | `format`, `x`, `y`, `rule`, `generation`, `metadata`; `grid` (raw cell values in an 8-bit grayscale PNG, and its `shape`); `canonical`: the grid as canonical RLE with the metadata, under the rule or `B3/S23` — or `error: true` |
+| `read` | `input` (a file in any format, perhaps gzip-compressed); `trim`; `limit` (`"default"`, a number, or `null`) | `format`, `x`, `y`, `rule`, `generation`, `metadata`; `grid` (raw cell values in an 8-bit grayscale PNG, and its `shape`); `canonical`: the grid as canonical RLE with the metadata, under the rule or `B3/S23` (and, untrimmed, the bounded grid's topology); `bounded_grid`, the canonical suffix, in the cases of a bounded file (absent: none) — or `error: true` |
 | `universe` | `input` | `format`, `metadata`, and the universe's state as [hashlife.md](hashlife.md#vector-encoding) pins one (`generation`, `population`, `bounding_box`, `state`); `with_metadata`: its canonical Macrocell with the metadata; `rle`: its RLE with the metadata, or `rle_error: true`; for a timeline, `step` and `frames` (each frame's state), and a case without them gives no frames — or `error: true` |
 | `detect` | `inputs`: a list of byte strings in hex | each one's `format`, or `error: true` |
-| `measure` | `input` (a file in any format, perhaps gzip-compressed) | `format`, `width`, `height`, `x`, `y`, `rule`, `generation`, `metadata`, `two_state` — or `error: true` |
+| `measure` | `input` (a file in any format, perhaps gzip-compressed) | `format`, `width`, `height`, `x`, `y`, `rule`, `generation`, `metadata`, `two_state`; `bounded_grid` as for `read` — or `error: true` |
 | `timeline-read` | `input.mc` | `count`, `first`, `step`, `metadata`, the file's own state, and `frames`: each frame's state, its canonical Macrocell in `frame-<i>.mc` — or `error: true` |
 | `timeline-write` | `input` (a pattern), `generations` (a frame at each), `metadata` | `timeline`: the file [macrocell.md](macrocell.md#timelines) writes; reading it back gives each frame's state again |
 

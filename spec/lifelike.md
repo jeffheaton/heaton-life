@@ -12,9 +12,14 @@ Conformance tier: **bit-exact**. Vectors: [`vectors/lifelike/`](../vectors/lifel
 Each cell's neighborhood index ([rules.md](rules.md#the-transition-table)): the weights
 of the live cells in its 3 × 3 block, the cell included, summed in integer arithmetic.
 
-Boundary modes:
-- `torus` (default): indices wrap in both axes.
-- `dead`: cells outside the grid count as 0.
+The block is read from the grid's [halo](topology.md#the-halo) of radius 1, so the
+cells past an edge are the ones the grid's [topology](topology.md) puts there:
+
+- `torus` (default): indices wrap in both axes, shifted along one if the torus has a
+  `shift`.
+- `dead` (the plane): cells outside the grid count as 0.
+- `klein`, `cross` and `sphere`: the Klein bottle, the cross-surface and the sphere
+  (square grids only).
 
 ## Respond + Integrate
 
@@ -36,8 +41,9 @@ where count is the number of live neighbors. Params always carry the canonical r
 string; preset names (life, highlife, seeds, daynight, replicator, maze, diamoeba) are
 implementation conveniences, not part of the wire format.
 
-B0 rules run as written: on a torus every dead cell without live neighbors is born at
-once, and with `dead` boundaries the cells outside the grid stay dead.
+B0 rules run as written: on a torus (or any topology but the plane) every dead cell
+without live neighbors is born at once, and with `dead` boundaries the cells outside the
+grid stay dead.
 
 ## Parameters
 
@@ -56,6 +62,11 @@ once, and with `dead` boundaries the cells outside the grid stay dead.
 `init` ∈ `soup | blob | single | array` (`array` means the initial state is supplied
 out-of-band; in vectors it is the step-0 PNG).
 
+`boundary` is any of the [topologies](topology.md#the-topologies): `torus`, `dead`,
+`klein`, `cross` or `sphere`. A torus or a Klein bottle may also carry `shift` (an
+integer) and `axis` (`x` or `y`); absent, they are 0 and `x`, and a vector's params leave
+them out at those values.
+
 ## Initialization
 
 All strategies use [PCG32](rng.md) with `seq = 0` and consume exactly `width * height`
@@ -71,6 +82,9 @@ draws in row-major order (even for cells a mask later discards).
 Two-state RLE (`b`/`o`/`$`/`!`, run counts, `#` comments, `x = …, y = …, rule = …` header)
 is the supported pattern interchange format; a header naming any Life-like rule marks the
 file two-state ([patterns.md](patterns.md#rle-text-encoding-life-like-wireworld-cyclic)).
+A world saves with its topology as the rule's [bounded-grid
+suffix](topology.md#the-bounded-grid-suffix) (`rule = B3/S23:K64*,48`), and a file with
+one opens as that world ([formats.md](formats.md#bounded-grids)).
 
 ## Vector encoding
 
@@ -80,6 +94,9 @@ State PNGs are 8-bit grayscale, pixel = `state * 255`.
 
 - Glider translates by exactly one diagonal cell every 4 generations; on a 16×16 torus it
   returns to its starting cells at generation 64.
+- On a torus with a shift of `s` along x, a glider crossing the bottom edge comes back
+  across the top one `s` columns over; on a Klein bottle twisted along x, a glider heading
+  down and right comes back across the top mirrored, heading down and left.
 - Blinker has period 2; block is a still life.
 - An outer-totalistic rule's table and the count formula above give the same next state
   for all 512 indices.

@@ -25,7 +25,7 @@ namespace HeatonLife
     {
         internal PatternFile(
             PatternFormat format, byte[] cells, int width, int height, BigInteger x, BigInteger y,
-            string? rule, BigInteger generation, PatternMetadata metadata)
+            string? rule, BigInteger generation, PatternMetadata metadata, BoundedGrid? boundedGrid = null)
         {
             Format = format;
             Cells = cells;
@@ -36,6 +36,7 @@ namespace HeatonLife
             Rule = rule;
             Generation = generation;
             Metadata = metadata;
+            BoundedGrid = boundedGrid;
         }
 
         public PatternFormat Format { get; }
@@ -52,12 +53,17 @@ namespace HeatonLife
 
         public BigInteger Y { get; }
 
-        /// <summary>The file's rule, or null when it names none.</summary>
+        /// <summary>The file's rule, or null when it names none; an RLE header's without its
+        /// bounded-grid suffix.</summary>
         public string? Rule { get; }
 
         public BigInteger Generation { get; }
 
         public PatternMetadata Metadata { get; }
+
+        /// <summary>The world a bounded file names (spec/formats.md "Bounded grids"), or null; the
+        /// cells are that whole world unless trimmed.</summary>
+        public BoundedGrid? BoundedGrid { get; }
     }
 
     /// <summary>A pattern file read into a HashLife universe, with its format and metadata, and a
@@ -136,7 +142,7 @@ namespace HeatonLife
     {
         internal PatternExtent(
             PatternFormat format, BigInteger width, BigInteger height, BigInteger x, BigInteger y, string? rule,
-            BigInteger generation, PatternMetadata metadata, bool twoState)
+            BigInteger generation, PatternMetadata metadata, bool twoState, BoundedGrid? boundedGrid = null)
         {
             Format = format;
             Width = width;
@@ -147,6 +153,7 @@ namespace HeatonLife
             Generation = generation;
             Metadata = metadata;
             TwoState = twoState;
+            BoundedGrid = boundedGrid;
         }
 
         public PatternFormat Format { get; }
@@ -172,6 +179,10 @@ namespace HeatonLife
         /// <summary>False for an extended RLE file, whatever states it uses: only a two-state file
         /// can be read into the unbounded universe.</summary>
         public bool TwoState { get; }
+
+        /// <summary>The world a bounded file names, or null: only a file without one can be read
+        /// into the unbounded universe.</summary>
+        public BoundedGrid? BoundedGrid { get; }
     }
 
     /// <summary>
@@ -500,6 +511,10 @@ namespace HeatonLife
         }
 
         /// <summary>Life 1.05's survival/birth digits as B…/S…; other text as written.</summary>
+        /// <summary>A rule in survival/birth order (<c>23/3</c>) as <c>B…/S…</c> (<c>B3/S23</c>),
+        /// each side's digits sorted and repeats dropped; any other text as written
+        /// (spec/formats.md "Rules in survival/birth order"). Life 1.05's <c>#R</c> and an RLE
+        /// header's rule are read this way.</summary>
         internal static string LifeRule(string value)
         {
             int slash = value.IndexOf('/');
@@ -685,17 +700,62 @@ namespace HeatonLife
 
         private static PatternFile ReadRle(string text, long? maxCells, bool trim)
         {
-            Patterns.Cxrle(text, out BigInteger x, out BigInteger y, out BigInteger generation);
-            RlePattern decoded = Patterns.RleDecode(text, maxCells, trim);
+            bool placed = Patterns.Cxrle(text, out BigInteger x, out BigInteger y, out BigInteger generation);
+            BoundedGrid? world = Patterns.RleBoundedGrid(text); // from the header alone
+            if (world == null)
+            {
+                RlePattern decoded = Patterns.RleDecode(text, maxCells, trim);
+                if (trim)
+                {
+                    CellBox live = Patterns.RleMeasure(text).Live!.Value; // a trimmed decode has a live cell
+                    x += live.X0;
+                    y += live.Y0;
+                }
+                return new PatternFile(
+                    PatternFormat.Rle, decoded.Cells, decoded.Width, decoded.Height, x, y, decoded.Rule, generation,
+                    Patterns.RleMetadata(text));
+            }
+            RleExtent extent = Patterns.RleMeasure(text);
+            Bounded(world, extent, placed, ref x, ref y, out BigInteger left, out BigInteger top);
             if (trim)
             {
-                CellBox live = Patterns.RleMeasure(text).Live!.Value; // a trimmed decode has a live cell
-                x += live.X0;
-                y += live.Y0;
+                RlePattern box = Patterns.RleDecode(text, maxCells, trim: true);
+                CellBox live = extent.Live!.Value; // a trimmed decode has a live cell
+                return new PatternFile(
+                    PatternFormat.Rle, box.Cells, box.Width, box.Height, x + live.X0, y + live.Y0, box.Rule,
+                    generation, Patterns.RleMetadata(text), world);
             }
+            // The whole world, the pattern placed in it (spec/formats.md "Bounded grids").
+            Check(world.Width, world.Height, maxCells);
+            var cells = new byte[(long)world.Width * world.Height];
+            Patterns.PlaceRle(text, cells, world.Width, x - left, y - top);
             return new PatternFile(
-                PatternFormat.Rle, decoded.Cells, decoded.Width, decoded.Height, x, y, decoded.Rule, generation,
-                Patterns.RleMetadata(text));
+                PatternFormat.Rle, cells, world.Width, world.Height, left, top, extent.Rule, generation,
+                Patterns.RleMetadata(text), world);
+        }
+
+        /// <summary>
+        /// A bounded file's pattern in its world (spec/formats.md "Bounded grids"): moves
+        /// (<paramref name="x"/>, <paramref name="y"/>) to the pattern's top-left — <c>#CXRLE
+        /// Pos</c> when <paramref name="placed"/>, else its decoded size's half up and left of the
+        /// origin — and gives the world's top-left (the world is centered on the origin). A pattern
+        /// with a live cell past its world is refused.
+        /// </summary>
+        private static void Bounded(
+            BoundedGrid world, RleExtent extent, bool placed, ref BigInteger x, ref BigInteger y,
+            out BigInteger left, out BigInteger top)
+        {
+            left = -(world.Width / 2);
+            top = -(world.Height / 2);
+            if (!placed)
+            {
+                x = -BigInteger.Divide(extent.Width, 2);
+                y = -BigInteger.Divide(extent.Height, 2);
+            }
+            if (extent.Live is CellBox live
+                && (x + live.X0 < left || y + live.Y0 < top
+                    || x + live.X1 >= left + world.Width || y + live.Y1 >= top + world.Height))
+                throw new ArgumentException($"the pattern reaches past its bounded grid ({world.Suffix})");
         }
 
         private static PatternFile ReadMacrocell(string text, long? maxCells)
@@ -758,14 +818,26 @@ namespace HeatonLife
         private static PatternExtent MeasureRle(string text)
         {
             // The #CXRLE line: position and generation, checked as a read checks them.
-            Patterns.Cxrle(text, out BigInteger x, out BigInteger y, out BigInteger generation);
+            bool placed = Patterns.Cxrle(text, out BigInteger x, out BigInteger y, out BigInteger generation);
             RleExtent extent = Patterns.RleMeasure(text);
             BigInteger width = extent.Width, height = extent.Height;
-            if (width.IsZero || height.IsZero)
+            BoundedGrid? world = extent.BoundedGrid;
+            if (world != null)
+            {
+                // The world, whatever the pattern's own size.
+                Bounded(world, extent, placed, ref x, ref y, out BigInteger left, out BigInteger top);
+                x = left;
+                y = top;
+                width = world.Width;
+                height = world.Height;
+            }
+            else if (width.IsZero || height.IsZero)
+            {
                 width = height = x = y = BigInteger.Zero;
+            }
             return new PatternExtent(
                 PatternFormat.Rle, width, height, x, y, extent.Rule, generation, Patterns.RleMetadata(text),
-                twoState: !extent.Extended);
+                twoState: !extent.Extended, world);
         }
 
         // ---- reading into the unbounded universe -----------------------------------------------

@@ -6,11 +6,15 @@ Conformance tier: **bit-exact**. Vectors: [`vectors/wireworld/`](../vectors/wire
 
 2-D grid, unsigned bytes: `0` empty, `1` electron head, `2` electron tail, `3` conductor.
 Shape `(height, width)`, row-major. Default boundary is `dead` (circuits rarely want a
-torus); `torus` is allowed.
+torus); every [topology](topology.md#the-topologies) is allowed: `torus`, `klein`, `cross`
+and `sphere`, with `shift` and `axis` as [lifelike.md](lifelike.md#parameters) gives
+them.
 
 ## Gather / Respond / Integrate
 
-Count electron heads among the 8 Moore neighbors. Then, synchronously:
+Count electron heads among the 8 Moore neighbors, read from the grid's
+[halo](topology.md#the-halo) of radius 1 (past a `dead` edge, empty). Then,
+synchronously:
 
 - head → tail
 - tail → conductor
@@ -26,6 +30,8 @@ correct Wireworld behavior, not a bug.
 ```json
 { "width": 64, "height": 64, "init": "clock", "boundary": "dead" }
 ```
+
+`shift` and `axis` join them for a torus or a Klein bottle; absent, they are 0 and `x`.
 
 No seed — Wireworld has no randomness.
 

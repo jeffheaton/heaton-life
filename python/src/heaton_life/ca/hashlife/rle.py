@@ -54,6 +54,11 @@ def build_rle(universe: HashLife, text: str) -> tuple[int, int, int, str]:
     pattern's tree as (root, level), its generation, and its rule in canonical form. A file
     names its rule, never a preset (an RLE header preset already makes the file extended)."""
     info, runs = rle_runs(text)
+    if info.bounded_grid is not None:  # spec/patterns.md "RLE in the unbounded universe"
+        raise ValueError(
+            f"the unbounded universe has no bounded grid ('{info.bounded_grid.suffix}' "
+            "in the rule): open the file in a grid world (spec/topology.md)"
+        )
     if info.extended:
         raise ValueError("HashLife reads two-state RLE only (this file is extended RLE)")
     rule = _hashlife_rule(info.rule or "B3/S23", presets=False)

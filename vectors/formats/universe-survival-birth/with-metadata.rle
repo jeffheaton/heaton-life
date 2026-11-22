@@ -1,0 +1,4 @@
+#CXRLE Pos=-1,-1
+#N HighLife glider
+x = 3, y = 3, rule = B36/S23
+bo$2bo$3o!

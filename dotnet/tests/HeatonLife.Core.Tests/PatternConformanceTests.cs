@@ -311,17 +311,18 @@ namespace HeatonLife.Tests
             JsonElement world, byte[] grid, int width, int height, int[] r, int n, bool outside)
         {
             var keys = world.EnumerateObject().Select(p => p.Name).ToHashSet();
-            Boundary Edge(string name) => name switch
-            {
-                "torus" => Boundary.Torus,
-                "dead" => Boundary.Dead,
-                _ => throw new InvalidDataException($"unknown boundary {name}"),
-            };
+            // A topology's shift and axis appear only when they aren't 0 and x (spec/topology.md).
+            Topology Edge(string name) => Topology.Parse(
+                name,
+                world.TryGetProperty("shift", out JsonElement shift) ? shift.GetInt32() : 0,
+                world.TryGetProperty("axis", out JsonElement axis) ? axis.GetString()! : "x");
+            var topologyKeys = new HashSet<string> { "boundary", "shift", "axis" };
             switch (world.GetProperty("family").GetString())
             {
                 case "lifelike":
                     {
-                        Assert.Equal(new HashSet<string> { "family", "rule", "boundary" }, keys);
+                        Assert.Subset(keys, new HashSet<string> { "family", "rule", "boundary" });
+                        Assert.Superset(keys, new HashSet<string>(topologyKeys) { "family", "rule" });
                         var life = new LifeLike(
                             world.GetProperty("rule").GetString()!, width, height,
                             Edge(world.GetProperty("boundary").GetString()!));
@@ -332,7 +333,8 @@ namespace HeatonLife.Tests
                     }
                 case "wireworld":
                     {
-                        Assert.Equal(new HashSet<string> { "family", "boundary" }, keys);
+                        Assert.Subset(keys, new HashSet<string> { "family", "boundary" });
+                        Assert.Superset(keys, new HashSet<string>(topologyKeys) { "family" });
                         var wire = new Wireworld(width, height, grid, Edge(world.GetProperty("boundary").GetString()!));
                         return (() => wire.State.ToArray(), () => wire.Generation, outside
                             ? () => wire.AdvanceOutside(r[0], r[1], r[2], r[3], n)

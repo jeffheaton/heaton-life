@@ -99,7 +99,14 @@ class _Binary:
             return Elementary.from_params(ElementaryParams.from_dict(params))
         if initial is not None:
             p2 = LifeLikeParams.from_dict(params)
-            return LifeLike(p2.rule, size=(p2.width, p2.height), init=initial, boundary=p2.boundary)  # type: ignore[arg-type]
+            return LifeLike(
+                p2.rule,
+                size=(p2.width, p2.height),
+                init=initial,
+                boundary=p2.boundary,  # type: ignore[arg-type]
+                shift=p2.shift,
+                axis=p2.axis,  # type: ignore[arg-type]
+            )
         return LifeLike.from_params(LifeLikeParams.from_dict(params))
 
 
@@ -124,7 +131,13 @@ class _Indexed:
         if self.family == "wireworld":
             if initial is not None:
                 p = WireworldParams.from_dict(params)
-                return Wireworld(size=(p.width, p.height), init=initial, boundary=p.boundary)  # type: ignore[arg-type]
+                return Wireworld(
+                    size=(p.width, p.height),
+                    init=initial,
+                    boundary=p.boundary,  # type: ignore[arg-type]
+                    shift=p.shift,
+                    axis=p.axis,  # type: ignore[arg-type]
+                )
             return Wireworld.from_params(WireworldParams.from_dict(params))
         if initial is not None:
             p2 = CyclicParams.from_dict(params)
@@ -189,9 +202,7 @@ CODECS: dict[str, Codec] = {
     "mergelife": _Rgb(),
     "grayscott": _Float64(lambda p: GrayScott.from_params(GrayScottParams.from_dict(p))),
     "lenia-classic": _Float64(lambda p: ClassicLenia.from_params(LeniaParams.from_dict(p))),
-    "lenia-asymptotic": _Float64(
-        lambda p: AsymptoticLenia.from_params(LeniaParams.from_dict(p))
-    ),
+    "lenia-asymptotic": _Float64(lambda p: AsymptoticLenia.from_params(LeniaParams.from_dict(p))),
     "lenia-flow": _Float64(lambda p: FlowLenia.from_params(FlowLeniaParams.from_dict(p))),
     "boids": _Float64(lambda p: Boids.from_params(BoidsParams.from_dict(p))),
 }
@@ -219,7 +230,5 @@ def bytes_to_state(family: str, data: bytes, shape: Sequence[int] | None = None)
     return CODECS[family].decode(data, shape)
 
 
-def build_sim(
-    family: str, params: dict[str, Any], initial: StateArray | None = None
-) -> Simulation:
+def build_sim(family: str, params: dict[str, Any], initial: StateArray | None = None) -> Simulation:
     return CODECS[family].build(params, initial)

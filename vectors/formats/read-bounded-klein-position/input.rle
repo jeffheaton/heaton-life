@@ -1,0 +1,4 @@
+#CXRLE Pos=-15,7 Gen=3
+#N Mirror glider
+x = 3, y = 3, rule = B3/S23:K30*+1,20
+bo$2bo$3o!

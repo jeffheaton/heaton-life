@@ -18,6 +18,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from heaton_life.core.decimal_text import int_of_digits
+from heaton_life.core.topology import BoundedGrid
 from heaton_life.init.images import (
     PNG_SIGNATURE,
     bmp_cells,
@@ -35,11 +36,15 @@ from heaton_life.init.metadata import (
 )
 from heaton_life.init.rle import (
     DEFAULT_MAX_CELLS,
+    RleExtent,
+    RleInfo,
+    _place_rle,
     is_rle_header,
     rle_decode,
     rle_measure,
     rle_metadata,
     rle_runs,
+    survival_birth_rule,
 )
 
 PatternFormat = Literal["rle", "macrocell", "plaintext", "life-1.05", "life-1.06", "png", "bmp"]
@@ -54,7 +59,6 @@ PATTERN_FORMATS: tuple[PatternFormat, ...] = (
 )
 
 _PLAINTEXT_CELLS = frozenset(".O*")
-_RULE_DIGITS = frozenset("012345678")
 
 Run = tuple[int, int, int]
 """A run of live cells: (x, y, length), x and y in the file's own coordinates."""
@@ -73,6 +77,9 @@ class PatternFile:
     rule: str | None
     generation: int
     metadata: PatternMetadata
+    bounded_grid: BoundedGrid | None = None
+    """The world a bounded file names (spec/formats.md "Bounded grids"); the cells are that
+    whole world unless trimmed."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -92,6 +99,8 @@ class PatternExtent:
     metadata: PatternMetadata
     two_state: bool
     """False for extended RLE, whatever states it uses: the universe reader refuses it."""
+    bounded_grid: BoundedGrid | None = None
+    """The world a bounded file names; the universe reader refuses such a file too."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -226,14 +235,6 @@ def _cell(text: str, number: int, what: str) -> tuple[int, int]:
     raise ValueError(f"line {number}: {what} needs two integers 'x y', got {text!r}")
 
 
-def _life_rule(value: str) -> str:
-    """Life 1.05's survival/birth ``S/B`` digits as ``B…/S…``; other text as written."""
-    survival, slash, birth = value.partition("/")
-    if slash and "/" not in birth and set(survival + birth) <= _RULE_DIGITS:
-        return f"B{''.join(sorted(set(birth)))}/S{''.join(sorted(set(survival)))}"
-    return value
-
-
 def _life(
     text: str, *, blocks: bool, add: Callable[[Run], None]
 ) -> tuple[str | None, PatternMetadata]:
@@ -253,7 +254,7 @@ def _life(
             elif tag == "#N":
                 rule = "B3/S23"
             elif tag == "#R":
-                rule = _life_rule(value) if value else rule
+                rule = survival_birth_rule(value) if value else rule
             elif tag == "#P" and blocks:
                 bx, by = _cell(value, number, "#P")
                 row = 0
@@ -379,13 +380,50 @@ def read_pattern(
 
 def _read_rle(text: str, max_cells: int | None, trim: bool) -> PatternFile:
     info, _ = rle_runs(text)  # the #CXRLE line: position and generation
-    cells, rule = rle_decode(text, max_cells=max_cells, trim=trim)
-    x, y = info.position or (0, 0)
+    metadata = rle_metadata(text)
+    world = info.bounded_grid
+    if world is None:
+        cells, rule = rle_decode(text, max_cells=max_cells, trim=trim)
+        x, y = info.position or (0, 0)
+        if trim:
+            live = rle_measure(text).live
+            assert live is not None  # a trimmed decode has a live cell
+            x, y = x + live[0], y + live[1]
+        return PatternFile("rle", cells, x, y, rule, info.generation, metadata)
+    extent = rle_measure(text)
+    x0, y0, left, top = _bounded(info, extent)
     if trim:
-        live = rle_measure(text).live
-        assert live is not None  # a trimmed decode has a live cell
-        x, y = x + live[0], y + live[1]
-    return PatternFile("rle", cells, x, y, rule, info.generation, rle_metadata(text))
+        cells, rule = rle_decode(text, max_cells=max_cells, trim=True)
+        assert extent.live is not None  # a trimmed decode has a live cell
+        x, y = x0 + extent.live[0], y0 + extent.live[1]
+        return PatternFile("rle", cells, x, y, rule, info.generation, metadata, world)
+    _check(world.width, world.height, max_cells)
+    cells = np.zeros((world.height, world.width), dtype=np.uint8)
+    _place_rle(text, cells, x0 - left, y0 - top)
+    return PatternFile("rle", cells, left, top, info.rule, info.generation, metadata, world)
+
+
+def _bounded(info: RleInfo, extent: RleExtent) -> tuple[int, int, int, int]:
+    """A bounded file's pattern and world (spec/formats.md "Bounded grids"): where the
+    pattern's top-left cell sits (``#CXRLE Pos``, or its decoded size's half up and left of
+    the origin) and where the world's does (centered on the origin). A pattern with a live
+    cell past its world is refused."""
+    world = info.bounded_grid
+    assert world is not None
+    left, top = -(world.width // 2), -(world.height // 2)
+    if info.position is not None:
+        x0, y0 = info.position
+    else:
+        x0, y0 = -(extent.width // 2), -(extent.height // 2)
+    live = extent.live
+    if live is not None and (
+        x0 + live[0] < left
+        or y0 + live[1] < top
+        or x0 + live[2] >= left + world.width
+        or y0 + live[3] >= top + world.height
+    ):
+        raise ValueError(f"the pattern reaches past its bounded grid ({world.suffix})")
+    return x0, y0, left, top
 
 
 def _read_macrocell(text: str, max_cells: int | None) -> PatternFile:
@@ -458,7 +496,10 @@ def _measure_rle(text: str) -> PatternExtent:
     extent = rle_measure(text)
     width, height = extent.width, extent.height
     x, y = info.position or (0, 0)
-    if width == 0 or height == 0:
+    if info.bounded_grid is not None:  # the world, whatever the pattern's own size
+        _, _, x, y = _bounded(info, extent)
+        width, height = info.bounded_grid.width, info.bounded_grid.height
+    elif width == 0 or height == 0:
         width = height = x = y = 0
     return PatternExtent(
         "rle",
@@ -470,4 +511,5 @@ def _measure_rle(text: str) -> PatternExtent:
         info.generation,
         rle_metadata(text),
         not extent.extended,
+        info.bounded_grid,
     )

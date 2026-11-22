@@ -3,7 +3,7 @@
 States: 0 empty, 1 electron head, 2 electron tail, 3 conductor.
 head -> tail; tail -> conductor; conductor -> head iff exactly 1 or 2 Moore
 neighbors are heads; empty stays empty. Default boundary is dead (circuits
-rarely want a torus).
+rarely want a torus); every topology of spec/topology.md is allowed.
 """
 
 from __future__ import annotations
@@ -16,8 +16,9 @@ import numpy as np
 from numpy.typing import NDArray
 
 from heaton_life.ca._advance import AdvanceRegion
-from heaton_life.core.neighbors import Boundary, moore_sum
+from heaton_life.core.neighbors import moore_sum
 from heaton_life.core.params import Params
+from heaton_life.core.topology import AXES, BOUNDARIES, Axis, Boundary, Halo, Topology
 from heaton_life.init.patterns import clear
 
 EMPTY, HEAD, TAIL, CONDUCTOR = 0, 1, 2, 3
@@ -64,7 +65,12 @@ class WireworldParams(Params):
     width: int = dataclasses.field(default=64, metadata={"min": 8, "max": 2048})
     height: int = dataclasses.field(default=64, metadata={"min": 8, "max": 2048})
     init: str = dataclasses.field(default="clock", metadata={"choices": ["clock"]})
-    boundary: str = dataclasses.field(default="dead", metadata={"choices": ["dead", "torus"]})
+    # The topology (spec/topology.md): a shift and an axis matter for a torus or a Klein bottle.
+    boundary: str = dataclasses.field(
+        default="dead", metadata={"choices": ["dead", *(b for b in BOUNDARIES if b != "dead")]}
+    )
+    shift: int = dataclasses.field(default=0, metadata={"min": -2048, "max": 2048})
+    axis: str = dataclasses.field(default="x", metadata={"choices": list(AXES)})
 
 
 class Wireworld(AdvanceRegion):
@@ -76,6 +82,8 @@ class Wireworld(AdvanceRegion):
         size: tuple[int, int] = (64, 64),
         init: str | NDArray[np.uint8] = "clock",
         boundary: Boundary = "dead",
+        shift: int = 0,
+        axis: Axis = "x",
     ) -> None:
         width, height = size
         self._initial: NDArray[np.uint8] | None = None
@@ -90,7 +98,17 @@ class Wireworld(AdvanceRegion):
             init_name = "array"
         else:
             init_name = init
-        self.params = WireworldParams(width=width, height=height, init=init_name, boundary=boundary)
+        topology = Topology(boundary, shift, axis)
+        # The cells past the edges, filled each generation (spec/topology.md "The halo").
+        self._halo = Halo(topology, width, height)
+        self.params = WireworldParams(
+            width=width,
+            height=height,
+            init=init_name,
+            boundary=topology.boundary,
+            shift=topology.shift,
+            axis=topology.axis,
+        )
         self._generation = 0
         self._state: NDArray[np.uint8]
         self.reset()
@@ -103,6 +121,8 @@ class Wireworld(AdvanceRegion):
             size=(params.width, params.height),
             init=params.init,
             boundary=cast(Boundary, params.boundary),
+            shift=params.shift,
+            axis=cast(Axis, params.axis),
         )
 
     def reset(self, seed: int | None = None) -> None:
@@ -140,11 +160,11 @@ class Wireworld(AdvanceRegion):
         self._generation = generation
 
     def step(self, n: int = 1) -> None:
-        boundary = cast(Boundary, self.params.boundary)
+        halo = self._halo
         for _ in range(n):
             state = self._state
             heads = (state == HEAD).astype(np.uint8)
-            head_count = moore_sum(heads, boundary)
+            head_count = moore_sum(heads, halo=halo)
             new = state.copy()
             new[state == HEAD] = TAIL
             new[state == TAIL] = CONDUCTOR
@@ -156,6 +176,11 @@ class Wireworld(AdvanceRegion):
     @property
     def state(self) -> NDArray[np.uint8]:
         return self._state
+
+    @property
+    def topology(self) -> Topology:
+        """How the grid's edges join (spec/topology.md)."""
+        return self._halo.topology
 
     @property
     def generation(self) -> int:

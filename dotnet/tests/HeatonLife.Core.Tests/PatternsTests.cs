@@ -224,5 +224,42 @@ namespace HeatonLife.Tests
             // A name that is not a rule in this grammar reads as extended: O 15, B 2.
             Assert.Equal(new byte[] { 15, 2, 2, 15 }, Patterns.RleDecode("x = 2, y = 2, rule = life\nOB$BO!").Cells);
         }
+
+        // ---- a header's rule in survival/birth order (spec/formats.md "Rules in survival/birth order")
+
+        [Theory]
+        [InlineData("23/3", "B3/S23")]
+        [InlineData("323/33", "B3/S23")] // sorted, repeats dropped
+        [InlineData("/2", "B2/S")]
+        [InlineData("3/", "B/S3")]
+        [InlineData("/", "B/S")]
+        [InlineData("23/3:T30,20", "B3/S23")] // the bounded-grid suffix comes off first
+        public void ASurvivalBirthHeaderReadsAsBS(string header, string rule)
+        {
+            RlePattern read = Patterns.RleDecode($"x = 3, y = 1, rule = {header}\nOBO!\n");
+            Assert.Equal(rule, read.Rule);
+            Assert.Equal(new byte[] { 1, 0, 1 }, read.Cells); // two-state: uppercase B and O are dead and alive
+        }
+
+        [Theory]
+        [InlineData("23/3/2")]
+        [InlineData("9/3")]
+        [InlineData("23/3a")]
+        public void OtherSlashedRulesStayAsWritten(string header)
+        {
+            RlePattern read = Patterns.RleDecode($"x = 3, y = 1, rule = {header}\nOBO!\n");
+            Assert.Equal(header, read.Rule);
+            Assert.Equal(new byte[] { 15, 2, 15 }, read.Cells); // not Life-like: extended
+        }
+
+        [Fact]
+        public void CanonicalRleWritesBSForASurvivalBirthRule()
+        {
+            string text = Patterns.RleEncode(new byte[] { 0, 1, 1 }, 3, 1, "23/36");
+            Assert.StartsWith("x = 3, y = 1, rule = B36/S23\n", text);
+            RlePattern read = Patterns.RleDecode("x = 3, y = 1, rule = 23/36\nb2o!\n");
+            Assert.Equal("B36/S23", Patterns.RleDecode(Patterns.RleEncode(read.Cells, read.Width, read.Height, read.Rule!)).Rule);
+            Assert.Equal("B36/S23", PatternFiles.ReadUniverse("x = 3, y = 1, rule = 23/36\nb2o!\n").Universe.Rule);
+        }
     }
 }

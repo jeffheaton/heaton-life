@@ -134,3 +134,37 @@ def test_a_header_naming_any_life_like_rule_is_two_state() -> None:
     # A preset name is not a rule in a file, so this one reads as extended: O 15, B 2.
     grid, _ = rle_decode("x = 2, y = 2, rule = life\nOB$BO!")
     assert grid.tolist() == [[15, 2], [2, 15]]
+
+
+# -- a header's rule in survival/birth order (spec/formats.md "Rules in survival/birth order")
+
+
+@pytest.mark.parametrize(
+    ("header", "rule"),
+    [
+        ("23/3", "B3/S23"),
+        ("323/33", "B3/S23"),  # sorted, repeats dropped
+        ("/2", "B2/S"),
+        ("3/", "B/S3"),
+        ("/", "B/S"),
+        ("23/3:T30,20", "B3/S23"),  # the bounded-grid suffix comes off first
+    ],
+)
+def test_a_survival_birth_header_reads_as_b_s(header: str, rule: str) -> None:
+    grid, read = rle_decode(f"x = 3, y = 1, rule = {header}\nOBO!\n")
+    assert read == rule
+    assert grid.tolist() == [[1, 0, 1]]  # two-state: uppercase B and O are dead and alive
+
+
+def test_other_slashed_rules_stay_as_written() -> None:
+    for header in ("23/3/2", "9/3", "23/3a"):
+        grid, read = rle_decode(f"x = 3, y = 1, rule = {header}\nOBO!\n")
+        assert read == header
+        assert grid.tolist() == [[15, 2, 15]]  # not Life-like: extended
+
+
+def test_canonical_rle_writes_b_s_for_a_survival_birth_rule() -> None:
+    grid = np.array([[0, 1, 1]], dtype=np.uint8)
+    text = rle_encode(grid, "23/36")
+    assert text.splitlines()[0] == "x = 3, y = 1, rule = B36/S23"
+    assert rle_decode(rle_encode(*rle_decode("x = 3, y = 1, rule = 23/36\nb2o!\n")))[1] == "B36/S23"

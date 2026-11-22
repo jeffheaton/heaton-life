@@ -278,7 +278,7 @@ namespace HeatonLife.Tests
                 case "lifelike":
                     {
                         var sim = new LifeLike(
-                            p.GetProperty("rule").GetString()!, width, height, ParseBoundary(p));
+                            p.GetProperty("rule").GetString()!, width, height, ParseTopology(p));
                         if (initial != null)
                             sim.SetState(initial);
                         else if (init == "soup")
@@ -326,7 +326,7 @@ namespace HeatonLife.Tests
                     }
                 case "wireworld":
                     {
-                        var sim = new Wireworld(width, height, ParseBoundary(p));
+                        var sim = new Wireworld(width, height, ParseTopology(p));
                         if (initial != null)
                             sim.SetState(initial);
                         else if (init == "clock")
@@ -353,5 +353,12 @@ namespace HeatonLife.Tests
 
         private static Boundary ParseBoundary(JsonElement p) =>
             p.GetProperty("boundary").GetString() == "dead" ? Boundary.Dead : Boundary.Torus;
+
+        /// <summary>A grid's topology from its params (spec/topology.md): a shift and an axis that
+        /// are absent are 0 and x, as in every run from before topologies.</summary>
+        private static Topology ParseTopology(JsonElement p) => Topology.Parse(
+            p.GetProperty("boundary").GetString()!,
+            p.TryGetProperty("shift", out JsonElement shift) ? shift.GetInt32() : 0,
+            p.TryGetProperty("axis", out JsonElement axis) ? axis.GetString()! : "x");
     }
 }

@@ -10,6 +10,7 @@ import dataclasses
 import os
 from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 
@@ -27,9 +28,9 @@ from heaton_life.ca import (
 from heaton_life.ca.hashlife import LifeView
 from heaton_life.ca.mergelife import parse_rule_error
 from heaton_life.core import decimal_text
-from heaton_life.core.neighbors import Boundary
 from heaton_life.core.params import Params
 from heaton_life.core.protocols import Simulation
+from heaton_life.core.topology import Axis, Boundary
 from heaton_life.fractal import BurningShip, Julia, Mandelbrot, Newton
 from heaton_life.lenia import (
     AsymptoticLenia,
@@ -189,7 +190,7 @@ register(
         category="Cellular Automata",
         params_cls=LifeLikeSimParams,
         build=LifeLikeSim.build,
-        hot_fields=frozenset({"rule", "boundary"}),
+        hot_fields=frozenset({"rule", "boundary", "shift", "axis"}),
         hot_apply=_hot_lifelike,
         validate=_validate_lifelike,
         default_cmap="phosphor",
@@ -399,11 +400,12 @@ def _build_wireworld(params: Params) -> Simulation:
 
 def _hot_wireworld(sim: Simulation, params: Params) -> Simulation:
     assert isinstance(params, WireworldParams)
-    boundary: Boundary = "torus" if params.boundary == "torus" else "dead"
     return Wireworld(
         size=(params.width, params.height),
         init=np.asarray(sim.state, dtype=np.uint8),
-        boundary=boundary,
+        boundary=cast(Boundary, params.boundary),
+        shift=params.shift,
+        axis=cast(Axis, params.axis),
     )
 
 
@@ -419,7 +421,7 @@ register(
         category="Cellular Automata",
         params_cls=WireworldParams,
         build=_build_wireworld,
-        hot_fields=frozenset({"boundary"}),
+        hot_fields=frozenset({"boundary", "shift", "axis"}),
         hot_apply=_hot_wireworld,
         validate=_no_validate,
         default_cmap="wireworld",

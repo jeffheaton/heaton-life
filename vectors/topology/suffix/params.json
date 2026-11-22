@@ -1,0 +1,333 @@
+{
+  "cases": [
+    {
+      "axis": "x",
+      "boundary": "torus",
+      "canonical": ":T30,20",
+      "height": 20,
+      "input": ":T30,20",
+      "shift": 0,
+      "width": 30
+    },
+    {
+      "axis": "x",
+      "boundary": "torus",
+      "canonical": ":T30,20",
+      "height": 20,
+      "input": ":t30+0,20",
+      "shift": 0,
+      "width": 30
+    },
+    {
+      "axis": "x",
+      "boundary": "torus",
+      "canonical": ":T30+5,20",
+      "height": 20,
+      "input": ":T30+5,20",
+      "shift": 5,
+      "width": 30
+    },
+    {
+      "axis": "y",
+      "boundary": "torus",
+      "canonical": ":T30,20-2",
+      "height": 20,
+      "input": ":T30,20-2",
+      "shift": -2,
+      "width": 30
+    },
+    {
+      "axis": "x",
+      "boundary": "torus",
+      "canonical": ":T30-35,20",
+      "height": 20,
+      "input": ":T30-35,20",
+      "shift": -35,
+      "width": 30
+    },
+    {
+      "axis": "x",
+      "boundary": "torus",
+      "canonical": ":T30,20",
+      "height": 20,
+      "input": ":T030,0020",
+      "shift": 0,
+      "width": 30
+    },
+    {
+      "axis": "x",
+      "boundary": "dead",
+      "canonical": ":P30,20",
+      "height": 20,
+      "input": ":P30,20",
+      "shift": 0,
+      "width": 30
+    },
+    {
+      "axis": "x",
+      "boundary": "dead",
+      "canonical": ":P7,7",
+      "height": 7,
+      "input": ":p7",
+      "shift": 0,
+      "width": 7
+    },
+    {
+      "axis": "x",
+      "boundary": "klein",
+      "canonical": ":K30*,20",
+      "height": 20,
+      "input": ":K30*,20",
+      "shift": 0,
+      "width": 30
+    },
+    {
+      "axis": "y",
+      "boundary": "klein",
+      "canonical": ":K30,20*",
+      "height": 20,
+      "input": ":K30,20*",
+      "shift": 0,
+      "width": 30
+    },
+    {
+      "axis": "x",
+      "boundary": "klein",
+      "canonical": ":K30*+1,20",
+      "height": 20,
+      "input": ":K30*+1,20",
+      "shift": 1,
+      "width": 30
+    },
+    {
+      "axis": "y",
+      "boundary": "klein",
+      "canonical": ":K30,20*-4",
+      "height": 20,
+      "input": ":K30,20*-4",
+      "shift": -4,
+      "width": 30
+    },
+    {
+      "axis": "x",
+      "boundary": "klein",
+      "canonical": ":K30*,30",
+      "height": 30,
+      "input": ":k30*",
+      "shift": 0,
+      "width": 30
+    },
+    {
+      "axis": "x",
+      "boundary": "klein",
+      "canonical": ":K30*,20",
+      "height": 20,
+      "input": ":K30*,20+0",
+      "shift": 0,
+      "width": 30
+    },
+    {
+      "axis": "x",
+      "boundary": "cross",
+      "canonical": ":C30,20",
+      "height": 20,
+      "input": ":C30,20",
+      "shift": 0,
+      "width": 30
+    },
+    {
+      "axis": "x",
+      "boundary": "cross",
+      "canonical": ":C1,1",
+      "height": 1,
+      "input": ":c1,1",
+      "shift": 0,
+      "width": 1
+    },
+    {
+      "axis": "x",
+      "boundary": "sphere",
+      "canonical": ":S30",
+      "height": 30,
+      "input": ":S30",
+      "shift": 0,
+      "width": 30
+    },
+    {
+      "axis": "x",
+      "boundary": "sphere",
+      "canonical": ":S30",
+      "height": 30,
+      "input": ":s30,30",
+      "shift": 0,
+      "width": 30
+    },
+    {
+      "axis": "x",
+      "boundary": "torus",
+      "canonical": ":T30+5,30",
+      "height": 30,
+      "input": ":T30+5",
+      "shift": 5,
+      "width": 30
+    },
+    {
+      "axis": "y",
+      "boundary": "torus",
+      "canonical": ":T2000000000,1-2000000000",
+      "height": 1,
+      "input": ":T2000000000,1-2000000000",
+      "shift": -2000000000,
+      "width": 2000000000
+    },
+    {
+      "error": true,
+      "input": "T30,20",
+      "reason": "a bounded grid starts with ':'"
+    },
+    {
+      "error": true,
+      "input": "",
+      "reason": "a bounded grid starts with ':'"
+    },
+    {
+      "error": true,
+      "input": ":",
+      "reason": "expected P, T, K, C or S after ':'"
+    },
+    {
+      "error": true,
+      "input": ":X30,20",
+      "reason": "expected P, T, K, C or S after ':'"
+    },
+    {
+      "error": true,
+      "input": ":ſ30",
+      "reason": "expected P, T, K, C or S after ':'"
+    },
+    {
+      "error": true,
+      "input": ":T",
+      "reason": "expected a number after 'T'"
+    },
+    {
+      "error": true,
+      "input": ":T,20",
+      "reason": "expected a number after 'T'"
+    },
+    {
+      "error": true,
+      "input": ":T30,",
+      "reason": "expected a number after ','"
+    },
+    {
+      "error": true,
+      "input": ":T30+,20",
+      "reason": "expected a number after '+'"
+    },
+    {
+      "error": true,
+      "input": ":T30,20-",
+      "reason": "expected a number after '-'"
+    },
+    {
+      "error": true,
+      "input": ":T٣٠,20",
+      "reason": "expected a number after 'T'"
+    },
+    {
+      "error": true,
+      "input": ":T30,20,10",
+      "reason": "unexpected ',10' in the bounded grid"
+    },
+    {
+      "error": true,
+      "input": ":T30 ,20",
+      "reason": "unexpected ' ,20' in the bounded grid"
+    },
+    {
+      "error": true,
+      "input": ":K30+1*,20",
+      "reason": "unexpected '*,20' in the bounded grid"
+    },
+    {
+      "error": true,
+      "input": ":P30+1,20",
+      "reason": "the plane has no shift or twist"
+    },
+    {
+      "error": true,
+      "input": ":C30*,20",
+      "reason": "the cross-surface has no shift or twist"
+    },
+    {
+      "error": true,
+      "input": ":S30-1",
+      "reason": "the sphere has no shift or twist"
+    },
+    {
+      "error": true,
+      "input": ":T30*,20",
+      "reason": "a torus has no twist"
+    },
+    {
+      "error": true,
+      "input": ":T30+5,20-2",
+      "reason": "a torus shifts one side only"
+    },
+    {
+      "error": true,
+      "input": ":K30,20",
+      "reason": "a Klein bottle twists one side: '*' after its width or its height"
+    },
+    {
+      "error": true,
+      "input": ":K30*,20*",
+      "reason": "a Klein bottle twists one side: '*' after its width or its height"
+    },
+    {
+      "error": true,
+      "input": ":K30*,20+1",
+      "reason": "a Klein bottle shifts only its twisted side"
+    },
+    {
+      "error": true,
+      "input": ":T0,20",
+      "reason": "a side of 0 (an unbounded strip or tube) is not supported"
+    },
+    {
+      "error": true,
+      "input": ":P30,0",
+      "reason": "a side of 0 (an unbounded strip or tube) is not supported"
+    },
+    {
+      "error": true,
+      "input": ":T2000000001,20",
+      "reason": "a side or a shift is at most 2000000000"
+    },
+    {
+      "error": true,
+      "input": ":T30+99999999999999999999,20",
+      "reason": "a side or a shift is at most 2000000000"
+    },
+    {
+      "error": true,
+      "input": ":S30,20",
+      "reason": "a sphere is square"
+    },
+    {
+      "error": true,
+      "input": ":K31*+1,20",
+      "reason": "a Klein bottle shifts only a side of even length"
+    },
+    {
+      "error": true,
+      "input": ":K30,21*-1",
+      "reason": "a Klein bottle shifts only a side of even length"
+    }
+  ],
+  "family": "topology",
+  "kind": "suffix",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

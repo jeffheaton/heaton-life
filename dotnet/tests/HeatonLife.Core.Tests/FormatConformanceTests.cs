@@ -33,7 +33,7 @@ namespace HeatonLife.Tests
                 ["read"] = Of(common, new[]
                 {
                     "input", "trim", "limit", "error", "format", "x", "y", "rule", "generation", "metadata", "grid",
-                    "canonical",
+                    "canonical", "bounded_grid",
                 }),
                 ["universe"] = Of(
                     common, new[] { "input", "error", "format", "metadata", "with_metadata", "rle", "rle_error", "frames", "step" },
@@ -42,6 +42,7 @@ namespace HeatonLife.Tests
                 ["measure"] = Of(common, new[]
                 {
                     "input", "error", "format", "width", "height", "x", "y", "rule", "generation", "metadata", "two_state",
+                    "bounded_grid",
                 }),
                 ["timeline-read"] = Of(common, new[] { "input", "error", "count", "first", "step", "metadata", "universe", "frames" }),
                 ["timeline-write"] = Of(common, new[] { "input", "generations", "metadata", "timeline", "frames" }),
@@ -114,6 +115,10 @@ namespace HeatonLife.Tests
             Assert.True(e is FormatException || e is ArgumentException, $"refused with {e.GetType().Name}: {e.Message}");
         }
 
+        /// <summary>A case's bounded grid (spec/topology.md): its canonical suffix, or null if absent.</summary>
+        private static BoundedGrid? Bounded(JsonElement root)
+            => root.TryGetProperty("bounded_grid", out JsonElement suffix) ? BoundedGrid.Parse(suffix.GetString()!) : null;
+
         private static PatternFile Read(JsonElement root, byte[] data)
         {
             JsonElement limit = root.GetProperty("limit");
@@ -162,10 +167,16 @@ namespace HeatonLife.Tests
                         Assert.Equal(grid.GetProperty("shape")[1].GetInt32(), found.Width);
                         var (_, _, _, pixels) = Png.Read(Path.Combine(dir, grid.GetProperty("file").GetString()!));
                         Assert.Equal(pixels, found.Cells);
+                        Assert.Equal(Bounded(root), found.BoundedGrid);
+                        // A bounded world writes its suffix; its trimmed cells are no world.
+                        Topology? topology = found.BoundedGrid == null || root.GetProperty("trim").GetBoolean()
+                            ? (Topology?)null
+                            : found.BoundedGrid.Topology;
                         string canonical = File.ReadAllText(Path.Combine(dir, root.GetProperty("canonical").GetString()!));
                         Assert.Equal(
                             canonical,
-                            Patterns.RleEncode(found.Cells, found.Width, found.Height, found.Rule ?? "B3/S23", found.Metadata));
+                            Patterns.RleEncode(
+                                found.Cells, found.Width, found.Height, found.Rule ?? "B3/S23", found.Metadata, topology));
                         PatternFile again = PatternFiles.Read(canonical); // the round trip
                         Assert.Equal(found.Cells, again.Cells);
                         Assert.Equal(found.Metadata, again.Metadata);
@@ -228,6 +239,7 @@ namespace HeatonLife.Tests
                         Assert.Equal(BigInteger.Parse(root.GetProperty("generation").GetString()!), extent.Generation);
                         Assert.Equal(Metadata(root.GetProperty("metadata")), extent.Metadata);
                         Assert.Equal(root.GetProperty("two_state").GetBoolean(), extent.TwoState);
+                        Assert.Equal(Bounded(root), extent.BoundedGrid);
                         if (data.All(b => b < 0x80))
                         {
                             // A text file measures the same handed over as text.

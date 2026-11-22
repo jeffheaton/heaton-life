@@ -57,16 +57,21 @@ def _decode(text: str, meta: dict, *, trim: bool = False):  # type: ignore[no-un
     return rle_decode(text, trim=trim, max_cells=meta["limit"])
 
 
+_TOPOLOGY = {"boundary", "shift", "axis"}
+
+
 def _world(desc: dict, grid: np.ndarray):  # type: ignore[no-untyped-def, type-arg]
     """The world an ``advance`` case names: a family and its parameters, cells from ``grid``."""
     size = (grid.shape[1], grid.shape[0])
     family = desc["family"]
+    # A topology's shift and axis appear only when they aren't 0 and "x" (spec/topology.md).
+    topology = {k: desc[k] for k in ("boundary", "shift", "axis") if k in desc}
     if family == "lifelike":
-        assert set(desc) == {"family", "rule", "boundary"}
-        return LifeLike(desc["rule"], size=size, init=grid, boundary=desc["boundary"])
+        assert {"family", "rule", "boundary"} <= set(desc) <= {"family", "rule", *_TOPOLOGY}
+        return LifeLike(desc["rule"], size=size, init=grid, **topology)
     if family == "wireworld":
-        assert set(desc) == {"family", "boundary"}
-        return Wireworld(size=size, init=grid, boundary=desc["boundary"])
+        assert {"family", "boundary"} <= set(desc) <= {"family", *_TOPOLOGY}
+        return Wireworld(size=size, init=grid, **topology)
     assert family == "cyclic"
     assert set(desc) == {"family", "states", "threshold", "reach", "neighborhood"}
     return Cyclic(

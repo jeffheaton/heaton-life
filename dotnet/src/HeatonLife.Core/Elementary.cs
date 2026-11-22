@@ -30,6 +30,8 @@ namespace HeatonLife
         {
             if (rule < 0 || rule > 255)
                 throw new ArgumentOutOfRangeException(nameof(rule), $"rule must be 0..255, got {rule}");
+            if (boundary != Boundary.Torus && boundary != Boundary.Dead) // a tape has two ends, not a topology
+                throw new ArgumentException($"elementary boundary is 'torus' or 'dead', got '{boundary}'", nameof(boundary));
             Rule = rule;
             Width = width;
             Height = height;

@@ -15,6 +15,7 @@ import pytest
 from PIL import Image
 
 from heaton_life.ca.hashlife import HashLife, read_timeline, read_universe, write_timeline
+from heaton_life.core import BoundedGrid, parse_bounded_grid
 from heaton_life.init import (
     PatternMetadata,
     detect_format,
@@ -31,7 +32,7 @@ _STATE = {"generation", "population", "bounding_box", "state", "state_sha256", "
 _KEYS = {
     "read": _COMMON
     | {"input", "trim", "limit", "error", "format", "x", "y", "rule", "generation"}
-    | {"metadata", "grid", "canonical"},
+    | {"metadata", "grid", "canonical", "bounded_grid"},
     "universe": _COMMON
     | {"input", "error", "format", "metadata", "with_metadata", "rle", "rle_error"}
     | {"frames", "step"}
@@ -39,7 +40,7 @@ _KEYS = {
     "detect": _COMMON | {"inputs"},
     "measure": _COMMON
     | {"input", "error", "format", "width", "height", "x", "y", "rule", "generation"}
-    | {"metadata", "two_state"},
+    | {"metadata", "two_state", "bounded_grid"},
     "timeline-read": _COMMON
     | {"input", "error", "count", "first", "step", "metadata", "universe", "frames"},
     "timeline-write": _COMMON | {"input", "generations", "metadata", "timeline", "frames"},
@@ -73,6 +74,11 @@ def test_format_vectors_exist() -> None:
     assert kinds == set(_KEYS)
 
 
+def _bounded(meta: dict[str, Any]) -> BoundedGrid | None:
+    """A case's bounded grid (spec/topology.md): its canonical suffix, or none if absent."""
+    return parse_bounded_grid(meta["bounded_grid"]) if "bounded_grid" in meta else None
+
+
 def _read(meta: dict[str, Any], data: bytes | str) -> Any:
     if meta["limit"] == "default":
         return read_pattern(data, trim=meta["trim"])
@@ -101,8 +107,15 @@ def test_format_vector(case: Path) -> None:
         assert found.metadata == _metadata(meta["metadata"])
         assert list(found.cells.shape) == meta["grid"]["shape"]
         assert np.array_equal(found.cells, _png(d / meta["grid"]["file"]))
+        assert found.bounded_grid == _bounded(meta)
+        # A bounded world writes its suffix; its trimmed cells are no world.
+        world = None if found.bounded_grid is None or meta["trim"] else found.bounded_grid
+        topology = None if world is None else world.topology
         canonical = (d / meta["canonical"]).read_text(encoding="utf-8")
-        assert rle_encode(found.cells, found.rule or "B3/S23", metadata=found.metadata) == canonical
+        encoded = rle_encode(
+            found.cells, found.rule or "B3/S23", metadata=found.metadata, topology=topology
+        )
+        assert encoded == canonical
         again = read_pattern(canonical)  # the round trip: same cells and metadata
         assert np.array_equal(again.cells, found.cells)
         assert again.metadata == found.metadata
@@ -145,6 +158,7 @@ def test_format_vector(case: Path) -> None:
         assert extent.generation == int(meta["generation"])
         assert extent.metadata == _metadata(meta["metadata"])
         assert extent.two_state is meta["two_state"]
+        assert extent.bounded_grid == _bounded(meta)
         if data.isascii():  # a text file measures the same handed over as text
             assert measure_pattern(data.decode("ascii")) == extent
     elif kind == "detect":

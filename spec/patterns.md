@@ -46,6 +46,18 @@ header `x = W, y = H[, rule = R]` may declare size and rule; the body uses run
 counts followed by tags; whitespace is ignored; `!` ends the pattern. Lines split and
 strip as [formats.md](formats.md#bytes-and-text) says.
 
+**Bounded grids.** The header's rule may end in a [bounded-grid
+suffix](topology.md#the-bounded-grid-suffix), `rule = B3/S23:T30,20`: the pattern lives in
+a world of that size and topology. The rule is the text before the first `:`, and
+everything below that reads the header's rule reads that text; the suffix is read as
+topology.md says (a bad one is an error of the decode) and reported beside the rule.
+[formats.md](formats.md#bounded-grids) places the pattern in its world.
+
+**Survival/birth order.** A header's rule written survival digits first, `rule = 23/3`,
+is the Life-like rule `B3/S23`, read as [formats.md](formats.md#rules-in-survivalbirth-order)
+says, after any bounded-grid suffix comes off (`rule = 23/3:T30,20`). Everything below
+reads the rule so converted, and so does the encoder: given `23/3`, it writes `B3/S23`.
+
 The two dialects overlap: uppercase `B`/`O` mean dead/alive in two-state files
 but states 2/15 in extended RLE. **Dialect detection** (normative): the pattern
 is extended iff its body contains `.`, or any letter `A`–`X` other than `B`/`O`,
@@ -72,7 +84,7 @@ a pattern is measured without a grid being made of it:
   included) and the rows are one more than the row ends before `!`;
 - `live` — the inclusive box `(x0, y0, x1, y1)` of the non-zero cells, or none;
 - `population` — how many cells are non-zero;
-- `rule` and the dialect, as decoding finds them.
+- `rule` and the dialect, as decoding finds them, and the bounded grid, if any.
 
 A run count is any number of digits and every one of these is an exact integer, since a
 few bytes of RLE can describe more cells than any memory holds: `o999999999b!` is a
@@ -99,7 +111,10 @@ form ([rules.md](rules.md#canonical-form)), so it reads back as the same rule ho
 was spelled (`b3 / s32` is written `B3/S23`), and any other rule as given. Encoding then
 decoding reproduces the grid exactly. Given [metadata](formats.md#metadata), the
 encoder writes its lines (`#N`, `#O`, then `#C`) before the header; without it, the text
-is exactly the above.
+is exactly the above. Given a [topology](topology.md), the grid is a whole world: the
+header's rule is followed by the world's suffix in canonical form, `x = 30, y = 20, rule =
+B3/S23:T30,20` for a 30 × 20 torus, and the body is unchanged; without one, no suffix is
+written.
 
 MergeLife, Lenia, and Gray-Scott patterns are **not RLE-representable**; they
 travel as raw cell payloads (the catalog/zoo container format, app-level).
@@ -121,7 +136,9 @@ other spelling of either is an error. Either may be missing; unknown keys are ig
 line as a comment. Anywhere but the first line, `#CXRLE` is an ordinary comment.
 
 **Reading into the universe.** The dialect rules above apply, and the file must be
-two-state (an extended file, or a state above 1, is an error). The pattern's top-left
+two-state (an extended file, or a state above 1, is an error) and unbounded (a rule with a
+[bounded-grid suffix](topology.md#the-bounded-grid-suffix) is an error: the universe has
+no edges). The pattern's top-left
 cell lands at `Pos`, or at (0, 0) without it — never centered, since the plane has no
 center to speak of. Cells are placed as decoded; the header's `x`/`y` declare nothing the
 universe needs. The rule is the header's, or `B3/S23` without one. The generation is
@@ -153,7 +170,8 @@ RGB triple moves as one cell.
 ## Extract and stamp
 
 Both take a target grid `(W, H)`, a position `(x, y)` (pattern top-left), and
-the target's boundary mode:
+the target's boundary mode: torus or dead. A world whose [topology](topology.md) is a
+torus without a shift wraps; every other topology clips, as dead edges do.
 
 - **Extract**`(grid, x, y, w, h)` — copies the region into a new pattern.
   Torus targets wrap coordinates; dead-boundary targets read 0 outside.
@@ -234,15 +252,16 @@ cells, with blank neighbors outside it". Advance Outside likewise lets the
 outside grow into the blank region, and back out of it, before the region's own
 cells are put back.
 
-**Edges.** The copy has the world's boundary. With dead edges, cells beyond them
-read dead in the copy as in the world. On a torus, cells that cross an edge come
-back at the opposite one, in the copy as in the world: a pattern advanced in a
-region can leave it, wrap around, and enter it again within n generations, and
-Advance Outside's outside wraps across the seam as usual. A region spanning the
+**Edges.** The copy has the world's boundary, its whole [topology](topology.md). With
+dead edges, cells beyond them read dead in the copy as in the world. On a torus, cells
+that cross an edge come back at the opposite one, in the copy as in the world: a pattern
+advanced in a region can leave it, wrap around, and enter it again within n generations,
+and Advance Outside's outside wraps across the seam as usual. A region spanning the
 whole width of a torus is its own neighbor across the seam (its left column sees
-its right column), as in the world, and likewise for its height. On the whole
-grid, Advance Selection is n ordinary generations that leave the counter alone,
-and Advance Outside changes nothing.
+its right column), as in the world, and likewise for its height. The other topologies
+join their edges in the copy as they do in the world. On the whole grid, Advance
+Selection is n ordinary generations that leave the counter alone, and Advance Outside
+changes nothing.
 
 ## Built-in patterns
 
@@ -309,3 +328,13 @@ tools are pinned by the `edit-*` cases of [`../vectors/hashlife/`](../vectors/ha
 strings, some past 2⁶⁴. The rectangles cover every parity of x0, y0, x1 and y1, and a
 runner also checks that HashLife's `rotate_rect` returns the same rectangle wherever both
 lie in its editing box.
+
+Bounded grids (spec 0.16.0): `rle-bounded-*` decode headers whose rule carries a
+[bounded-grid suffix](topology.md#the-bounded-grid-suffix), the dialect and the expected
+`rule` being the text before its `:`; an `advance` case's `world` may name a whole
+topology, `shift` and `axis` beside `boundary` where they aren't 0 and `x`
+(`advance-selection-life-klein`, `advance-outside-wireworld-sphere`). Bounded files read
+into their world are pinned under [`../vectors/formats/`](../vectors/formats/).
+`rle-survival-birth*` and `extent-survival-birth` decode headers whose rule is written in
+survival/birth order, one with a bounded-grid suffix: the expected `rule` is the
+`B…/S…` form, and the dialect two-state.

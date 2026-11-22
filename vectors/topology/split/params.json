@@ -1,0 +1,68 @@
+{
+  "cases": [
+    {
+      "input": "B3/S23",
+      "rule": "B3/S23",
+      "suffix": null
+    },
+    {
+      "input": "B3/S23:T30,20",
+      "rule": "B3/S23",
+      "suffix": ":T30,20"
+    },
+    {
+      "input": " B3 / S23 :K8*,6 　",
+      "rule": " B3 / S23 ",
+      "suffix": ":K8*,6"
+    },
+    {
+      "input": "B3/S23:T30,20\t",
+      "rule": "B3/S23",
+      "suffix": ":T30,20"
+    },
+    {
+      "input": "WireWorld:P40,30",
+      "rule": "WireWorld",
+      "suffix": ":P40,30"
+    },
+    {
+      "input": "LifeHistory:t30+7,20",
+      "rule": "LifeHistory",
+      "suffix": ":T30+7,20"
+    },
+    {
+      "input": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oeIDogGiA6ICAAIAAAAAAAAAAAAAAAAAAAAAAAA:S10",
+      "rule": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oeIDogGiA6ICAAIAAAAAAAAAAAAAAAAAAAAAAAA",
+      "suffix": ":S10"
+    },
+    {
+      "input": ":T30,20",
+      "rule": "",
+      "suffix": ":T30,20"
+    },
+    {
+      "error": true,
+      "input": "B3/S23:",
+      "reason": "expected P, T, K, C or S after ':'"
+    },
+    {
+      "error": true,
+      "input": "B3/S23:T30,20:T20,20",
+      "reason": "unexpected ':T20,20' in the bounded grid"
+    },
+    {
+      "error": true,
+      "input": "B3/S23: T30,20",
+      "reason": "expected P, T, K, C or S after ':'"
+    },
+    {
+      "error": true,
+      "input": "B3/S23:T0,64",
+      "reason": "a side of 0 (an unbounded strip or tube) is not supported"
+    }
+  ],
+  "family": "topology",
+  "kind": "split",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

@@ -1,0 +1,32 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_00001.png",
+      "step": 1
+    },
+    {
+      "file": "state_00010.png",
+      "step": 10
+    },
+    {
+      "file": "state_00100.png",
+      "step": 100
+    }
+  ],
+  "family": "lifelike",
+  "params": {
+    "boundary": "cross",
+    "density": 0.35,
+    "height": 40,
+    "init": "soup",
+    "rule": "B3/S23",
+    "seed": 45,
+    "width": 48
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

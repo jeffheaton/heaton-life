@@ -11,8 +11,9 @@ from numpy.typing import NDArray
 
 from heaton_life.ca._advance import AdvanceRegion
 from heaton_life.ca.rulestring import compile_rule
-from heaton_life.core.neighbors import Boundary, moore_index
+from heaton_life.core.neighbors import moore_index
 from heaton_life.core.params import Params
+from heaton_life.core.topology import AXES, BOUNDARIES, Axis, Boundary, Halo, Topology
 from heaton_life.init import blob, single, soup
 from heaton_life.init.patterns import clear, fill_random
 
@@ -28,7 +29,10 @@ class LifeLikeParams(Params):
         default=0.35, metadata={"min": 0.0, "max": 1.0, "step": 0.01}
     )
     seed: int = dataclasses.field(default=0, metadata={"min": 0, "max": 4294967295, "role": "seed"})
-    boundary: str = dataclasses.field(default="torus", metadata={"choices": ["torus", "dead"]})
+    # The topology (spec/topology.md): a shift and an axis matter for a torus or a Klein bottle.
+    boundary: str = dataclasses.field(default="torus", metadata={"choices": list(BOUNDARIES)})
+    shift: int = dataclasses.field(default=0, metadata={"min": -2048, "max": 2048})
+    axis: str = dataclasses.field(default="x", metadata={"choices": list(AXES)})
 
 
 class LifeLike(AdvanceRegion):
@@ -43,6 +47,8 @@ class LifeLike(AdvanceRegion):
         density: float = 0.35,
         seed: int = 0,
         boundary: Boundary = "torus",
+        shift: int = 0,
+        axis: Axis = "x",
     ) -> None:
         width, height = size
         self._initial: NDArray[np.uint8] | None = None
@@ -56,6 +62,9 @@ class LifeLike(AdvanceRegion):
         else:
             init_name = init
         compiled = compile_rule(rule)
+        topology = Topology(boundary, shift, axis)
+        # The cells past the edges, filled each generation (spec/topology.md "The halo").
+        self._halo = Halo(topology, width, height)
         self.params = LifeLikeParams(
             rule=compiled.canonical,
             width=width,
@@ -63,7 +72,9 @@ class LifeLike(AdvanceRegion):
             init=init_name,
             density=density,
             seed=seed,
-            boundary=boundary,
+            boundary=topology.boundary,
+            shift=topology.shift,
+            axis=topology.axis,
         )
         # The rule's transition table, indexed by each cell's 3×3 neighborhood (spec/rules.md).
         self._table = np.frombuffer(compiled.table, dtype=np.uint8)
@@ -84,6 +95,8 @@ class LifeLike(AdvanceRegion):
             density=params.density,
             seed=params.seed,
             boundary=cast(Boundary, params.boundary),
+            shift=params.shift,
+            axis=cast(Axis, params.axis),
         )
 
     def reset(self, seed: int | None = None) -> None:
@@ -127,10 +140,15 @@ class LifeLike(AdvanceRegion):
         self._generation = generation
 
     def step(self, n: int = 1) -> None:
-        boundary = cast(Boundary, self.params.boundary)
+        halo = self._halo
         for _ in range(n):
-            self._state = self._table[moore_index(self._state, boundary)]
+            self._state = self._table[moore_index(self._state, halo=halo)]
         self._generation += n
+
+    @property
+    def topology(self) -> Topology:
+        """How the grid's edges join (spec/topology.md)."""
+        return self._halo.topology
 
     @property
     def state(self) -> NDArray[np.uint8]:

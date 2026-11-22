@@ -65,6 +65,11 @@ def _vector_params(family: str, params: dict[str, Any]) -> dict[str, Any]:
         defaults = {f.name: f.default for f in dataclasses.fields(BoidsParams)}
         if all(params[k] == defaults[k] for k in ("dimensions", "depth")):
             return {k: v for k, v in params.items() if k not in ("dimensions", "depth")}
+    if family in ("lifelike", "wireworld"):
+        # Grid runs from before topologies (spec/topology.md) carry neither key; the runners
+        # read an absent shift as 0 and an absent axis as "x", so each is left out there.
+        unset = {"shift": 0, "axis": "x"}
+        return {k: v for k, v in params.items() if k not in unset or v != unset[k]}
     return params
 
 
@@ -985,6 +990,10 @@ def main() -> None:
 
     # -- Rules with B0 on the unbounded plane (spec/hashlife.md "Rules with B0") ----------
     write_b0_cases()
+
+    # -- Grid topologies: where a point past an edge lands, the halo, the bounded-grid
+    #    suffix, grid runs on every topology, bounded RLE files (spec/topology.md)
+    write_topology_cases()
 
     print("done")
 
@@ -7702,6 +7711,569 @@ def write_b0_cases() -> None:
             (LifeView(-10, -11, -2), (21, 21), "any"),
             (LifeView(-90, -91, 1), (180, 180), "any"),
         ],
+    )
+
+
+TOPOLOGY_SPEC_VERSION = "0.16.0"
+
+
+def write_topology_cases() -> None:
+    """Grid topologies (spec/topology.md). vectors/topology/: the halo of each topology
+    (where every point past an edge lands, and the errors), the bounded-grid suffix read
+    and canonicalized (and the reasons it is refused), and a rule's text split at its
+    suffix. Grid runs on every topology under vectors/lifelike/ and vectors/wireworld/;
+    RLE headers whose rule carries a suffix and Advance Selection / Outside on other
+    topologies under vectors/patterns/; bounded files read, measured, and refused by the
+    universe under vectors/formats/. Every case is new; nothing existing changes."""
+    import io
+
+    from PIL import Image
+
+    from heaton_life.ca.hashlife import read_universe
+    from heaton_life.core.topology import (
+        Halo,
+        Topology,
+        TopologyError,
+        parse_bounded_grid,
+        split_rule_suffix,
+        try_parse_bounded_grid,
+    )
+    from heaton_life.init import PatternMetadata, measure_pattern, read_pattern, rle_encode, soup
+
+    def save(family: str, name: str, meta: dict[str, Any]) -> Path:
+        d = VECTOR_ROOT / family / name
+        d.mkdir(parents=True, exist_ok=True)
+        full = {"spec_version": TOPOLOGY_SPEC_VERSION, "family": family, "tier": "bit-exact"}
+        full.update(meta)
+        (d / "params.json").write_text(
+            json.dumps(full, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        print(f"wrote {d.relative_to(REPO_ROOT)}")
+        return d
+
+    def case_dir(family: str, name: str) -> Path:
+        d = VECTOR_ROOT / family / name
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def gray_png(arr: Any) -> bytes:
+        buf = io.BytesIO()
+        Image.fromarray(np.asarray(arr).astype(np.uint8), mode="L").save(buf, format="PNG")
+        return buf.getvalue()
+
+    # -- the halo of each topology ---------------------------------------------------------
+    halo_cases: list[dict[str, Any]] = []
+    shifted_cases: list[dict[str, Any]] = []
+
+    def halo(
+        width: int,
+        height: int,
+        boundary: str,
+        shift: int,
+        axis: str,
+        radius: int,
+        *,
+        error: bool = False,
+    ) -> None:
+        entry: dict[str, Any] = {
+            "width": width,
+            "height": height,
+            "boundary": boundary,
+            "shift": shift,
+            "axis": axis,
+            "radius": radius,
+        }
+        try:
+            built = Halo(Topology(boundary, shift, axis), width, height, radius)  # type: ignore[arg-type]
+        except TopologyError as refused:
+            assert error, entry
+            entry["error"] = True
+            entry["reason"] = refused.reason
+        else:
+            assert not error, entry
+            assert (built.topology.shift, built.topology.axis) == (shift, axis), entry
+            entry["map"] = built.sources().tolist()
+        # A shifted torus's or Klein bottle's map rests on how a shift reads (the senses in
+        # heaton_life.core.topology): those maps go to halo-shifted, to be redone together.
+        (shifted_cases if shift and not error else halo_cases).append(entry)
+
+    halo(5, 4, "dead", 0, "x", 1)
+    halo(5, 4, "dead", 0, "x", 2)
+    halo(5, 4, "torus", 0, "x", 1)
+    halo(5, 4, "torus", 0, "x", 3)
+    halo(2, 3, "torus", 0, "x", 4)  # a halo deeper than the grid wraps around it again
+    halo(1, 1, "torus", 0, "x", 2)
+    halo(5, 4, "torus", 2, "x", 2)
+    halo(5, 4, "torus", -3, "x", 1)
+    halo(4, 5, "torus", 7, "x", 2)  # a shift past the width
+    halo(5, 4, "torus", 1, "y", 2)
+    halo(4, 5, "torus", -6, "y", 1)
+    halo(5, 4, "klein", 0, "x", 1)
+    halo(6, 4, "klein", 0, "x", 2)
+    halo(5, 4, "klein", 0, "y", 2)
+    halo(6, 4, "klein", 1, "x", 2)
+    halo(6, 4, "klein", -1, "x", 1)
+    halo(6, 4, "klein", 2, "x", 1)
+    halo(5, 4, "klein", 3, "y", 2)
+    halo(4, 6, "klein", 0, "x", 5)
+    halo(5, 4, "cross", 0, "x", 1)
+    halo(5, 4, "cross", 0, "x", 4)  # as deep as the grid's shorter side
+    halo(1, 1, "cross", 0, "x", 1)
+    halo(4, 4, "sphere", 0, "x", 1)
+    halo(3, 3, "sphere", 0, "x", 3)
+    halo(5, 5, "sphere", 0, "x", 2)
+    halo(1, 1, "sphere", 0, "x", 1)
+    halo(5, 4, "sphere", 0, "x", 1, error=True)
+    halo(5, 4, "klein", 1, "x", 1, error=True)
+    halo(4, 5, "klein", -1, "y", 1, error=True)
+    halo(5, 4, "dead", 1, "x", 1, error=True)
+    halo(5, 4, "cross", -2, "x", 1, error=True)
+    halo(4, 4, "sphere", 3, "y", 1, error=True)
+    halo(5, 4, "moebius", 0, "x", 1, error=True)
+    halo(5, 4, "torus", 0, "z", 1, error=True)
+    halo(0, 4, "torus", 0, "x", 1, error=True)
+    halo(5, 4, "torus", 0, "x", 0, error=True)
+    halo(5, 4, "cross", 0, "x", 5, error=True)
+    halo(4, 4, "sphere", 0, "x", 5, error=True)
+    save("topology", "halo", {"kind": "halo", "cases": halo_cases})
+    save("topology", "halo-shifted", {"kind": "halo", "cases": shifted_cases})
+
+    # -- the bounded-grid suffix ----------------------------------------------------------
+    suffix_cases: list[dict[str, Any]] = []
+    for text in [
+        ":T30,20",
+        ":t30+0,20",
+        ":T30+5,20",
+        ":T30,20-2",
+        ":T30-35,20",
+        ":T030,0020",
+        ":P30,20",
+        ":p7",
+        ":K30*,20",
+        ":K30,20*",
+        ":K30*+1,20",
+        ":K30,20*-4",
+        ":k30*",
+        ":K30*,20+0",
+        ":C30,20",
+        ":c1,1",
+        ":S30",
+        ":s30,30",
+        ":T30+5",
+        ":T2000000000,1-2000000000",
+        "T30,20",
+        "",
+        ":",
+        ":X30,20",
+        ":ſ30",
+        ":T",
+        ":T,20",
+        ":T30,",
+        ":T30+,20",
+        ":T30,20-",
+        ":T٣٠,20",
+        ":T30,20,10",
+        ":T30 ,20",
+        ":K30+1*,20",
+        ":P30+1,20",
+        ":C30*,20",
+        ":S30-1",
+        ":T30*,20",
+        ":T30+5,20-2",
+        ":K30,20",
+        ":K30*,20*",
+        ":K30*,20+1",
+        ":T0,20",
+        ":P30,0",
+        ":T2000000001,20",
+        ":T30+99999999999999999999,20",
+        ":S30,20",
+        ":K31*+1,20",
+        ":K30,21*-1",
+    ]:
+        grid, reason = try_parse_bounded_grid(text)
+        if grid is None:
+            suffix_cases.append({"input": text, "error": True, "reason": reason})
+            continue
+        assert parse_bounded_grid(grid.suffix) == grid
+        suffix_cases.append(
+            {
+                "input": text,
+                "canonical": grid.suffix,
+                "width": grid.width,
+                "height": grid.height,
+                "boundary": grid.topology.boundary,
+                "shift": grid.topology.shift,
+                "axis": grid.topology.axis,
+            }
+        )
+    save("topology", "suffix", {"kind": "suffix", "cases": suffix_cases})
+
+    # -- a rule's text split at its suffix ------------------------------------------------
+    map_rule = "MAP" + "ARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oeIDogGiA6ICAAIAAAAAAAA"
+    map_rule += "A" * (89 - len(map_rule))
+    split_cases: list[dict[str, Any]] = []
+    for text in [
+        "B3/S23",
+        "B3/S23:T30,20",
+        " B3 / S23 :K8*,6 　",
+        "B3/S23:T30,20\t",
+        "WireWorld:P40,30",
+        "LifeHistory:t30+7,20",
+        map_rule + ":S10",
+        ":T30,20",
+        "B3/S23:",
+        "B3/S23:T30,20:T20,20",
+        "B3/S23: T30,20",
+        "B3/S23:T0,64",
+    ]:
+        try:
+            rule, bounded = split_rule_suffix(text)
+        except TopologyError as refused:
+            split_cases.append({"input": text, "error": True, "reason": refused.reason})
+            continue
+        split_cases.append(
+            {"input": text, "rule": rule, "suffix": None if bounded is None else bounded.suffix}
+        )
+    save("topology", "split", {"kind": "split", "cases": split_cases})
+
+    # -- grid runs on every topology --------------------------------------------------------
+    # The runs with a shift rest on how a shift reads (the senses in heaton_life.core.topology),
+    # like topology/halo-shifted: their names all hold "shift", to be redone together.
+    shifted_runs: list[tuple[str, dict[str, Any]]] = [
+        ("soup-48x40-torus-shift-x", {"width": 48, "height": 40, "seed": 41, "shift": 7}),
+        (
+            "soup-40x48-torus-shift-y",
+            {"width": 40, "height": 48, "seed": 42, "shift": -5, "axis": "y"},
+        ),
+        (
+            "soup-40x48-klein-y-shift",
+            {"width": 40, "height": 48, "seed": 44, "boundary": "klein", "shift": 1, "axis": "y"},
+        ),
+    ]
+    life_runs: list[tuple[str, dict[str, Any]]] = [
+        ("soup-48x40-klein-x", {"width": 48, "height": 40, "seed": 43, "boundary": "klein"}),
+        ("soup-48x40-cross", {"width": 48, "height": 40, "seed": 45, "boundary": "cross"}),
+        ("soup-48-sphere", {"width": 48, "height": 48, "seed": 46, "boundary": "sphere"}),
+        (
+            "b0-negative-life-36-sphere",
+            {
+                "width": 36,
+                "height": 36,
+                "seed": 47,
+                "boundary": "sphere",
+                "rule": "B0123478/S01234678",
+            },
+        ),
+        (
+            "isotropic-40x32-klein-y",
+            {
+                "width": 40,
+                "height": 32,
+                "seed": 48,
+                "boundary": "klein",
+                "axis": "y",
+                "rule": "B3/S2-i34q",
+            },
+        ),
+    ]
+    for name, overrides in shifted_runs + life_runs:
+        params = {"rule": "B3/S23", "density": 0.35, "boundary": "torus", **overrides}
+        write_case(
+            "lifelike",
+            name,
+            build_sim("lifelike", params),
+            [0, 1, 10, 100],
+            spec_version=TOPOLOGY_SPEC_VERSION,
+        )
+
+    wire = np.zeros((12, 16), np.uint8)
+    wire[:, 3] = wire[:, 12] = 3  # one loop through the twisted seam: column 3 meets 12
+    wire[4, 3], wire[5, 3] = 2, 1  # an electron heading down
+    write_case(
+        "wireworld",
+        "wire-16x12-klein-x",
+        Wireworld(size=(16, 12), init=wire, boundary="klein"),
+        [0, 1, 10, 40],
+        spec_version=TOPOLOGY_SPEC_VERSION,
+    )
+    for name, (width, height), topology in [
+        ("soup-24-sphere", (24, 24), {"boundary": "sphere"}),
+        ("soup-24x20-cross", (24, 20), {"boundary": "cross"}),
+        # Rests on how a shift reads, like the shifted runs above.
+        ("soup-24x20-torus-shift-y", (24, 20), {"boundary": "torus", "shift": 3, "axis": "y"}),
+    ]:
+        mixed = soup((width, height), density=0.5, seed=width) + 2 * soup(
+            (width, height), density=0.5, seed=height + 1
+        )
+        write_case(
+            "wireworld",
+            name,
+            Wireworld(size=(width, height), init=mixed, **topology),  # type: ignore[arg-type]
+            [0, 1, 10, 40],
+            spec_version=TOPOLOGY_SPEC_VERSION,
+        )
+
+    # -- RLE headers with a suffix: the dialect and rule are the rule's -----------------------
+    from heaton_life.init import rle_decode
+
+    # A header's rule in survival/birth order is the B…/S… rule (spec/formats.md "Rules in
+    # survival/birth order"), after any suffix comes off: the dialect is two-state.
+    for name, text in [
+        ("rle-bounded-two-state", "x = 3, y = 3, rule = B3/S23:T30,20\nBOB$2BO$3O!\n"),
+        ("rle-bounded-extended", "x = 3, y = 1, rule = WireWorld:P10,4\nCBA!\n"),
+        ("rle-survival-birth", "x = 3, y = 3, rule = 23/3\nBOB$2BO$3O!\n"),
+        ("rle-survival-birth-seeds", "x = 4, y = 2, rule = /2\nO2BO$BOO!\n"),
+        ("rle-survival-birth-bounded", "x = 3, y = 3, rule = 323/33:T30,20\nBOB$2BO$3O!\n"),
+    ]:
+        d = case_dir("patterns", name)
+        (d / "input.rle").write_text(text, encoding="utf-8", newline="\n")
+        cells, rule = rle_decode(text)
+        (d / "grid.png").write_bytes(gray_png(cells))
+        canonical = rle_encode(cells, rule or "B3/S23")
+        (d / "canonical.rle").write_text(canonical, encoding="utf-8", newline="\n")
+        save(
+            "patterns",
+            name,
+            {
+                "kind": "rle",
+                "input": "input.rle",
+                "rule": rule,
+                "grid": {"file": "grid.png", "shape": list(cells.shape)},
+                "canonical": "canonical.rle",
+            },
+        )
+
+    from heaton_life.init import rle_measure
+
+    sb_text = "x = 5, y = 2, rule = 245/368\n5O$O3BO!\n"
+    d = case_dir("patterns", "extent-survival-birth")
+    (d / "input.rle").write_text(sb_text, encoding="utf-8", newline="\n")
+    sb_extent = rle_measure(sb_text)
+    assert (sb_extent.rule, sb_extent.extended) == ("B368/S245", False)
+    save(
+        "patterns",
+        "extent-survival-birth",
+        {
+            "kind": "rle-extent",
+            "input": "input.rle",
+            "extent": {
+                "width": str(sb_extent.width),
+                "height": str(sb_extent.height),
+                "live": None if sb_extent.live is None else [str(v) for v in sb_extent.live],
+                "population": str(sb_extent.population),
+                "rule": sb_extent.rule,
+                "extended": sb_extent.extended,
+            },
+        },
+    )
+
+    # -- Advance Selection / Outside on other topologies -------------------------------------
+    def advance(
+        name: str, desc: dict[str, Any], grid: Any, region: tuple[int, ...], n: int, outside: bool
+    ) -> None:
+        size = (grid.shape[1], grid.shape[0])
+        topology = {k: desc[k] for k in ("boundary", "shift", "axis") if k in desc}
+        if desc["family"] == "lifelike":
+            w: Any = LifeLike(desc["rule"], size=size, init=grid, **topology)
+        else:
+            w = Wireworld(size=size, init=grid, **topology)
+        (w.advance_outside if outside else w.advance_selection)(*region, n)
+        assert w.generation == 0
+        d = case_dir("patterns", name)
+        (d / "grid.png").write_bytes(gray_png(grid))
+        (d / "expected.png").write_bytes(gray_png(w.state))
+        save(
+            "patterns",
+            name,
+            {
+                "kind": "advance",
+                "world": desc,
+                "grid": {"file": "grid.png", "shape": list(grid.shape)},
+                "expected": {"file": "expected.png", "shape": list(np.asarray(w.state).shape)},
+                "region": list(region),
+                "n": n,
+                "outside": outside,
+            },
+        )
+
+    glider = np.array([[0, 1, 0], [0, 0, 1], [1, 1, 1]], dtype=np.uint8)
+    edge = np.zeros((10, 12), np.uint8)
+    edge[3:6, 7:10] = glider  # heading down and right, toward the twisted right edge
+    edge[0, 0:3] = 1  # a blinker outside the region
+    klein_y = {"family": "lifelike", "rule": "B3/S23", "boundary": "klein", "axis": "y"}
+    advance("advance-selection-life-klein", klein_y, edge, (6, 2, 11, 7), 20, False)
+    folded = soup((8, 8), density=0.5, seed=8) + 2 * soup((8, 8), density=0.5, seed=9)
+    sphere = {"family": "wireworld", "boundary": "sphere"}
+    advance("advance-outside-wireworld-sphere", sphere, folded, (2, 2, 5, 5), 5, True)
+
+    # -- bounded files: read into their world, measured, refused by the universe -------------
+    def notes(m: PatternMetadata) -> dict[str, Any]:
+        return {"name": m.name, "author": m.author, "comments": list(m.comments)}
+
+    def read(
+        name: str, text: str, *, trim: bool = False, limit: Any = "default", error: bool = False
+    ) -> None:
+        d = case_dir("formats", f"read-{name}")
+        data = text.encode("utf-8")
+        (d / "input.rle").write_bytes(data)
+        meta: dict[str, Any] = {"kind": "read", "input": "input.rle", "trim": trim, "limit": limit}
+        try:
+            f = (
+                read_pattern(data, trim=trim)
+                if limit == "default"
+                else read_pattern(data, trim=trim, max_cells=limit)
+            )
+        except ValueError:
+            assert error, f"read-{name} was meant to read"
+            meta["error"] = True
+            save("formats", f"read-{name}", meta)
+            return
+        assert not error, f"read-{name} was meant to be refused"
+        assert (f.bounded_grid is not None) == name.startswith("bounded"), name
+        (d / "grid.png").write_bytes(gray_png(f.cells))
+        topology = None if trim or f.bounded_grid is None else f.bounded_grid.topology
+        canonical = rle_encode(f.cells, f.rule or "B3/S23", metadata=f.metadata, topology=topology)
+        (d / "canonical.rle").write_text(canonical, encoding="utf-8", newline="\n")
+        meta.update(
+            {
+                "format": f.format,
+                "x": _signed_text(f.x),
+                "y": _signed_text(f.y),
+                "rule": f.rule,
+                "generation": decimal_text.digits_of(f.generation),
+                "metadata": notes(f.metadata),
+                "grid": {"file": "grid.png", "shape": list(f.cells.shape)},
+                "canonical": "canonical.rle",
+            }
+        )
+        if f.bounded_grid is not None:
+            meta["bounded_grid"] = f.bounded_grid.suffix
+        save("formats", f"read-{name}", meta)
+
+    def measure(name: str, text: str, *, error: bool = False) -> None:
+        d = case_dir("formats", f"measure-{name}")
+        data = text.encode("utf-8")
+        (d / "input.rle").write_bytes(data)
+        meta: dict[str, Any] = {"kind": "measure", "input": "input.rle"}
+        try:
+            e = measure_pattern(data)
+        except ValueError:
+            assert error, f"measure-{name} was meant to measure"
+            meta["error"] = True
+            save("formats", f"measure-{name}", meta)
+            return
+        assert not error and (e.bounded_grid is not None) == name.startswith("bounded"), name
+        if e.width * e.height <= 1 << 20:  # small enough to read: the read must agree
+            f = read_pattern(data)
+            assert (f.x, f.y, f.cells.shape, f.bounded_grid) == (
+                e.x,
+                e.y,
+                (e.height, e.width),
+                e.bounded_grid,
+            ), name
+        meta.update(
+            {
+                "format": e.format,
+                "width": decimal_text.digits_of(e.width),
+                "height": decimal_text.digits_of(e.height),
+                "x": _signed_text(e.x),
+                "y": _signed_text(e.y),
+                "rule": e.rule,
+                "generation": decimal_text.digits_of(e.generation),
+                "metadata": notes(e.metadata),
+                "two_state": e.two_state,
+            }
+        )
+        if e.bounded_grid is not None:
+            meta["bounded_grid"] = e.bounded_grid.suffix
+        save("formats", f"measure-{name}", meta)
+
+    def refused_by_the_universe(name: str, text: str) -> None:
+        d = case_dir("formats", f"universe-{name}")
+        data = text.encode("utf-8")
+        (d / "input.rle").write_bytes(data)
+        try:
+            read_universe(data)
+        except ValueError:
+            save(
+                "formats",
+                f"universe-{name}",
+                {"kind": "universe", "input": "input.rle", "error": True},
+            )
+            return
+        raise AssertionError(f"universe-{name} was meant to be refused")
+
+    glider_torus = "x = 3, y = 3, rule = B3/S23:T30,20\nbo$2bo$3o!\n"
+    read("bounded-torus-centered", glider_torus)
+    read("bounded-trimmed", glider_torus, trim=True)
+    read(
+        "bounded-klein-position",
+        "#CXRLE Pos=-15,7 Gen=3\n#N Mirror glider\nx = 3, y = 3, rule = B3/S23:K30*+1,20\n"
+        "bo$2bo$3o!\n",
+    )
+    read("bounded-odd-centering", "x = 4, y = 3, rule = B3/S23:C31,21\nb2o$2ob$bo!\n")
+    whole = soup((12, 12), density=0.4, seed=12)
+    read(
+        "bounded-sphere-whole",
+        rle_encode(
+            whole, "B2-a/S12", metadata=PatternMetadata("Folded soup"), topology=Topology("sphere")
+        ),
+    )
+    read("bounded-wireworld", "x = 4, y = 3, rule = WireWorld:P8,5\n.2C$AC.C$.2CB!\n")
+    read("bounded-dead-margin", "x = 40, y = 3, rule = B3/S23:T30,20\n19b3o!\n")
+    read("bounded-error-past", "#CXRLE Pos=-15,8\n" + glider_torus, error=True)
+    read("bounded-error-tube", "x = 3, y = 3, rule = B3/S23:T0,20\nbo$2bo$3o!\n", error=True)
+    read("bounded-error-limit", "x = 3, y = 3, rule = B3/S23:T9000,9000\nbo$2bo$3o!\n", error=True)
+    read("bounded-limit-given", glider_torus, limit=600)
+    read("bounded-error-limit-given", glider_torus, limit=599, error=True)
+    measure("bounded-torus", glider_torus)
+    measure("bounded-giant-sphere", "x = 3, y = 3, rule = B3/S23:S2000000000\nbo$2bo$3o!\n")
+    measure("bounded-error-past", "#CXRLE Pos=-16,0\n" + glider_torus, error=True)
+    # A header's rule in survival/birth order (spec/formats.md "Rules in survival/birth order").
+    read("survival-birth", "x = 3, y = 3, rule = 23/36\nbo$2bo$3o!\n")
+    read("bounded-survival-birth", "x = 3, y = 3, rule = 23/3:K10*,8\nBOB$2BO$3O!\n")
+    measure("survival-birth", "#CXRLE Pos=-1,-1 Gen=7\nx = 3, y = 3, rule = 23/36\nbo$2bo$3o!\n")
+    from heaton_life.ca.hashlife import HashLife
+
+    def universe(name: str, text: str) -> None:
+        d = case_dir("formats", f"universe-{name}")
+        data = text.encode("utf-8")
+        (d / "input.rle").write_bytes(data)
+        found = read_universe(data)
+        u: HashLife = found.universe
+        (d / "state.mc").write_text(u.to_macrocell(), encoding="utf-8", newline="\n")
+        with_metadata = u.to_macrocell(found.metadata)
+        (d / "with-metadata.mc").write_text(with_metadata, encoding="utf-8", newline="\n")
+        rle = u.to_rle(found.metadata)
+        (d / "with-metadata.rle").write_text(rle, encoding="utf-8", newline="\n")
+        box = u.bounding_box()
+        save(
+            "formats",
+            f"universe-{name}",
+            {
+                "kind": "universe",
+                "input": "input.rle",
+                "format": found.format,
+                "metadata": notes(found.metadata),
+                "generation": decimal_text.digits_of(u.generation),
+                "population": decimal_text.digits_of(u.population),
+                "bounding_box": None if box is None else [_signed_text(v) for v in box],
+                "state": "state.mc",
+                "with_metadata": "with-metadata.mc",
+                "rle": "with-metadata.rle",
+            },
+        )
+
+    universe(
+        "survival-birth",
+        "#CXRLE Pos=-1,-1\n#N HighLife glider\nx = 3, y = 3, rule = 23/36\nbo$2bo$3o!\n",
+    )
+    refused_by_the_universe("error-bounded-torus", glider_torus)
+    refused_by_the_universe(
+        "error-bounded-plane", "#CXRLE Pos=0,0\nx = 3, y = 3, rule = B3/S23:P100,100\nbo$2bo$3o!\n"
     )
 
 

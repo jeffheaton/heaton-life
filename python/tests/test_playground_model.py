@@ -12,7 +12,10 @@ def test_field_specs_for_lifelike() -> None:
     assert specs["density"].kind == "float" and specs["density"].maximum == 1.0
     assert specs["init"].kind == "choice" and "soup" in specs["init"].choices
     assert "array" not in specs["init"].choices  # UI cannot produce out-of-band arrays
-    assert specs["boundary"].choices == ("torus", "dead")
+    # Every topology of spec/topology.md, with a shift and its axis for a torus or Klein bottle.
+    assert specs["boundary"].choices == ("torus", "dead", "klein", "cross", "sphere")
+    assert specs["axis"].choices == ("x", "y")
+    assert specs["shift"].kind == "int"
     assert specs["seed"].role == "seed"
     assert specs["rule"].label == "Rule (B/S)"
 

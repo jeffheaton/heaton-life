@@ -31,18 +31,30 @@ namespace HeatonLife
     public sealed class RlePattern
     {
         public RlePattern(byte[] cells, int width, int height, string? rule)
+            : this(cells, width, height, rule, null)
+        {
+        }
+
+        public RlePattern(byte[] cells, int width, int height, string? rule, BoundedGrid? boundedGrid)
         {
             Cells = cells;
             Width = width;
             Height = height;
             Rule = rule;
+            BoundedGrid = boundedGrid;
         }
 
         public byte[] Cells { get; }
         public int Width { get; }
         public int Height { get; }
-        /// <summary>The header's rule string, or null when the RLE carried no rule.</summary>
+        /// <summary>The header's rule string without a bounded-grid suffix, or null when the RLE
+        /// carried no rule.</summary>
         public string? Rule { get; }
+
+        /// <summary>The world the header's bounded-grid suffix names (spec/topology.md), or null.
+        /// The cells are the pattern as decoded; <see cref="PatternFiles.Read(string, long?, bool)"/>
+        /// places it in its world.</summary>
+        public BoundedGrid? BoundedGrid { get; }
     }
 
     /// <summary>
@@ -53,6 +65,13 @@ namespace HeatonLife
     {
         public RleExtent(
             BigInteger width, BigInteger height, CellBox? live, BigInteger population, string? rule, bool extended)
+            : this(width, height, live, population, rule, extended, null)
+        {
+        }
+
+        public RleExtent(
+            BigInteger width, BigInteger height, CellBox? live, BigInteger population, string? rule, bool extended,
+            BoundedGrid? boundedGrid)
         {
             Width = width;
             Height = height;
@@ -60,6 +79,7 @@ namespace HeatonLife
             Population = population;
             Rule = rule;
             Extended = extended;
+            BoundedGrid = boundedGrid;
         }
 
         /// <summary>The decoded grid's width: the larger of what the header declares and the body holds.</summary>
@@ -69,8 +89,13 @@ namespace HeatonLife
         public CellBox? Live { get; }
         /// <summary>How many cells are non-zero.</summary>
         public BigInteger Population { get; }
+
+        /// <summary>The header's rule without a bounded-grid suffix, or null.</summary>
         public string? Rule { get; }
         public bool Extended { get; }
+
+        /// <summary>The world the header's bounded-grid suffix names (spec/topology.md), or null.</summary>
+        public BoundedGrid? BoundedGrid { get; }
     }
 
     /// <summary>
@@ -98,8 +123,8 @@ namespace HeatonLife
         public static RleExtent RleMeasure(string text)
         {
             ParseRle(text, out BigInteger declaredW, out BigInteger declaredH, out string? rule,
-                out string body, out bool extended);
-            return Measure(declaredW, declaredH, rule, body, extended);
+                out string body, out bool extended, out BoundedGrid? bounded);
+            return Measure(declaredW, declaredH, rule, body, extended, bounded);
         }
 
         /// <summary>Decodes under the default limit, <see cref="DefaultMaxCells"/>.</summary>
@@ -116,8 +141,8 @@ namespace HeatonLife
         public static RlePattern RleDecode(string text, long? maxCells, bool trim = false)
         {
             ParseRle(text, out BigInteger declaredW, out BigInteger declaredH, out string? rule,
-                out string body, out bool extended);
-            RleExtent extent = Measure(declaredW, declaredH, rule, body, extended);
+                out string body, out bool extended, out BoundedGrid? bounded);
+            RleExtent extent = Measure(declaredW, declaredH, rule, body, extended, bounded);
             BigInteger left = BigInteger.Zero, top = BigInteger.Zero;
             BigInteger width = extent.Width, height = extent.Height;
             if (trim)
@@ -151,13 +176,49 @@ namespace HeatonLife
                 int at = (int)(run.Y - top) * w + (int)(run.X - left);
                 cells.AsSpan(at, (int)run.Length).Fill((byte)run.State);
             }
-            return new RlePattern(cells, w, (int)height, rule);
+            return new RlePattern(cells, w, (int)height, rule, bounded);
         }
 
-        /// <summary>An RLE text as (declared width, declared height, rule, body, dialect).</summary>
+        /// <summary>The world an RLE header's bounded-grid suffix names, or null, read from the
+        /// header alone (no cell is walked).</summary>
+        internal static BoundedGrid? RleBoundedGrid(string text)
+        {
+            foreach (string raw in TextLines.Split(text))
+            {
+                string line = TextLines.Strip(raw);
+                if (line.Length == 0 || line[0] == '#')
+                    continue;
+                if (!TryParseHeader(line, out _, out _, out string? rule) || rule == null)
+                    return null;
+                BoundedGrid.SplitRule(rule, out BoundedGrid? bounded);
+                return bounded;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Writes the non-zero runs of an RLE text into <paramref name="world"/> (row-major,
+        /// <paramref name="worldWidth"/> wide), each pattern cell (x, y) at (x + dx, y + dy): a
+        /// bounded file's pattern placed in its world (spec/formats.md "Bounded grids"). Every
+        /// non-zero cell must land inside, as the caller has checked from the extent.
+        /// </summary>
+        internal static void PlaceRle(string text, byte[] world, int worldWidth, BigInteger dx, BigInteger dy)
+        {
+            ParseRle(text, out _, out _, out _, out string body, out bool extended, out _);
+            foreach (RleRun run in Walk(body, extended))
+            {
+                if (run.State <= 0)
+                    continue;
+                int at = (int)(run.Y + dy) * worldWidth + (int)(run.X + dx);
+                world.AsSpan(at, (int)run.Length).Fill((byte)run.State);
+            }
+        }
+
+        /// <summary>An RLE text as (declared width, declared height, rule, body, dialect, bounded
+        /// grid): the rule is the header's text before a bounded-grid suffix.</summary>
         private static void ParseRle(
             string text, out BigInteger declaredW, out BigInteger declaredH, out string? rule,
-            out string body, out bool extended)
+            out string body, out bool extended, out BoundedGrid? bounded)
         {
             var lines = new List<string>();
             foreach (string raw in TextLines.Split(text)) // as the reference's splitlines and strip
@@ -169,10 +230,17 @@ namespace HeatonLife
             if (lines.Count == 0)
                 throw new ArgumentException("empty RLE input");
 
+            bounded = null;
             if (TryParseHeader(lines[0], out declaredW, out declaredH, out rule))
+            {
                 body = string.Concat(lines.GetRange(1, lines.Count - 1));
+                if (rule != null) // spec/patterns.md "Bounded grids", spec/formats.md "Rules in survival/birth order"
+                    rule = PatternFiles.LifeRule(BoundedGrid.SplitRule(rule, out bounded));
+            }
             else
+            {
                 body = string.Concat(lines);
+            }
 
             // Dialect detection (spec/patterns.md): uppercase B/O are dead/alive in
             // two-state files but states 2/15 in extended RLE.
@@ -262,7 +330,8 @@ namespace HeatonLife
         }
 
         private static RleExtent Measure(
-            BigInteger declaredW, BigInteger declaredH, string? rule, string body, bool extended)
+            BigInteger declaredW, BigInteger declaredH, string? rule, string body, bool extended,
+            BoundedGrid? bounded)
         {
             BigInteger longest = BigInteger.Zero, rows = BigInteger.Zero, population = BigInteger.Zero;
             bool any = false;
@@ -295,7 +364,7 @@ namespace HeatonLife
             }
             return new RleExtent(
                 BigInteger.Max(declaredW, longest), BigInteger.Max(declaredH, rows),
-                any ? new CellBox(x0, y0, x1, y1) : (CellBox?)null, population, rule, extended);
+                any ? new CellBox(x0, y0, x1, y1) : (CellBox?)null, population, rule, extended, bounded);
         }
 
         /// <summary>
@@ -331,7 +400,7 @@ namespace HeatonLife
         internal static bool IsRleHeader(string line) => TryParseHeader(line, out _, out _, out _);
 
         /// <summary>The <c>#CXRLE</c> first line's position and generation, or zeros without one.</summary>
-        internal static void Cxrle(string text, out BigInteger x, out BigInteger y, out BigInteger generation)
+        internal static bool Cxrle(string text, out BigInteger x, out BigInteger y, out BigInteger generation)
         {
             x = y = generation = BigInteger.Zero;
             foreach (string raw in TextLines.Split(text))
@@ -339,15 +408,15 @@ namespace HeatonLife
                 string line = TextLines.Strip(raw);
                 if (line.Length == 0)
                     continue;
-                if (line.StartsWith("#CXRLE", StringComparison.Ordinal))
-                    ReadCxrle(line, ref x, ref y, ref generation);
-                return;
+                return line.StartsWith("#CXRLE", StringComparison.Ordinal) && ReadCxrle(line, ref x, ref y, ref generation);
             }
+            return false;
         }
 
         /// <summary>Canonical RLE; dialect chosen by content (cells above 24 are unencodable). The
         /// header names a Life-like rule in its canonical form (spec/rules.md), so it reads back as
-        /// the same rule, and any other rule as given.</summary>
+        /// the same rule (one in survival/birth order, <c>23/3</c>, as <c>B3/S23</c>), and any other
+        /// rule as given.</summary>
         public static string RleEncode(ReadOnlySpan<byte> cells, int width, int height, string rule = "B3/S23")
             => RleEncode(cells, width, height, rule, null);
 
@@ -355,8 +424,19 @@ namespace HeatonLife
         /// <c>#C</c> lines before the header (spec/formats.md "Metadata").</summary>
         public static string RleEncode(
             ReadOnlySpan<byte> cells, int width, int height, string rule, PatternMetadata? metadata)
+            => RleEncode(cells, width, height, rule, metadata, null);
+
+        /// <summary>
+        /// Canonical RLE of a whole world with a <paramref name="topology"/> (spec/topology.md):
+        /// the header's rule carries the world's bounded-grid suffix, <c>rule = B3/S23:T30,20</c>.
+        /// Without one (null) it is <see cref="RleEncode(ReadOnlySpan{byte}, int, int, string, PatternMetadata?)"/>.
+        /// </summary>
+        public static string RleEncode(
+            ReadOnlySpan<byte> cells, int width, int height, string rule, PatternMetadata? metadata,
+            Topology? topology)
         {
             List<string> notes = PatternMetadata.Lines(metadata);
+            string suffix = topology == null ? "" : new BoundedGrid(width, height, topology.Value).Suffix;
             if (cells.Length != width * height)
                 throw new ArgumentException($"expected {width * height} cells, got {cells.Length}");
             int top = 0;
@@ -410,7 +490,9 @@ namespace HeatonLife
             foreach (string note in notes)
                 sb.Append(note).Append('\n');
             sb.Append("x = ").Append(width).Append(", y = ").Append(height)
-              .Append(", rule = ").Append(RuleString.TryCompile(rule, out LifeRule? life) ? life.Canonical : rule);
+              .Append(", rule = ")
+              .Append(RuleString.TryCompile(PatternFiles.LifeRule(rule), out LifeRule? life) ? life.Canonical : rule)
+              .Append(suffix);
             foreach (string bodyLine in body)
                 sb.Append('\n').Append(bodyLine);
             sb.Append('\n');
@@ -460,6 +542,13 @@ namespace HeatonLife
             string? rule = null;
             if (lines.Count > 0 && TryParseHeader(lines[0], out _, out _, out rule))
                 lines.RemoveAt(0);
+            if (rule != null)
+            {
+                rule = PatternFiles.LifeRule(BoundedGrid.SplitRule(rule, out BoundedGrid? bounded));
+                if (bounded != null) // spec/patterns.md "RLE in the unbounded universe"
+                    throw new FormatException(
+                        $"the unbounded universe has no bounded grid ('{bounded.Suffix}' in the rule): open the file in a grid world (spec/topology.md)");
+            }
             string body = string.Concat(lines);
             bool extended = rule != null && !IsLifelikeRule(rule);
             foreach (char c in body)
@@ -545,8 +634,10 @@ namespace HeatonLife
             return (root, level, generation, canonical);
         }
 
-        private static void ReadCxrle(string line, ref BigInteger posX, ref BigInteger posY, ref BigInteger generation)
+        /// <summary>Reads a <c>#CXRLE</c> line's fields; true when it gives a <c>Pos</c>.</summary>
+        private static bool ReadCxrle(string line, ref BigInteger posX, ref BigInteger posY, ref BigInteger generation)
         {
+            bool placed = false;
             string[] fields = SplitSpace(line);
             for (int f = 1; f < fields.Length; f++)
             {
@@ -559,12 +650,14 @@ namespace HeatonLife
                     int comma = value.IndexOf(',');
                     posX = ParseInteger(comma < 0 ? value : value.Substring(0, comma), signed: true);
                     posY = ParseInteger(comma < 0 ? "" : value.Substring(comma + 1), signed: true);
+                    placed = true;
                 }
                 else if (key == "Gen")
                 {
                     generation = ParseInteger(value, signed: false);
                 }
             }
+            return placed;
         }
 
         private static string[] SplitSpace(string line)

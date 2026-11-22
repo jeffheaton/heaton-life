@@ -1,0 +1,28 @@
+{
+  "bounded_grid": ":K30*+1,20",
+  "canonical": "canonical.rle",
+  "family": "formats",
+  "format": "rle",
+  "generation": "3",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      20,
+      30
+    ]
+  },
+  "input": "input.rle",
+  "kind": "read",
+  "limit": "default",
+  "metadata": {
+    "author": null,
+    "comments": [],
+    "name": "Mirror glider"
+  },
+  "rule": "B3/S23",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "trim": false,
+  "x": "-15",
+  "y": "-10"
+}

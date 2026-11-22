@@ -194,6 +194,25 @@ and an RLE header naming any Life-like rule making the file two-state.
   `BackgroundAlive`), `LifeRule.has_smax` and `LifeRule.background(generation)` (.NET
   `HasSmax`, `BackgroundAlive(generation)`). A frame shows the universe's cells; where the
   background is alive it shows the plane in negative, and a viewer may swap its colors.
+- **Grid topologies** ([spec/topology.md](spec/topology.md)): Life-like and Wireworld
+  grids run on the plane (`dead`), the torus with an optional shift along one axis, the
+  Klein bottle (one pair of edges twisted, optionally shifted), the cross-surface, and the
+  sphere (square grids). The params gain `shift` and `axis`, left out of a vector's params
+  at 0 and `x`, so every earlier run reads as it did; `Topology` (a Python dataclass, a
+  .NET struct) says where any point past an edge lands. One halo fill (`Halo`, any radius)
+  is how a grid's step reads past its edges, so the grid families still to come take every
+  topology with it. .NET's `Step` still allocates nothing.
+- **Bounded grids in RLE** ([spec/topology.md](spec/topology.md) "The bounded-grid
+  suffix"): an RLE header's rule may carry the suffix Life programs share for a bounded
+  world, `rule = B3/S23:T30,20` (`:P` plane, `:T` torus with `+n`/`-n` shifts, `:K` Klein
+  bottle with a `*` twist, `:C` cross-surface, `:S` sphere), read in either case and written
+  canonically: `parse_bounded_grid`, `try_parse_bounded_grid` and `split_rule_suffix`
+  (.NET `BoundedGrid.Parse`, `TryParse` and `SplitRule`), every refusal with its reason.
+  `read_pattern` / `PatternFiles.Read` reads a bounded file as its whole world, the world
+  centered on the origin and the pattern at its `#CXRLE Pos` or centered too, and reports
+  the world as `bounded_grid` (`BoundedGrid`), as `measure_pattern` / `Measure` does; the
+  encoders take a `topology` and write the world with its suffix. A side of 0 (the
+  notation's unbounded strip or tube) is refused.
 
 ### Changed
 
@@ -243,6 +262,29 @@ and an RLE header naming any Life-like rule making the file two-state.
   failed in Python but not in .NET.
 - .NET: `Wireworld.SetState` and `Cyclic.SetState` check every value before they write
   any, so a refused grid changes nothing. They used to write the cells before the bad one.
+- **An RLE header's bounded-grid suffix is read as one** ([spec/patterns.md](spec/patterns.md)
+  "Bounded grids"): the rule the decoders report is the text before the `:`, and the
+  dialect is that rule's, so `rule = B3/S23:T30,20` heads a two-state file. The whole token
+  used to be the rule, which no rule compiler accepts, so such a file read as extended RLE
+  (uppercase `B` and `O` as states 2 and 15) and HashLife refused it as extended. A
+  malformed suffix is now an error of the decode, and HashLife refuses a bounded file as
+  bounded.
+- **Reading a bounded RLE file into a grid gives its whole world** (`read_pattern`,
+  `PatternFiles.Read`, and their measures): the world's size, its top-left at
+  (−⌊W/2⌋, −⌊H/2⌋), the pattern placed in it. It used to give the pattern at its declared
+  size, at (0, 0).
+- **An RLE header's rule in survival/birth order reads as `B…/S…`**
+  ([spec/formats.md](spec/formats.md) "Rules in survival/birth order"), as Life 1.05's
+  `#R` line already did: `rule = 23/3` is `B3/S23`, after any bounded-grid suffix comes off
+  (`rule = 23/3:T30,20`). Such a file is two-state, HashLife reads it, and canonical RLE
+  writes the rule as `B3/S23`. The header used to name a rule no compiler accepts, so the
+  file read as extended RLE and HashLife refused it.
+- Elementary refuses a boundary other than `torus` or `dead`. Python read any other name
+  as `dead`; .NET's `Boundary` enum now names the other topologies too.
+- Python: `moore_index` and `moore_sum` read through the halo and take a `Topology` as
+  well as a boundary's name; their torus and dead results are unchanged.
+- Python playground: the Life-like and Wireworld forms offer every topology, with its
+  shift and axis.
 
 ## 1.1.0 (2026-09-25)
 

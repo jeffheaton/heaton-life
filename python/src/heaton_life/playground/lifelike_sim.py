@@ -25,7 +25,7 @@ import dataclasses
 import functools
 import zlib
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -33,8 +33,8 @@ from numpy.typing import NDArray
 from heaton_life.ca import LifeLike, LifeLikeParams
 from heaton_life.ca.hashlife import DEFAULT_MEMORY_MB, HashLife, HashLifeMemoryError
 from heaton_life.ca.rulestring import compile_rule
-from heaton_life.core.neighbors import Boundary
 from heaton_life.core.params import Params
+from heaton_life.core.topology import Axis, Boundary, Topology
 from heaton_life.init import BUILTIN_PATTERNS, place, rle_decode, rle_encode, rle_measure
 from heaton_life.playground.hashlife_sim import BUILTIN_NAMES, PATTERN_FILTER, PATTERN_SUFFIXES
 
@@ -76,6 +76,8 @@ class LifeLikeSimParams(Params):
     density: float = _library_field("density")
     seed: int = _library_field("seed")
     boundary: str = _library_field("boundary")
+    shift: int = _library_field("shift")
+    axis: str = _library_field("axis")
 
 
 # -- measuring a pattern ------------------------------------------------------------------
@@ -260,8 +262,10 @@ def advise(params: Params) -> Advice | None:
 # -- the sim ----------------------------------------------------------------------------------
 
 
-def _boundary(params: LifeLikeSimParams) -> Boundary:
-    return "dead" if params.boundary == "dead" else "torus"
+def _topology(params: LifeLikeSimParams) -> dict[str, Any]:
+    """The form's topology as LifeLike's keyword arguments (spec/topology.md)."""
+    boundary = cast(Boundary, params.boundary)
+    return {"boundary": boundary, "shift": params.shift, "axis": cast(Axis, params.axis)}
 
 
 def _with_room(side: int, cells: int) -> int:
@@ -276,6 +280,11 @@ def validate(params: Params) -> tuple[str, str] | None:
         compile_rule(params.rule)
     except ValueError as exc:
         return ("rule", str(exc))
+    try:
+        topology = Topology(cast(Boundary, params.boundary), params.shift, cast(Axis, params.axis))
+        topology.check(params.width, params.height)
+    except ValueError as exc:
+        return ("boundary", str(exc))
     pattern = params.pattern
     named = pattern in BUILTIN_NAMES or Path(pattern).expanduser().is_file()
     if params.init == "pattern" and not named:
@@ -303,7 +312,7 @@ class LifeLikeSim:
                 init=params.init,
                 density=params.density,
                 seed=params.seed,
-                boundary=_boundary(params),
+                **_topology(params),
             )
             return cls(life, params)
         measured = measure(params.pattern)
@@ -312,18 +321,14 @@ class LifeLikeSim:
         pattern_height, pattern_width = measured.cells.shape
         size = (_with_room(params.width, pattern_width), _with_room(params.height, pattern_height))
         rule = measured.rule or params.rule
-        life = LifeLike(
-            rule, size=size, init=place(measured.cells, size), boundary=_boundary(params)
-        )
+        life = LifeLike(rule, size=size, init=place(measured.cells, size), **_topology(params))
         return cls(life, params.replace(rule=rule, width=size[0], height=size[1]))
 
     def apply(self, params: LifeLikeSimParams) -> None:
-        """Rule and boundary in place: the cells stay."""
+        """Rule and topology in place: the cells stay."""
         state = np.asarray(self._life.state, dtype=np.uint8)
         height, width = state.shape
-        self._life = LifeLike(
-            params.rule, size=(width, height), init=state, boundary=_boundary(params)
-        )
+        self._life = LifeLike(params.rule, size=(width, height), init=state, **_topology(params))
         self.params = params
 
     # -- Simulation protocol ------------------------------------------------------------

@@ -44,6 +44,8 @@ class Elementary:
     ) -> None:
         if not 0 <= rule <= 255:
             raise ValueError(f"rule must be 0..255, got {rule}")
+        if boundary not in ("torus", "dead"):  # a tape has two ends, not a topology
+            raise ValueError(f"elementary boundary is 'torus' or 'dead', got {boundary!r}")
         width, height = size
         self._initial: NDArray[np.uint8] | None = None
         if isinstance(init, np.ndarray):

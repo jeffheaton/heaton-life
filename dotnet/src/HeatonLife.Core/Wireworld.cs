@@ -7,8 +7,8 @@ namespace HeatonLife
     /// Wireworld, Silverman (spec/wireworld.md). States: 0 empty, 1 electron head,
     /// 2 electron tail, 3 conductor. head -> tail; tail -> conductor; conductor -> head
     /// iff exactly 1 or 2 Moore neighbors are heads; empty stays empty. State is a flat
-    /// row-major byte grid; default boundary is dead (circuits rarely want a torus).
-    /// Bit-exact tier.
+    /// row-major byte grid; default boundary is dead (circuits rarely want a torus), and every
+    /// topology of spec/topology.md is allowed, read through the grid's halo. Bit-exact tier.
     /// </summary>
     public sealed class Wireworld : IIndexedFrameSource
     {
@@ -17,21 +17,38 @@ namespace HeatonLife
         public const byte Tail = 2;
         public const byte Conductor = 3;
 
+        private readonly Halo _halo; // the cells past the edges (spec/topology.md "The halo")
+        private readonly byte[] _padded; // the halo each generation reads
         private byte[] _cells;
         private byte[] _scratch;
 
         public int Width { get; }
         public int Height { get; }
-        public Boundary Boundary { get; }
+
+        /// <summary>The topology's boundary: <see cref="Topology"/>.Boundary.</summary>
+        public Boundary Boundary => Topology.Boundary;
+
+        /// <summary>How the grid's edges join (spec/topology.md).</summary>
+        public Topology Topology { get; }
+
         public int Generation { get; private set; }
 
         public ReadOnlySpan<byte> State => _cells;
 
         public Wireworld(int width, int height, Boundary boundary = Boundary.Dead)
+            : this(width, height, new Topology(boundary))
         {
+        }
+
+        /// <summary>A world on any topology (spec/topology.md), seeded with the clock; throws
+        /// <see cref="TopologyException"/> for a topology the size can't have.</summary>
+        public Wireworld(int width, int height, Topology topology)
+        {
+            _halo = new Halo(topology, width, height);
+            _padded = new byte[_halo.Length];
             Width = width;
             Height = height;
-            Boundary = boundary;
+            Topology = topology;
             _cells = new byte[width * height];
             _scratch = new byte[width * height];
             // The Python constructor's default init; throws (like Python) if the grid
@@ -41,10 +58,18 @@ namespace HeatonLife
 
         /// <summary>Construct directly from an explicit grid, mirroring Python's init=array.</summary>
         public Wireworld(int width, int height, ReadOnlySpan<byte> cells, Boundary boundary = Boundary.Dead)
+            : this(width, height, cells, new Topology(boundary))
         {
+        }
+
+        /// <summary>A world on any topology from an explicit grid, mirroring Python's init=array.</summary>
+        public Wireworld(int width, int height, ReadOnlySpan<byte> cells, Topology topology)
+        {
+            _halo = new Halo(topology, width, height);
+            _padded = new byte[_halo.Length];
             Width = width;
             Height = height;
-            Boundary = boundary;
+            Topology = topology;
             _cells = new byte[width * height];
             _scratch = new byte[width * height];
             SetState(cells);
@@ -260,10 +285,12 @@ namespace HeatonLife
 
         private void StepOnce()
         {
-            int w = Width, h = Height;
-            bool torus = Boundary == Boundary.Torus;
+            int w = Width, h = Height, stride = _halo.Columns;
+            byte[] p = _padded;
+            _halo.Fill(_cells, p, Empty);
             for (int y = 0; y < h; y++)
             {
+                int mid = (y + 1) * stride + 1; // the halo index of (0, y)
                 for (int x = 0; x < w; x++)
                 {
                     byte current = _cells[y * w + x];
@@ -282,19 +309,7 @@ namespace HeatonLife
                         for (int dy = -1; dy <= 1; dy++)
                             for (int dx = -1; dx <= 1; dx++)
                             {
-                                if (dy == 0 && dx == 0)
-                                    continue;
-                                int ny = y + dy, nx = x + dx;
-                                if (torus)
-                                {
-                                    ny = (ny + h) % h;
-                                    nx = (nx + w) % w;
-                                }
-                                else if (ny < 0 || ny >= h || nx < 0 || nx >= w)
-                                {
-                                    continue;
-                                }
-                                if (_cells[ny * w + nx] == Head)
+                                if ((dy != 0 || dx != 0) && p[mid + x + dy * stride + dx] == Head)
                                     heads++;
                             }
                         if (heads == 1 || heads == 2)
