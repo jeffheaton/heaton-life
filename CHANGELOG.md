@@ -5,7 +5,7 @@ number, and from 1.1.0 on each release ships both from one commit. Every entry a
 both unless it names a port. The spec version (the `spec_version` field of the conformance
 vectors) moves on its own; each release lists the one it implements.
 
-## 1.2.0 (2026-11-21)
+## 1.2.0 (unreleased)
 
 Implements spec version 0.16.0 (1.1.0 implemented 0.13.0). Every conformance vector that
 existed at 1.1.0 is byte-identical; the new behavior comes with new vector cases. The
