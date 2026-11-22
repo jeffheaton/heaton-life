@@ -245,6 +245,14 @@ and an RLE header naming any Life-like rule making the file two-state.
 - The new `hashlife-multistate/` vectors run Wireworld on the plane beside the grid
   family's own runs: a pattern evolves cell for cell as on a grid with dead edges,
   wherever the grid lies.
+- **Grid Advance Selection and Advance Outside can be canceled**
+  ([spec/patterns.md](spec/patterns.md) "Canceling"), as HashLife's always could:
+  .NET's `LifeLike`, `Wireworld` and `Cyclic` `AdvanceSelection` / `AdvanceOutside` take an
+  optional `CancellationToken`, polled every row, and Python's grid families gain
+  `cancel()`, honored between generations from another thread. A canceled advance throws
+  what a canceled HashLife step throws (`OperationCanceledException`, `StepCanceled`) and
+  leaves the world exactly as it was, so a host can offer Cancel instead of capping the
+  work. Without a cancel, every result is as before.
 
 ### Changed
 

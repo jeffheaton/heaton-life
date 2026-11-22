@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace HeatonLife
 {
@@ -15,7 +16,7 @@ namespace HeatonLife
     /// already hold that successor. State is a flat row-major byte grid in [0, States),
     /// toroidal by definition. Bit-exact tier.
     /// </summary>
-    public sealed class Cyclic : IIndexedFrameSource
+    public sealed class Cyclic : IIndexedFrameSource, IRegionWorld
     {
         private readonly (int Dy, int Dx)[] _offsets;
         private byte[] _cells;
@@ -175,24 +176,27 @@ namespace HeatonLife
         /// Advance Selection (spec/patterns.md "Editing a region"): the inclusive region evolves
         /// <paramref name="n"/> generations as if nothing else existed — a copy of the world blank
         /// outside it runs under the world's rule and boundary (a torus wraps), and its region is
-        /// copied back. Cells outside the region and <see cref="Generation"/> are untouched.
+        /// copied back. Cells outside the region and <see cref="Generation"/> are untouched. A
+        /// canceled <paramref name="cancellationToken"/> stops it promptly with
+        /// <see cref="OperationCanceledException"/> and leaves the world exactly as it was.
         /// </summary>
-        public void AdvanceSelection(int x0, int y0, int x1, int y1, int n = 1) => Advance(x0, y0, x1, y1, n, outside: false);
+        public void AdvanceSelection(
+            int x0, int y0, int x1, int y1, int n = 1, CancellationToken cancellationToken = default)
+            => GridRegion.Advance(this, Width, Height, x0, y0, x1, y1, n, outside: false, cancellationToken);
 
         /// <summary>
         /// Advance Outside: Advance Selection's mirror image. The world with the region blank runs
         /// <paramref name="n"/> generations and everything outside the region is copied back; the
-        /// region keeps its cells, and <see cref="Generation"/> stays.
+        /// region keeps its cells, and <see cref="Generation"/> stays. A canceled
+        /// <paramref name="cancellationToken"/> stops it as it does Advance Selection.
         /// </summary>
-        public void AdvanceOutside(int x0, int y0, int x1, int y1, int n = 1) => Advance(x0, y0, x1, y1, n, outside: true);
+        public void AdvanceOutside(
+            int x0, int y0, int x1, int y1, int n = 1, CancellationToken cancellationToken = default)
+            => GridRegion.Advance(this, Width, Height, x0, y0, x1, y1, n, outside: true, cancellationToken);
 
-        private void Advance(int x0, int y0, int x1, int y1, int n, bool outside)
-        {
-            byte[] saved = GridRegion.Isolate(_cells, Width, Height, x0, y0, x1, y1, n, outside);
-            for (int s = 0; s < n; s++)
-                StepOnce();
-            GridRegion.Merge(_cells, saved, Width, Height, x0, y0, x1, y1, outside);
-        }
+        byte[] IRegionWorld.Cells => _cells;
+
+        void IRegionWorld.StepOnce(CancellationToken cancellationToken) => StepOnce(cancellationToken);
 
         public void Step(int n = 1)
         {
@@ -219,11 +223,15 @@ namespace HeatonLife
             return frame;
         }
 
-        private void StepOnce()
+        private void StepOnce(CancellationToken cancellationToken = default)
         {
             int w = Width, h = Height;
             for (int y = 0; y < h; y++)
             {
+                // Polled each row, so even a big grid stops within a generation (spec/patterns.md
+                // "Canceling"); Step's default token is never canceled.
+                if (cancellationToken.IsCancellationRequested)
+                    throw GridRegion.Canceled(cancellationToken, Generation);
                 for (int x = 0; x < w; x++)
                 {
                     byte current = _cells[y * w + x];

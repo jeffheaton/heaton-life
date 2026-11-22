@@ -263,6 +263,19 @@ join their edges in the copy as they do in the world. On the whole grid, Advance
 Selection is n ordinary generations that leave the counter alone, and Advance Outside
 changes nothing.
 
+**Canceling.** A host can stop an advance from another thread, as it stops a
+[HashLife step](hashlife.md#cancellation): .NET passes a `CancellationToken` to
+`AdvanceSelection` or `AdvanceOutside`, and in Python another thread calls the world's
+`cancel()`. The advance stops between generations (.NET's grids poll within one too) and
+throws what a canceled HashLife step throws, `OperationCanceledException` in .NET and
+`StepCanceled` in Python, and the world is exactly as it was before the advance began: its
+cells, its generation, and its start, with no partial result for undo to repair.
+Cancellation never changes a result: an advance that runs to its end gives the same cells
+with a token or without one. As with HashLife, an advance of 0 generations checks nothing,
+and a Python `cancel()` reaches only an advance that is running; each advance starts by
+forgetting an earlier request. HashLife's own Advance Selection and Advance Outside cancel the
+same way and leave the universe as it was ([hashlife.md](hashlife.md#advancing-part-of-the-universe)).
+
 ## Built-in patterns
 
 Every implementation ships the same canonical set of built-in patterns —

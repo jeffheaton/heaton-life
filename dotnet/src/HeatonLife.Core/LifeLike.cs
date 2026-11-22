@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 namespace HeatonLife
 {
@@ -9,7 +10,7 @@ namespace HeatonLife
     /// Life-like rule (spec/rules.md), run through its 512-entry table, on any topology
     /// (spec/topology.md), read through the grid's halo.
     /// </summary>
-    public sealed class LifeLike : IIndexedFrameSource
+    public sealed class LifeLike : IIndexedFrameSource, IRegionWorld
     {
         private readonly byte[] _table; // next state by 3×3 neighborhood index (spec/rules.md)
         private readonly Halo _halo; // the cells past the edges (spec/topology.md "The halo")
@@ -173,24 +174,27 @@ namespace HeatonLife
         /// Advance Selection (spec/patterns.md "Editing a region"): the inclusive region evolves
         /// <paramref name="n"/> generations as if nothing else existed — a copy of the world blank
         /// outside it runs under the world's rule and boundary (a torus wraps), and its region is
-        /// copied back. Cells outside the region and <see cref="Generation"/> are untouched.
+        /// copied back. Cells outside the region and <see cref="Generation"/> are untouched. A
+        /// canceled <paramref name="cancellationToken"/> stops it promptly with
+        /// <see cref="OperationCanceledException"/> and leaves the world exactly as it was.
         /// </summary>
-        public void AdvanceSelection(int x0, int y0, int x1, int y1, int n = 1) => Advance(x0, y0, x1, y1, n, outside: false);
+        public void AdvanceSelection(
+            int x0, int y0, int x1, int y1, int n = 1, CancellationToken cancellationToken = default)
+            => GridRegion.Advance(this, Width, Height, x0, y0, x1, y1, n, outside: false, cancellationToken);
 
         /// <summary>
         /// Advance Outside: Advance Selection's mirror image. The world with the region blank runs
         /// <paramref name="n"/> generations and everything outside the region is copied back; the
-        /// region keeps its cells, and <see cref="Generation"/> stays.
+        /// region keeps its cells, and <see cref="Generation"/> stays. A canceled
+        /// <paramref name="cancellationToken"/> stops it as it does Advance Selection.
         /// </summary>
-        public void AdvanceOutside(int x0, int y0, int x1, int y1, int n = 1) => Advance(x0, y0, x1, y1, n, outside: true);
+        public void AdvanceOutside(
+            int x0, int y0, int x1, int y1, int n = 1, CancellationToken cancellationToken = default)
+            => GridRegion.Advance(this, Width, Height, x0, y0, x1, y1, n, outside: true, cancellationToken);
 
-        private void Advance(int x0, int y0, int x1, int y1, int n, bool outside)
-        {
-            byte[] saved = GridRegion.Isolate(_cells, Width, Height, x0, y0, x1, y1, n, outside);
-            for (int s = 0; s < n; s++)
-                StepOnce();
-            GridRegion.Merge(_cells, saved, Width, Height, x0, y0, x1, y1, outside);
-        }
+        byte[] IRegionWorld.Cells => _cells;
+
+        void IRegionWorld.StepOnce(CancellationToken cancellationToken) => StepOnce(cancellationToken);
 
         /// <summary>
         /// Random fill (spec/patterns.md "Editing a region"): the inclusive region becomes the soup
@@ -225,13 +229,17 @@ namespace HeatonLife
             return frame;
         }
 
-        private void StepOnce()
+        private void StepOnce(CancellationToken cancellationToken = default)
         {
             int w = Width, h = Height, stride = _halo.Columns;
             byte[] p = _padded;
             _halo.Fill(_cells, p, 0);
             for (int y = 0; y < h; y++)
             {
+                // Polled each row, so even a big grid stops within a generation (spec/patterns.md
+                // "Canceling"); Step's default token is never canceled.
+                if (cancellationToken.IsCancellationRequested)
+                    throw GridRegion.Canceled(cancellationToken, Generation);
                 // Halo indices of (0, y - 1), (0, y) and (0, y + 1): row y + 1 of the halo is the
                 // grid's row y, and its column x + 1 the grid's column x.
                 int up = y * stride + 1, mid = up + stride, down = mid + stride, row = y * w;
