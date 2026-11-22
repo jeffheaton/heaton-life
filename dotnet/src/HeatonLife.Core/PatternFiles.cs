@@ -60,21 +60,72 @@ namespace HeatonLife
         public PatternMetadata Metadata { get; }
     }
 
-    /// <summary>A pattern file read into a HashLife universe, with its format and metadata.</summary>
+    /// <summary>A pattern file read into a HashLife universe, with its format and metadata, and a
+    /// Macrocell timeline's frames (spec/formats.md "Reading into the unbounded universe").</summary>
     public sealed class PatternUniverse
     {
-        internal PatternUniverse(PatternFormat format, HashLife universe, PatternMetadata metadata)
+        internal PatternUniverse(
+            PatternFormat format, HashLife universe, PatternMetadata metadata,
+            IReadOnlyList<HashLifeSnapshot> frames, BigInteger? step)
         {
             Format = format;
             Universe = universe;
             Metadata = metadata;
+            Frames = frames;
+            Step = step;
         }
 
         public PatternFormat Format { get; }
 
+        /// <summary>The universe, at the file's own root and generation (a timeline's too).</summary>
         public HashLife Universe { get; }
 
         public PatternMetadata Metadata { get; }
+
+        /// <summary>A timeline's frames, snapshots of <see cref="Universe"/> in order (frame i at
+        /// generation Frames[0].Generation + i × <see cref="Step"/>); empty for any other file.</summary>
+        public IReadOnlyList<HashLifeSnapshot> Frames { get; }
+
+        /// <summary>A timeline's step, or null for a file that is no timeline.</summary>
+        public BigInteger? Step { get; }
+    }
+
+    /// <summary>
+    /// A pattern file read into a universe that exists (spec/formats.md "Reading into a universe
+    /// that exists"): its format, a snapshot of its cells and generation in that universe, its
+    /// rule in canonical form, its metadata, and a timeline's frames and step. The universe itself
+    /// is unchanged. The Python reference's heaton_life.ca.hashlife.PatternSnapshot.
+    /// </summary>
+    public sealed class PatternSnapshot
+    {
+        internal PatternSnapshot(
+            PatternFormat format, HashLifeSnapshot snapshot, string rule, PatternMetadata metadata,
+            IReadOnlyList<HashLifeSnapshot> frames, BigInteger? step)
+        {
+            Format = format;
+            Snapshot = snapshot;
+            Rule = rule;
+            Metadata = metadata;
+            Frames = frames;
+            Step = step;
+        }
+
+        public PatternFormat Format { get; }
+
+        /// <summary>The file's cells and generation, a snapshot of the universe it was read into.</summary>
+        public HashLifeSnapshot Snapshot { get; }
+
+        /// <summary>The file's rule in canonical form, B3/S23 when it names none.</summary>
+        public string Rule { get; }
+
+        public PatternMetadata Metadata { get; }
+
+        /// <summary>A timeline's frames, snapshots of the same universe in order; empty for any
+        /// other file.</summary>
+        public IReadOnlyList<HashLifeSnapshot> Frames { get; }
+
+        /// <summary>A timeline's step, or null for a file that is no timeline.</summary>
+        public BigInteger? Step { get; }
     }
 
     /// <summary>
@@ -188,7 +239,9 @@ namespace HeatonLife
         /// <summary>
         /// A two-state pattern file of any format in a HashLife universe (spec/formats.md
         /// "Reading into the unbounded universe"), placed as its format says; the rule is the
-        /// file's, or B3/S23 without one.
+        /// file's, or B3/S23 without one. A Macrocell file with a <c>#FRAMES</c> line is a timeline:
+        /// the result also gives its frames and step, and a malformed timeline throws
+        /// <see cref="FormatException"/>.
         /// </summary>
         public static PatternUniverse ReadUniverse(byte[] data, int maxMemoryMb = HashLife.DefaultMaxMemoryMb)
             => ReadUniverse(Recognize(data), maxMemoryMb);
@@ -196,6 +249,29 @@ namespace HeatonLife
         /// <summary>Text in a HashLife universe.</summary>
         public static PatternUniverse ReadUniverse(string text, int maxMemoryMb = HashLife.DefaultMaxMemoryMb)
             => ReadUniverse(Recognize(text), maxMemoryMb);
+
+        /// <summary>
+        /// A two-state pattern file of any format read into <paramref name="universe"/>'s own store
+        /// as a snapshot (spec/formats.md "Reading into a universe that exists"), with its format,
+        /// rule, metadata and a timeline's frames: read and refused as
+        /// <see cref="ReadUniverse(byte[], int)"/> reads and refuses it, while the universe's cells,
+        /// generation, rule and earlier snapshots stay as they were.
+        /// <see cref="HashLife.ReadSnapshot(byte[])"/> is the same.
+        /// </summary>
+        public static PatternSnapshot ReadSnapshot(HashLife universe, byte[] data)
+        {
+            if (universe == null)
+                throw new ArgumentNullException(nameof(universe));
+            return ReadSnapshot(universe, Recognize(data));
+        }
+
+        /// <summary>Text read into a universe that exists, as a snapshot.</summary>
+        public static PatternSnapshot ReadSnapshot(HashLife universe, string text)
+        {
+            if (universe == null)
+                throw new ArgumentNullException(nameof(universe));
+            return ReadSnapshot(universe, Recognize(text));
+        }
 
         // ---- detection ----------------------------------------------------------------------
 
@@ -696,30 +772,91 @@ namespace HeatonLife
 
         private static PatternUniverse ReadUniverse(Recognized found, int maxMemoryMb)
         {
+            var universe = new HashLife(maxMemoryMb: maxMemoryMb);
+            Reading read = ReadInto(universe, found);
+            universe.Rule = read.Rule;
+            universe.Adopt(read.Root, read.Level, read.Generation);
+            return new PatternUniverse(found.Format, universe, read.Metadata, Snapshots(universe, read), read.Step);
+        }
+
+        private static PatternSnapshot ReadSnapshot(HashLife universe, Recognized found)
+        {
+            Reading read = ReadInto(universe, found);
+            HashLifeSnapshot snapshot = universe.SnapshotAt(read.Root, read.Level, read.Generation);
+            return new PatternSnapshot(
+                found.Format, snapshot, read.Rule, read.Metadata, Snapshots(universe, read), read.Step);
+        }
+
+        private static IReadOnlyList<HashLifeSnapshot> Snapshots(HashLife universe, Reading read)
+        {
+            if (read.Frames == null)
+                return Array.Empty<HashLifeSnapshot>();
+            var frames = new HashLifeSnapshot[read.Frames.Count];
+            for (int i = 0; i < frames.Length; i++)
+            {
+                var (root, level, generation) = read.Frames[i];
+                frames[i] = universe.SnapshotAt(root, level, generation);
+            }
+            return frames;
+        }
+
+        /// <summary>A file read into a store: its tree, generation, rule, metadata, and a
+        /// timeline's step and frames, the universe not yet any of them.</summary>
+        private sealed class Reading
+        {
+            public int Root;
+            public int Level;
+            public BigInteger Generation;
+            public string Rule = "B3/S23";
+            public PatternMetadata Metadata = PatternMetadata.Empty;
+            public BigInteger? Step;
+            public List<(int Root, int Level, BigInteger Generation)>? Frames;
+        }
+
+        /// <summary>Read a two-state pattern file of any format into <paramref name="universe"/>'s
+        /// store, placed as its format says, without changing the universe's state or rule.</summary>
+        private static Reading ReadInto(HashLife universe, Recognized found)
+        {
             PatternFormat format = found.Format;
+            var read = new Reading();
             if (format == PatternFormat.Rle)
             {
-                HashLife rle = Patterns.RleToHashLife(found.Text!, maxMemoryMb);
-                return new PatternUniverse(format, rle, Patterns.RleMetadata(found.Text!));
+                (read.Root, read.Level, read.Generation, read.Rule) = Patterns.BuildRle(universe, found.Text!);
+                read.Metadata = Patterns.RleMetadata(found.Text!);
+                return read;
             }
             if (format == PatternFormat.Macrocell)
             {
-                HashLife mc = Macrocell.ReadWithMetadata(found.Text!, maxMemoryMb, out PatternMetadata metadata);
-                return new PatternUniverse(format, mc, metadata);
+                Macrocell.Built built = Macrocell.Build(universe, found.Text!);
+                var timeline = Macrocell.TimelineFrames(universe.Store, built);
+                read.Root = built.Root;
+                read.Level = built.Level;
+                read.Generation = built.Generation;
+                read.Rule = built.Rule;
+                read.Metadata = built.Metadata;
+                if (timeline != null)
+                {
+                    read.Step = timeline.Value.Step;
+                    read.Frames = timeline.Value.Frames;
+                }
+                return read;
             }
             if (format == PatternFormat.Png || format == PatternFormat.Bmp)
             {
                 byte[] image = format == PatternFormat.Png
                     ? PngGrid.DecodeLive(found.Data!, null, out int width, out int height)
                     : PatternImages.BmpLive(found.Data!, null, out width, out height);
-                var pictured = new HashLife(maxMemoryMb: maxMemoryMb);
-                pictured.SetRect(0, 0, image, width, height, HashLifePasteMode.Or);
-                return new PatternUniverse(format, pictured, PatternMetadata.Empty);
+                (read.Root, read.Level) = universe.Build(
+                    () => universe.SetRect(0, 0, image, width, height, HashLifePasteMode.Or));
+                return read;
             }
             LiveRuns live = Runs(found);
-            var universe = new HashLife(live.Rule ?? "B3/S23", maxMemoryMb);
-            Place(universe, live);
-            return new PatternUniverse(format, universe, live.Metadata);
+            // A file names its rule, never a preset (spec/formats.md "Reading into the unbounded
+            // universe"): the universe's rule check refuses one.
+            read.Rule = HashLife.CheckedRule(live.Rule ?? "B3/S23");
+            read.Metadata = live.Metadata;
+            (read.Root, read.Level) = universe.Build(() => Place(universe, live));
+            return read;
         }
 
         /// <summary>Paste live runs, refusing any cell outside the editing box (spec/hashlife.md).</summary>

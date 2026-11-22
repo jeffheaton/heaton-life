@@ -1,0 +1,73 @@
+{
+  "bounding_box": [
+    "2",
+    "2",
+    "4",
+    "4"
+  ],
+  "family": "formats",
+  "format": "macrocell",
+  "frames": [
+    {
+      "bounding_box": [
+        "-1",
+        "-1",
+        "1",
+        "1"
+      ],
+      "generation": "0",
+      "population": "5",
+      "state": "frame-0.mc"
+    },
+    {
+      "bounding_box": [
+        "0",
+        "0",
+        "2",
+        "2"
+      ],
+      "generation": "4",
+      "population": "5",
+      "state": "frame-1.mc"
+    },
+    {
+      "bounding_box": [
+        "1",
+        "1",
+        "3",
+        "3"
+      ],
+      "generation": "8",
+      "population": "5",
+      "state": "frame-2.mc"
+    },
+    {
+      "bounding_box": [
+        "2",
+        "2",
+        "4",
+        "4"
+      ],
+      "generation": "12",
+      "population": "5",
+      "state": "frame-3.mc"
+    }
+  ],
+  "generation": "12",
+  "input": "input.mc",
+  "kind": "universe",
+  "metadata": {
+    "author": null,
+    "comments": [
+      "Four frames."
+    ],
+    "name": "Glider"
+  },
+  "population": "5",
+  "rle": "with-metadata.rle",
+  "spec_version": "0.16.0",
+  "state": "state.mc",
+  "step": "4",
+  "tier": "bit-exact",
+  "with_metadata": "with-metadata.mc"
+}

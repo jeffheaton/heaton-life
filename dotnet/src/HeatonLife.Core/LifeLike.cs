@@ -120,6 +120,27 @@ namespace HeatonLife
             Generation = generation;
         }
 
+        /// <summary>
+        /// Load a 0/1 grid at a given generation (spec/README.md "A world's state and its start").
+        /// Without <paramref name="keepStart"/> it is <see cref="SetState(ReadOnlySpan{byte}, int)"/>:
+        /// the grid also becomes the start <see cref="Reset"/> returns to. With it the start stays
+        /// as it was and nothing is copied for it, so showing a saved frame or putting back an undo
+        /// point allocates nothing.
+        /// </summary>
+        public void SetState(ReadOnlySpan<byte> cells, int generation, bool keepStart)
+        {
+            if (!keepStart)
+            {
+                SetState(cells, generation);
+                return;
+            }
+            if (cells.Length != _cells.Length)
+                throw new ArgumentException($"expected {_cells.Length} cells, got {cells.Length}");
+            for (int i = 0; i < cells.Length; i++)
+                _cells[i] = (byte)(cells[i] > 0 ? 1 : 0);
+            Generation = generation;
+        }
+
         /// <summary>Paint one cell in place (0/1); does not reset the generation.</summary>
         public void SetCell(int x, int y, byte value)
         {

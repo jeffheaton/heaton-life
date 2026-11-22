@@ -1,0 +1,5 @@
+[M2]
+#FRAMES 3 0 1
+*$
+#FRAME 0 1
+#FRAME 2 1

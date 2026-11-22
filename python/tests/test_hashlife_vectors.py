@@ -1,7 +1,8 @@
 """HashLife conformance: replay vectors/hashlife/ — evolution checkpoints, Macrocell and
-RLE reading and canonical writing, and edit sequences. Every state is compared through its
-canonical Macrocell text (spec/macrocell.md), bit-exact. The .NET suite replays the same
-files."""
+RLE reading and canonical writing, edit sequences, and snapshot scripts (what snapshots
+hold, releasing them, files read into a universe that exists). Every state is compared
+through its canonical Macrocell text (spec/macrocell.md), bit-exact. The .NET suite replays
+the same files."""
 
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ from PIL import Image
 from heaton_life.ca.hashlife import (
     HashLife,
     LifeView,
+    Snapshot,
     cell_at,
     center_cell,
     centered,
@@ -26,6 +28,7 @@ from heaton_life.ca.hashlife import (
     resized,
     zoom_at,
 )
+from heaton_life.init import PatternMetadata
 
 VECTOR_ROOT = Path(__file__).resolve().parents[2] / "vectors" / "hashlife"
 CASES = sorted(VECTOR_ROOT.glob("*/params.json"))
@@ -41,6 +44,15 @@ _KEYS = {
     "edit": _COMMON | {"rule", "ops", "state", "state_sha256", "state_lines"} | _STATE,
     "view": _COMMON | {"operations"},
     "render": _COMMON | {"input", "generation", "frames"},
+    "snapshots": _COMMON | {"rule", "ops", "state", "state_sha256", "state_lines"} | _STATE,
+}
+# A snapshot script's own ops (spec 0.16.0); its other ops are the edit ops.
+_SNAPSHOT_OPS = {
+    "snapshot": {"op", "name"},
+    "release": {"op", "name"},
+    "restore": {"op", "name", "expect", "error"},
+    "read": {"op", "input", "name", "frames", "expect", "error"},
+    "measure": {"op", "names", "expect"},
 }
 
 
@@ -51,7 +63,7 @@ def _expect_state(case_dir: Path, u: HashLife, entry: dict[str, Any]) -> None:
     assert (None if box is None else [str(v) for v in box]) == entry["bounding_box"]
     text = u.to_macrocell()
     if "state" in entry:
-        assert text == (case_dir / entry["state"]).read_text()
+        assert text == (case_dir / entry["state"]).read_text(encoding="utf-8")
     else:
         assert text.count("\n") == entry["state_lines"]
         assert hashlib.sha256(text.encode("ascii")).hexdigest() == entry["state_sha256"]
@@ -127,14 +139,50 @@ def _check_view_op(op: dict[str, Any]) -> None:
     assert _view_result(op) == want, op
 
 
+def _snapshot_op(d: Path, u: HashLife, named: dict[str, Snapshot], op: dict[str, Any]) -> None:
+    """One op of a snapshot script (spec/hashlife.md "Vector encoding", ``snapshots``)."""
+    kind = op["op"]
+    if kind not in _SNAPSHOT_OPS:
+        _apply(u, op)
+        return
+    assert set(op) <= _SNAPSHOT_OPS[kind], set(op) - _SNAPSHOT_OPS[kind]
+    if kind == "snapshot":
+        named[op["name"]] = u.snapshot()
+    elif kind == "release":
+        named[op["name"]].release()
+    elif kind == "restore":
+        u.restore(named[op["name"]])
+        _expect_state(d, u, op["expect"])
+    elif kind == "read":
+        before = (u.to_macrocell(), u.generation, u.rule)
+        found = u.read_snapshot((d / op["input"]).read_bytes())
+        assert (u.to_macrocell(), u.generation, u.rule) == before  # a read never moves it
+        expect = op["expect"]
+        assert found.format == expect["format"]
+        assert found.rule == expect["rule"]
+        notes = expect["metadata"]
+        assert found.metadata == PatternMetadata(
+            notes["name"], notes["author"], tuple(notes["comments"])
+        )
+        assert (None if found.step is None else str(found.step)) == expect["step"]
+        named[op["name"]] = found.snapshot
+        named.update(zip(op["frames"], found.frames, strict=True))
+    else:  # measure
+        footprint = u.measure_snapshots([named[n] for n in op["names"]])
+        expect = op["expect"]
+        assert footprint.universe_nodes == expect["universe_nodes"], op
+        assert list(footprint.added) == expect["added"], op
+        assert footprint.nodes == expect["nodes"], op
+
+
 def test_hashlife_vectors_exist() -> None:
-    kinds = {json.loads(c.read_text())["kind"] for c in CASES}
+    kinds = {json.loads(c.read_text(encoding="utf-8"))["kind"] for c in CASES}
     assert kinds == set(_KEYS)
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda p: p.parent.name)
 def test_hashlife_vector(case: Path) -> None:
-    meta = json.loads(case.read_text())
+    meta = json.loads(case.read_text(encoding="utf-8"))
     d = case.parent
     kind = meta["kind"]
     assert meta["family"] == "hashlife" and meta["tier"] == "bit-exact"
@@ -146,7 +194,7 @@ def test_hashlife_vector(case: Path) -> None:
             u.step(int(entry["generation"]) - u.generation)
             _expect_state(d, u, entry)
     elif kind in ("macrocell", "rle"):
-        text = (d / meta["input"]).read_text()
+        text = (d / meta["input"]).read_text(encoding="utf-8")
         read = HashLife.from_macrocell if kind == "macrocell" else HashLife.from_rle
         if meta.get("error"):
             with pytest.raises(ValueError):
@@ -158,7 +206,7 @@ def test_hashlife_vector(case: Path) -> None:
             with pytest.raises(ValueError, match="Macrocell"):
                 u.to_rle()
         else:
-            assert u.to_rle() == (d / meta["rle"]).read_text()
+            assert u.to_rle() == (d / meta["rle"]).read_text(encoding="utf-8")
     elif kind == "view":
         for op in meta["operations"]:
             _check_view_op(op)
@@ -169,6 +217,18 @@ def test_hashlife_vector(case: Path) -> None:
             got = u.render(_view(frame["view"]), tuple(frame["size"]), frame["mode"])
             with Image.open(d / frame["file"]) as img:
                 assert np.array_equal(got, np.asarray(img.convert("L"))), frame
+    elif kind == "snapshots":
+        u = HashLife(meta["rule"])
+        named: dict[str, Snapshot] = {}
+        for op in meta["ops"]:
+            if op.get("error"):
+                before = (u.to_macrocell(), u.generation, u.rule)
+                with pytest.raises(ValueError):
+                    _snapshot_op(d, u, named, op)
+                assert (u.to_macrocell(), u.generation, u.rule) == before
+            else:
+                _snapshot_op(d, u, named, op)
+        _expect_state(d, u, meta)
     else:  # edit
         u = HashLife(meta["rule"])
         for op in meta["ops"]:

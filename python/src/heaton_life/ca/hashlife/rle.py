@@ -13,6 +13,7 @@ from heaton_life.ca.hashlife.universe import (
     DEFAULT_MEMORY_MB,
     EDIT_LIMIT,
     HashLife,
+    _hashlife_rule,
     check_box,
 )
 from heaton_life.core.decimal_text import digits_of
@@ -41,10 +42,21 @@ _RUNS = tuple(_byte_runs(b) for b in range(256))
 
 def read_rle(text: str, *, max_memory_mb: int = DEFAULT_MEMORY_MB) -> HashLife:
     """Build a universe from two-state RLE text."""
+    universe = HashLife(max_memory_mb=max_memory_mb)
+    root, level, generation, rule = build_rle(universe, text)
+    universe.rule = rule
+    universe._adopt(root, level, generation)
+    return universe
+
+
+def build_rle(universe: HashLife, text: str) -> tuple[int, int, int, str]:
+    """Read two-state RLE text into ``universe``'s store without changing the universe: the
+    pattern's tree as (root, level), its generation, and its rule in canonical form. A file
+    names its rule, never a preset (an RLE header preset already makes the file extended)."""
     info, runs = rle_runs(text)
     if info.extended:
         raise ValueError("HashLife reads two-state RLE only (this file is extended RLE)")
-    universe = HashLife(info.rule or "B3/S23", max_memory_mb=max_memory_mb)
+    rule = _hashlife_rule(info.rule or "B3/S23", presets=False)
     x0, y0 = info.position or (0, 0)
     blocks: dict[tuple[int, int], int] = {}
     width = height = 0
@@ -54,11 +66,16 @@ def read_rle(text: str, *, max_memory_mb: int = DEFAULT_MEMORY_MB) -> HashLife:
         width = max(width, x + length)
         height = max(height, y + 1)
         add_run(blocks, x0 + x, y0 + y - 1, length)  # tree row: one above the cell's y
+    rect = (x0, y0 - 1, x0 + width - 1, y0 + height - 2)
     if blocks:
         check_box(x0, y0, x0 + width - 1, y0 + height - 1)
-        universe._paste_blocks(blocks, (x0, y0 - 1, x0 + width - 1, y0 + height - 2), "or")
-    universe._generation = info.generation
-    return universe
+
+    def paste() -> None:
+        if blocks:
+            universe._paste_blocks(blocks, rect, "or")
+
+    root, level = universe._build(paste)
+    return root, level, info.generation, rule
 
 
 def add_run(blocks: dict[tuple[int, int], int], cx: int, ty: int, length: int) -> None:

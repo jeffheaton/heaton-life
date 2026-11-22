@@ -13,6 +13,7 @@ are well-known coordinates in it.
 from __future__ import annotations
 
 import dataclasses
+import operator
 
 import numpy as np
 from numpy.typing import NDArray
@@ -48,9 +49,7 @@ class GrayScottParams(Params):
     height: int = dataclasses.field(default=256, metadata={"min": 16, "max": 1024})
     init: str = dataclasses.field(default="spots", metadata={"choices": ["spots", "center"]})
     spots: int = dataclasses.field(default=20, metadata={"min": 1, "max": 200})
-    seed: int = dataclasses.field(
-        default=0, metadata={"min": 0, "max": 4294967295, "role": "seed"}
-    )
+    seed: int = dataclasses.field(default=0, metadata={"min": 0, "max": 4294967295, "role": "seed"})
 
 
 class GrayScott:
@@ -135,6 +134,26 @@ class GrayScott:
             raise ValueError(f"unknown init strategy: {p.init!r}")
         self._state = np.stack([u, v])
         self._generation = 0
+
+    def set_state(
+        self, state: NDArray[np.generic], generation: int = 0, *, keep_start: bool = False
+    ) -> None:
+        """Replace the state ((2, height, width): U, then V) and set the generation
+        (spec/README.md "A world's state and its start"). The state also becomes the start
+        ``reset()`` returns to (``init`` ``array``), unless ``keep_start``: then the start
+        stays as it was, and no copy of the state is kept for it."""
+        p = self.params
+        fields = np.array(state, dtype=np.float64)
+        if fields.shape != (2, p.height, p.width):
+            raise ValueError(
+                f"state shape {fields.shape} does not match (2, h={p.height}, w={p.width})"
+            )
+        generation = operator.index(generation)
+        if not keep_start:
+            self._initial = fields.copy()
+            self.params = p.replace(init="array")
+        self._state = fields
+        self._generation = generation
 
     def step(self, n: int = 1) -> None:
         p = self.params

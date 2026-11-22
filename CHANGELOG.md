@@ -85,7 +85,10 @@ makes the file two-state.
   (`#FRAMES` and `#FRAME` lines). `read_timeline` / `Macrocell.ReadTimeline` gives each
   frame as a snapshot of one universe; `write_timeline` / `Macrocell.WriteTimeline` writes
   a file from snapshots, canonically, with its root and `#G` set to the last frame so
-  readers without timelines load that.
+  readers without timelines load that. `read_universe` / `PatternFiles.ReadUniverse` give
+  a timeline file's frames too (`frames` and `step` on `PatternUniverse`), so one read
+  opens one, and refuse a malformed timeline as `read_timeline` does; the plain Macrocell
+  readers (`HashLife.from_macrocell`, `Macrocell.Read`) still skip timeline lines.
 
 - **Editing primitives** for selection and run tools ([spec/patterns.md](spec/patterns.md)
   "Extract and stamp" and "Editing a region", [spec/hashlife.md](spec/hashlife.md)
@@ -152,6 +155,32 @@ makes the file two-state.
   "Reasons"): the compiled rule, or the reason for the first problem in the text, such as
   `expected '/' after the birth counts`. Every reason is listed in the spec and gives the
   same text in both ports; compiling's error message carries the same reason.
+- **What snapshots hold, and letting them go** (`HashLife.measure_snapshots`, giving a
+  `SnapshotFootprint`, and `Snapshot.release`; .NET `HashLife.MeasureSnapshots` and
+  `HashLifeSnapshot.Release`; [spec/hashlife.md](spec/hashlife.md) "Snapshots", "What
+  snapshots hold"). The measure counts the nodes a list of snapshots holds in a universe's
+  store beyond its current state, and what each one adds to those before it. The counts
+  are exact and the same in both ports: a state's nodes are its canonical Macrocell node
+  lines. Each port adds its own estimate in bytes. With the list newest first, the last k
+  counts add up to what releasing those k snapshots frees, so an undo history can be held
+  to a byte budget. `release()` lets a snapshot's nodes go at the universe's next
+  collection, without waiting for the object to be dropped and, in .NET, found by the
+  managed collector.
+- **Reading a file into a universe that exists** (`HashLife.read_snapshot`, giving a
+  `PatternSnapshot`; .NET `HashLife.ReadSnapshot` and `PatternFiles.ReadSnapshot`;
+  [spec/formats.md](spec/formats.md) "Reading into a universe that exists"). Any file
+  `read_universe` reads goes into the universe's own store as a snapshot, with its
+  format, rule, metadata and a timeline's frames, and shares the nodes the store already
+  holds. The universe's state, rule and earlier snapshots stay as they were, so a host
+  can go back to a start that lives in a file and keep its undo history.
+- **A world's state without moving its start** ([spec/README.md](spec/README.md) "A
+  world's state and its start"): Python's grid families gain
+  `set_state(state, generation, keep_start=False)`, and .NET adds
+  `SetState(state, generation, keepStart)` and `StateCodec.Load(sim, bytes, generation,
+  keepStart)`. By default the state also becomes the start that Reset returns to, as
+  .NET's `SetState` always made it. With `keep_start` the start stays and nothing is
+  copied for it, so a host that shows a timeline frame or puts back an undo point leaves
+  Reset where it was. .NET allocates nothing doing it.
 
 ### Changed
 
@@ -199,6 +228,8 @@ makes the file two-state.
 - Python: generations and positions of any length read and write. CPython refuses to
   convert integers past 4,300 digits, so a Macrocell `#G` or an RLE `#CXRLE Gen` that long
   failed in Python but not in .NET.
+- .NET: `Wireworld.SetState` and `Cyclic.SetState` check every value before they write
+  any, so a refused grid changes nothing. They used to write the cells before the bad one.
 
 ## 1.1.0 (2026-09-25)
 

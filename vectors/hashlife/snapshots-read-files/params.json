@@ -1,0 +1,324 @@
+{
+  "bounding_box": [
+    "0",
+    "0",
+    "2",
+    "2"
+  ],
+  "family": "hashlife",
+  "generation": "0",
+  "kind": "snapshots",
+  "ops": [
+    {
+      "cells": [
+        ".*.",
+        "..*",
+        "***"
+      ],
+      "mode": "copy",
+      "op": "set_rect",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "name": "start",
+      "op": "snapshot"
+    },
+    {
+      "n": "100",
+      "op": "step"
+    },
+    {
+      "expect": {
+        "format": "rle",
+        "metadata": {
+          "author": null,
+          "comments": [],
+          "name": "Glider"
+        },
+        "rule": "B3/S23",
+        "step": null
+      },
+      "frames": [],
+      "input": "glider.rle",
+      "name": "glider-file",
+      "op": "read"
+    },
+    {
+      "expect": {
+        "added": [
+          1,
+          0
+        ],
+        "nodes": 1,
+        "universe_nodes": 4
+      },
+      "names": [
+        "start",
+        "glider-file"
+      ],
+      "op": "measure"
+    },
+    {
+      "expect": {
+        "format": "macrocell",
+        "metadata": {
+          "author": null,
+          "comments": [
+            "Here in HighLife."
+          ],
+          "name": "Gosper glider gun"
+        },
+        "rule": "B36/S23",
+        "step": null
+      },
+      "frames": [],
+      "input": "gun.mc",
+      "name": "gun-file",
+      "op": "read"
+    },
+    {
+      "expect": {
+        "format": "macrocell",
+        "metadata": {
+          "author": null,
+          "comments": [],
+          "name": "Three frames"
+        },
+        "rule": "B3/S23",
+        "step": "4"
+      },
+      "frames": [
+        "frame-0",
+        "frame-1",
+        "frame-2"
+      ],
+      "input": "timeline.mc.gz",
+      "name": "timeline-file",
+      "op": "read"
+    },
+    {
+      "expect": {
+        "added": [
+          3,
+          0,
+          3,
+          3
+        ],
+        "nodes": 9,
+        "universe_nodes": 4
+      },
+      "names": [
+        "timeline-file",
+        "frame-2",
+        "frame-1",
+        "frame-0"
+      ],
+      "op": "measure"
+    },
+    {
+      "expect": {
+        "format": "plaintext",
+        "metadata": {
+          "author": null,
+          "comments": [],
+          "name": "Blinker"
+        },
+        "rule": "B3/S23",
+        "step": null
+      },
+      "frames": [],
+      "input": "blinker.cells",
+      "name": "blinker-file",
+      "op": "read"
+    },
+    {
+      "expect": {
+        "format": "life-1.06",
+        "metadata": {
+          "author": null,
+          "comments": [],
+          "name": null
+        },
+        "rule": "B3/S23",
+        "step": null
+      },
+      "frames": [],
+      "input": "far.lif",
+      "name": "far-file",
+      "op": "read"
+    },
+    {
+      "expect": {
+        "format": "png",
+        "metadata": {
+          "author": null,
+          "comments": [],
+          "name": null
+        },
+        "rule": "B3/S23",
+        "step": null
+      },
+      "frames": [],
+      "input": "picture.png",
+      "name": "picture-file",
+      "op": "read"
+    },
+    {
+      "error": true,
+      "input": "b0.lif",
+      "op": "read"
+    },
+    {
+      "error": true,
+      "input": "extended.rle",
+      "op": "read"
+    },
+    {
+      "error": true,
+      "input": "broken-timeline.mc",
+      "op": "read"
+    },
+    {
+      "expect": {
+        "added": [
+          1,
+          0,
+          19,
+          2,
+          3,
+          3,
+          0,
+          1,
+          70,
+          1
+        ],
+        "nodes": 100,
+        "universe_nodes": 4
+      },
+      "names": [
+        "start",
+        "glider-file",
+        "gun-file",
+        "timeline-file",
+        "frame-0",
+        "frame-1",
+        "frame-2",
+        "blinker-file",
+        "far-file",
+        "picture-file"
+      ],
+      "op": "measure"
+    },
+    {
+      "expect": {
+        "bounding_box": [
+          "-18",
+          "-4",
+          "17",
+          "4"
+        ],
+        "generation": "5",
+        "population": "36",
+        "state": "restore-15.mc"
+      },
+      "name": "gun-file",
+      "op": "restore"
+    },
+    {
+      "expect": {
+        "bounding_box": [
+          "11",
+          "11",
+          "13",
+          "13"
+        ],
+        "generation": "4",
+        "population": "5",
+        "state": "restore-16.mc"
+      },
+      "name": "frame-1",
+      "op": "restore"
+    },
+    {
+      "expect": {
+        "bounding_box": [
+          "-1000000000",
+          "0",
+          "1000000000",
+          "1000000000"
+        ],
+        "generation": "0",
+        "population": "3",
+        "state": "restore-17.mc"
+      },
+      "name": "far-file",
+      "op": "restore"
+    },
+    {
+      "expect": {
+        "bounding_box": [
+          "1",
+          "1",
+          "3",
+          "1"
+        ],
+        "generation": "0",
+        "population": "3",
+        "state": "restore-18.mc"
+      },
+      "name": "picture-file",
+      "op": "restore"
+    },
+    {
+      "expect": {
+        "bounding_box": [
+          "0",
+          "0",
+          "2",
+          "0"
+        ],
+        "generation": "0",
+        "population": "3",
+        "state": "restore-19.mc"
+      },
+      "name": "blinker-file",
+      "op": "restore"
+    },
+    {
+      "expect": {
+        "bounding_box": [
+          "0",
+          "0",
+          "2",
+          "2"
+        ],
+        "generation": "0",
+        "population": "5",
+        "state": "restore-20.mc"
+      },
+      "name": "glider-file",
+      "op": "restore"
+    },
+    {
+      "expect": {
+        "bounding_box": [
+          "0",
+          "0",
+          "2",
+          "2"
+        ],
+        "generation": "0",
+        "population": "5",
+        "state": "restore-21.mc"
+      },
+      "name": "start",
+      "op": "restore"
+    }
+  ],
+  "population": "5",
+  "rule": "B3/S23",
+  "spec_version": "0.16.0",
+  "state": "final.mc",
+  "tier": "bit-exact"
+}

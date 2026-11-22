@@ -12,8 +12,9 @@ namespace HeatonLife.Tests
 {
     /// <summary>
     /// HashLife conformance: replay vectors/hashlife/ — evolution checkpoints, Macrocell and RLE
-    /// reading and canonical writing, edit sequences, view arithmetic, and rendered frames
-    /// (spec/hashlife.md "Vector encoding"). Every state is compared through its canonical
+    /// reading and canonical writing, edit sequences, view arithmetic, rendered frames, and
+    /// snapshot scripts: what snapshots hold, releasing them, files read into a universe that
+    /// exists (spec/hashlife.md "Vector encoding"). Every state is compared through its canonical
     /// Macrocell text, byte for byte or by SHA-256 and line count. As strict as the Python
     /// runner (python/tests/test_hashlife_vectors.py): an unknown key, kind, or spec_version
     /// fails the case.
@@ -38,8 +39,19 @@ namespace HeatonLife.Tests
                 ["edit"] = Of(common, new[] { "rule", "ops" }, stored, state),
                 ["view"] = Of(common, new[] { "operations" }),
                 ["render"] = Of(common, new[] { "input", "generation", "frames" }),
+                ["snapshots"] = Of(common, new[] { "rule", "ops" }, stored, state),
             };
         }
+
+        /// <summary>A snapshot script's own ops (spec 0.16.0); its other ops are the edit ops.</summary>
+        private static readonly Dictionary<string, HashSet<string>> SnapshotOps = new Dictionary<string, HashSet<string>>
+        {
+            ["snapshot"] = new HashSet<string> { "op", "name" },
+            ["release"] = new HashSet<string> { "op", "name" },
+            ["restore"] = new HashSet<string> { "op", "name", "expect", "error" },
+            ["read"] = new HashSet<string> { "op", "input", "name", "frames", "expect", "error" },
+            ["measure"] = new HashSet<string> { "op", "names", "expect" },
+        };
 
         private static string Root => Path.Combine(TestPaths.VectorRoot(), "hashlife");
 
@@ -157,6 +169,28 @@ namespace HeatonLife.Tests
                             else
                             {
                                 Apply(u, op);
+                            }
+                        }
+                        ExpectState(dir, u, meta);
+                        break;
+                    }
+                case "snapshots":
+                    {
+                        var u = new HashLife(meta.GetProperty("rule").GetString()!);
+                        var named = new Dictionary<string, HashLifeSnapshot>();
+                        foreach (JsonElement op in meta.GetProperty("ops").EnumerateArray())
+                        {
+                            if (op.TryGetProperty("error", out JsonElement error) && error.GetBoolean())
+                            {
+                                var before = (u.ToMacrocell(), u.Generation, u.Rule);
+                                Exception e = Assert.ThrowsAny<Exception>(() => SnapshotOp(dir, u, named, op));
+                                Assert.True(
+                                    e is ArgumentException || e is FormatException || e is InvalidOperationException, e.ToString());
+                                Assert.Equal(before, (u.ToMacrocell(), u.Generation, u.Rule));
+                            }
+                            else
+                            {
+                                SnapshotOp(dir, u, named, op);
                             }
                         }
                         ExpectState(dir, u, meta);
@@ -295,6 +329,63 @@ namespace HeatonLife.Tests
                     }
                 default:
                     throw new InvalidDataException($"unknown op {op.GetProperty("op").GetString()}");
+            }
+        }
+
+        /// <summary>One op of a snapshot script (spec/hashlife.md "Vector encoding", snapshots).</summary>
+        private static void SnapshotOp(string dir, HashLife u, Dictionary<string, HashLifeSnapshot> named, JsonElement op)
+        {
+            string kind = op.GetProperty("op").GetString()!;
+            if (!SnapshotOps.TryGetValue(kind, out HashSet<string>? keys))
+            {
+                Apply(u, op);
+                return;
+            }
+            foreach (JsonProperty property in op.EnumerateObject())
+                Assert.True(keys.Contains(property.Name), $"unknown key {property.Name} in {kind}");
+            switch (kind)
+            {
+                case "snapshot":
+                    named[op.GetProperty("name").GetString()!] = u.Snapshot();
+                    break;
+                case "release":
+                    named[op.GetProperty("name").GetString()!].Release();
+                    break;
+                case "restore":
+                    u.Restore(named[op.GetProperty("name").GetString()!]);
+                    ExpectState(dir, u, op.GetProperty("expect"));
+                    break;
+                case "read":
+                    {
+                        var before = (u.ToMacrocell(), u.Generation, u.Rule);
+                        PatternSnapshot found = u.ReadSnapshot(File.ReadAllBytes(Path.Combine(dir, op.GetProperty("input").GetString()!)));
+                        Assert.Equal(before, (u.ToMacrocell(), u.Generation, u.Rule)); // a read never moves it
+                        JsonElement expect = op.GetProperty("expect");
+                        Assert.Equal(expect.GetProperty("format").GetString(), PatternFiles.FormatName(found.Format));
+                        Assert.Equal(expect.GetProperty("rule").GetString(), found.Rule);
+                        Assert.Equal(FormatConformanceTests.Metadata(expect.GetProperty("metadata")), found.Metadata);
+                        JsonElement step = expect.GetProperty("step");
+                        Assert.Equal(step.ValueKind == JsonValueKind.Null ? null : step.GetString(), found.Step?.ToString());
+                        named[op.GetProperty("name").GetString()!] = found.Snapshot;
+                        string[] frames = op.GetProperty("frames").EnumerateArray().Select(f => f.GetString()!).ToArray();
+                        Assert.Equal(frames.Length, found.Frames.Count);
+                        for (int i = 0; i < frames.Length; i++)
+                            named[frames[i]] = found.Frames[i];
+                        break;
+                    }
+                default: // measure
+                    {
+                        var listed = op.GetProperty("names").EnumerateArray().Select(n => named[n.GetString()!]).ToList();
+                        SnapshotFootprint footprint = u.MeasureSnapshots(listed);
+                        JsonElement expect = op.GetProperty("expect");
+                        Assert.Equal(expect.GetProperty("universe_nodes").GetInt64(), footprint.UniverseNodes);
+                        Assert.Equal(
+                            expect.GetProperty("added").EnumerateArray().Select(a => a.GetInt64()).ToArray(),
+                            footprint.Added.ToArray());
+                        Assert.Equal(expect.GetProperty("nodes").GetInt64(), footprint.Nodes);
+                        Assert.Equal(footprint.Nodes * 40, footprint.EstimatedBytes);
+                        break;
+                    }
             }
         }
 

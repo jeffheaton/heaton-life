@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import operator
 from typing import cast
 
 import numpy as np
@@ -103,6 +104,27 @@ class LifeLike(AdvanceRegion):
             raise ValueError(f"unknown init strategy: {p.init!r}")
         self._state = state
         self._generation = 0
+
+    def set_state(
+        self, state: NDArray[np.generic], generation: int = 0, *, keep_start: bool = False
+    ) -> None:
+        """Replace the state, nonzero cells alive, and set the generation (spec/README.md
+        "A world's state and its start"). The state also becomes the start ``reset()``
+        returns to (``init`` ``array``), unless ``keep_start``: then the start stays as it
+        was, and no copy of the state is kept for it."""
+        p = self.params
+        cells = np.asarray(state)
+        if cells.shape != (p.height, p.width):
+            raise ValueError(
+                f"state shape {cells.shape} does not match (h={p.height}, w={p.width})"
+            )
+        cells = (cells > 0).astype(np.uint8)
+        generation = operator.index(generation)
+        if not keep_start:
+            self._initial = cells.copy()
+            self.params = p.replace(init="array")
+        self._state = cells
+        self._generation = generation
 
     def step(self, n: int = 1) -> None:
         boundary = cast(Boundary, self.params.boundary)

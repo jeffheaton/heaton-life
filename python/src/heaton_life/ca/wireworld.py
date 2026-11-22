@@ -9,6 +9,7 @@ rarely want a torus).
 from __future__ import annotations
 
 import dataclasses
+import operator
 from typing import cast
 
 import numpy as np
@@ -89,9 +90,7 @@ class Wireworld(AdvanceRegion):
             init_name = "array"
         else:
             init_name = init
-        self.params = WireworldParams(
-            width=width, height=height, init=init_name, boundary=boundary
-        )
+        self.params = WireworldParams(width=width, height=height, init=init_name, boundary=boundary)
         self._generation = 0
         self._state: NDArray[np.uint8]
         self.reset()
@@ -116,6 +115,29 @@ class Wireworld(AdvanceRegion):
         else:
             raise ValueError(f"unknown init strategy: {p.init!r}")
         self._generation = 0
+
+    def set_state(
+        self, state: NDArray[np.generic], generation: int = 0, *, keep_start: bool = False
+    ) -> None:
+        """Replace the state (values 0 to 3) and set the generation (spec/README.md "A
+        world's state and its start"). The state also becomes the start ``reset()`` returns
+        to (``init`` ``array``), unless ``keep_start``: then the start stays as it was, and
+        no copy of the state is kept for it."""
+        p = self.params
+        cells = np.asarray(state)
+        if cells.shape != (p.height, p.width):
+            raise ValueError(
+                f"state shape {cells.shape} does not match (h={p.height}, w={p.width})"
+            )
+        if cells.max(initial=0) > CONDUCTOR:
+            raise ValueError("wireworld state has values > 3")
+        cells = cells.astype(np.uint8)
+        generation = operator.index(generation)
+        if not keep_start:
+            self._initial = cells.copy()
+            self.params = p.replace(init="array")
+        self._state = cells
+        self._generation = generation
 
     def step(self, n: int = 1) -> None:
         boundary = cast(Boundary, self.params.boundary)

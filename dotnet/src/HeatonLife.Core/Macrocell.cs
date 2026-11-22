@@ -46,14 +46,14 @@ namespace HeatonLife
         /// lines (spec/macrocell.md "Metadata").</summary>
         internal static HashLife ReadWithMetadata(string text, int maxMemoryMb, out PatternMetadata metadata)
         {
-            Parsed parsed = Parse(text, maxMemoryMb);
-            metadata = parsed.Metadata;
-            return parsed.Universe;
+            var (universe, built) = Parse(text, maxMemoryMb);
+            metadata = built.Metadata;
+            return universe;
         }
 
         /// <summary>A file's lines read once: every node line as (value, level), <c>#G</c>, the
         /// metadata, and the timeline lines left for the timeline reader.</summary>
-        private class NodeLines
+        internal class NodeLines
         {
             public PatternMetadata Metadata = PatternMetadata.Empty;
             public BigInteger Generation = BigInteger.Zero;
@@ -63,15 +63,13 @@ namespace HeatonLife
             public readonly List<(int Number, string Line)> FrameLines = new List<(int, string)>();
         }
 
-        /// <summary>A file read into a universe, at its root and <c>#G</c>.</summary>
-        private sealed class Parsed : NodeLines
+        /// <summary>A file's tree built in a universe's store, which it hasn't become: its root
+        /// placed by tree coordinates, and its rule in canonical form (B3/S23 without <c>#R</c>).</summary>
+        internal sealed class Built : NodeLines
         {
-            public Parsed(HashLife universe)
-            {
-                Universe = universe;
-            }
-
-            public HashLife Universe { get; }
+            public int Root;
+            public int Level;
+            public string Rule = "B3/S23";
         }
 
         /// <summary>Where a file's nodes of level 3 and up go, as ids: a universe's store, or the
@@ -91,17 +89,18 @@ namespace HeatonLife
             void Rule(string text);
         }
 
-        /// <summary>A file's nodes in a universe's store, its <c>#R</c> the universe's rule.</summary>
+        /// <summary>A file's nodes in a universe's store, its <c>#R</c> kept as the file's rule in
+        /// canonical form (the universe's own rule is the caller's to set).</summary>
         private sealed class StoreNodes : INodes
         {
-            private readonly HashLife _universe;
             private readonly HashLifeStore _store;
 
-            public StoreNodes(HashLife universe)
+            public StoreNodes(HashLifeStore store)
             {
-                _universe = universe;
-                _store = universe.Store;
+                _store = store;
             }
+
+            public string Canonical = "B3/S23";
 
             public long Leaf(ulong bits) => _store.Leaf(bits);
 
@@ -109,7 +108,7 @@ namespace HeatonLife
 
             public long Join(long nw, long ne, long sw, long se, int level) => _store.Join((int)nw, (int)ne, (int)sw, (int)se);
 
-            public void Rule(string text) => _universe.Rule = text;
+            public void Rule(string text) => Canonical = HashLife.CheckedRule(text);
         }
 
         /// <summary>A file's nodes as their live cells' boxes, each relative to its node's top-left
@@ -230,17 +229,32 @@ namespace HeatonLife
             return (root, level);
         }
 
-        private static Parsed Parse(string text, int maxMemoryMb)
+        /// <summary>A file read into a new universe, left at the file's root, <c>#G</c> and rule.</summary>
+        private static (HashLife Universe, Built Built) Parse(string text, int maxMemoryMb)
+        {
+            var universe = new HashLife(maxMemoryMb: maxMemoryMb);
+            Built built = Build(universe, text);
+            universe.Rule = built.Rule;
+            universe.Adopt(built.Root, built.Level, built.Generation);
+            return (universe, built);
+        }
+
+        /// <summary>
+        /// Read Macrocell text into <paramref name="universe"/>'s store without changing the
+        /// universe: its root, level, generation and rule stay. Malformed text throws
+        /// <see cref="FormatException"/>.
+        /// </summary>
+        internal static Built Build(HashLife universe, string text)
         {
             List<string> lines = TextLines.Split(text);
             int start = HeaderLine(lines);
-            var universe = new HashLife(maxMemoryMb: maxMemoryMb);
-            var parsed = new Parsed(universe);
-            ReadLines(lines, start, new StoreNodes(universe), parsed);
-            var (root, rootLevel) = NormalizeRoot(
-                universe.Store, parsed.Values[parsed.Values.Count - 1], parsed.Levels[parsed.Levels.Count - 1]);
-            universe.Adopt(root, rootLevel, parsed.Generation);
-            return parsed;
+            var nodes = new StoreNodes(universe.Store);
+            var built = new Built();
+            ReadLines(lines, start, nodes, built);
+            (built.Root, built.Level) = NormalizeRoot(
+                universe.Store, built.Values[built.Values.Count - 1], built.Levels[built.Levels.Count - 1]);
+            built.Rule = nodes.Canonical;
+            return built;
         }
 
         /// <summary>The index of the <c>[M2]</c> header line, after any blank lines.</summary>
@@ -566,9 +580,26 @@ namespace HeatonLife
         {
             if (text == null)
                 throw new ArgumentNullException(nameof(text));
-            Parsed parsed = Parse(text, maxMemoryMb);
+            var (universe, built) = Parse(text, maxMemoryMb);
+            var timeline = TimelineFrames(universe.Store, built)
+                ?? throw new FormatException("not a timeline: the file has no #FRAMES line");
+            var frames = new List<HashLifeSnapshot>(timeline.Frames.Count);
+            foreach (var (root, level, generation) in timeline.Frames)
+                frames.Add(universe.SnapshotAt(root, level, generation));
+            return new MacrocellTimeline(universe, frames, timeline.Step, built.Metadata);
+        }
+
+        /// <summary>
+        /// A file's timeline (spec/macrocell.md "Timelines"): its step, and each frame's root as
+        /// (node, level, generation) in order, placed in <paramref name="store"/> as a file's root
+        /// is; or null for a file without a <c>#FRAMES</c> line. A malformed timeline throws
+        /// <see cref="FormatException"/>.
+        /// </summary>
+        internal static (BigInteger Step, List<(int Root, int Level, BigInteger Generation)> Frames)? TimelineFrames(
+            HashLifeStore store, NodeLines parsed)
+        {
             if (parsed.FramesLines.Count == 0)
-                throw new FormatException("not a timeline: the file has no #FRAMES line");
+                return null;
             if (parsed.FramesLines.Count > 1)
                 throw new FormatException($"line {parsed.FramesLines[1].Number}: a second #FRAMES line");
             var (number, line) = parsed.FramesLines[0];
@@ -603,15 +634,14 @@ namespace HeatonLife
                     missing++;
                 throw new FormatException($"the timeline has no #FRAME line for frame {missing}");
             }
-            HashLife universe = parsed.Universe;
-            var frames = new List<HashLifeSnapshot>();
+            var frames = new List<(int Root, int Level, BigInteger Generation)>();
             for (int i = 0; i < (int)count; i++)
             {
                 int node = (int)refs[i] - 1;
-                var (root, level) = NormalizeRoot(universe.Store, parsed.Values[node], parsed.Levels[node]);
-                frames.Add(universe.SnapshotAt(root, level, first + i * step));
+                var (root, level) = NormalizeRoot(store, parsed.Values[node], parsed.Levels[node]);
+                frames.Add((root, level, first + i * step));
             }
-            return new MacrocellTimeline(universe, frames, step, parsed.Metadata);
+            return (step, frames);
         }
 
         private static BigInteger Number(string text, int number, string what)
@@ -711,6 +741,8 @@ namespace HeatonLife
             {
                 if (frame == null || !ReferenceEquals(frame.Owner, universe))
                     throw new ArgumentException("every frame must be a snapshot of the universe being written", nameof(frames));
+                if (frame.Released)
+                    throw new ArgumentException("a released snapshot holds no cells to write", nameof(frames));
             }
             BigInteger step = frames.Count > 1 ? frames[1].Generation - frames[0].Generation : BigInteger.One;
             for (int i = 1; i < frames.Count; i++)

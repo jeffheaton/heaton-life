@@ -1,0 +1,8 @@
+{
+  "error": true,
+  "family": "formats",
+  "input": "input.mc",
+  "kind": "universe",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

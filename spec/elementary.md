@@ -13,6 +13,12 @@ restored from its tape alone reopens with a blank diagram. The .NET `StateCodec`
 therefore stores `tape ‖ diagram` for elementary (and still loads tape-only saves);
 conformance vectors compare tapes only, as below.
 
+`set_state` ([README.md](README.md#a-worlds-state-and-its-start)) takes the diagram with
+the tape (`height` rows of `width` cells, each taken as 0 or 1). Given the tape alone, the
+diagram restarts from it: the tape sits in row `min(max(generation, 0), height − 1)`,
+where a world stepped to that generation holds it, and every other row is blank. Either
+way `reset()` replays the start with a fresh diagram, the tape in row 0.
+
 ## Gather / Respond / Integrate
 
 For each cell, form `index = left<<2 | center<<1 | right`; the next value is bit `index`

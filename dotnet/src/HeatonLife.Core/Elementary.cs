@@ -142,6 +142,59 @@ namespace HeatonLife
             Generation = generation;
         }
 
+        /// <summary>
+        /// Load a tape at a given generation, its diagram restarted from it as
+        /// <see cref="SetState(ReadOnlySpan{byte}, int)"/> restarts it (spec/README.md "A world's
+        /// state and its start"; spec/elementary.md "State"). Without <paramref name="keepStart"/>
+        /// it is that overload: the tape also becomes the start <see cref="Reset"/> returns to. With
+        /// it the start stays as it was and nothing is copied for it.
+        /// </summary>
+        public void SetState(ReadOnlySpan<byte> tape, int generation, bool keepStart)
+        {
+            if (!keepStart)
+            {
+                SetState(tape, generation);
+                return;
+            }
+            CheckTape(tape);
+            for (int i = 0; i < tape.Length; i++)
+                _tape[i] = (byte)(tape[i] > 0 ? 1 : 0);
+            Array.Clear(_diagram, 0, _diagram.Length);
+            Array.Copy(_tape, 0, _diagram, TapeRow(generation) * Width, Width);
+            Generation = generation;
+        }
+
+        /// <summary>
+        /// Load a tape and its space-time diagram at a given generation (spec/README.md "A world's
+        /// state and its start"; spec/elementary.md "State"). Without <paramref name="keepStart"/>
+        /// it is <see cref="SetState(ReadOnlySpan{byte}, ReadOnlySpan{byte}, int)"/>: the tape also
+        /// becomes the start <see cref="Reset"/> returns to. With it the start stays as it was and
+        /// nothing is copied for it, so showing a saved frame allocates nothing.
+        /// </summary>
+        public void SetState(ReadOnlySpan<byte> tape, ReadOnlySpan<byte> diagram, int generation, bool keepStart)
+        {
+            if (!keepStart)
+            {
+                SetState(tape, diagram, generation);
+                return;
+            }
+            CheckTape(tape);
+            if (diagram.Length != _diagram.Length)
+                throw new ArgumentException(
+                    $"expected {_diagram.Length} diagram cells, got {diagram.Length}");
+            for (int i = 0; i < tape.Length; i++)
+                _tape[i] = (byte)(tape[i] > 0 ? 1 : 0);
+            for (int i = 0; i < diagram.Length; i++)
+                _diagram[i] = (byte)(diagram[i] > 0 ? 1 : 0);
+            Generation = generation;
+        }
+
+        private void CheckTape(ReadOnlySpan<byte> tape)
+        {
+            if (tape.Length != Width)
+                throw new ArgumentException($"expected {Width} cells, got {tape.Length}");
+        }
+
         /// <summary>The diagram row that holds the tape at a given generation.</summary>
         private int TapeRow(int generation) => Math.Min(Math.Max(generation, 0), Height - 1);
 

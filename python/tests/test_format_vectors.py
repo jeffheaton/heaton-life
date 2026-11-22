@@ -1,7 +1,7 @@
-"""Pattern file conformance: replay vectors/formats/ — every format read into a grid and into
-the unbounded universe, measured without a grid, detection, metadata read and written, and
-Macrocell timelines (spec/formats.md, spec/macrocell.md). Bit-exact; the .NET suite replays
-the same files."""
+"""Pattern file conformance: replay vectors/formats/ — every format read into a grid, into a
+new unbounded universe and into one that exists, measured without a grid, detection,
+metadata read and written, and Macrocell timelines (spec/formats.md, spec/macrocell.md).
+Bit-exact; the .NET suite replays the same files."""
 
 from __future__ import annotations
 
@@ -34,6 +34,7 @@ _KEYS = {
     | {"metadata", "grid", "canonical"},
     "universe": _COMMON
     | {"input", "error", "format", "metadata", "with_metadata", "rle", "rle_error"}
+    | {"frames", "step"}
     | _STATE,
     "detect": _COMMON | {"inputs"},
     "measure": _COMMON
@@ -61,7 +62,7 @@ def _expect_state(case_dir: Path, u: HashLife, entry: dict[str, Any]) -> None:
     assert (None if box is None else [str(v) for v in box]) == entry["bounding_box"]
     text = u.to_macrocell()
     if "state" in entry:
-        assert text == (case_dir / entry["state"]).read_text()
+        assert text == (case_dir / entry["state"]).read_text(encoding="utf-8")
     else:
         assert text.count("\n") == entry["state_lines"]
         assert hashlib.sha256(text.encode("ascii")).hexdigest() == entry["state_sha256"]
@@ -123,6 +124,13 @@ def test_format_vector(case: Path) -> None:
         else:
             rle = found.universe.to_rle(found.metadata)
             assert rle == (d / meta["rle"]).read_text(encoding="utf-8")
+        if "frames" in meta:  # a timeline: the universe at the file's root, and its frames
+            assert found.step == int(meta["step"])
+            for frame, entry in zip(found.frames, meta["frames"], strict=True):
+                found.universe.restore(frame)
+                _expect_state(d, found.universe, entry)
+        else:
+            assert found.frames == () and found.step is None
     elif kind == "measure":
         data = (d / meta["input"]).read_bytes()
         if meta.get("error"):
@@ -149,9 +157,14 @@ def test_format_vector(case: Path) -> None:
                 assert detect_format(data) == entry["format"], data
     elif kind == "timeline-read":
         text = (d / meta["input"]).read_text(encoding="utf-8")
+        # A file with a #FRAMES line is a timeline to the reader by content too.
+        framed = any(line.strip().startswith("#FRAMES") for line in text.splitlines())
         if meta.get("error"):
             with pytest.raises(ValueError):
                 read_timeline(text)
+            if framed:
+                with pytest.raises(ValueError):
+                    read_universe(text)
             return
         timeline = read_timeline(text)
         assert len(timeline.frames) == meta["count"]
@@ -162,6 +175,12 @@ def test_format_vector(case: Path) -> None:
         for frame, entry in zip(timeline.frames, meta["frames"], strict=True):
             timeline.universe.restore(frame)
             _expect_state(d, timeline.universe, entry)
+        found = read_universe(text)
+        assert found.step == timeline.step
+        _expect_state(d, found.universe, meta["universe"])
+        for frame, entry in zip(found.frames, meta["frames"], strict=True):
+            found.universe.restore(frame)
+            _expect_state(d, found.universe, entry)
     else:  # timeline-write
         universe = read_universe((d / meta["input"]).read_bytes()).universe
         frames = []
@@ -175,3 +194,42 @@ def test_format_vector(case: Path) -> None:
         for frame, entry in zip(timeline.frames, meta["frames"], strict=True):
             timeline.universe.restore(frame)
             _expect_state(d, timeline.universe, entry)
+
+
+UNIVERSE_CASES = [
+    c for c in CASES if json.loads(c.read_text(encoding="utf-8"))["kind"] == "universe"
+]
+
+
+@pytest.mark.parametrize("case", UNIVERSE_CASES, ids=lambda p: p.parent.name)
+def test_read_snapshot_reads_as_the_universe_case(case: Path) -> None:
+    """spec/formats.md "Reading into a universe that exists": every universe case's file,
+    read into a universe that already holds a state and a snapshot, is accepted or refused
+    as the case says, restores to the case's states, and leaves that universe as it was."""
+    meta = json.loads(case.read_text(encoding="utf-8"))
+    d = case.parent
+    data = (d / meta["input"]).read_bytes()
+    host = HashLife("B36/S23")
+    host.set_rect(3, -2, np.array([[0, 1, 0], [0, 0, 1], [1, 1, 1]], np.uint8))
+    host.step(7)
+    kept = host.snapshot()
+    host.step(5)
+    before = (host.to_macrocell(), host.generation, host.rule)
+    if meta.get("error"):
+        with pytest.raises(ValueError):
+            host.read_snapshot(data)
+        assert (host.to_macrocell(), host.generation, host.rule) == before
+        return
+    found = host.read_snapshot(data)
+    assert (host.to_macrocell(), host.generation, host.rule) == before
+    assert found.format == meta["format"]
+    assert found.metadata == _metadata(meta["metadata"])
+    assert found.step == (int(meta["step"]) if "step" in meta else None)
+    host.rule = found.rule  # the case's states carry the file's rule
+    host.restore(found.snapshot)
+    _expect_state(d, host, meta)
+    for frame, entry in zip(found.frames, meta.get("frames", []), strict=True):
+        host.restore(frame)
+        _expect_state(d, host, entry)
+    host.restore(kept)  # a snapshot taken before the read still restores
+    assert host.generation == 7

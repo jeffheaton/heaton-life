@@ -17,6 +17,7 @@ oriented triangles from the raw state.
 from __future__ import annotations
 
 import dataclasses
+import operator
 
 import numpy as np
 from numpy.typing import NDArray
@@ -27,8 +28,17 @@ from heaton_life.core.rng import Pcg32
 FloatArray = NDArray[np.float64]
 
 # Rasterization kernel: center bright, cross and diagonals dimmer.
-_DOT = [(0, 0, 1.0), (-1, 0, 0.55), (1, 0, 0.55), (0, -1, 0.55), (0, 1, 0.55),
-        (-1, -1, 0.3), (-1, 1, 0.3), (1, -1, 0.3), (1, 1, 0.3)]
+_DOT = [
+    (0, 0, 1.0),
+    (-1, 0, 0.55),
+    (1, 0, 0.55),
+    (0, -1, 0.55),
+    (0, 1, 0.55),
+    (-1, -1, 0.3),
+    (-1, 1, 0.3),
+    (1, -1, 0.3),
+    (1, 1, 0.3),
+]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -64,9 +74,7 @@ class BoidsParams(Params):
     )
     boundary: str = dataclasses.field(default="wrap", metadata={"choices": ["wrap", "bounce"]})
     init: str = dataclasses.field(default="random", metadata={"choices": ["random"]})
-    seed: int = dataclasses.field(
-        default=0, metadata={"min": 0, "max": 4294967295, "role": "seed"}
-    )
+    seed: int = dataclasses.field(default=0, metadata={"min": 0, "max": 4294967295, "role": "seed"})
 
 
 class Boids:
@@ -193,6 +201,26 @@ class Boids:
             raise ValueError(f"unknown init strategy: {p.init!r}")
         self._generation = 0
 
+    def set_state(
+        self, state: NDArray[np.generic], generation: int = 0, *, keep_start: bool = False
+    ) -> None:
+        """Replace the state ((count, 2 · dimensions): positions, then velocities) and set the
+        generation (spec/README.md "A world's state and its start"). The state also becomes
+        the start ``reset()`` returns to (``init`` ``array``), unless ``keep_start``: then the
+        start stays as it was, and no copy of the state is kept for it."""
+        p = self.params
+        flock = np.array(state, dtype=np.float64)
+        if flock.shape != (p.count, 2 * p.dimensions):
+            raise ValueError(
+                f"state shape {flock.shape} does not match ({p.count}, {2 * p.dimensions})"
+            )
+        generation = operator.index(generation)
+        if not keep_start:
+            self._initial = flock.copy()
+            self.params = p.replace(init="array")
+        self._state = flock
+        self._generation = generation
+
     def step(self, n: int = 1) -> None:
         for _ in range(n):
             self._state = _step_once(self._state, self.params)
@@ -254,7 +282,9 @@ class Boids:
         }
 
 
-def _steer(direction: FloatArray, vel: FloatArray, max_speed: float, max_force: float) -> FloatArray:
+def _steer(
+    direction: FloatArray, vel: FloatArray, max_speed: float, max_force: float
+) -> FloatArray:
     """Reynolds steering: desired = normalize(direction)*max_speed; clip force."""
     norm = np.sqrt((direction**2).sum(axis=1, keepdims=True))
     has = norm > 0.0

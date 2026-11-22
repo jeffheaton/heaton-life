@@ -7,6 +7,7 @@ the canonical way to *look* at these — a clean example of state != frame.
 from __future__ import annotations
 
 import dataclasses
+import operator
 
 import numpy as np
 from numpy.typing import NDArray
@@ -23,12 +24,8 @@ class ElementaryParams(Params):
         default=256, metadata={"min": 8, "max": 4096, "label": "Diagram Rows"}
     )
     init: str = dataclasses.field(default="single", metadata={"choices": ["single", "soup"]})
-    density: float = dataclasses.field(
-        default=0.5, metadata={"min": 0.0, "max": 1.0, "step": 0.01}
-    )
-    seed: int = dataclasses.field(
-        default=0, metadata={"min": 0, "max": 4294967295, "role": "seed"}
-    )
+    density: float = dataclasses.field(default=0.5, metadata={"min": 0.0, "max": 1.0, "step": 0.01})
+    seed: int = dataclasses.field(default=0, metadata={"min": 0, "max": 4294967295, "role": "seed"})
     boundary: str = dataclasses.field(default="torus", metadata={"choices": ["torus", "dead"]})
 
 
@@ -103,6 +100,43 @@ class Elementary:
         self._diagram = np.zeros((p.height, p.width), dtype=np.uint8)
         self._diagram[0] = tape
         self._generation = 0
+
+    def set_state(
+        self,
+        tape: NDArray[np.generic],
+        generation: int = 0,
+        *,
+        diagram: NDArray[np.generic] | None = None,
+        keep_start: bool = False,
+    ) -> None:
+        """Replace the tape, nonzero cells alive, and set the generation (spec/README.md "A
+        world's state and its start"; spec/elementary.md "State"). The space-time diagram is
+        ``diagram`` when given, else it restarts from the tape, which sits in the row a world
+        stepped to that generation holds it in. The tape also becomes the start ``reset()``
+        returns to (``init`` ``array``), unless ``keep_start``: then the start stays as it
+        was, and no copy of the tape is kept for it."""
+        p = self.params
+        cells = np.asarray(tape)
+        if cells.shape != (p.width,):
+            raise ValueError(f"tape shape {cells.shape} does not match (width={p.width},)")
+        cells = (cells > 0).astype(np.uint8)
+        generation = operator.index(generation)
+        if diagram is None:
+            picture = np.zeros((p.height, p.width), dtype=np.uint8)
+            picture[min(max(generation, 0), p.height - 1)] = cells
+        else:
+            picture = np.asarray(diagram)
+            if picture.shape != (p.height, p.width):
+                raise ValueError(
+                    f"diagram shape {picture.shape} does not match (h={p.height}, w={p.width})"
+                )
+            picture = (picture > 0).astype(np.uint8)
+        if not keep_start:
+            self._initial = cells.copy()
+            self.params = p.replace(init="array")
+        self._tape = cells
+        self._diagram = picture
+        self._generation = generation
 
     def step(self, n: int = 1) -> None:
         p = self.params

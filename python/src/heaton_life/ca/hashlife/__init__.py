@@ -5,7 +5,12 @@ and jumps any number of generations. Editing reaches |x|, |y| ≤ 10⁹ (``EDIT_
 queries and rendering reach everywhere. Trees stop at level 512 (``MAX_LEVEL``).
 """
 
-from heaton_life.ca.hashlife.files import PatternUniverse, read_universe
+from heaton_life.ca.hashlife.files import (
+    PatternSnapshot,
+    PatternUniverse,
+    read_snapshot,
+    read_universe,
+)
 from heaton_life.ca.hashlife.macrocell import MacrocellTimeline, read_timeline, write_timeline
 from heaton_life.ca.hashlife.render import RENDER_MODES, RenderMode
 from heaton_life.ca.hashlife.universe import (
@@ -19,6 +24,7 @@ from heaton_life.ca.hashlife.universe import (
     HashLifeParams,
     PasteMode,
     Snapshot,
+    SnapshotFootprint,
     StepCanceled,
 )
 from heaton_life.ca.hashlife.view import (
@@ -48,9 +54,11 @@ __all__ = [
     "LifeView",
     "MacrocellTimeline",
     "PasteMode",
+    "PatternSnapshot",
     "PatternUniverse",
     "RenderMode",
     "Snapshot",
+    "SnapshotFootprint",
     "StepCanceled",
     "cell_at",
     "center_cell",
@@ -58,6 +66,7 @@ __all__ = [
     "fit",
     "frame_map",
     "pan",
+    "read_snapshot",
     "read_timeline",
     "read_universe",
     "resized",

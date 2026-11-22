@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 
 namespace HeatonLife
 {
@@ -24,7 +25,7 @@ namespace HeatonLife
     /// </summary>
     public static class StateCodec
     {
-        /// <summary>Serialize a world's raw state. Round-trips through <see cref="Load"/>.</summary>
+        /// <summary>Serialize a world's raw state. Round-trips through <see cref="Load(ISimulation, byte[], int)"/>.</summary>
         public static byte[] Save(ISimulation sim)
         {
             switch (sim)
@@ -45,26 +46,52 @@ namespace HeatonLife
 
         /// <summary>
         /// Restore bytes produced by <see cref="Save"/> into a world of the same
-        /// family and dimensions, at the given generation.
+        /// family and dimensions, at the given generation. The state also becomes the
+        /// world's start, the one Reset returns to.
         /// </summary>
         public static void Load(ISimulation sim, byte[] bytes, int generation)
+            => Load(sim, bytes, generation, keepStart: false);
+
+        /// <summary>
+        /// Restore bytes produced by <see cref="Save"/> into a world of the same family and
+        /// dimensions, at the given generation (spec/README.md "A world's state and its
+        /// start"). With <paramref name="keepStart"/> the world's start stays as it was and
+        /// nothing is copied for it: how a host shows a timeline frame or puts back an undo
+        /// point, Reset still going to the world's own start. On a little-endian host (every
+        /// one .NET and Unity run on today) that path allocates nothing, the double families'
+        /// bytes read in place.
+        /// </summary>
+        public static void Load(ISimulation sim, byte[] bytes, int generation, bool keepStart)
         {
             if (bytes == null)
                 throw new ArgumentNullException(nameof(bytes));
             switch (sim)
             {
-                case LifeLike life: life.SetState(bytes, generation); break;
-                case Cyclic cyclic: cyclic.SetState(bytes, generation); break;
-                case Wireworld wire: wire.SetState(bytes, generation); break;
-                case MergeLife merge: merge.SetState(bytes, generation); break;
-                case Elementary elementary: LoadElementary(elementary, bytes, generation); break;
-                case GrayScott gray: gray.SetState(BytesToDoubles(bytes), generation); break;
-                case LeniaBase lenia: lenia.SetState(BytesToDoubles(bytes), generation); break;
-                case Boids boids: boids.SetState(BytesToDoubles(bytes), generation); break;
+                case LifeLike life: life.SetState(bytes, generation, keepStart); break;
+                case Cyclic cyclic: cyclic.SetState(bytes, generation, keepStart); break;
+                case Wireworld wire: wire.SetState(bytes, generation, keepStart); break;
+                case MergeLife merge: merge.SetState(bytes, generation, keepStart); break;
+                case Elementary elementary: LoadElementary(elementary, bytes, generation, keepStart); break;
+                case GrayScott gray: gray.SetState(Doubles(bytes), generation, keepStart); break;
+                case LeniaBase lenia: lenia.SetState(Doubles(bytes), generation, keepStart); break;
+                case Boids boids: boids.SetState(Doubles(bytes), generation, keepStart); break;
                 default:
                     throw new ArgumentException(
                         $"no state restorer for {sim.GetType().Name}", nameof(sim));
             }
+        }
+
+        /// <summary>The doubles <see cref="DoubleBytes"/> wrote: read in place on a little-endian
+        /// host, where the explicit little-endian layout is the memory layout (span copies move
+        /// bytes, so alignment never matters), and decoded into a new array elsewhere.</summary>
+        private static ReadOnlySpan<double> Doubles(byte[] bytes)
+        {
+            if (!BitConverter.IsLittleEndian)
+                return BytesToDoubles(bytes);
+            if (bytes.Length % 8 != 0)
+                throw new ArgumentException(
+                    $"expected a multiple of 8 bytes, got {bytes.Length}", nameof(bytes));
+            return MemoryMarshal.Cast<byte, double>(new ReadOnlySpan<byte>(bytes));
         }
 
         /// <summary>
@@ -85,19 +112,19 @@ namespace HeatonLife
         }
 
         /// <summary>Accepts both layouts: tape only (what 1.0.0 writes) or tape + diagram (1.1.0 on).</summary>
-        private static void LoadElementary(Elementary sim, byte[] bytes, int generation)
+        private static void LoadElementary(Elementary sim, byte[] bytes, int generation, bool keepStart)
         {
             int width = sim.Width;
             int full = width + sim.Diagram.Length;
             if (bytes.Length == width)
             {
-                sim.SetState(bytes, generation);
+                sim.SetState(bytes, generation, keepStart);
                 return;
             }
             if (bytes.Length != full)
                 throw new ArgumentException(
                     $"expected {width} (tape) or {full} (tape + diagram) bytes, got {bytes.Length}");
-            sim.SetState(bytes.AsSpan(0, width), bytes.AsSpan(width), generation);
+            sim.SetState(bytes.AsSpan(0, width), bytes.AsSpan(width), generation, keepStart);
         }
 
         /// <summary>IEEE-754 doubles as explicit little-endian bytes (8 per value).</summary>

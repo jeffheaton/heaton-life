@@ -978,6 +978,11 @@ def main() -> None:
     # -- A file names its rule, never a preset (spec/formats.md, spec/macrocell.md) -------
     write_preset_rule_cases()
 
+    # -- Snapshots: what they hold, releasing them, a file read into a universe that exists;
+    #    a timeline's frames from the reader by content (spec/hashlife.md, spec/formats.md)
+    write_snapshot_cases()
+    write_universe_timeline_cases()
+
     print("done")
 
 
@@ -6886,6 +6891,441 @@ def write_preset_rule_cases() -> None:
     refused("life105-preset-rule", "universe", life105, "#R highlife", "#R 23/36", "lif")
     rle = "x = 3, y = 3, rule = life\nbo$2bo$3o!\n"
     refused("rle-preset-rule", "universe", rle, "rule = life", "rule = B3/S23", "rle")
+
+
+# -- snapshots: what they hold, releasing them, files read into a universe that exists -------
+
+SNAPSHOTS_SPEC_VERSION = "0.16.0"
+
+_GUN_RLE = (
+    "24bo$22bobo$12b2o6b2o12b2o$11bo3bo4b2o12b2o$2o8bo5bo3b2o$2o8bo3bob2o4bobo$"
+    "10bo5bo7bo$11bo3bo$12b2o!"
+)
+
+
+def _rle_rows(body: str) -> list[str]:
+    """A two-state RLE body as rows of '.' and '*', for a `set_rect` op."""
+    cells, _ = rle_decode(f"x = 0, y = 0\n{body}\n")
+    return ["".join("*" if v else "." for v in row) for row in np.asarray(cells)]
+
+
+def _hashlife_entry(d: Path, u: Any, label: str) -> dict[str, Any]:
+    """A universe's state pinned as spec/hashlife.md "Vector encoding" pins one."""
+    text = u.to_macrocell()
+    box = u.bounding_box()
+    entry: dict[str, Any] = {
+        "generation": decimal_text.digits_of(u.generation),
+        "population": decimal_text.digits_of(u.population),
+        "bounding_box": None if box is None else [_signed_text(v) for v in box],
+    }
+    if len(text) <= _HASHLIFE_INLINE_BYTES:
+        (d / f"{label}.mc").write_text(text, encoding="utf-8", newline="\n")
+        entry["state"] = f"{label}.mc"
+    else:
+        entry["state_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        entry["state_lines"] = text.count("\n")
+    return entry
+
+
+def write_snapshot_cases() -> None:
+    """Snapshots (spec/hashlife.md "Snapshots", "What snapshots hold"; spec/formats.md
+    "Reading into a universe that exists"), under vectors/hashlife/snapshots-*: scripts of
+    edits, steps, snapshots, releases, restores, files read into the universe and node counts.
+    Every count is checked here against the nodes the canonical Macrocell texts write, keyed
+    by level and cells across texts, so the counts rest on the spec's definition alone."""
+    import gzip
+
+    from heaton_life.ca.hashlife import HashLife, Snapshot, write_timeline
+    from heaton_life.init import PatternMetadata
+
+    root = VECTOR_ROOT / "hashlife"
+    content_ids: dict[Any, int] = {}
+
+    def node_ids(text: str) -> set[int]:
+        """The nodes a canonical Macrocell text writes, each as an id for its level and
+        cells, shared across texts; the empty universe's lone `$` is no node."""
+        local: list[int] = []
+        for line in text.splitlines()[1:]:
+            if line.startswith("#"):
+                continue
+            if line[0] in ".*$":
+                key: Any = ("leaf", line)
+            else:
+                level, *kids = (int(field) for field in line.split())
+                key = (level, tuple(0 if k == 0 else local[k - 1] for k in kids))
+            local.append(content_ids.setdefault(key, len(content_ids) + 1))
+        ids = set(local)
+        ids.discard(content_ids.get(("leaf", "$"), -1))
+        return ids
+
+    def text_of(u: HashLife, snapshot: Snapshot) -> str:
+        saved = u.snapshot()
+        u.restore(snapshot)
+        text = u.to_macrocell()
+        u.restore(saved)
+        saved.release()
+        return text
+
+    def notes(m: PatternMetadata) -> dict[str, Any]:
+        return {"name": m.name, "author": m.author, "comments": list(m.comments)}
+
+    def edit(u: HashLife, op: dict[str, Any]) -> None:
+        kind = op["op"]
+        if kind == "set_cell":
+            u.set_cell(op["x"], op["y"], op["alive"])
+        elif kind == "set_rect":
+            cells = np.array([[c == "*" for c in row] for row in op["cells"]], np.uint8)
+            u.set_rect(op["x"], op["y"], cells, op["mode"])
+        elif kind == "clear_rect":
+            u.clear_rect(op["x0"], op["y0"], op["x1"], op["y1"])
+        elif kind == "fill_random":
+            u.fill_random(op["x0"], op["y0"], op["x1"], op["y1"], op["density"], op["seed"])
+        elif kind == "step":
+            u.step(int(op["n"]))
+        elif kind == "clear":
+            u.clear()
+        elif kind == "set_generation":
+            u.set_generation(int(op["n"]))
+        else:
+            raise AssertionError(kind)
+
+    def script(name: str, rule: str, ops: list[dict[str, Any]], files: dict[str, bytes]) -> None:
+        d = root / f"snapshots-{name}"
+        d.mkdir(parents=True, exist_ok=True)
+        for file_name, data in files.items():
+            (d / file_name).write_bytes(data)
+        u = HashLife(rule)
+        named: dict[str, Snapshot] = {}
+        for index, op in enumerate(ops):
+            kind = op["op"]
+            before = (u.to_macrocell(), u.generation, u.rule)
+            try:
+                if kind == "snapshot":
+                    named[op["name"]] = u.snapshot()
+                elif kind == "release":
+                    named[op["name"]].release()
+                elif kind == "restore":
+                    u.restore(named[op["name"]])
+                    op["expect"] = _hashlife_entry(d, u, f"restore-{index}")
+                elif kind == "read":
+                    found = u.read_snapshot((d / op["input"]).read_bytes())
+                    assert (u.to_macrocell(), u.generation, u.rule) == before, op
+                    assert len(found.frames) == len(op["frames"]), op
+                    named[op["name"]] = found.snapshot
+                    named.update(zip(op["frames"], found.frames, strict=True))
+                    op["expect"] = {
+                        "format": found.format,
+                        "rule": found.rule,
+                        "metadata": notes(found.metadata),
+                        "step": None if found.step is None else str(found.step),
+                    }
+                elif kind == "measure":
+                    listed = [named[n] for n in op["names"]]
+                    footprint = u.measure_snapshots(listed)
+                    seen = node_ids(u.to_macrocell())
+                    assert footprint.universe_nodes == len(seen), op
+                    for snapshot, count in zip(listed, footprint.added, strict=True):
+                        ids = set() if snapshot.released else node_ids(text_of(u, snapshot))
+                        assert count == len(ids - seen), op
+                        seen |= ids
+                    assert footprint.nodes == sum(footprint.added), op
+                    op["expect"] = {
+                        "universe_nodes": footprint.universe_nodes,
+                        "added": list(footprint.added),
+                        "nodes": footprint.nodes,
+                    }
+                else:
+                    edit(u, op)
+            except ValueError:
+                assert op.get("error"), op
+                assert (u.to_macrocell(), u.generation, u.rule) == before, op
+            else:
+                assert not op.get("error"), op
+        meta: dict[str, Any] = {
+            "spec_version": SNAPSHOTS_SPEC_VERSION,
+            "family": "hashlife",
+            "tier": "bit-exact",
+            "kind": "snapshots",
+            "rule": rule,
+            "ops": ops,
+        }
+        meta.update(_hashlife_entry(d, u, "final"))
+        _gap_save(d, meta)
+
+    gun = _rle_rows(_GUN_RLE)
+    glider = _rle_rows("bo$2bo$3o!")
+
+    # A gun's history: the gun is the same every 30 generations and its stream only grows,
+    # so later points add little; listed newest first, the counts add up from the oldest.
+    script(
+        "gun-history",
+        "B3/S23",
+        [
+            {"op": "set_rect", "x": -18, "y": -4, "mode": "copy", "cells": gun},
+            {"op": "snapshot", "name": "gen-0"},
+            {"op": "step", "n": "30"},
+            {"op": "snapshot", "name": "gen-30"},
+            {"op": "step", "n": "30"},
+            {"op": "snapshot", "name": "gen-60"},
+            {"op": "step", "n": "30"},
+            {"op": "snapshot", "name": "gen-90"},
+            {"op": "measure", "names": []},
+            {"op": "measure", "names": ["gen-90", "gen-60", "gen-30", "gen-0"]},
+            {"op": "measure", "names": ["gen-0", "gen-30", "gen-60", "gen-90"]},
+            {"op": "measure", "names": ["gen-60", "gen-60"]},
+            {"op": "release", "name": "gen-0"},
+            {"op": "release", "name": "gen-0"},
+            {"op": "measure", "names": ["gen-90", "gen-60", "gen-30", "gen-0"]},
+            {"op": "restore", "name": "gen-0", "error": True},
+            {"op": "restore", "name": "gen-30"},
+            {"op": "measure", "names": ["gen-90", "gen-60"]},
+            {"op": "step", "n": "1000"},
+            {"op": "measure", "names": ["gen-90", "gen-60", "gen-30"]},
+        ],
+        {},
+    )
+
+    # Edits change a few nodes of a soup: each point adds only the nodes on its edits' paths.
+    script(
+        "soup-edits",
+        "B3/S23",
+        [
+            {
+                "op": "fill_random",
+                "x0": -40,
+                "y0": -30,
+                "x1": 39,
+                "y1": 29,
+                "density": 0.4,
+                "seed": 9,
+            },
+            {"op": "snapshot", "name": "soup"},
+            {"op": "set_cell", "x": 30, "y": 20, "alive": False},
+            {"op": "set_cell", "x": 31, "y": 20, "alive": True},
+            {"op": "snapshot", "name": "two-cells"},
+            {"op": "clear_rect", "x0": -5, "y0": -5, "x1": 5, "y1": 5},
+            {"op": "snapshot", "name": "hole"},
+            {"op": "step", "n": "64"},
+            {"op": "snapshot", "name": "later"},
+            {"op": "set_generation", "n": "0"},
+            {"op": "measure", "names": ["later", "hole", "two-cells", "soup"]},
+            {"op": "measure", "names": ["soup", "two-cells", "hole", "later"]},
+            {"op": "restore", "name": "two-cells"},
+            {"op": "measure", "names": ["soup", "hole", "later"]},
+        ],
+        {},
+    )
+
+    # The empty universe has no nodes; one cell is a leaf under a level-4 root.
+    script(
+        "empty-and-released",
+        "B36/S23",
+        [
+            {"op": "snapshot", "name": "empty"},
+            {"op": "measure", "names": ["empty"]},
+            {"op": "set_cell", "x": 5, "y": -7, "alive": True},
+            {"op": "measure", "names": ["empty"]},
+            {"op": "snapshot", "name": "one"},
+            {"op": "clear"},
+            {"op": "measure", "names": ["one", "empty", "one"]},
+            {"op": "restore", "name": "one"},
+            {"op": "release", "name": "empty"},
+            {"op": "restore", "name": "empty", "error": True},
+            {"op": "measure", "names": ["empty", "one"]},
+        ],
+        {},
+    )
+
+    # Files of every kind read into a universe that already has a history: the universe
+    # stays put, a file equal to a snapshot adds nothing, a refused file changes nothing,
+    # and every snapshot, the files' and the frames' among them, restores.
+    gun_universe = HashLife("B36/S23")
+    gun_universe.set_rect(-18, -4, np.array([[c == "*" for c in r] for r in gun], np.uint8))
+    gun_universe.set_generation(5)
+    gun_mc = gun_universe.to_macrocell(
+        PatternMetadata("Gosper glider gun", None, ("Here in HighLife.",))
+    )
+    recorded = HashLife()
+    recorded.set_rect(10, 10, np.array([[c == "*" for c in r] for r in glider], np.uint8))
+    frames = []
+    for generation in (0, 4, 8):
+        recorded.step(generation - recorded.generation)
+        frames.append(recorded.snapshot())
+    timeline = write_timeline(recorded, frames, metadata=PatternMetadata("Three frames"))
+    picture = np.full((3, 5), 255, dtype=np.uint8)
+    picture[1, 1:4] = 0
+    script(
+        "read-files",
+        "B3/S23",
+        [
+            {"op": "set_rect", "x": 0, "y": 0, "mode": "copy", "cells": glider},
+            {"op": "snapshot", "name": "start"},
+            {"op": "step", "n": "100"},
+            {"op": "read", "input": "glider.rle", "name": "glider-file", "frames": []},
+            {"op": "measure", "names": ["start", "glider-file"]},
+            {"op": "read", "input": "gun.mc", "name": "gun-file", "frames": []},
+            {
+                "op": "read",
+                "input": "timeline.mc.gz",
+                "name": "timeline-file",
+                "frames": ["frame-0", "frame-1", "frame-2"],
+            },
+            {"op": "measure", "names": ["timeline-file", "frame-2", "frame-1", "frame-0"]},
+            {"op": "read", "input": "blinker.cells", "name": "blinker-file", "frames": []},
+            {"op": "read", "input": "far.lif", "name": "far-file", "frames": []},
+            {"op": "read", "input": "picture.png", "name": "picture-file", "frames": []},
+            {"op": "read", "input": "b0.lif", "error": True},
+            {"op": "read", "input": "extended.rle", "error": True},
+            {"op": "read", "input": "broken-timeline.mc", "error": True},
+            {
+                "op": "measure",
+                "names": [
+                    "start",
+                    "glider-file",
+                    "gun-file",
+                    "timeline-file",
+                    "frame-0",
+                    "frame-1",
+                    "frame-2",
+                    "blinker-file",
+                    "far-file",
+                    "picture-file",
+                ],
+            },
+            {"op": "restore", "name": "gun-file"},
+            {"op": "restore", "name": "frame-1"},
+            {"op": "restore", "name": "far-file"},
+            {"op": "restore", "name": "picture-file"},
+            {"op": "restore", "name": "blinker-file"},
+            {"op": "restore", "name": "glider-file"},
+            {"op": "restore", "name": "start"},
+        ],
+        {
+            "glider.rle": b"#N Glider\nx = 3, y = 3, rule = B3/S23\nbo$2bo$3o!\n",
+            "gun.mc": gun_mc.encode(),
+            "timeline.mc.gz": gzip.compress(timeline.encode(), mtime=0),
+            "blinker.cells": b"!Name: Blinker\nOOO\n",
+            "far.lif": b"#Life 1.06\n1000000000 0\n-1000000000 0\n0 1000000000\n",
+            "picture.png": _png_file(picture, 8, 0),
+            "b0.lif": b"#Life 1.05\n#R 23/03\n#P 0 0\n**\n",
+            "extended.rle": b"x = 2, y = 1, rule = WireWorld\nAC!\n",
+            "broken-timeline.mc": b"[M2]\n#FRAMES 3 0 1\n*$\n#FRAME 0 1\n#FRAME 2 1\n",
+        },
+    )
+
+
+def write_universe_timeline_cases() -> None:
+    """A Macrocell timeline read by content (spec/formats.md "Reading into the unbounded
+    universe", "Timelines"), under vectors/formats/universe-*: the universe at the file's own
+    root and #G, and every frame; a malformed timeline refused; #FRAME lines without a
+    #FRAMES line skipped."""
+    import gzip
+
+    from heaton_life.ca.hashlife import read_timeline, read_universe, write_timeline
+    from heaton_life.init import PatternMetadata
+
+    root = VECTOR_ROOT / "formats"
+
+    def notes(m: PatternMetadata) -> dict[str, Any]:
+        return {"name": m.name, "author": m.author, "comments": list(m.comments)}
+
+    def universe(name: str, data: bytes, ext: str, *, error: bool = False) -> None:
+        d = root / f"universe-{name}"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"input.{ext}").write_bytes(data)
+        meta: dict[str, Any] = {
+            "spec_version": SNAPSHOTS_SPEC_VERSION,
+            "family": "formats",
+            "tier": "bit-exact",
+            "kind": "universe",
+            "input": f"input.{ext}",
+        }
+        try:
+            found = read_universe(data)
+        except ValueError:
+            assert error, f"universe-{name} was meant to read"
+            meta["error"] = True
+            _gap_save(d, meta)
+            return
+        assert not error, f"universe-{name} was meant to be refused"
+        u = found.universe
+        meta["format"] = found.format
+        meta["metadata"] = notes(found.metadata)
+        meta.update(_hashlife_entry(d, u, "state"))
+        (d / "with-metadata.mc").write_text(
+            u.to_macrocell(found.metadata), encoding="utf-8", newline="\n"
+        )
+        meta["with_metadata"] = "with-metadata.mc"
+        try:
+            text = u.to_rle(found.metadata)
+        except ValueError:
+            meta["rle_error"] = True
+        else:
+            (d / "with-metadata.rle").write_text(text, encoding="utf-8", newline="\n")
+            meta["rle"] = "with-metadata.rle"
+        if found.frames:
+            assert found.step is not None
+            text = gzip.decompress(data).decode() if data[:2] == b"\x1f\x8b" else data.decode()
+            timeline = read_timeline(text)  # the timeline reader gives the same frames
+            assert [f.generation for f in timeline.frames] == [f.generation for f in found.frames]
+            assert timeline.step == found.step
+            meta["step"] = decimal_text.digits_of(found.step)
+            states = []
+            for i, frame in enumerate(found.frames):
+                u.restore(frame)
+                states.append(_hashlife_entry(d, u, f"frame-{i}"))
+            meta["frames"] = states
+        else:
+            assert found.step is None
+        _gap_save(d, meta)
+
+    def recorded(rle: str, generations: list[int]) -> tuple[Any, list[Any]]:
+        u = read_universe(rle).universe
+        snapshots = []
+        for g in generations:
+            u.step(g - u.generation)
+            snapshots.append(u.snapshot())
+        return u, snapshots
+
+    u, frames = recorded("#CXRLE Pos=-1,-1\nx = 3, y = 3\nbo$2bo$3o!\n", [0, 4, 8, 12])
+    glider_timeline = write_timeline(
+        u, frames, metadata=PatternMetadata("Glider", None, ("Four frames.",))
+    )
+    universe("timeline-glider", glider_timeline.encode(), "mc")
+    u, frames = recorded(f"#CXRLE Pos=-18,-4\nx = 36, y = 9\n{_GUN_RLE}\n", [0, 30, 60])
+    gun_timeline = write_timeline(u, frames, metadata=PatternMetadata("Gosper glider gun"))
+    universe("timeline-gzip", gzip.compress(gun_timeline.encode(), mtime=0), "mc.gz")
+    universe(
+        "timeline-big-step",
+        b"[M2]\n#R B3/S23\n#FRAMES 2 7 3^2000\n**$**$\n#FRAME 0 1\n#FRAME 1 1\n",
+        "mc",
+    )
+    universe(
+        "timeline-root-elsewhere",
+        b"[M2] (example 1.0)\n#R B3/S23\n#G 99\n#N Three states\n#FRAMES 2 10 5\n"
+        b".*$..*$***$\n$$$...***$\n**$**$\n#FRAME 0 1\n#FRAME 1 2\n",
+        "mc",
+    )
+    universe("frame-lines-without-frames", b"[M2]\n*$\n#FRAME 0 1\n#FRAME 7 9\n", "mc")
+    universe(
+        "error-timeline-missing-frame",
+        b"[M2]\n#FRAMES 3 0 1\n*$\n#FRAME 0 1\n#FRAME 2 1\n",
+        "mc",
+        error=True,
+    )
+    universe(
+        "error-timeline-two-frames-lines",
+        b"[M2]\n#FRAMES 1 0 1\n#FRAMES 1 0 1\n*$\n#FRAME 0 1\n",
+        "mc",
+        error=True,
+    )
+    universe(
+        "error-timeline-node-past-the-last",
+        b"[M2]\n#FRAMES 1 0 1\n*$\n#FRAME 0 2\n",
+        "mc",
+        error=True,
+    )
+    universe("error-timeline-step-zero", b"[M2]\n#FRAMES 1 0 0\n*$\n#FRAME 0 1\n", "mc", error=True)
 
 
 if __name__ == "__main__":

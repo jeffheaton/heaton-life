@@ -1,0 +1,208 @@
+{
+  "bounding_box": [
+    "-18",
+    "-4",
+    "257",
+    "257"
+  ],
+  "family": "hashlife",
+  "generation": "1030",
+  "kind": "snapshots",
+  "ops": [
+    {
+      "cells": [
+        "........................*...........",
+        "......................*.*...........",
+        "............**......**............**",
+        "...........*...*....**............**",
+        "**........*.....*...**..............",
+        "**........*...*.**....*.*...........",
+        "..........*.....*.......*...........",
+        "...........*...*....................",
+        "............**......................"
+      ],
+      "mode": "copy",
+      "op": "set_rect",
+      "x": -18,
+      "y": -4
+    },
+    {
+      "name": "gen-0",
+      "op": "snapshot"
+    },
+    {
+      "n": "30",
+      "op": "step"
+    },
+    {
+      "name": "gen-30",
+      "op": "snapshot"
+    },
+    {
+      "n": "30",
+      "op": "step"
+    },
+    {
+      "name": "gen-60",
+      "op": "snapshot"
+    },
+    {
+      "n": "30",
+      "op": "step"
+    },
+    {
+      "name": "gen-90",
+      "op": "snapshot"
+    },
+    {
+      "expect": {
+        "added": [],
+        "nodes": 0,
+        "universe_nodes": 22
+      },
+      "names": [],
+      "op": "measure"
+    },
+    {
+      "expect": {
+        "added": [
+          0,
+          2,
+          3,
+          4
+        ],
+        "nodes": 9,
+        "universe_nodes": 22
+      },
+      "names": [
+        "gen-90",
+        "gen-60",
+        "gen-30",
+        "gen-0"
+      ],
+      "op": "measure"
+    },
+    {
+      "expect": {
+        "added": [
+          4,
+          3,
+          2,
+          0
+        ],
+        "nodes": 9,
+        "universe_nodes": 22
+      },
+      "names": [
+        "gen-0",
+        "gen-30",
+        "gen-60",
+        "gen-90"
+      ],
+      "op": "measure"
+    },
+    {
+      "expect": {
+        "added": [
+          2,
+          0
+        ],
+        "nodes": 2,
+        "universe_nodes": 22
+      },
+      "names": [
+        "gen-60",
+        "gen-60"
+      ],
+      "op": "measure"
+    },
+    {
+      "name": "gen-0",
+      "op": "release"
+    },
+    {
+      "name": "gen-0",
+      "op": "release"
+    },
+    {
+      "expect": {
+        "added": [
+          0,
+          2,
+          3,
+          0
+        ],
+        "nodes": 5,
+        "universe_nodes": 22
+      },
+      "names": [
+        "gen-90",
+        "gen-60",
+        "gen-30",
+        "gen-0"
+      ],
+      "op": "measure"
+    },
+    {
+      "error": true,
+      "name": "gen-0",
+      "op": "restore"
+    },
+    {
+      "expect": {
+        "bounding_box": [
+          "-18",
+          "-4",
+          "17",
+          "7"
+        ],
+        "generation": "30",
+        "population": "41",
+        "state": "restore-16.mc"
+      },
+      "name": "gen-30",
+      "op": "restore"
+    },
+    {
+      "expect": {
+        "added": [
+          6,
+          2
+        ],
+        "nodes": 8,
+        "universe_nodes": 19
+      },
+      "names": [
+        "gen-90",
+        "gen-60"
+      ],
+      "op": "measure"
+    },
+    {
+      "n": "1000",
+      "op": "step"
+    },
+    {
+      "expect": {
+        "added": [
+          14,
+          2,
+          3
+        ],
+        "nodes": 19,
+        "universe_nodes": 109
+      },
+      "names": [
+        "gen-90",
+        "gen-60",
+        "gen-30"
+      ],
+      "op": "measure"
+    }
+  ],
+  "population": "218",
+  "rule": "B3/S23",
+  "spec_version": "0.16.0",
+  "state": "final.mc",
+  "tier": "bit-exact"
+}

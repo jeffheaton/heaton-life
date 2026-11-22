@@ -235,11 +235,12 @@ def _read_lines(lines: list[str], start: int, tree: _Nodes) -> _Lines:
 
 
 class _StoreNodes:
-    """A file's nodes in a universe's store, its ``#R`` the universe's rule."""
+    """A file's nodes in a universe's store, its ``#R`` kept as the file's rule in canonical
+    form (the universe's own rule is the caller's to set)."""
 
-    def __init__(self, universe: HashLife) -> None:
-        self._universe = universe
-        self._store = universe._store
+    def __init__(self, store: NodeStore) -> None:
+        self._store = store
+        self.canonical = "B3/S23"
 
     def leaf(self, bits: int) -> int:
         return self._store.leaf(bits)
@@ -251,15 +252,50 @@ class _StoreNodes:
         return self._store.join(nw, ne, sw, se)
 
     def rule(self, text: str) -> None:
-        self._universe.rule = _hashlife_rule(text, presets=False)  # a file names no preset
+        self.canonical = _hashlife_rule(text, presets=False)  # a file names no preset
+
+
+@dataclasses.dataclass
+class _Built:
+    """A Macrocell file's tree built in a universe's store, which it hasn't become: the root
+    as (node, level), ``#G``, the rule in canonical form, the metadata, every node line as
+    (value, level), and the timeline lines."""
+
+    root: int
+    level: int
+    generation: int
+    rule: str
+    metadata: PatternMetadata
+    nodes: list[tuple[int, int]]
+    frames_lines: list[tuple[int, str]]
+    frame_lines: list[tuple[int, str]]
+
+
+def build_macrocell(universe: HashLife, source: str | bytes) -> _Built:
+    """Read a Macrocell file into ``universe``'s store without changing the universe: its
+    root, level, generation and rule stay. Raises ValueError for a malformed file."""
+    lines, start = _lines(source)
+    sink = _StoreNodes(universe._store)
+    read = _read_lines(lines, start, sink)
+    root, level = _root(universe._store, *read.nodes[-1])
+    return _Built(
+        root,
+        level,
+        read.generation,
+        sink.canonical,
+        read.metadata,
+        read.nodes,
+        read.frames_lines,
+        read.frame_lines,
+    )
 
 
 def _parse(source: str | bytes, max_memory_mb: int) -> _Parsed:
-    lines, start = _lines(source)
     universe = HashLife(max_memory_mb=max_memory_mb)
-    read = _read_lines(lines, start, _StoreNodes(universe))
-    universe._adopt(*_root(universe._store, *read.nodes[-1]), read.generation)
-    return _Parsed(universe, read.metadata, read.nodes, read.frames_lines, read.frame_lines)
+    built = build_macrocell(universe, source)
+    universe.rule = built.rule
+    universe._adopt(built.root, built.level, built.generation)
+    return _Parsed(universe, built.metadata, built.nodes, built.frames_lines, built.frame_lines)
 
 
 Box = tuple[int, int, int, int]
@@ -431,11 +467,29 @@ def read_timeline(
     """A timeline file's frames (spec/macrocell.md "Timelines"): one ``#FRAMES count first
     step`` line and a ``#FRAME i n`` line for every frame; anything else is an error."""
     parsed = _parse(source, max_memory_mb)
-    if not parsed.frames_lines:
+    universe = parsed.universe
+    found = timeline_frames(universe._store, parsed.nodes, parsed.frames_lines, parsed.frame_lines)
+    if found is None:
         raise ValueError("not a timeline: the file has no #FRAMES line")
-    if len(parsed.frames_lines) > 1:
-        raise ValueError(f"line {parsed.frames_lines[1][0]}: a second #FRAMES line")
-    number, line = parsed.frames_lines[0]
+    step, roots = found
+    frames = tuple(universe._snapshot_at(*root) for root in roots)
+    return MacrocellTimeline(universe, frames, step, parsed.metadata)
+
+
+def timeline_frames(
+    store: NodeStore,
+    nodes: list[tuple[int, int]],
+    frames_lines: list[tuple[int, str]],
+    frame_lines: list[tuple[int, str]],
+) -> tuple[int, list[tuple[int, int, int]]] | None:
+    """A file's timeline (spec/macrocell.md "Timelines"): its step, and each frame's root as
+    (node, level, generation) in order, placed in ``store`` as a file's root is; or None
+    for a file without a ``#FRAMES`` line. A malformed timeline raises ValueError."""
+    if not frames_lines:
+        return None
+    if len(frames_lines) > 1:
+        raise ValueError(f"line {frames_lines[1][0]}: a second #FRAMES line")
+    number, line = frames_lines[0]
     fields = line[len("#FRAMES") :].split()
     if len(fields) != 3:
         raise ValueError(f"line {number}: expected '#FRAMES count first step'")
@@ -445,7 +499,7 @@ def read_timeline(
     if count == 0:
         raise ValueError(f"line {number}: a timeline has at least one frame")
     refs: dict[int, int] = {}
-    for number, line in parsed.frame_lines:
+    for number, line in frame_lines:
         fields = line[len("#FRAME") :].split()
         if len(fields) != 2:
             raise ValueError(f"line {number}: expected '#FRAME index node'")
@@ -455,19 +509,14 @@ def read_timeline(
             raise ValueError(f"line {number}: frame {index} is past the {count} frames")
         if index in refs:
             raise ValueError(f"line {number}: frame {index} is given twice")
-        if not 0 < node <= len(parsed.nodes):
+        if not 0 < node <= len(nodes):
             raise ValueError(f"line {number}: the file has no node {node}")
         refs[index] = node
     if len(refs) != count:
         missing = next(i for i in range(count) if i not in refs)
         raise ValueError(f"the timeline has no #FRAME line for frame {missing}")
-    universe = parsed.universe
-    store = universe._store
-    frames = tuple(
-        universe._snapshot_at(*_root(store, *parsed.nodes[refs[i] - 1]), first + i * step)
-        for i in range(count)
-    )
-    return MacrocellTimeline(universe, frames, step, parsed.metadata)
+    roots = [(*_root(store, *nodes[refs[i] - 1]), first + i * step) for i in range(count)]
+    return step, roots
 
 
 def _root_of(n: int, e: int) -> int:
@@ -505,6 +554,8 @@ def write_timeline(
         raise ValueError("a timeline needs at least one frame")
     if any(frame._owner() is not universe for frame in frames):
         raise ValueError("every frame must be a snapshot of the universe being written")
+    if any(frame.released for frame in frames):
+        raise ValueError("a released snapshot holds no cells to write")
     generations = [frame.generation for frame in frames]
     step = generations[1] - generations[0] if len(frames) > 1 else 1
     if any(b - a != step for a, b in itertools.pairwise(generations)):

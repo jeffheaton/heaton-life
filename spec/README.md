@@ -23,7 +23,7 @@ Each family gets one page structured as:
 
 | Tier | Families | Test |
 |---|---|---|
-| Bit-exact | Life-like rules (canonical strings, tables, and the reasons for errors), Life-like, HashLife (cells, populations and bounding boxes at any generation, and their canonical Macrocell text), Elementary, Cyclic, Wireworld, MergeLife (and its decoded rule table), fractal iteration counts (with or without BLA), their status, and Newton root indices, colormap LUTs and per-family frame indexing, patterns (RLE, transforms, stamp/extract, region editing), pattern files (format detection, every format's reading and measuring, metadata read and written, Macrocell timelines), PNG grid I/O (decoded grids), evolve (objective statistics, operators, whole runs); pow10, turns and floatexp via the known-answer bit patterns on their pages; the T2 loop on crafted states; navigation (moved centers, pixel deltas); discovery (box periods, Newton's nucleus: its verdict, stop, counts and printed center); the iteration policy; zoom movies (schedule, frame zooms and speeds, movie budgets, the survey's stations and patience rule, whole surveys at the pinned probe); fractal color given its inputs (stretch, depth phase, frequency, distance shading) and the phase lookup with its dither and cyclic palettes | byte-for-byte equality with the vector: states at each checkpoint step, or the one-shot output (float64 outputs by value, every NaN equal to every NaN) |
+| Bit-exact | Life-like rules (canonical strings, tables, and the reasons for errors), Life-like, HashLife (cells, populations and bounding boxes at any generation, their canonical Macrocell text, and the nodes snapshots hold), Elementary, Cyclic, Wireworld, MergeLife (and its decoded rule table), fractal iteration counts (with or without BLA), their status, and Newton root indices, colormap LUTs and per-family frame indexing, patterns (RLE, transforms, stamp/extract, region editing), pattern files (format detection, every format's reading and measuring, metadata read and written, Macrocell timelines), PNG grid I/O (decoded grids), evolve (objective statistics, operators, whole runs); pow10, turns and floatexp via the known-answer bit patterns on their pages; the T2 loop on crafted states; navigation (moved centers, pixel deltas); discovery (box periods, Newton's nucleus: its verdict, stop, counts and printed center); the iteration policy; zoom movies (schedule, frame zooms and speeds, movie budgets, the survey's stations and patience rule, whole surveys at the pinned probe); fractal color given its inputs (stretch, depth phase, frequency, distance shading) and the phase lookup with its dither and cyclic palettes | byte-for-byte equality with the vector: states at each checkpoint step, or the one-shot output (float64 outputs by value, every NaN equal to every NaN) |
 | ε-tolerance | Lenia ×3, Gray-Scott, Boids, smooth fractal coloring (the fractal render), the fractal distance estimate (relative: ε·|value|, its NaN, 0 and ±∞ exact), location framing (the zoom an imported location converts to, compared relatively: ε·max(1, |value|); its centers are exact), the atom size estimate (relative, its NaN exact) | max abs deviation ≤ the `epsilon` in the case's `params.json` (1e-6 for Lenia and boids, 1e-9 for Gray-Scott and the fractal render), or the output's `relative_epsilon` (1e-12 for the distance estimate and the atom size) |
 
 ## Conventions
@@ -33,6 +33,25 @@ Each family gets one page structured as:
 - All params serialize to snake_case JSON; each language adapts naming at its own boundary.
 - Fractal viewports store centers as decimal strings (arbitrary length) and zoom as log10 magnification — see [deep-zoom.md](deep-zoom.md).
 
+## A world's state and its start
+
+Every time-stepped family but HashLife (whose [snapshots](hashlife.md#snapshots) do this
+job) keeps a **start**: the state `reset(seed)` returns to at generation 0, its `init`
+strategy replayed. Life-like, Elementary, Cyclic, Wireworld, MergeLife, Gray-Scott, the
+three Lenias and boids take an explicit state with `set_state(state, generation)` (.NET
+`SetState`):
+
+- The state becomes the given one, its values taken as the family's `array` init takes
+  them (Life-like and Elementary cells as 0 or 1, the rest as given; a value the init
+  refuses, or a state of the wrong shape, is an error that changes nothing). The
+  generation becomes `generation`, 0 when it isn't given.
+- By default the state also becomes the start, `init` `array`, so `reset()` returns to it.
+- With `keep_start` the start stays as it was, and nothing of the new state is kept for
+  it. A host that shows a saved frame or puts back an undo point moves the world this
+  way: Reset still goes to the world's own start, and no copy of the world is made.
+
+Elementary takes its space-time diagram too ([elementary.md](elementary.md#state)).
+
 ## Index
 
 - [rng.md](rng.md) — pinned PCG32 algorithm, known-answer test, the streams in use, draw-order convention
@@ -41,7 +60,7 @@ Each family gets one page structured as:
 - [floatexp.md](floatexp.md) — a float64 mantissa with an unbounded exponent: T2's numbers, every operation correctly rounded (bit-exact tier)
 - [rules.md](rules.md) — Life-like rules: one 512-entry table over the 3×3 neighborhood, compiled from `B…/S…` (outer-totalistic, isotropic letters, hexagonal `H`, von Neumann `V`) or `MAP` strings; grammar, canonical form, bit order, and why a text is no rule (bit-exact tier)
 - [lifelike.md](lifelike.md) — Life-like CA (bit-exact tier)
-- [hashlife.md](hashlife.md) — HashLife: Life-like rules on an unbounded plane — any generation count, editing within ±10⁹ (paste modes, rectangle transforms at any size, advancing a selection or its outside), a memory budget that never changes results (bit-exact tier)
+- [hashlife.md](hashlife.md) — HashLife: Life-like rules on an unbounded plane — any generation count, editing within ±10⁹ (paste modes, rectangle transforms at any size, advancing a selection or its outside), a memory budget that never changes results, snapshots (what they hold, releasing them) (bit-exact tier)
 - [elementary.md](elementary.md) — Wolfram elementary CA (bit-exact tier)
 - [cyclic.md](cyclic.md) — cyclic CA (bit-exact tier)
 - [wireworld.md](wireworld.md) — Wireworld (bit-exact tier)
@@ -62,5 +81,5 @@ Each family gets one page structured as:
 - [macrocell.md](macrocell.md) — Macrocell, HashLife's native file format: reading, root placement, and a canonical writer (bit-exact tier)
 - [patterns.md](patterns.md) — pattern model, RLE dialects, transforms, extract/stamp, family-bound compatibility
 - [png-io.md](png-io.md) — MergeLife PNG import/export at integer scale; grid-level bit-exact contract (PNG bytes are per-encoder)
-- [formats.md](formats.md) — pattern files: detection by content (gzip, PNG, BMP, text), metadata (name, author, comments), plaintext, Life 1.05, Life 1.06, PNG and BMP images, the readers into a grid or a HashLife universe, and measuring a file before reading it (bit-exact tier)
+- [formats.md](formats.md) — pattern files: detection by content (gzip, PNG, BMP, text), metadata (name, author, comments), plaintext, Life 1.05, Life 1.06, PNG and BMP images, the readers into a grid, a new HashLife universe or one that exists, and measuring a file before reading it (bit-exact tier)
 - Every family in the library has a page above. A new family adds its page here (the index and the tier table) before it merges; see [python/DEVELOPMENT.md, "Adding or changing a family"](../python/DEVELOPMENT.md#adding-or-changing-a-family).

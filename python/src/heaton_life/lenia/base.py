@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import operator
 
 import numpy as np
 from numpy.typing import NDArray
@@ -28,12 +29,8 @@ class LeniaParams(Params):
     height: int = dataclasses.field(default=128, metadata={"min": 32, "max": 1024})
     init: str = dataclasses.field(default="blobs", metadata={"choices": ["blobs", "soup"]})
     blobs: int = dataclasses.field(default=40, metadata={"min": 1, "max": 100})
-    density: float = dataclasses.field(
-        default=0.5, metadata={"min": 0.0, "max": 1.0, "step": 0.05}
-    )
-    seed: int = dataclasses.field(
-        default=0, metadata={"min": 0, "max": 4294967295, "role": "seed"}
-    )
+    density: float = dataclasses.field(default=0.5, metadata={"min": 0.0, "max": 1.0, "step": 0.05})
+    seed: int = dataclasses.field(default=0, metadata={"min": 0, "max": 4294967295, "role": "seed"})
 
 
 class LeniaBase:
@@ -62,6 +59,26 @@ class LeniaBase:
         else:
             raise ValueError(f"unknown init strategy: {p.init!r}")
         self._generation = 0
+
+    def set_state(
+        self, state: NDArray[np.generic], generation: int = 0, *, keep_start: bool = False
+    ) -> None:
+        """Replace the state ((height, width) values) and set the generation
+        (spec/README.md "A world's state and its start"). The state also becomes the start
+        ``reset()`` returns to (``init`` ``array``), unless ``keep_start``: then the start
+        stays as it was, and no copy of the state is kept for it."""
+        p = self.params
+        field = np.array(state, dtype=np.float64)
+        if field.shape != (p.height, p.width):
+            raise ValueError(
+                f"state shape {field.shape} does not match (h={p.height}, w={p.width})"
+            )
+        generation = operator.index(generation)
+        if not keep_start:
+            self._initial = field.copy()
+            self.params = p.replace(init="array")
+        self._state = field
+        self._generation = generation
 
     def step(self, n: int = 1) -> None:
         for _ in range(n):
@@ -132,7 +149,9 @@ def make_lenia_params(
     initial: NDArray[np.float64] | None = None
     if isinstance(init, np.ndarray):
         if init.shape != (height, width):
-            raise ValueError(f"init array shape {init.shape} does not match (h={height}, w={width})")
+            raise ValueError(
+                f"init array shape {init.shape} does not match (h={height}, w={width})"
+            )
         initial = init.astype(np.float64)
         init_name = "array"
     else:

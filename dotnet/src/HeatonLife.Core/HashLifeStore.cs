@@ -337,7 +337,7 @@ namespace HeatonLife
         internal int Root;
         internal int Level;
 
-        /// <summary>Snapshots pin their roots for as long as they live.</summary>
+        /// <summary>Snapshots pin their roots for as long as they live and aren't released.</summary>
         internal readonly List<WeakReference<HashLifeSnapshot>> Snapshots = new List<WeakReference<HashLifeSnapshot>>();
 
         /// <summary>True while a step computes: allocation may collect in flight or abort.</summary>
@@ -921,8 +921,8 @@ namespace HeatonLife
         // -- collection -------------------------------------------------------------------------
 
         /// <summary>
-        /// Mark from the root, the live snapshots, the empty nodes, and — in flight — the saved
-        /// stack; free the rest. Results survive only when both ends do.
+        /// Mark from the root, the live snapshots (not the released ones), the empty nodes, and
+        /// — in flight — the saved stack; free the rest. Results survive only when both ends do.
         /// </summary>
         internal void Collect(bool inFlight)
         {
@@ -931,7 +931,7 @@ namespace HeatonLife
                 MarkFrom(_empty[k]);
             for (int i = Snapshots.Count - 1; i >= 0; i--)
             {
-                if (Snapshots[i].TryGetTarget(out HashLifeSnapshot? snapshot))
+                if (Snapshots[i].TryGetTarget(out HashLifeSnapshot? snapshot) && !snapshot.Released)
                     MarkFrom(snapshot.RootNode);
                 else
                     Snapshots.RemoveAt(i);

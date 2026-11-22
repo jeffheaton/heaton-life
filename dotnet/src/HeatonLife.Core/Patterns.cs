@@ -432,6 +432,20 @@ namespace HeatonLife
         {
             if (text == null)
                 throw new ArgumentNullException(nameof(text));
+            var universe = new HashLife(maxMemoryMb: maxMemoryMb);
+            var (root, level, generation, rule) = BuildRle(universe, text);
+            universe.Rule = rule;
+            universe.Adopt(root, level, generation);
+            return universe;
+        }
+
+        /// <summary>
+        /// Two-state RLE read into <paramref name="universe"/>'s store without changing the
+        /// universe: the pattern's tree, its generation and its rule in canonical form, refused
+        /// as <see cref="RleToHashLife"/> refuses it.
+        /// </summary>
+        internal static (int Root, int Level, BigInteger Generation, string Rule) BuildRle(HashLife universe, string text)
+        {
             var lines = new List<string>();
             foreach (string raw in TextLines.Split(text))
             {
@@ -455,7 +469,7 @@ namespace HeatonLife
             }
             if (extended)
                 throw new FormatException("HashLife reads two-state RLE only (this file is extended RLE)");
-            var universe = new HashLife(rule ?? "B3/S23", maxMemoryMb);
+            string canonical = HashLife.CheckedRule(rule ?? "B3/S23");
 
             const long limit = HashLife.EditLimit;
             bool placed = BigInteger.Abs(posX) <= limit && BigInteger.Abs(posY) <= limit;
@@ -522,12 +536,13 @@ namespace HeatonLife
                 }
             }
             if (blocks.Count > 0)
-            {
                 HashLife.CheckBox(x0, y0, x0 + width - 1, y0 + height - 1);
-                universe.PasteBlocks(blocks, x0, y0 - 1, x0 + width - 1, y0 + height - 2, HashLifePasteMode.Or);
-            }
-            universe.SetGeneration(generation);
-            return universe;
+            var (root, level) = universe.Build(() =>
+            {
+                if (blocks.Count > 0)
+                    universe.PasteBlocks(blocks, x0, y0 - 1, x0 + width - 1, y0 + height - 2, HashLifePasteMode.Or);
+            });
+            return (root, level, generation, canonical);
         }
 
         private static void ReadCxrle(string line, ref BigInteger posX, ref BigInteger posY, ref BigInteger generation)

@@ -1,0 +1,4 @@
+#CXRLE Pos=-4,-3 Gen=99
+#N Three states
+x = 2, y = 2, rule = B3/S23
+2o$2o!

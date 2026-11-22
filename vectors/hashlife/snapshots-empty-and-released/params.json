@@ -1,0 +1,117 @@
+{
+  "bounding_box": [
+    "5",
+    "-7",
+    "5",
+    "-7"
+  ],
+  "family": "hashlife",
+  "generation": "0",
+  "kind": "snapshots",
+  "ops": [
+    {
+      "name": "empty",
+      "op": "snapshot"
+    },
+    {
+      "expect": {
+        "added": [
+          0
+        ],
+        "nodes": 0,
+        "universe_nodes": 0
+      },
+      "names": [
+        "empty"
+      ],
+      "op": "measure"
+    },
+    {
+      "alive": true,
+      "op": "set_cell",
+      "x": 5,
+      "y": -7
+    },
+    {
+      "expect": {
+        "added": [
+          0
+        ],
+        "nodes": 0,
+        "universe_nodes": 2
+      },
+      "names": [
+        "empty"
+      ],
+      "op": "measure"
+    },
+    {
+      "name": "one",
+      "op": "snapshot"
+    },
+    {
+      "op": "clear"
+    },
+    {
+      "expect": {
+        "added": [
+          2,
+          0,
+          0
+        ],
+        "nodes": 2,
+        "universe_nodes": 0
+      },
+      "names": [
+        "one",
+        "empty",
+        "one"
+      ],
+      "op": "measure"
+    },
+    {
+      "expect": {
+        "bounding_box": [
+          "5",
+          "-7",
+          "5",
+          "-7"
+        ],
+        "generation": "0",
+        "population": "1",
+        "state": "restore-7.mc"
+      },
+      "name": "one",
+      "op": "restore"
+    },
+    {
+      "name": "empty",
+      "op": "release"
+    },
+    {
+      "error": true,
+      "name": "empty",
+      "op": "restore"
+    },
+    {
+      "expect": {
+        "added": [
+          0,
+          0
+        ],
+        "nodes": 0,
+        "universe_nodes": 2
+      },
+      "names": [
+        "empty",
+        "one"
+      ],
+      "op": "measure"
+    }
+  ],
+  "population": "1",
+  "rule": "B36/S23",
+  "spec_version": "0.16.0",
+  "state": "final.mc",
+  "tier": "bit-exact"
+}

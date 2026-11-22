@@ -1,0 +1,142 @@
+{
+  "bounding_box": [
+    "-40",
+    "-30",
+    "39",
+    "29"
+  ],
+  "family": "hashlife",
+  "generation": "0",
+  "kind": "snapshots",
+  "ops": [
+    {
+      "density": 0.4,
+      "op": "fill_random",
+      "seed": 9,
+      "x0": -40,
+      "x1": 39,
+      "y0": -30,
+      "y1": 29
+    },
+    {
+      "name": "soup",
+      "op": "snapshot"
+    },
+    {
+      "alive": false,
+      "op": "set_cell",
+      "x": 30,
+      "y": 20
+    },
+    {
+      "alive": true,
+      "op": "set_cell",
+      "x": 31,
+      "y": 20
+    },
+    {
+      "name": "two-cells",
+      "op": "snapshot"
+    },
+    {
+      "op": "clear_rect",
+      "x0": -5,
+      "x1": 5,
+      "y0": -5,
+      "y1": 5
+    },
+    {
+      "name": "hole",
+      "op": "snapshot"
+    },
+    {
+      "n": "64",
+      "op": "step"
+    },
+    {
+      "name": "later",
+      "op": "snapshot"
+    },
+    {
+      "n": "0",
+      "op": "set_generation"
+    },
+    {
+      "expect": {
+        "added": [
+          0,
+          117,
+          17,
+          5
+        ],
+        "nodes": 139,
+        "universe_nodes": 135
+      },
+      "names": [
+        "later",
+        "hole",
+        "two-cells",
+        "soup"
+      ],
+      "op": "measure"
+    },
+    {
+      "expect": {
+        "added": [
+          117,
+          5,
+          17,
+          0
+        ],
+        "nodes": 139,
+        "universe_nodes": 135
+      },
+      "names": [
+        "soup",
+        "two-cells",
+        "hole",
+        "later"
+      ],
+      "op": "measure"
+    },
+    {
+      "expect": {
+        "bounding_box": [
+          "-40",
+          "-30",
+          "39",
+          "29"
+        ],
+        "generation": "0",
+        "population": "1886",
+        "state_lines": 119,
+        "state_sha256": "81953ea97f3ac46f73800aa553219f97ab8790ca43147650496064d1edd257a7"
+      },
+      "name": "two-cells",
+      "op": "restore"
+    },
+    {
+      "expect": {
+        "added": [
+          5,
+          17,
+          135
+        ],
+        "nodes": 157,
+        "universe_nodes": 117
+      },
+      "names": [
+        "soup",
+        "hole",
+        "later"
+      ],
+      "op": "measure"
+    }
+  ],
+  "population": "1886",
+  "rule": "B3/S23",
+  "spec_version": "0.16.0",
+  "state_lines": 119,
+  "state_sha256": "81953ea97f3ac46f73800aa553219f97ab8790ca43147650496064d1edd257a7",
+  "tier": "bit-exact"
+}

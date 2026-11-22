@@ -15,8 +15,9 @@ never by the file's name:
 
 Any of them may arrive gzip-compressed. This page defines how bytes become text, how a
 format is recognized, what the five formats without a page of their own mean, the
-metadata every text format can carry, and the two readers built on top: one that gives a
-dense grid and one that gives a [HashLife](hashlife.md) universe. A file can also be
+metadata every text format can carry, and the readers built on top: one that gives a
+dense grid, one that gives a [HashLife](hashlife.md) universe, and one that reads into a
+universe that exists. A file can also be
 measured, its grid's size found without the grid being made, before either reader is
 asked for memory.
 
@@ -309,9 +310,39 @@ universe.
   file names its rule, never a preset.
 - **Generation.** RLE's `Gen`, Macrocell's `#G`, otherwise 0.
 
-An empty pattern gives an empty universe. Macrocell timelines have their own reader and
-writer ([macrocell.md](macrocell.md#timelines)); this reader takes a timeline file's root
-and `#G`, as any timeline-unaware reader does.
+An empty pattern gives an empty universe.
+
+**Timelines.** A Macrocell file with a `#FRAMES` line is a
+[timeline](macrocell.md#timelines), and this reader reads it as one. The universe is left
+at the file's own root and `#G`, and the result also gives the timeline's `frames` (a
+snapshot of the universe for each frame, in order) and its `step`. The frame lines are
+read as macrocell.md says, so a malformed timeline is an error of the read. Any other file
+gives no frames and no step: a file with `#FRAME` lines but no `#FRAMES` line is not a
+timeline, and its `#FRAME` lines are skipped.
+
+## Reading into a universe that exists
+
+`read_snapshot(source)`, a method of a [HashLife](hashlife.md) universe (.NET
+`HashLife.ReadSnapshot`), reads a pattern file into the universe's own store and gives a
+`PatternSnapshot`: the format's name, a [snapshot](hashlife.md#snapshots) of the file's
+cells and generation, the file's rule in canonical form, its metadata, and a timeline's
+`frames` and `step` (none for any other file).
+
+- **The file** is read exactly as [reading into the unbounded
+  universe](#reading-into-the-unbounded-universe) reads it: the same files are accepted
+  and refused, with the same cells, placement, rule and generation. Restored, with the
+  file's rule taken, the snapshot is the state that reader gives, and each frame is its
+  frame.
+- **The universe** doesn't change: its cells, generation and rule stay, and so does every
+  snapshot taken before, which stays restorable. Restoring the file's snapshot, and taking
+  its rule, is the caller's choice. A host keeps its history across a file this way: a
+  world's start that lives in a file becomes a snapshot of the world's own universe, and
+  going back to it can be undone like any other change.
+- **Memory.** The file's nodes are built in the universe's store, so a node of the file
+  that has the level and cells of a node the store already holds is that node. Reading
+  never fails for lack of budget ([hashlife.md](hashlife.md#memory)). A refused file
+  leaves the universe and its snapshots as they were; the store may keep some of the
+  file's nodes until its next collection.
 
 ## Conformance
 
@@ -322,7 +353,7 @@ are decimal strings; metadata is `{"name", "author", "comments"}` with `null` fo
 | kind | inputs | expected |
 |---|---|---|
 | `read` | `input` (a file in any format, perhaps gzip-compressed); `trim`; `limit` (`"default"`, a number, or `null`) | `format`, `x`, `y`, `rule`, `generation`, `metadata`; `grid` (raw cell values in an 8-bit grayscale PNG, and its `shape`); `canonical`: the grid as canonical RLE with the metadata, under the rule or `B3/S23` — or `error: true` |
-| `universe` | `input` | `format`, `metadata`, and the universe's state as [hashlife.md](hashlife.md#vector-encoding) pins one (`generation`, `population`, `bounding_box`, `state`); `with_metadata`: its canonical Macrocell with the metadata; `rle`: its RLE with the metadata, or `rle_error: true` — or `error: true` |
+| `universe` | `input` | `format`, `metadata`, and the universe's state as [hashlife.md](hashlife.md#vector-encoding) pins one (`generation`, `population`, `bounding_box`, `state`); `with_metadata`: its canonical Macrocell with the metadata; `rle`: its RLE with the metadata, or `rle_error: true`; for a timeline, `step` and `frames` (each frame's state), and a case without them gives no frames — or `error: true` |
 | `detect` | `inputs`: a list of byte strings in hex | each one's `format`, or `error: true` |
 | `measure` | `input` (a file in any format, perhaps gzip-compressed) | `format`, `width`, `height`, `x`, `y`, `rule`, `generation`, `metadata`, `two_state` — or `error: true` |
 | `timeline-read` | `input.mc` | `count`, `first`, `step`, `metadata`, the file's own state, and `frames`: each frame's state, its canonical Macrocell in `frame-<i>.mc` — or `error: true` |
@@ -330,4 +361,10 @@ are decimal strings; metadata is `{"name", "author", "comments"}` with `null` fo
 
 The round trips (write, then read: the same cells and metadata) are property-tested in
 both suites, and so is measuring against reading: every `read` case's input that reads
-untrimmed measures as that read gives it.
+untrimmed measures as that read gives it. So is reading into a universe that exists: every
+`universe` case's input, read with `read_snapshot` into a universe that already holds a
+state and a snapshot, is accepted or refused as the case says, gives a snapshot and frames
+that restore to the case's states, and leaves that universe as it was. A `timeline-read`
+case's input with a `#FRAMES` line is accepted or refused by `read_universe` as by the
+timeline reader, with the same frames. The `snapshots` cases of
+[`../vectors/hashlife/`](../vectors/hashlife/) read files into universes that hold more.

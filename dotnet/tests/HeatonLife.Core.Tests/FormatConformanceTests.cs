@@ -11,10 +11,11 @@ using Xunit;
 namespace HeatonLife.Tests
 {
     /// <summary>
-    /// Pattern file conformance: replay vectors/formats/ — every format read into a grid and into
-    /// the unbounded universe, measured without a grid, detection, metadata read and written, and
-    /// Macrocell timelines (spec/formats.md, spec/macrocell.md). Bit-exact, and as strict as the Python runner
-    /// (python/tests/test_format_vectors.py): an unknown key, kind, or spec_version fails the case.
+    /// Pattern file conformance: replay vectors/formats/ — every format read into a grid, into a
+    /// new unbounded universe and into one that exists, measured without a grid, detection,
+    /// metadata read and written, and Macrocell timelines (spec/formats.md, spec/macrocell.md).
+    /// Bit-exact, and as strict as the Python runner (python/tests/test_format_vectors.py): an
+    /// unknown key, kind, or spec_version fails the case.
     /// </summary>
     public class FormatConformanceTests
     {
@@ -34,7 +35,9 @@ namespace HeatonLife.Tests
                     "input", "trim", "limit", "error", "format", "x", "y", "rule", "generation", "metadata", "grid",
                     "canonical",
                 }),
-                ["universe"] = Of(common, new[] { "input", "error", "format", "metadata", "with_metadata", "rle", "rle_error" }, state),
+                ["universe"] = Of(
+                    common, new[] { "input", "error", "format", "metadata", "with_metadata", "rle", "rle_error", "frames", "step" },
+                    state),
                 ["detect"] = Of(common, new[] { "inputs" }),
                 ["measure"] = Of(common, new[]
                 {
@@ -68,7 +71,7 @@ namespace HeatonLife.Tests
             Assert.Equal(new HashSet<string>(Keys.Keys), kinds);
         }
 
-        private static PatternMetadata Metadata(JsonElement e)
+        internal static PatternMetadata Metadata(JsonElement e)
         {
             string? name = e.GetProperty("name").ValueKind == JsonValueKind.Null ? null : e.GetProperty("name").GetString();
             string? author = e.GetProperty("author").ValueKind == JsonValueKind.Null ? null : e.GetProperty("author").GetString();
@@ -193,6 +196,17 @@ namespace HeatonLife.Tests
                                 File.ReadAllText(Path.Combine(dir, root.GetProperty("rle").GetString()!)),
                                 found.Universe.ToRle(found.Metadata));
                         }
+                        if (root.TryGetProperty("frames", out JsonElement frames))
+                        {
+                            // A timeline: the universe at the file's own root, and every frame.
+                            Assert.Equal(BigInteger.Parse(root.GetProperty("step").GetString()!), found.Step);
+                            ExpectFrames(dir, found.Universe, found.Frames, frames);
+                        }
+                        else
+                        {
+                            Assert.Empty(found.Frames);
+                            Assert.Null(found.Step);
+                        }
                         break;
                     }
                 case "measure":
@@ -240,9 +254,13 @@ namespace HeatonLife.Tests
                 case "timeline-read":
                     {
                         string text = File.ReadAllText(Path.Combine(dir, root.GetProperty("input").GetString()!));
+                        // A file with a #FRAMES line is a timeline to the reader by content too.
+                        bool framed = text.Split('\n').Any(line => line.Trim().StartsWith("#FRAMES", StringComparison.Ordinal));
                         if (error)
                         {
                             Assert.Throws<FormatException>(() => Macrocell.ReadTimeline(text));
+                            if (framed)
+                                Assert.Throws<FormatException>(() => PatternFiles.ReadUniverse(text));
                             return;
                         }
                         MacrocellTimeline timeline = Macrocell.ReadTimeline(text);
@@ -251,13 +269,11 @@ namespace HeatonLife.Tests
                         Assert.Equal(BigInteger.Parse(root.GetProperty("step").GetString()!), timeline.Step);
                         Assert.Equal(Metadata(root.GetProperty("metadata")), timeline.Metadata);
                         ExpectState(dir, timeline.Universe, root.GetProperty("universe"));
-                        int i = 0;
-                        foreach (JsonElement entry in root.GetProperty("frames").EnumerateArray())
-                        {
-                            timeline.Universe.Restore(timeline.Frames[i++]);
-                            ExpectState(dir, timeline.Universe, entry);
-                        }
-                        Assert.Equal(timeline.Frames.Count, i);
+                        ExpectFrames(dir, timeline.Universe, timeline.Frames, root.GetProperty("frames"));
+                        PatternUniverse byContent = PatternFiles.ReadUniverse(text);
+                        Assert.Equal(timeline.Step, byContent.Step);
+                        ExpectState(dir, byContent.Universe, root.GetProperty("universe"));
+                        ExpectFrames(dir, byContent.Universe, byContent.Frames, root.GetProperty("frames"));
                         break;
                     }
                 case "timeline-write":
@@ -287,6 +303,72 @@ namespace HeatonLife.Tests
                 default:
                     throw new InvalidDataException($"unknown kind {kind}");
             }
+        }
+
+        /// <summary>Each frame restored in turn matches its pinned state.</summary>
+        private static void ExpectFrames(string dir, HashLife universe, IReadOnlyList<HashLifeSnapshot> frames, JsonElement entries)
+        {
+            int i = 0;
+            foreach (JsonElement entry in entries.EnumerateArray())
+            {
+                Assert.True(i < frames.Count, "fewer frames than the case pins");
+                universe.Restore(frames[i++]);
+                ExpectState(dir, universe, entry);
+            }
+            Assert.Equal(frames.Count, i);
+        }
+
+        public static IEnumerable<object[]> UniverseCases()
+        {
+            foreach (object[] c in Cases())
+            {
+                using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(Root, (string)c[0], "params.json")));
+                if (doc.RootElement.GetProperty("kind").GetString() == "universe")
+                    yield return c;
+            }
+        }
+
+        /// <summary>
+        /// spec/formats.md "Reading into a universe that exists": every universe case's file, read
+        /// into a universe that already holds a state and a snapshot, is accepted or refused as the
+        /// case says, restores to the case's states, and leaves that universe as it was.
+        /// </summary>
+        [Theory]
+        [MemberData(nameof(UniverseCases))]
+        public void ReadSnapshotReadsAsTheUniverseCase(string caseName)
+        {
+            string dir = Path.Combine(Root, caseName);
+            using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(dir, "params.json")));
+            JsonElement root = doc.RootElement;
+            byte[] data = File.ReadAllBytes(Path.Combine(dir, root.GetProperty("input").GetString()!));
+            var host = new HashLife("B36/S23");
+            host.SetRect(3, -2, new byte[] { 0, 1, 0, 0, 0, 1, 1, 1, 1 }, 3, 3);
+            host.Step(7);
+            HashLifeSnapshot kept = host.Snapshot();
+            host.Step(5);
+            var before = (host.ToMacrocell(), host.Generation, host.Rule);
+            if (root.TryGetProperty("error", out JsonElement flag) && flag.GetBoolean())
+            {
+                Refused(() => host.ReadSnapshot(data));
+                Assert.Equal(before, (host.ToMacrocell(), host.Generation, host.Rule));
+                return;
+            }
+            PatternSnapshot found = host.ReadSnapshot(data);
+            Assert.Equal(before, (host.ToMacrocell(), host.Generation, host.Rule));
+            Assert.Equal(root.GetProperty("format").GetString(), PatternFiles.FormatName(found.Format));
+            Assert.Equal(Metadata(root.GetProperty("metadata")), found.Metadata);
+            Assert.Equal(
+                root.TryGetProperty("step", out JsonElement step) ? BigInteger.Parse(step.GetString()!) : (BigInteger?)null,
+                found.Step);
+            host.Rule = found.Rule; // the case's states carry the file's rule
+            host.Restore(found.Snapshot);
+            ExpectState(dir, host, root);
+            if (root.TryGetProperty("frames", out JsonElement frames))
+                ExpectFrames(dir, host, found.Frames, frames);
+            else
+                Assert.Empty(found.Frames);
+            host.Restore(kept); // a snapshot taken before the read still restores
+            Assert.Equal(7, (int)host.Generation);
         }
     }
 }

@@ -1,0 +1,49 @@
+{
+  "bounding_box": [
+    "-4",
+    "-3",
+    "-3",
+    "-2"
+  ],
+  "family": "formats",
+  "format": "macrocell",
+  "frames": [
+    {
+      "bounding_box": [
+        "-4",
+        "-3",
+        "-2",
+        "-1"
+      ],
+      "generation": "10",
+      "population": "5",
+      "state": "frame-0.mc"
+    },
+    {
+      "bounding_box": [
+        "-1",
+        "0",
+        "1",
+        "0"
+      ],
+      "generation": "15",
+      "population": "3",
+      "state": "frame-1.mc"
+    }
+  ],
+  "generation": "99",
+  "input": "input.mc",
+  "kind": "universe",
+  "metadata": {
+    "author": null,
+    "comments": [],
+    "name": "Three states"
+  },
+  "population": "4",
+  "rle": "with-metadata.rle",
+  "spec_version": "0.16.0",
+  "state": "state.mc",
+  "step": "5",
+  "tier": "bit-exact",
+  "with_metadata": "with-metadata.mc"
+}

@@ -99,17 +99,12 @@ namespace HeatonLife
             _replayInit(_seed);
         }
 
-        /// <summary>Load an explicit grid (row-major, Height*Width entries, values 0..3).</summary>
+        /// <summary>Load an explicit grid (row-major, Height*Width entries, values 0..3). A grid of
+        /// the wrong size, or a value above 3, throws and changes nothing.</summary>
         public void SetState(ReadOnlySpan<byte> cells)
         {
-            if (cells.Length != _cells.Length)
-                throw new ArgumentException($"expected {_cells.Length} cells, got {cells.Length}");
-            for (int i = 0; i < cells.Length; i++)
-            {
-                if (cells[i] > Conductor)
-                    throw new ArgumentException($"wireworld cell value {cells[i]} > 3");
-                _cells[i] = cells[i];
-            }
+            CheckCells(cells);
+            cells.CopyTo(_cells);
             Generation = 0;
             var snapshot = _cells.Clone() as byte[];
             Remember(_seed, _ =>
@@ -124,6 +119,36 @@ namespace HeatonLife
         {
             SetState(cells);
             Generation = generation;
+        }
+
+        /// <summary>
+        /// Load a grid at a given generation (spec/README.md "A world's state and its start").
+        /// Without <paramref name="keepStart"/> it is <see cref="SetState(ReadOnlySpan{byte}, int)"/>:
+        /// the grid also becomes the start <see cref="Reset"/> returns to. With it the start stays
+        /// as it was and nothing is copied for it, so showing a saved frame or putting back an undo
+        /// point allocates nothing.
+        /// </summary>
+        public void SetState(ReadOnlySpan<byte> cells, int generation, bool keepStart)
+        {
+            if (!keepStart)
+            {
+                SetState(cells, generation);
+                return;
+            }
+            CheckCells(cells);
+            cells.CopyTo(_cells);
+            Generation = generation;
+        }
+
+        private void CheckCells(ReadOnlySpan<byte> cells)
+        {
+            if (cells.Length != _cells.Length)
+                throw new ArgumentException($"expected {_cells.Length} cells, got {cells.Length}");
+            for (int i = 0; i < cells.Length; i++)
+            {
+                if (cells[i] > Conductor)
+                    throw new ArgumentException($"wireworld cell value {cells[i]} > 3");
+            }
         }
 
         /// <summary>

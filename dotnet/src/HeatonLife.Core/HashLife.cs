@@ -68,6 +68,8 @@ namespace HeatonLife
     /// <summary>A universe's cells and generation at one moment (spec/hashlife.md "Snapshots").</summary>
     public sealed class HashLifeSnapshot
     {
+        private volatile bool _released;
+
         internal HashLifeSnapshot(HashLife owner, int root, int level, BigInteger generation)
         {
             Owner = owner;
@@ -83,6 +85,52 @@ namespace HeatonLife
         internal int Level { get; }
 
         public BigInteger Generation { get; }
+
+        /// <summary>True once <see cref="Release"/> has let go of the snapshot's nodes.</summary>
+        public bool Released => _released;
+
+        /// <summary>
+        /// Let go of this snapshot's nodes now (spec/hashlife.md "Snapshots"): the universe's next
+        /// collection may free whatever nothing else holds, without waiting for the managed
+        /// collector to find this object unreachable. A released snapshot holds no cells, so
+        /// restoring it, or writing it into a timeline, throws; its <see cref="Generation"/> can
+        /// still be read, and releasing it again does nothing. Any thread may call it: the store
+        /// reads the flag at its next collection.
+        /// </summary>
+        public void Release() => _released = true;
+    }
+
+    /// <summary>
+    /// What a list of snapshots holds in a universe's store beyond its current state
+    /// (spec/hashlife.md "What snapshots hold"). The counts are nodes, exact and the same in
+    /// every port; <see cref="EstimatedBytes"/> is this port's estimate of <see cref="Nodes"/>
+    /// in memory. The Python reference's heaton_life.ca.hashlife.SnapshotFootprint.
+    /// </summary>
+    public sealed class SnapshotFootprint
+    {
+        internal SnapshotFootprint(long universeNodes, long[] added, long nodes, long estimatedBytes)
+        {
+            UniverseNodes = universeNodes;
+            Added = added;
+            Nodes = nodes;
+            EstimatedBytes = estimatedBytes;
+        }
+
+        /// <summary>The nodes of the universe's current state: its canonical Macrocell node lines
+        /// (none for the empty universe).</summary>
+        public long UniverseNodes { get; }
+
+        /// <summary>For each snapshot in order, the nodes it holds that neither the current state
+        /// nor an earlier snapshot in the list holds (0 for a released snapshot, and for one listed
+        /// a second time). The last k counts add up to what releasing those k snapshots frees.</summary>
+        public IReadOnlyList<long> Added { get; }
+
+        /// <summary>The sum of <see cref="Added"/>: the nodes the list holds beyond the current state.</summary>
+        public long Nodes { get; }
+
+        /// <summary><see cref="Nodes"/> at the store's size of a node (40 bytes), the measure
+        /// <see cref="HashLife.MemoryUsed"/> and the memory budget are kept in.</summary>
+        public long EstimatedBytes { get; }
     }
 
     /// <summary>A step could not fit even one generation into <see cref="HashLife.MaxMemoryMb"/>.</summary>
@@ -796,25 +844,90 @@ namespace HeatonLife
             List<WeakReference<HashLifeSnapshot>> live = _store.Snapshots;
             if (live.Count >= _snapshotPrune)
             {
-                // Forget snapshots nobody holds any more, so a host taking one per frame
-                // keeps a short list even when nothing collects.
-                live.RemoveAll(weak => !weak.TryGetTarget(out _));
+                // Forget snapshots nobody holds any more, or that were released, so a host taking
+                // one per frame keeps a short list even when nothing collects.
+                live.RemoveAll(weak => !weak.TryGetTarget(out HashLifeSnapshot? held) || held.Released);
                 _snapshotPrune = Math.Max(64, 2 * live.Count);
             }
             live.Add(new WeakReference<HashLifeSnapshot>(snapshot));
             return snapshot;
         }
 
+        /// <summary>Put the universe back at a snapshot of it: its cells and generation. A snapshot
+        /// of another universe, or a released one, throws <see cref="ArgumentException"/>.</summary>
         public void Restore(HashLifeSnapshot snapshot)
         {
-            if (snapshot == null)
-                throw new ArgumentNullException(nameof(snapshot));
-            if (!ReferenceEquals(snapshot.Owner, this))
-                throw new ArgumentException("the snapshot belongs to another universe", nameof(snapshot));
+            CheckOwn(snapshot, nameof(snapshot));
+            if (snapshot.Released)
+                throw new ArgumentException("the snapshot was released and holds no cells", nameof(snapshot));
             _store.Root = snapshot.RootNode;
             _store.Level = snapshot.Level;
             SetGeneration(snapshot.Generation);
             _version++;
+        }
+
+        private void CheckOwn(HashLifeSnapshot snapshot, string name)
+        {
+            if (snapshot == null)
+                throw new ArgumentNullException(name);
+            if (!ReferenceEquals(snapshot.Owner, this))
+                throw new ArgumentException("the snapshot belongs to another universe", name);
+        }
+
+        /// <summary>
+        /// What <paramref name="snapshots"/> hold beyond the current state, in nodes
+        /// (spec/hashlife.md "What snapshots hold"): the current state's own nodes, each
+        /// snapshot's addition to the state's and the earlier snapshots' nodes, and their sum. A
+        /// state's nodes are the distinct non-empty nodes of its minimal tree, the ones its
+        /// canonical Macrocell text writes. The last k snapshots' counts add up to what releasing
+        /// them frees, so a history listed newest first says what letting go of its oldest points
+        /// would free. A snapshot of another universe throws <see cref="ArgumentException"/>.
+        /// </summary>
+        public SnapshotFootprint MeasureSnapshots(IEnumerable<HashLifeSnapshot> snapshots)
+        {
+            if (snapshots == null)
+                throw new ArgumentNullException(nameof(snapshots));
+            var listed = new List<HashLifeSnapshot>(snapshots);
+            foreach (HashLifeSnapshot snapshot in listed)
+                CheckOwn(snapshot, nameof(snapshots));
+            var seen = new HashSet<int>();
+            var (root, level) = Minimal();
+            long universeNodes = CountNew(root, level, seen);
+            var added = new long[listed.Count];
+            long nodes = 0;
+            for (int i = 0; i < listed.Count; i++)
+            {
+                HashLifeSnapshot snapshot = listed[i];
+                if (snapshot.Released)
+                    continue;
+                var (n, k) = Minimal(snapshot.RootNode, snapshot.Level);
+                added[i] = CountNew(n, k, seen);
+                nodes += added[i];
+            }
+            return new SnapshotFootprint(universeNodes, added, nodes, nodes * HashLifeStore.BytesPerNode);
+        }
+
+        /// <summary>The non-empty nodes of tree (root, level) that <paramref name="seen"/> lacks,
+        /// added to it.</summary>
+        private long CountNew(int root, int level, HashSet<int> seen)
+        {
+            var s = _store;
+            long count = 0;
+            var stack = new Stack<(int Node, int Level)>();
+            stack.Push((root, level));
+            while (stack.Count > 0)
+            {
+                var (n, k) = stack.Pop();
+                if (n == s.Empty(k) || !seen.Add(n))
+                    continue;
+                count++;
+                if (k > 3)
+                {
+                    for (int q = 0; q < 4; q++)
+                        stack.Push((s.Kid(n, q), k - 1));
+                }
+            }
+            return count;
         }
 
         // -- files ------------------------------------------------------------------------------
@@ -841,6 +954,20 @@ namespace HeatonLife
                 throw new ArgumentNullException(nameof(data));
             return PatternFiles.ReadUniverse(data, maxMemoryMb).Universe;
         }
+
+        /// <summary>
+        /// Read a pattern file's bytes, in any two-state format and gzip-compressed or not, into
+        /// this universe's own store (spec/formats.md "Reading into a universe that exists"): a
+        /// snapshot of its cells and generation, with its format, rule, metadata and a timeline's
+        /// frames. The file is read as <see cref="PatternFiles.ReadUniverse(byte[], int)"/> reads it
+        /// and refused as it refuses it, but this universe's cells, generation, rule and earlier
+        /// snapshots stay as they were: restoring the file's snapshot, and taking its rule, is the
+        /// caller's to do. Its nodes are shared with any equal ones the store already holds.
+        /// </summary>
+        public PatternSnapshot ReadSnapshot(byte[] data) => PatternFiles.ReadSnapshot(this, data);
+
+        /// <summary>A pattern file's text read into this universe's store as a snapshot.</summary>
+        public PatternSnapshot ReadSnapshot(string text) => PatternFiles.ReadSnapshot(this, text);
 
         /// <summary>RLE of the bounding box behind a <c>#CXRLE</c> line; inside the editing box only.</summary>
         public string ToRle() => Patterns.HashLifeToRle(this);
@@ -899,6 +1026,34 @@ namespace HeatonLife
             _store.Level = level;
             SetGeneration(generation);
             _version++;
+        }
+
+        /// <summary>
+        /// Run <paramref name="fill"/> on an empty tree in this universe's store and give the tree
+        /// it built, leaving the universe's own root, level and generation as they were: how a file
+        /// is read into the store without becoming the state. Nothing collects outside a step, so
+        /// the universe's own tree survives the building.
+        /// </summary>
+        internal (int Root, int Level) Build(Action fill)
+        {
+            var s = _store;
+            int root = s.Root, level = s.Level;
+            BigInteger generation = Generation;
+            s.Root = s.Empty(MinLevel);
+            s.Level = MinLevel;
+            _version++;
+            try
+            {
+                fill();
+                return (s.Root, s.Level);
+            }
+            finally
+            {
+                s.Root = root;
+                s.Level = level;
+                SetGeneration(generation);
+                _version++;
+            }
         }
 
         /// <summary>The smallest centered root (level ≥ 3) that holds every live cell.</summary>
@@ -1424,22 +1579,31 @@ namespace HeatonLife
                 throw new ArgumentOutOfRangeException(
                     nameof(n), n, $"a step of 2^{MaxLevel - 2} generations or more needs a tree deeper than level {MaxLevel}");
             HashLifeSnapshot saved = Snapshot(); // a collection inside the step keeps the original's nodes
-            if (outside)
-                ClearRect(x0, y0, x1, y1);
-            else
-                ClearOutside(x0, y0, x1, y1);
+            var s = _store;
+            int grown, grownLevel;
             try
             {
-                Step(n, cancellationToken);
-            }
-            catch
-            {
+                if (outside)
+                    ClearRect(x0, y0, x1, y1);
+                else
+                    ClearOutside(x0, y0, x1, y1);
+                try
+                {
+                    Step(n, cancellationToken);
+                }
+                catch
+                {
+                    Restore(saved);
+                    throw;
+                }
+                grown = s.Root;
+                grownLevel = s.Level;
                 Restore(saved);
-                throw;
             }
-            var s = _store;
-            int grown = s.Root, grownLevel = s.Level;
-            Restore(saved);
+            finally
+            {
+                saved.Release(); // the universe holds its nodes again, so it pins nothing past here
+            }
             int level = Math.Max(Math.Max(grownLevel, s.Level), WindowLevel + 2);
             while (s.Level < level)
                 Expand();

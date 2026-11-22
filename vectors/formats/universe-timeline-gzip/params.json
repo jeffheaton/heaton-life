@@ -1,0 +1,60 @@
+{
+  "bounding_box": [
+    "-18",
+    "-4",
+    "17",
+    "15"
+  ],
+  "family": "formats",
+  "format": "macrocell",
+  "frames": [
+    {
+      "bounding_box": [
+        "-18",
+        "-4",
+        "17",
+        "4"
+      ],
+      "generation": "0",
+      "population": "36",
+      "state": "frame-0.mc"
+    },
+    {
+      "bounding_box": [
+        "-18",
+        "-4",
+        "17",
+        "7"
+      ],
+      "generation": "30",
+      "population": "41",
+      "state": "frame-1.mc"
+    },
+    {
+      "bounding_box": [
+        "-18",
+        "-4",
+        "17",
+        "15"
+      ],
+      "generation": "60",
+      "population": "46",
+      "state": "frame-2.mc"
+    }
+  ],
+  "generation": "60",
+  "input": "input.mc.gz",
+  "kind": "universe",
+  "metadata": {
+    "author": null,
+    "comments": [],
+    "name": "Gosper glider gun"
+  },
+  "population": "46",
+  "rle": "with-metadata.rle",
+  "spec_version": "0.16.0",
+  "state": "state.mc",
+  "step": "30",
+  "tier": "bit-exact",
+  "with_metadata": "with-metadata.mc"
+}

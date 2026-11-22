@@ -303,6 +303,26 @@ namespace HeatonLife
             Generation = generation;
         }
 
+        /// <summary>
+        /// Load an RGB lattice at a given generation (spec/README.md "A world's state and its
+        /// start"). Without <paramref name="keepStart"/> it is
+        /// <see cref="SetState(ReadOnlySpan{byte}, int)"/>: the lattice also becomes the start
+        /// <see cref="Reset"/> returns to. With it the start stays as it was and nothing is copied
+        /// for it, so showing a saved frame or putting back an undo point allocates nothing.
+        /// </summary>
+        public void SetState(ReadOnlySpan<byte> cells, int generation, bool keepStart)
+        {
+            if (!keepStart)
+            {
+                SetState(cells, generation);
+                return;
+            }
+            if (cells.Length != _cells.Length)
+                throw new ArgumentException($"expected {_cells.Length} bytes, got {cells.Length}");
+            cells.CopyTo(_cells);
+            Generation = generation;
+        }
+
         /// <summary>Export the RGB lattice as PNG, each cell a scale×scale block (spec/png-io.md).</summary>
         public byte[] ToPng(int scale = 1) => PngGrid.EncodeRgb(_cells, Width, Height, scale);
 

@@ -198,9 +198,46 @@ stops at a sub-step boundary.
 
 `snapshot()` records the cells and the generation in O(1) time and space: it holds the
 root node. `restore(snapshot)` returns the universe to it. A snapshot keeps its nodes
-alive through garbage collection for as long as the snapshot object lives, and it survives
-rule changes (it holds cells, not results). A snapshot belongs to the universe that made
-it; restoring it into another is an error.
+alive through garbage collection until it is released or the snapshot object is dropped,
+and it survives rule changes (it holds cells, not results). A snapshot belongs to the
+universe that made it; restoring it into another is an error.
+
+**Releasing.** `release()` lets go of a snapshot's nodes at once, so the next collection
+can free whatever nothing else holds, without waiting for the snapshot object to be
+dropped (a runtime that finds dropped objects by tracing finds them only when its own
+collector runs). A released snapshot holds no cells: restoring it, or writing it into a
+[timeline](macrocell.md#timelines), is an error. Its generation can still be read, and
+releasing it again does nothing.
+
+### What snapshots hold
+
+The **nodes of a state** are the distinct non-empty nodes of its minimal tree: the minimal
+root of [macrocell.md](macrocell.md#writing) "Writing", step 4, and every non-empty node
+below it. They are the nodes its canonical Macrocell text writes, one line each, and the
+empty universe has none. Nodes are compared by level and cells, the identity hash-consing
+gives them, so a node that two states share is one node, wherever it lies in each.
+
+`measure_snapshots(snapshots)` counts, for a list of the universe's snapshots, what they
+hold beyond its current state:
+
+- `universe_nodes`: the nodes of the current state;
+- `added`: for each snapshot in order, how many of its nodes are neither the current
+  state's nor those of an earlier snapshot in the list. A released snapshot adds 0, and so
+  does a snapshot listed a second time;
+- `nodes`: the sum of `added`, the nodes the list holds beyond the current state.
+
+The nodes that the last k snapshots of the list hold, and that neither the current state
+nor an earlier snapshot in the list holds, therefore number exactly the sum of those k
+counts. Releasing those k snapshots lets a collection free that many nodes, when nothing
+outside the list holds them. Listing a history newest first thus tells how much letting go
+of its oldest points would free. A snapshot of another universe is an error.
+
+The counts are exact, and the same in every port: the vectors pin them. They measure
+trees, not a port's store. A store also keeps nodes the counts leave out (the empty nodes,
+the few between a minimal root and the root a state is held by, and cached results), so
+what a collection frees differs from them by about that much. Each port also gives
+`estimated_bytes`, its own estimate of those nodes' memory: `nodes` at its store's size of
+a node, 130 bytes in Python and 40 in .NET.
 
 ## Memory
 
@@ -308,7 +345,12 @@ integers), so ports move views identically and an app keeps no copy of the math:
   `.rle`, `.mc`, `.mc.gz` (gzip of the canonical text; the compressed bytes are the
   compressor's and not pinned), with the pattern's metadata when given.
 - [Timelines](macrocell.md#timelines): frames of one universe in one Macrocell file,
-  read into snapshots and written from them.
+  read into snapshots and written from them. Loading by content gives a timeline's frames
+  too.
+- Into a universe that exists: `read_snapshot(source)` reads any file that loading by
+  content reads into the universe's own store, as a snapshot of its cells and generation,
+  with its format, rule, metadata and a timeline's frames. The universe and its earlier
+  snapshots stay as they were ([formats.md](formats.md#reading-into-a-universe-that-exists)).
 
 ## Vector encoding
 
@@ -326,6 +368,7 @@ Each case under `vectors/hashlife/` has a `params.json` with `family: "hashlife"
 | `view` | `operations`: each names a view function and its inputs (views as `[x, y, mag]`, big integers as strings) | each operation's `expect`, or `error: true` where the function must raise |
 | `render` | `input`, stepped to `generation`; each frame's `view`, `size` (`[width, height]`), and `mode` | each frame's 8-bit grayscale PNG (compared by decoded pixels; the PNG bytes are the encoder's) |
 | `edit` | `rule`, then `ops` in order on an empty universe: `set_cell` (`x`, `y`, `alive`), `set_rect` (`x`, `y`, `mode`, `cells` as rows of `.`/`*`), `clear_rect` (`x0`…`y1`), `fill_random` (`x0`…`y1`, `density`, `seed`), `step` (`n`, a decimal string), `clear`; from spec 0.16.0 also `clear_outside` (`x0`…`y1`), `rotate_rect` (`x0`…`y1`, `clockwise`, and `expect`: the new rectangle), `flip_rect` (`x0`…`y1`, `horizontal`), `advance_selection` and `advance_outside` (`x0`…`y1`, `n`), `set_generation` (`n`), and the query `bounding_box_in` (`x0`…`y1` as decimal strings; `expect`: the box as four decimal strings, or null) | the final state; an op with `error: true` must raise and change nothing |
+| `snapshots` (spec 0.16.0) | `rule`, then `ops` in order on an empty universe: every `edit` op, and `snapshot` (`name`), `release` (`name`), `restore` (`name`; `expect`: the state, pinned as above), `read` (`input`, a file of the case read with `read_snapshot`; `name` for its snapshot and `frames` for its frames' names; `expect`: `format`, `rule`, `metadata` and `step`, a decimal string or null) and `measure` (`names`; `expect`: `universe_nodes`, `added` and `nodes`, as integers) | the final state; an op with `error: true` must raise and change nothing, and a `read` never changes the universe's state or rule |
 
 Runners are strict: an unknown key, kind, or `spec_version` fails the case.
 

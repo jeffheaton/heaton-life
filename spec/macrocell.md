@@ -119,7 +119,11 @@ frame, n of 0 or past the last node line, a step of 0 or one too large. The file
 root and `#G` still describe one universe, the one a reader without timelines loads; the
 writer below makes it the last frame. Python: `read_timeline(source)`, giving a
 `MacrocellTimeline` (one `universe` holding every frame's nodes, left at the file's root
-and generation, and `frames`, a snapshot of each); .NET: `Macrocell.ReadTimeline`.
+and generation, and `frames`, a snapshot of each); .NET: `Macrocell.ReadTimeline`. The
+reader by content gives a timeline's frames too
+([formats.md](formats.md#reading-into-the-unbounded-universe)), and `read_snapshot` reads
+them into a universe that exists
+([formats.md](formats.md#reading-into-a-universe-that-exists)).
 
 **Writing.** From frames that are snapshots of one universe, in order, at generations
 spaced evenly by a step of at least 1 (a single frame has step 1). Writing is canonical:

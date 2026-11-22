@@ -12,9 +12,9 @@ import dataclasses
 import functools
 import operator
 import weakref
-from collections.abc import Iterator
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 from numpy.typing import NDArray
@@ -34,13 +34,16 @@ from heaton_life.ca.hashlife.leaves import (
 )
 from heaton_life.ca.hashlife.render import TILE_CACHE_LIMIT, RenderMode
 from heaton_life.ca.hashlife.render import render as render_frame
-from heaton_life.ca.hashlife.store import Abort, NodeStore
+from heaton_life.ca.hashlife.store import NODE_BYTES, Abort, NodeStore
 from heaton_life.ca.hashlife.view import LifeView
 from heaton_life.ca.rulestring import compile_rule
 from heaton_life.core.params import Params
 from heaton_life.init.metadata import PatternMetadata
 from heaton_life.init.patterns import turn_center, turned_rect
 from heaton_life.init.seeding import soup
+
+if TYPE_CHECKING:
+    from heaton_life.ca.hashlife.files import PatternSnapshot
 
 EDIT_LIMIT = 1_000_000_000
 """Editing reaches cells with |x| ≤ EDIT_LIMIT and |y| ≤ EDIT_LIMIT."""
@@ -94,17 +97,51 @@ class HashLifeParams(Params):
 class Snapshot:
     """A universe's cells and generation at one moment (spec/hashlife.md "Snapshots")."""
 
-    __slots__ = ("__weakref__", "_generation", "_level", "_owner", "_root")
+    __slots__ = ("__weakref__", "_generation", "_level", "_owner", "_released", "_root")
 
     def __init__(self, owner: HashLife, root: int, level: int, generation: int) -> None:
         self._owner = weakref.ref(owner)
         self._root = root
         self._level = level
         self._generation = generation
+        self._released = False
 
     @property
     def generation(self) -> int:
         return self._generation
+
+    @property
+    def released(self) -> bool:
+        """True once ``release()`` has let go of the snapshot's nodes."""
+        return self._released
+
+    def release(self) -> None:
+        """Let go of this snapshot's nodes now (spec/hashlife.md "Snapshots"): the next
+        collection may free whatever nothing else holds. A released snapshot holds no cells,
+        so restoring it is an error; releasing it again does nothing."""
+        if self._released:
+            return
+        self._released = True
+        owner = self._owner()
+        if owner is not None:
+            owner._snapshots.discard(self)
+
+
+@dataclasses.dataclass(frozen=True)
+class SnapshotFootprint:
+    """What a list of snapshots holds in a universe's store beyond its current state
+    (spec/hashlife.md "What snapshots hold"). The counts are nodes, exact and the same in
+    every port; ``estimated_bytes`` is this port's estimate of ``nodes`` in memory."""
+
+    universe_nodes: int
+    """The nodes of the universe's current state."""
+    added: tuple[int, ...]
+    """For each snapshot in order, the nodes it holds that neither the current state nor an
+    earlier snapshot in the list holds (0 for a released snapshot)."""
+    nodes: int
+    """``sum(added)``: the nodes the list holds beyond the current state."""
+    estimated_bytes: int
+    """``nodes`` at this store's size of a node (``NODE_BYTES``)."""
 
 
 @functools.lru_cache(maxsize=16)
@@ -554,9 +591,48 @@ class HashLife:
     def restore(self, snapshot: Snapshot) -> None:
         if snapshot._owner() is not self:
             raise ValueError("snapshot belongs to another universe")
+        if snapshot._released:
+            raise ValueError("the snapshot was released and holds no cells")
         self._root = snapshot._root
         self._level = snapshot._level
         self._generation = snapshot._generation
+
+    def measure_snapshots(self, snapshots: Iterable[Snapshot]) -> SnapshotFootprint:
+        """What ``snapshots`` hold beyond the current state, in nodes (spec/hashlife.md "What
+        snapshots hold"): the current state's own nodes, each snapshot's addition to the
+        state's and the earlier snapshots' nodes, and their sum. The last k snapshots' counts
+        add up to what releasing them frees, so a history listed newest first says what
+        letting go of its oldest points would free."""
+        listed = list(snapshots)
+        for snapshot in listed:
+            if snapshot._owner() is not self:
+                raise ValueError("snapshot belongs to another universe")
+        seen: set[int] = set()
+        universe_nodes = self._count_new(*self._minimal(), seen)
+        added = tuple(
+            0 if s._released else self._count_new(*self._minimal_of(s._root, s._level), seen)
+            for s in listed
+        )
+        nodes = sum(added)
+        return SnapshotFootprint(universe_nodes, added, nodes, nodes * NODE_BYTES)
+
+    def _count_new(self, root: int, level: int, seen: set[int]) -> int:
+        """The non-empty nodes of tree (root, level) that ``seen`` lacks, added to it."""
+        store = self._store
+        data = store.data
+        count = 0
+        stack = [(root, level)]
+        while stack:
+            n, k = stack.pop()
+            if n in seen or n == store.empty(k):
+                continue
+            seen.add(n)
+            count += 1
+            if k > 3:
+                a, b, c, d = data[n]
+                k -= 1
+                stack += ((a, k), (b, k), (c, k), (d, k))
+        return count
 
     # -- frames -----------------------------------------------------------------------------
 
@@ -601,6 +677,16 @@ class HashLife:
 
         return read_universe(Path(path).read_bytes(), max_memory_mb=max_memory_mb).universe
 
+    def read_snapshot(self, source: bytes | bytearray | memoryview | str) -> PatternSnapshot:
+        """Read a pattern file of any two-state format into this universe's own store
+        (spec/formats.md "Reading into a universe that exists"): a snapshot of its cells and
+        generation, with its format, rule, metadata and a timeline's frames. The file is read
+        as ``read_universe`` reads it, but the universe's state, rule and earlier snapshots
+        stay as they were; restoring the snapshot is the caller's to do."""
+        from heaton_life.ca.hashlife.files import read_snapshot
+
+        return read_snapshot(self, source)
+
     def to_rle(self, metadata: PatternMetadata | None = None) -> str:
         """RLE of the bounding box behind a ``#CXRLE`` line (and ``metadata``'s lines);
         inside the editing box only."""
@@ -637,6 +723,18 @@ class HashLife:
     def _adopt(self, root: int, level: int, generation: int) -> None:
         self._root, self._level, self._generation = root, level, generation
 
+    def _build(self, fill: Callable[[], None]) -> tuple[int, int]:
+        """Run ``fill`` on an empty tree in this universe's store and give the tree it built
+        as (root, level), leaving the universe's own root, level and generation as they were:
+        how a file is read into the store without becoming the state."""
+        saved = self._root, self._level, self._generation
+        self._root, self._level = self._store.empty(_MIN_LEVEL), _MIN_LEVEL
+        try:
+            fill()
+            return self._root, self._level
+        finally:
+            self._root, self._level, self._generation = saved
+
     def _edit_rect(self, x0: int, y0: int, x1: int, y1: int) -> tuple[int, int, int, int]:
         """The tree rectangle of a non-empty inclusive rectangle in the editing box."""
         x0, y0, x1, y1 = _ints(x0, y0, x1, y1)
@@ -672,18 +770,21 @@ class HashLife:
         n = operator.index(n)
         _check_count(n)
         saved = self.snapshot()  # a collection inside the step keeps the original's nodes
-        origin = -(1 << (self._level - 1))
-        if outside:
-            self._root = self._clear(self._root, self._level, origin, origin, rect)
-        else:
-            self._root = self._keep(self._root, self._level, origin, origin, rect)
         try:
-            self.step(n)
-        except BaseException:
+            origin = -(1 << (self._level - 1))
+            if outside:
+                self._root = self._clear(self._root, self._level, origin, origin, rect)
+            else:
+                self._root = self._keep(self._root, self._level, origin, origin, rect)
+            try:
+                self.step(n)
+            except BaseException:
+                self.restore(saved)
+                raise
+            grown, grown_level = self._root, self._level
             self.restore(saved)
-            raise
-        grown, grown_level = self._root, self._level
-        self.restore(saved)
+        finally:
+            saved.release()  # the universe holds its nodes again; nothing else needs it
         while self._level < grown_level:
             self._expand()
         while grown_level < self._level:

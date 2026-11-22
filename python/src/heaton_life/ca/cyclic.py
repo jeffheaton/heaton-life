@@ -7,6 +7,7 @@ neighbors within `reach` already hold that successor. Toroidal by definition.
 from __future__ import annotations
 
 import dataclasses
+import operator
 
 import numpy as np
 from numpy.typing import NDArray
@@ -28,9 +29,7 @@ class CyclicParams(Params):
     width: int = dataclasses.field(default=256, metadata={"min": 8, "max": 2048})
     height: int = dataclasses.field(default=256, metadata={"min": 8, "max": 2048})
     init: str = dataclasses.field(default="soup", metadata={"choices": ["soup"]})
-    seed: int = dataclasses.field(
-        default=0, metadata={"min": 0, "max": 4294967295, "role": "seed"}
-    )
+    seed: int = dataclasses.field(default=0, metadata={"min": 0, "max": 4294967295, "role": "seed"})
 
 
 def _offsets(reach: int, neighborhood: str) -> list[tuple[int, int]]:
@@ -115,6 +114,29 @@ class Cyclic(AdvanceRegion):
         else:
             raise ValueError(f"unknown init strategy: {p.init!r}")
         self._generation = 0
+
+    def set_state(
+        self, state: NDArray[np.generic], generation: int = 0, *, keep_start: bool = False
+    ) -> None:
+        """Replace the state (values below ``states``) and set the generation
+        (spec/README.md "A world's state and its start"). The state also becomes the start
+        ``reset()`` returns to (``init`` ``array``), unless ``keep_start``: then the start
+        stays as it was, and no copy of the state is kept for it."""
+        p = self.params
+        cells = np.asarray(state)
+        if cells.shape != (p.height, p.width):
+            raise ValueError(
+                f"state shape {cells.shape} does not match (h={p.height}, w={p.width})"
+            )
+        if cells.max(initial=0) >= p.states:
+            raise ValueError("state has values >= states")
+        cells = cells.astype(np.uint8)
+        generation = operator.index(generation)
+        if not keep_start:
+            self._initial = cells.copy()
+            self.params = p.replace(init="array")
+        self._state = cells
+        self._generation = generation
 
     def step(self, n: int = 1) -> None:
         p = self.params
