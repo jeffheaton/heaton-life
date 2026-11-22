@@ -173,12 +173,20 @@ def _tables(rule: str) -> Tables:
 
 
 def _hashlife_rule(rule: str, *, presets: bool = True) -> str:
-    """The canonical form of a rule the universe can run: any Life-like rule, B0 included
-    (spec/hashlife.md "Rules with B0"). ``presets`` lets a preset name (``life``) stand
-    for its rule, as where a person types one; a rule read from a file passes
-    ``presets=False``, since a file names its rule, never a preset (spec/formats.md
+    """The canonical form of a rule the universe can run: any Life-like rule of two states,
+    B0 included (spec/hashlife.md "Rules with B0"). A rule with a variant (History) is
+    refused: it has more states than the universe holds. ``presets`` lets a preset name
+    (``life``) stand for its rule, as where a person types one; a rule read from a file
+    passes ``presets=False``, since a file names its rule, never a preset (spec/formats.md
     "Reading into the unbounded universe")."""
-    return compile_rule(rule, presets=presets).canonical
+    compiled = compile_rule(rule, presets=presets, variants=True)
+    if compiled.variant:
+        raise ValueError(
+            f"{compiled.canonical} is a {compiled.variant} rule of {compiled.states} states, "
+            "and this universe holds two: MultiStateHashLife runs it "
+            "(spec/hashlife.md, spec/hashlife-multistate.md)"
+        )
+    return compiled.canonical
 
 
 def _budget(max_memory_mb: int) -> int:

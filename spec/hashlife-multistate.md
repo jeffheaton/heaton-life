@@ -56,6 +56,7 @@ family's. Any other text is an error. The names so far:
 | Name | Rule | States |
 |---|---|---|
 | `WireWorld` | Wireworld ([wireworld.md](wireworld.md)): 0 empty, 1 electron head, 2 electron tail, 3 conductor | 4 |
+| a [History rule](history.md), `B3/S23History` or `LifeHistory`, any rule of [rules.md](rules.md) with the `History` variant | its cell function is history.md's evolution; canonical name and spellings as rules.md gives them (`LifeHistory` is `B3/S23History`). A base rule with B0 is refused: its background would change | 7 |
 
 A port may also take a state rule as an object (Python a `StateRule`, .NET a `StateRule`),
 for a family's own rules; files still name a rule by its canonical name (Pattern I/O,
@@ -131,8 +132,10 @@ refused, changes nothing.
   as [hashlife.md](hashlife.md#editing) defines them, the cells carrying their states and
   the blank being 0.
 
-Random fill is a Life-like tool ([patterns.md](patterns.md#editing-a-region)) and has no
-multi-state form.
+Random fill is a Life-like tool ([patterns.md](patterns.md#editing-a-region)): the
+universe of a [History rule](history.md) has it, `fill_random(x0, y0, x1, y1, density,
+seed)` as [hashlife.md](hashlife.md#editing) defines it, its live cells state 1 and its
+dead ones 0. Under any other rule it is an error.
 
 ## Snapshots
 
@@ -220,10 +223,10 @@ and `state_lines`.
 | kind | inputs | expected |
 |---|---|---|
 | `evolve` | `input` (an `.rle` or `.mc` file, loaded by content) | `checkpoints`: states in order; a runner steps by each difference |
-| `grid` | `rule`, `grid` (an 8-bit grayscale PNG of states × 85, as the [wireworld](wireworld.md#vector-encoding) vectors store them), `origin` (`[x, y]`, the cell the grid's top-left lands on) | `checkpoints`: each a state, and `cells` (a PNG like `grid`): the grid family run from `grid` with dead edges to that generation, which the universe's rectangle under the grid must equal, every non-zero cell of the universe lying in it |
+| `grid` | `rule`, `grid` (an 8-bit grayscale PNG of states: × 85 for `WireWorld`, as the [wireworld](wireworld.md#vector-encoding) vectors store them, and the state itself for a [History rule](history.md#vector-encoding)), `origin` (`[x, y]`, the cell the grid's top-left lands on) | `checkpoints`: each a state, and `cells` (a PNG like `grid`): the grid family run from `grid` with dead edges to that generation (Wireworld, or Life-like under the History rule), which the universe's rectangle under the grid must equal, every non-zero cell of the universe lying in it |
 | `macrocell` | `input.mc`, and `rule` (the reader's rule) when given | the state, and `rle` (the RLE file) or `rle_error: true`; or `error: true` |
 | `rle` | `input.rle`, and `rule` when given | the state and `rle`; or `error: true` |
-| `edit` | `rule`, then `ops` in order on an empty universe: `set_cell` (`x`, `y`, `state`), `set_rect` (`x`, `y`, `mode`, `cells` as rows of state digits, `0`–`9` then `a`–`z` for 10–35), `clear_rect`, `clear_outside`, `rotate_rect` (with `expect`), `flip_rect`, `advance_selection`, `advance_outside` (`n`), `set_generation` (`n`), `step` (`n`), `clear`, `set_rule` (`rule`), and the queries `get_rect` (`x0`…`y1`; `expect`: rows of state digits) and `bounding_box_in` (`expect`) — coordinates as in [hashlife.md](hashlife.md#vector-encoding) | the final state; an op with `error: true` must raise and change nothing |
+| `edit` | `rule`, then `ops` in order on an empty universe: `set_cell` (`x`, `y`, `state`), `set_rect` (`x`, `y`, `mode`, `cells` as rows of state digits, `0`–`9` then `a`–`z` for 10–35), `clear_rect`, `clear_outside`, `rotate_rect` (with `expect`), `flip_rect`, `advance_selection`, `advance_outside` (`n`), `set_generation` (`n`), `step` (`n`), `clear`, `set_rule` (`rule`), `fill_random` (`x0`…`y1`, `density`, `seed`; History rules only), and the queries `get_rect` (`x0`…`y1`; `expect`: rows of state digits) and `bounding_box_in` (`expect`) — coordinates as in [hashlife.md](hashlife.md#vector-encoding) | the final state; an op with `error: true` must raise and change nothing |
 | `render` | `input`, stepped to `generation`; each frame's `view`, `size`, `mode`, and `order` (the zoom order) | each frame's 8-bit grayscale PNG of pixel values (compared by decoded pixels) |
 | `snapshots` | `rule`, then `ops`: every `edit` op, and `snapshot`, `release`, `restore` (`expect`: the state), `read` (`input`, `name`, `frames`; `expect`: `format`, `rule`, `metadata`, `step`) and `measure` (`names`; `expect`: `universe_nodes`, `added`, `nodes`) as in [hashlife.md](hashlife.md#vector-encoding) | the final state; an op with `error: true` must raise and change nothing |
 | `timeline` | `input` (a pattern), `generations` (a frame at each, from the input's own), `metadata` | `timeline`: the file [macrocell.md](macrocell.md#timelines) writes; reading it back gives each frame's state (`frames`) again |

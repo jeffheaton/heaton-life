@@ -1,0 +1,199 @@
+{
+  "cases": [
+    {
+      "base": "B3/S23",
+      "canonical": "B3/S23History",
+      "input": "B3/S23History",
+      "neighborhood": "moore",
+      "states": 7,
+      "table": "0116177e16687ee816687ee86880e88016687ee86880e8806880e8808000800016687ee86880e8806880e880800080006880e880800080008000800000000000"
+    },
+    {
+      "base": "B3/S23",
+      "canonical": "B3/S23History",
+      "input": "b3/s23history",
+      "neighborhood": "moore",
+      "states": 7,
+      "table": "0116177e16687ee816687ee86880e88016687ee86880e8806880e8808000800016687ee86880e8806880e880800080006880e880800080008000800000000000"
+    },
+    {
+      "base": "B3/S23",
+      "canonical": "B3/S23History",
+      "input": "LifeHistory",
+      "neighborhood": "moore",
+      "states": 7,
+      "table": "0116177e16687ee816687ee86880e88016687ee86880e8806880e8808000800016687ee86880e8806880e880800080006880e880800080008000800000000000"
+    },
+    {
+      "base": "B3/S23",
+      "canonical": "B3/S23History",
+      "input": " LIFEHISTORY\t",
+      "neighborhood": "moore",
+      "states": 7,
+      "table": "0116177e16687ee816687ee86880e88016687ee86880e8806880e8808000800016687ee86880e8806880e880800080006880e880800080008000800000000000"
+    },
+    {
+      "base": "B36/S23",
+      "canonical": "B36/S23History",
+      "input": "B36/S23History",
+      "neighborhood": "moore",
+      "states": 7,
+      "table": "0116177e16687ee816687ee86881e88016687ee86881e8806881e8808116800016687ee86881e8806881e880811680006881e880811680008116800016680000"
+    },
+    {
+      "base": "B2-a/S12",
+      "canonical": "B2-a/S12History",
+      "input": "B2-a/S12History",
+      "neighborhood": "moore",
+      "states": 7,
+      "table": "04287ee86080e8806800e880800080006880e8808000800000008000000000006880e88000008000800080000000000000008000000000000000000000000000"
+    },
+    {
+      "base": "B3/S2-i34q",
+      "canonical": "B3/S2-i34qHistory",
+      "input": "b3/s2-i34qHISTORY",
+      "neighborhood": "moore",
+      "states": 7,
+      "table": "0116177e16687e6816687ee86880ea8016685ee86880e8806880e8888000800016687ef86880e8806880e880800080006880e8808000c0008000800000000000"
+    },
+    {
+      "base": "B2/S34H",
+      "canonical": "B2/S34HHistory",
+      "input": "B2/S34HHistory",
+      "neighborhood": "hexagonal",
+      "states": 7,
+      "table": "1166001166881177116600116688117766881177880077ee66881177880077ee66881177880077ee66881177880077ee880077ee0000ee88880077ee0000ee88"
+    },
+    {
+      "base": "B2/S34H",
+      "canonical": "B2/S34HHistory",
+      "input": "b2/s34hhistory",
+      "neighborhood": "hexagonal",
+      "states": 7,
+      "table": "1166001166881177116600116688117766881177880077ee66881177880077ee66881177880077ee66881177880077ee880077ee0000ee88880077ee0000ee88"
+    },
+    {
+      "base": "B2/S013V",
+      "canonical": "B2/S013VHistory",
+      "input": "B2/S013VHistory",
+      "neighborhood": "vonneumann",
+      "states": 7,
+      "table": "0033ffcc33cccc330033ffcc33cccc3333cccc33cc0033cc33cccc33cc0033cc0033ffcc33cccc330033ffcc33cccc3333cccc33cc0033cc33cccc33cc0033cc"
+    },
+    {
+      "base": "B0/S8",
+      "canonical": "B0/S8History",
+      "input": "B0/S8History",
+      "neighborhood": "moore",
+      "states": 7,
+      "table": "80000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+    },
+    {
+      "base": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAA",
+      "canonical": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAAHistory",
+      "input": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAAHistory",
+      "neighborhood": "moore",
+      "states": 7,
+      "table": "0116177e16687ee816687ee86880e88016687ee86880e8806880e8808000800016687ee86880e8806880e880800080006880e880800080008000800000000000"
+    },
+    {
+      "base": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAA",
+      "canonical": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAAHistory",
+      "input": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAA==history",
+      "neighborhood": "moore",
+      "states": 7,
+      "table": "0116177e16687ee816687ee86880e88016687ee86880e8806880e8808000800016687ee86880e8806880e880800080006880e880800080008000800000000000"
+    },
+    {
+      "base": "MAPFgFoF2gXgH5oF4B+AH4A6A",
+      "canonical": "MAPFgFoF2gXgH5oF4B+AH4A6AHistory",
+      "input": "MAPFgFoF2gXgH5oF4B+AH4A6AHistory",
+      "neighborhood": "hexagonal",
+      "states": 7,
+      "table": "1166001166881177116600116688117766881177880077ee66881177880077ee66881177880077ee66881177880077ee000077ee0000ee88000077ee0000ee88"
+    },
+    {
+      "base": "MAPHmkphg",
+      "canonical": "MAPHmkphgHistory",
+      "input": "MAPHmkphg==History",
+      "neighborhood": "vonneumann",
+      "states": 7,
+      "table": "0033ffcc33cccc330033ffcc33cccc3300cccc33cc0033cc00cccc33cc0033cc0033ffcc33cccc330033ffcc33cccc3300cccc33cc0033cc00cccc33cc0033cc"
+    },
+    {
+      "base": "B3/S23",
+      "canonical": "B3/S23",
+      "input": "B3/S23",
+      "neighborhood": "moore",
+      "states": 2,
+      "table": "0116177e16687ee816687ee86880e88016687ee86880e8806880e8808000800016687ee86880e8806880e880800080006880e880800080008000800000000000"
+    },
+    {
+      "base": "MAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHistorw",
+      "canonical": "MAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHistorw",
+      "input": "MAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHistory",
+      "neighborhood": "moore",
+      "states": 2,
+      "table": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000078acb68af"
+    },
+    {
+      "error": true,
+      "input": "B3/S23Histor",
+      "reason": "unexpected 'Histor' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "B3/S23 History",
+      "reason": "unexpected ' History' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "B3/S23HistoryHistory",
+      "reason": "unexpected 'HistoryHistory' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "B3/S23HistoryH",
+      "reason": "unexpected 'HistoryH' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "B9/S23History",
+      "reason": "expected '/' after the birth counts"
+    },
+    {
+      "error": true,
+      "input": "B1kn/SHistory",
+      "reason": "k is not a letter class of 1"
+    },
+    {
+      "error": true,
+      "input": "B3/S23HHistoryx",
+      "reason": "unexpected 'HHistoryx' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "LifeHistoryX",
+      "reason": "expected B…/S… or MAP…"
+    },
+    {
+      "error": true,
+      "input": "Life History",
+      "reason": "expected B…/S… or MAP…"
+    },
+    {
+      "error": true,
+      "input": "History",
+      "reason": "expected B…/S… or MAP…"
+    },
+    {
+      "error": true,
+      "input": "MAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHistory",
+      "reason": "a MAP payload is 86, 22 or 6 base64 characters, optionally followed by =="
+    }
+  ],
+  "family": "rules",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "variants": true
+}

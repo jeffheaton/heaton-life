@@ -275,14 +275,21 @@ namespace HeatonLife
         /// <summary>Garbage collections run so far.</summary>
         public int Collections => _store.Collections;
 
-        /// <summary>The canonical form of a rule a universe can run: any Life-like rule
-        /// (spec/rules.md), B0 included (spec/hashlife.md "Rules with B0"); anything else throws
-        /// <see cref="ArgumentException"/>.</summary>
+        /// <summary>The canonical form of a rule a universe can run: any Life-like rule of two
+        /// states (spec/rules.md), B0 included (spec/hashlife.md "Rules with B0"). A rule with a
+        /// variant (History) is refused, since it has more states than the universe holds, and
+        /// anything else throws <see cref="ArgumentException"/> too.</summary>
         internal static string CheckedRule(string rule)
         {
             if (rule == null)
                 throw new ArgumentNullException(nameof(rule));
-            return RuleString.Compile(rule).Canonical;
+            LifeRule compiled = RuleString.Compile(rule, variants: true);
+            if (compiled.Variant != RuleVariant.None)
+                throw new ArgumentException(
+                    $"{compiled.Canonical} is a {compiled.Variant} rule of {compiled.States} states, and this "
+                    + "universe holds two: MultiStateHashLife runs it (spec/hashlife.md, spec/hashlife-multistate.md)",
+                    nameof(rule));
+            return compiled.Canonical;
         }
 
         private static int MaxNodesFor(int maxMemoryMb)

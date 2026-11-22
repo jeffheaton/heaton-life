@@ -1,5 +1,5 @@
-"""Multi-state HashLife conformance: replay vectors/hashlife-multistate/ — Wireworld grids run
-on the plane beside the grid family, evolution from files, Macrocell and RLE reading and
+"""Multi-state HashLife conformance: replay vectors/hashlife-multistate/ — Wireworld and History
+grids run on the plane beside the grid family, evolution from files, Macrocell and RLE reading and
 canonical writing, edits with states, frames under a zoom order, snapshot scripts, and
 timelines. Every state is compared through its canonical Macrocell text
 (spec/hashlife-multistate.md), bit-exact. The .NET suite replays the same files."""
@@ -15,12 +15,14 @@ import numpy as np
 import pytest
 from PIL import Image
 
+from heaton_life.ca import LifeLike
 from heaton_life.ca.hashlife import LifeView, MultiStateHashLife, Snapshot
 from heaton_life.ca.hashlife.multistate import (
     read_multistate_universe,
     read_timeline,
     write_timeline,
 )
+from heaton_life.ca.rulestring import try_compile_rule
 from heaton_life.ca.wireworld import Wireworld
 from heaton_life.init import PatternMetadata
 
@@ -52,6 +54,7 @@ _EDIT_OPS = {
     "step": {"n"},
     "clear": set(),
     "set_rule": {"rule"},
+    "fill_random": {"x0", "y0", "x1", "y1", "density", "seed"},
     "get_rect": {"x0", "y0", "x1", "y1", "expect"},
     "bounding_box_in": {"x0", "y0", "x1", "y1", "expect"},
 }
@@ -78,10 +81,17 @@ def _expect_state(case_dir: Path, u: MultiStateHashLife, entry: dict[str, Any]) 
         assert hashlib.sha256(text.encode("ascii")).hexdigest() == entry["state_sha256"]
 
 
-def _states_png(path: Path) -> np.ndarray[Any, np.dtype[np.uint8]]:
-    """A grid stored as the wireworld vectors store one: states × 85."""
+def _states_png(path: Path, scale: int = 85) -> np.ndarray[Any, np.dtype[np.uint8]]:
+    """A grid stored as the wireworld vectors store one, states × 85, or, with ``scale`` 1,
+    as the lifelike-history vectors store one: the states themselves."""
     with Image.open(path) as img:
-        return (np.asarray(img.convert("L")) // 85).astype(np.uint8)
+        return (np.asarray(img.convert("L")) // scale).astype(np.uint8)
+
+
+def _is_history(rule: str) -> bool:
+    """Whether a case's rule is a History rule (spec/history.md), whose grid is Life-like."""
+    compiled, _ = try_compile_rule(rule, presets=False, variants=True)
+    return compiled is not None and compiled.variant == "History"
 
 
 def _cells(rows: list[str]) -> np.ndarray[Any, np.dtype[np.uint8]]:
@@ -117,6 +127,8 @@ def _apply(u: MultiStateHashLife, op: dict[str, Any]) -> None:
         u.clear()
     elif kind == "set_rule":
         u.rule = op["rule"]
+    elif kind == "fill_random":  # History rules only (spec/hashlife-multistate.md "Editing")
+        u.fill_random(*box, op["density"], op["seed"])
     elif kind == "get_rect":
         rows = ["".join(_DIGITS[v] for v in row) for row in u.get_rect(*box)]
         assert rows == op["expect"], op
@@ -195,19 +207,25 @@ def test_multistate_vector(case: Path) -> None:
             u.step(int(entry["generation"]) - u.generation)
             _expect_state(d, u, entry)
     elif kind == "grid":
-        grid = _states_png(d / meta["grid"])
+        history = _is_history(meta["rule"])
+        scale = 1 if history else 85
+        grid = _states_png(d / meta["grid"], scale)
         height, width = grid.shape
         x, y = (int(v) for v in meta["origin"])
         u = MultiStateHashLife(meta["rule"])
         u.set_rect(x, y, grid)
-        w = Wireworld(size=(width, height), init=grid)
+        w: LifeLike | Wireworld = (
+            LifeLike(meta["rule"], size=(width, height), init=grid, boundary="dead")
+            if history
+            else Wireworld(size=(width, height), init=grid)
+        )
         for entry in meta["checkpoints"]:
             assert set(entry) <= _STATE | {"cells"}, entry
             gen = int(entry["generation"])
             u.step(gen - u.generation)
             w.step(gen - w.generation)
             _expect_state(d, u, entry)
-            cells = _states_png(d / entry["cells"])
+            cells = _states_png(d / entry["cells"], scale)
             assert np.array_equal(w.state, cells), gen  # the grid family's own run
             assert np.array_equal(u.get_rect(x, y, x + width - 1, y + height - 1), cells), gen
             assert u.population == int(np.count_nonzero(cells)), gen  # nothing outside it

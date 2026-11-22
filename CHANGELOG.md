@@ -253,6 +253,34 @@ and an RLE header naming any Life-like rule making the file two-state.
   what a canceled HashLife step throws (`OperationCanceledException`, `StepCanceled`) and
   leaves the world exactly as it was, so a host can offer Cancel instead of capping the
   work. Without a cancel, every result is as before.
+- **History rules** ([spec/history.md](spec/history.md); [spec/rules.md](spec/rules.md)
+  "Variants"). A `History` suffix on any Life-like rule, in every notation and
+  neighborhood (`B3/S23History`, `B2/S34HHistory`, `MAP…History`; `LifeHistory` is
+  `B3/S23History`), gives seven states: off, on, envelope, marked on, marked off, start on
+  and boundary. The on cells (the odd states) run the base rule exactly; the envelope
+  records every cell once on; marks survive birth and death; boundary cells never change
+  and keep every cell beside them off. The states read and write as RLE's letters `.` and
+  `A`–`F`, so LifeHistory files shared online open as they were written.
+  - The rule compiler takes a variant only when asked (`compile_rule(text,
+    variants=True)`, .NET `RuleString.Compile(text, variants: true)` and the new
+    `TryCompile(text, variants, out rule, out reason)`); without it a History rule is
+    refused with the reason `a History rule has 7 states, not 2`, so every two-state
+    engine, reader and dialect check works as before. `LifeRule` gains `variant` (.NET
+    `Variant`, `RuleVariant`), `states`, `base`, `same_base` (.NET `SameBase`: a host's
+    native-or-alien check compares bases, so a Life part is at home in a History world)
+    and `convert_cells` (.NET `ConvertCells`: a state the rule lacks becomes on or off by
+    its parity, so a History pattern pastes into a two-state world by its on cells).
+  - Life-like grids run History rules on every topology (`LifeLike.states`, .NET
+    `States` and `CompiledRule`); their frames are the states themselves, for a color per
+    state. .NET `Step` and `WriteFrame` allocate nothing. Random fill writes the base
+    rule's soup, states 0 and 1.
+  - On the unbounded plane, the multi-state universe runs every History rule whose base
+    has no B0 (`MultiStateHashLife("B3/S23History")`, `HistoryRule`), with random fill
+    (`fill_random`, .NET `FillRandom`); the two-state `HashLife` refuses History rules
+    with a reason. The canonical RLE encoder writes a History rule's canonical name.
+  - New vectors: the `lifelike-history/` family, `rules/history*`, and History cases
+    under `patterns/`, `render/`, `formats/` and `hashlife-multistate/` (where the plane
+    runs beside a History grid inside walls of boundary cells).
 
 ### Changed
 

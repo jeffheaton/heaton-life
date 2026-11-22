@@ -1,0 +1,49 @@
+{
+  "cases": [
+    {
+      "canonical": "B3/S23",
+      "input": "B3/S23",
+      "neighborhood": "moore",
+      "table": "0116177e16687ee816687ee86880e88016687ee86880e8806880e8808000800016687ee86880e8806880e880800080006880e880800080008000800000000000"
+    },
+    {
+      "canonical": "MAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHistorw",
+      "input": "MAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHistory",
+      "neighborhood": "moore",
+      "table": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000078acb68af"
+    },
+    {
+      "error": true,
+      "input": "B3/S23History",
+      "reason": "a History rule has 7 states, not 2"
+    },
+    {
+      "error": true,
+      "input": "LifeHistory",
+      "reason": "a History rule has 7 states, not 2"
+    },
+    {
+      "error": true,
+      "input": "b2/s34hhistory",
+      "reason": "a History rule has 7 states, not 2"
+    },
+    {
+      "error": true,
+      "input": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAAHistory",
+      "reason": "a History rule has 7 states, not 2"
+    },
+    {
+      "error": true,
+      "input": "B3/S23Histor",
+      "reason": "unexpected 'Histor' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "B9/S23History",
+      "reason": "expected '/' after the birth counts"
+    }
+  ],
+  "family": "rules",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

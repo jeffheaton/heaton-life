@@ -1,0 +1,34 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_00001.png",
+      "step": 1
+    },
+    {
+      "file": "state_00010.png",
+      "step": 10
+    },
+    {
+      "file": "state_00100.png",
+      "step": 100
+    }
+  ],
+  "family": "lifelike-history",
+  "params": {
+    "axis": "x",
+    "boundary": "torus",
+    "density": 0.35,
+    "height": 40,
+    "init": "soup",
+    "rule": "B3/S23History",
+    "seed": 41,
+    "shift": 0,
+    "width": 48
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

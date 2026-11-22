@@ -1,0 +1,4 @@
+#N A marked blinker
+#CXRLE Pos=5,-2 Gen=3
+x = 5, y = 3, rule = LifeHistory
+2.B$CEC.D$2.F!

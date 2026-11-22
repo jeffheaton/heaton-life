@@ -491,7 +491,9 @@ namespace HeatonLife
                 sb.Append(note).Append('\n');
             sb.Append("x = ").Append(width).Append(", y = ").Append(height)
               .Append(", rule = ")
-              .Append(RuleString.TryCompile(PatternFiles.LifeRule(rule), out LifeRule? life) ? life.Canonical : rule)
+              .Append(RuleString.TryCompile(PatternFiles.LifeRule(rule), true, out LifeRule? life, out _)
+                  ? life.Canonical
+                  : rule)
               .Append(suffix);
             foreach (string bodyLine in body)
                 sb.Append('\n').Append(bodyLine);

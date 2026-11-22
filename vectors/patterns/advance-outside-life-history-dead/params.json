@@ -1,0 +1,33 @@
+{
+  "expected": {
+    "file": "expected.png",
+    "shape": [
+      12,
+      16
+    ]
+  },
+  "family": "patterns",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      12,
+      16
+    ]
+  },
+  "kind": "advance",
+  "n": 5,
+  "outside": true,
+  "region": [
+    4,
+    4,
+    9,
+    8
+  ],
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "world": {
+    "boundary": "dead",
+    "family": "lifelike",
+    "rule": "B36/S23History"
+  }
+}

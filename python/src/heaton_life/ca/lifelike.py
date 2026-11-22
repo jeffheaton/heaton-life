@@ -1,4 +1,5 @@
-"""Life-like cellular automata (spec/lifelike.md): binary state, any rule of spec/rules.md."""
+"""Life-like cellular automata (spec/lifelike.md): binary state, any rule of spec/rules.md,
+and the seven states of a History rule (spec/history.md)."""
 
 from __future__ import annotations
 
@@ -9,8 +10,9 @@ from typing import cast
 import numpy as np
 from numpy.typing import NDArray
 
+from heaton_life.ca import history
 from heaton_life.ca._advance import AdvanceRegion
-from heaton_life.ca.rulestring import compile_rule
+from heaton_life.ca.rulestring import LifeRule, compile_rule
 from heaton_life.core.neighbors import moore_index
 from heaton_life.core.params import Params
 from heaton_life.core.topology import AXES, BOUNDARIES, Axis, Boundary, Halo, Topology
@@ -36,7 +38,8 @@ class LifeLikeParams(Params):
 
 
 class LifeLike(AdvanceRegion):
-    """A Life-like CA. State is uint8 0/1, shape (height, width), row-major."""
+    """A Life-like CA. State is uint8 0/1, shape (height, width), row-major; under a History
+    rule (``B3/S23History``) a cell is any of the seven states 0–6 (spec/history.md)."""
 
     def __init__(
         self,
@@ -51,17 +54,18 @@ class LifeLike(AdvanceRegion):
         axis: Axis = "x",
     ) -> None:
         width, height = size
+        compiled = compile_rule(rule, variants=True)
+        self._rule = compiled
         self._initial: NDArray[np.uint8] | None = None
         if isinstance(init, np.ndarray):
             if init.shape != (height, width):
                 raise ValueError(
                     f"init array shape {init.shape} does not match size (h={height}, w={width})"
                 )
-            self._initial = (init > 0).astype(np.uint8)
+            self._initial = self._cells(init)
             init_name = "array"
         else:
             init_name = init
-        compiled = compile_rule(rule)
         topology = Topology(boundary, shift, axis)
         # The cells past the edges, filled each generation (spec/topology.md "The halo").
         self._halo = Halo(topology, width, height)
@@ -121,8 +125,9 @@ class LifeLike(AdvanceRegion):
     def set_state(
         self, state: NDArray[np.generic], generation: int = 0, *, keep_start: bool = False
     ) -> None:
-        """Replace the state, nonzero cells alive, and set the generation (spec/README.md
-        "A world's state and its start"). The state also becomes the start ``reset()``
+        """Replace the state, nonzero cells alive (History's states 0–6 kept as they are,
+        under a History rule), and set the generation (spec/README.md "A world's state and
+        its start"). The state also becomes the start ``reset()``
         returns to (``init`` ``array``), unless ``keep_start``: then the start stays as it
         was, and no copy of the state is kept for it."""
         p = self.params
@@ -131,7 +136,7 @@ class LifeLike(AdvanceRegion):
             raise ValueError(
                 f"state shape {cells.shape} does not match (h={p.height}, w={p.width})"
             )
-        cells = (cells > 0).astype(np.uint8)
+        cells = self._cells(cells)
         generation = operator.index(generation)
         if not keep_start:
             self._initial = cells.copy()
@@ -139,11 +144,32 @@ class LifeLike(AdvanceRegion):
         self._state = cells
         self._generation = generation
 
+    def _cells(self, cells: NDArray[np.generic]) -> NDArray[np.uint8]:
+        """Cells as this world's states: nonzero alive under a two-state rule, and History's
+        states 0–6 under a History rule (anything else an error)."""
+        if self._rule.variant:
+            return history.check_cells(cells)
+        return (np.asarray(cells) > 0).astype(np.uint8)
+
     def step(self, n: int = 1) -> None:
         halo = self._halo
-        for _ in range(n):
-            self._state = self._table[moore_index(self._state, halo=halo)]
+        if self._rule.variant:
+            for _ in range(n):
+                self._state = history.step(self._state, halo, self._rule)
+        else:
+            for _ in range(n):
+                self._state = self._table[moore_index(self._state, halo=halo)]
         self._generation += n
+
+    @property
+    def rule(self) -> LifeRule:
+        """The compiled rule: its canonical string, table, variant and number of states."""
+        return self._rule
+
+    @property
+    def states(self) -> int:
+        """The number of states a cell can have: 2, or 7 under a History rule."""
+        return self._rule.states
 
     @property
     def topology(self) -> Topology:
@@ -176,4 +202,8 @@ class LifeLike(AdvanceRegion):
         fill_random(self._state, x0, y0, x1, y1, density=density, seed=seed)
 
     def frame(self) -> NDArray[np.uint8]:
+        """spec/render.md: ``state * 255``, and under a History rule the state itself (0–6),
+        for a color per state (the host's palette, until multi-state rendering)."""
+        if self._rule.variant:
+            return self._state.copy()
         return self._state * np.uint8(255)

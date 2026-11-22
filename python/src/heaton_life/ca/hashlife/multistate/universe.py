@@ -481,6 +481,27 @@ class MultiStateHashLife:
                 )
         self._paste_blocks(_state_blocks(array, x, y - 1), rect, mode)
 
+    def fill_random(self, x0: int, y0: int, x1: int, y1: int, density: float, seed: int) -> None:
+        """Replace the inclusive rectangle with lifelike's PCG32 soup of the same size, its
+        live cells state 1 and its dead ones 0: the cells the two-state universe's
+        ``fill_random`` gives (spec/hashlife-multistate.md "Editing"). Random fill is a
+        Life-like tool, so only a History rule's universe has it; under any other rule it
+        is an error that changes nothing."""
+        from heaton_life.ca.history import is_history
+        from heaton_life.init.seeding import soup
+
+        if not is_history(self._rule):
+            raise ValueError(
+                f"random fill is a Life-like tool; {self.rule} is no History rule "
+                '(spec/hashlife-multistate.md "Editing")'
+            )
+        x0, y0, x1, y1, seed = _ints(x0, y0, x1, y1, seed)
+        check_box(x0, y0, x1, y1)
+        if x1 < x0 or y1 < y0:
+            raise ValueError(f"empty rectangle ({x0}, {y0})..({x1}, {y1})")
+        cells = soup((x1 - x0 + 1, y1 - y0 + 1), density=density, seed=seed)
+        self.set_rect(x0, y0, cells, "copy")
+
     def clear_rect(self, x0: int, y0: int, x1: int, y1: int) -> None:
         """Every cell of the inclusive rectangle becomes 0."""
         x0, y0, x1, y1 = _ints(x0, y0, x1, y1)

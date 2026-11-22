@@ -16,7 +16,10 @@ engine (torus or dead edges); this page is its unbounded counterpart.
 - **Rule.** A Life-like rule in canonical form ([rules.md](rules.md)): any notation, any
   of its three neighborhoods, B0 included. A rule with B0 lights the infinite background,
   so its universe holds the cells that differ from the background ("Rules with B0",
-  below); for every other rule those are simply the live cells.
+  below); for every other rule those are simply the live cells. A rule with a variant
+  ([rules.md](rules.md#variants)) is refused, with the reason that it has more than two
+  states: the [multi-state universe](hashlife-multistate.md) runs
+  [History rules](history.md).
 - Coordinates, generations, and populations are unbounded integers wherever the API takes
   or returns them. Ports use big integers at their public edges and whatever they like
   inside.

@@ -8,11 +8,14 @@ namespace HeatonLife
     /// byte grid (0/1), index = y * Width + x — the same memory layout as the
     /// Python implementation and the conformance vectors. Bit-exact tier. The rule is any
     /// Life-like rule (spec/rules.md), run through its 512-entry table, on any topology
-    /// (spec/topology.md), read through the grid's halo.
+    /// (spec/topology.md), read through the grid's halo. Under a History rule
+    /// (<c>B3/S23History</c>, spec/history.md) a cell is any of the seven states 0–6.
     /// </summary>
     public sealed class LifeLike : IIndexedFrameSource, IRegionWorld
     {
         private readonly byte[] _table; // next state by 3×3 neighborhood index (spec/rules.md)
+        private readonly bool _history; // a History rule: seven states (spec/history.md)
+        private readonly int _near; // History: the neighbors whose boundary cells keep a cell off
         private readonly Halo _halo; // the cells past the edges (spec/topology.md "The halo")
         private readonly byte[] _padded; // the halo each generation reads
         private byte[] _cells;
@@ -30,6 +33,12 @@ namespace HeatonLife
 
         public int Generation { get; private set; }
 
+        /// <summary>The compiled rule: its table, its variant and its number of states.</summary>
+        public LifeRule CompiledRule { get; }
+
+        /// <summary>The number of states a cell can have: 2, or 7 under a History rule.</summary>
+        public int States => CompiledRule.States;
+
         public ReadOnlySpan<byte> State => _cells;
 
         public LifeLike(
@@ -45,9 +54,12 @@ namespace HeatonLife
         /// <see cref="TopologyException"/> for one the size can't have.</summary>
         public LifeLike(string rule, int width, int height, Topology topology)
         {
-            LifeRule compiled = RuleString.Compile(rule);
+            LifeRule compiled = RuleString.Compile(rule, variants: true);
+            CompiledRule = compiled;
             Rule = compiled.Canonical;
             _table = compiled.Table.ToArray();
+            _history = compiled.Variant == RuleVariant.History;
+            _near = History.NeighborBits(compiled.Neighborhood);
             _halo = new Halo(topology, width, height);
             _padded = new byte[_halo.Length];
             Width = width;
@@ -110,13 +122,14 @@ namespace HeatonLife
             _replayInit(_seed);
         }
 
-        /// <summary>Load an explicit 0/1 grid (row-major, Height*Width entries).</summary>
+        /// <summary>Load an explicit grid (row-major, Height*Width entries): nonzero alive, or under
+        /// a History rule the states 0–6 as they are (any larger state is an error that changes
+        /// nothing).</summary>
         public void SetState(ReadOnlySpan<byte> cells)
         {
             if (cells.Length != _cells.Length)
                 throw new ArgumentException($"expected {_cells.Length} cells, got {cells.Length}");
-            for (int i = 0; i < cells.Length; i++)
-                _cells[i] = (byte)(cells[i] > 0 ? 1 : 0);
+            Load(cells);
             Generation = 0;
             var snapshot = _cells.Clone() as byte[];
             Remember(_seed, _ =>
@@ -149,16 +162,41 @@ namespace HeatonLife
             }
             if (cells.Length != _cells.Length)
                 throw new ArgumentException($"expected {_cells.Length} cells, got {cells.Length}");
-            for (int i = 0; i < cells.Length; i++)
-                _cells[i] = (byte)(cells[i] > 0 ? 1 : 0);
+            Load(cells);
             Generation = generation;
         }
 
-        /// <summary>Paint one cell in place (0/1); does not reset the generation.</summary>
+        /// <summary>The cells as this world's states: nonzero alive, or History's states as they
+        /// are, checked before any is written.</summary>
+        private void Load(ReadOnlySpan<byte> cells)
+        {
+            if (_history)
+            {
+                for (int i = 0; i < cells.Length; i++)
+                {
+                    if (cells[i] >= History.States)
+                        throw new ArgumentException($"state {cells[i]} is not a History state (0 to 6)");
+                }
+                cells.CopyTo(_cells);
+                return;
+            }
+            for (int i = 0; i < cells.Length; i++)
+                _cells[i] = (byte)(cells[i] > 0 ? 1 : 0);
+        }
+
+        /// <summary>Paint one cell in place (0/1, nonzero alive; under a History rule a state 0–6);
+        /// does not reset the generation.</summary>
         public void SetCell(int x, int y, byte value)
         {
             if (x < 0 || x >= Width || y < 0 || y >= Height)
                 throw new ArgumentOutOfRangeException($"cell ({x}, {y}) outside {Width}x{Height}");
+            if (_history)
+            {
+                if (value >= History.States)
+                    throw new ArgumentOutOfRangeException(nameof(value), value, "a History state is 0 to 6");
+                _cells[y * Width + x] = value;
+                return;
+            }
             _cells[y * Width + x] = (byte)(value > 0 ? 1 : 0);
         }
 
@@ -212,11 +250,18 @@ namespace HeatonLife
             Generation += n;
         }
 
-        /// <summary>Frame per spec/render.md: palette index = state * 255.</summary>
+        /// <summary>Frame per spec/render.md: palette index = state * 255, and under a History
+        /// rule the state itself (0–6), for a color per state (the host's palette, until
+        /// multi-state rendering defines History's).</summary>
         public void WriteFrame(byte[] frame)
         {
             if (frame.Length != _cells.Length)
                 throw new ArgumentException($"expected {_cells.Length} bytes, got {frame.Length}");
+            if (_history)
+            {
+                Array.Copy(_cells, frame, _cells.Length);
+                return;
+            }
             for (int i = 0; i < _cells.Length; i++)
                 frame[i] = (byte)(_cells[i] * 255);
         }
@@ -231,6 +276,11 @@ namespace HeatonLife
 
         private void StepOnce(CancellationToken cancellationToken = default)
         {
+            if (_history)
+            {
+                StepHistory(cancellationToken);
+                return;
+            }
             int w = Width, h = Height, stride = _halo.Columns;
             byte[] p = _padded;
             _halo.Fill(_cells, p, 0);
@@ -251,6 +301,47 @@ namespace HeatonLife
                         | (p[mid + x - 1] << 5) | (p[mid + x] << 4) | (p[mid + x + 1] << 3)
                         | (p[down + x - 1] << 2) | (p[down + x] << 1) | p[down + x + 1];
                     _scratch[row + x] = _table[index];
+                }
+            }
+            (_cells, _scratch) = (_scratch, _cells);
+        }
+
+        /// <summary>
+        /// One generation of a History rule (spec/history.md "Evolution"): the base rule's table
+        /// read at the index of the block's on cells (the odd states), a cell beside a boundary
+        /// cell in the rule's neighborhood off, and the next state from the table of state changes.
+        /// Allocates nothing.
+        /// </summary>
+        private void StepHistory(CancellationToken cancellationToken)
+        {
+            int w = Width, h = Height, stride = _halo.Columns, near = _near;
+            byte[] p = _padded, table = _table, next = History.Table;
+            const byte wall = History.Boundary;
+            _halo.Fill(_cells, p, 0);
+            for (int y = 0; y < h; y++)
+            {
+                // Polled each row, as in the two-state step (spec/patterns.md "Canceling").
+                if (cancellationToken.IsCancellationRequested)
+                    throw GridRegion.Canceled(cancellationToken, Generation);
+                int up = y * stride + 1, mid = up + stride, down = mid + stride, row = y * w;
+                for (int x = 0; x < w; x++)
+                {
+                    int c = p[mid + x];
+                    if (c == wall)
+                    {
+                        _scratch[row + x] = wall;
+                        continue;
+                    }
+                    int nw = p[up + x - 1], n = p[up + x], ne = p[up + x + 1];
+                    int wv = p[mid + x - 1], e = p[mid + x + 1];
+                    int sw = p[down + x - 1], s = p[down + x], se = p[down + x + 1];
+                    int index = ((nw & 1) << 8) | ((n & 1) << 7) | ((ne & 1) << 6) | ((wv & 1) << 5)
+                        | ((c & 1) << 4) | ((e & 1) << 3) | ((sw & 1) << 2) | ((s & 1) << 1) | (se & 1);
+                    int boundary = (nw == wall ? 256 : 0) | (n == wall ? 128 : 0) | (ne == wall ? 64 : 0)
+                        | (wv == wall ? 32 : 0) | (e == wall ? 8 : 0) | (sw == wall ? 4 : 0)
+                        | (s == wall ? 2 : 0) | (se == wall ? 1 : 0);
+                    int on = (boundary & near) == 0 ? table[index] : 0;
+                    _scratch[row + x] = next[2 * c + on];
                 }
             }
             (_cells, _scratch) = (_scratch, _cells);

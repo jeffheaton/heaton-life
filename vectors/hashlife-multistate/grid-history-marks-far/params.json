@@ -1,0 +1,74 @@
+{
+  "checkpoints": [
+    {
+      "bounding_box": [
+        "999999950",
+        "-1000000000",
+        "999999989",
+        "-999999969"
+      ],
+      "cells": "cells-0.png",
+      "generation": "0",
+      "population": "595",
+      "state": "state-0.mc"
+    },
+    {
+      "bounding_box": [
+        "999999950",
+        "-1000000000",
+        "999999989",
+        "-999999969"
+      ],
+      "cells": "cells-1.png",
+      "generation": "1",
+      "population": "786",
+      "state": "state-1.mc"
+    },
+    {
+      "bounding_box": [
+        "999999950",
+        "-1000000000",
+        "999999989",
+        "-999999969"
+      ],
+      "cells": "cells-3.png",
+      "generation": "3",
+      "population": "976",
+      "state": "state-3.mc"
+    },
+    {
+      "bounding_box": [
+        "999999950",
+        "-1000000000",
+        "999999989",
+        "-999999969"
+      ],
+      "cells": "cells-30.png",
+      "generation": "30",
+      "population": "1137",
+      "state": "state-30.mc"
+    },
+    {
+      "bounding_box": [
+        "999999950",
+        "-1000000000",
+        "999999989",
+        "-999999969"
+      ],
+      "cells": "cells-333.png",
+      "generation": "333",
+      "population": "1146",
+      "state": "state-333.mc"
+    }
+  ],
+  "family": "hashlife-multistate",
+  "grid": "grid.png",
+  "kind": "grid",
+  "origin": [
+    "999999950",
+    "-1000000000"
+  ],
+  "rule": "B36/S23History",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

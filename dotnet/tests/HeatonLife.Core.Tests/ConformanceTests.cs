@@ -16,7 +16,7 @@ namespace HeatonLife.Tests
     {
         /// <summary>Bit-exact families the C# port implements; cases are auto-discovered.</summary>
         private static readonly string[] ByteFamilies =
-            { "lifelike", "elementary", "cyclic", "wireworld", "mergelife" };
+            { "lifelike", "lifelike-history", "elementary", "cyclic", "wireworld", "mergelife" };
 
         /// <summary>ε-tier (float64) families the C# port implements.</summary>
         private static readonly string[] FloatFamilies =
@@ -252,6 +252,7 @@ namespace HeatonLife.Tests
                         return state;
                     }
                 case "cyclic": // pixel = raw state
+                case "lifelike-history": // a History rule's states 0–6, raw (spec/history.md)
                     return pixels;
                 case "wireworld": // pixel = state * 85
                     {
@@ -289,6 +290,19 @@ namespace HeatonLife.Tests
                             sim.SeedSingle();
                         else
                             throw new InvalidDataException($"unsupported lifelike init '{init}'");
+                        return new Sim(sim.Step, () => sim.State.ToArray());
+                    }
+                case "lifelike-history":
+                    {
+                        var sim = new LifeLike(
+                            p.GetProperty("rule").GetString()!, width, height, ParseTopology(p));
+                        Assert.Equal(RuleVariant.History, sim.CompiledRule.Variant);
+                        if (initial != null)
+                            sim.SetState(initial);
+                        else if (init == "soup")
+                            sim.SeedSoup(p.GetProperty("density").GetDouble(), p.GetProperty("seed").GetUInt32());
+                        else
+                            throw new InvalidDataException($"unsupported lifelike-history init '{init}'");
                         return new Sim(sim.Step, () => sim.State.ToArray());
                     }
                 case "elementary":

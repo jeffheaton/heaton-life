@@ -19,6 +19,7 @@ namespace HeatonLife.Tests
         private static readonly string[] SpecVersions = { "0.16.0" };
         private static readonly string[] CaseKeys = { "spec_version", "family", "tier", "cases" };
         private static readonly string[] RuleKeys = { "input", "canonical", "neighborhood", "table" };
+        private static readonly string[] VariantKeys = { "input", "canonical", "neighborhood", "table", "states", "base" };
         private static readonly string[] ErrorKeys = { "input", "error" };
         private static readonly string[] ReasonKeys = { "input", "error", "reason" };
 
@@ -37,6 +38,7 @@ namespace HeatonLife.Tests
             foreach (string name in new[]
             {
                 "totalistic", "isotropic", "isotropic-classes", "map", "hexagonal", "von-neumann", "errors", "reasons",
+                "history", "history-two-state",
             })
                 Assert.Contains(name, names);
         }
@@ -47,7 +49,9 @@ namespace HeatonLife.Tests
         {
             using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(Root, caseName, "params.json")));
             JsonElement root = doc.RootElement;
-            AssertKeys(root, CaseKeys);
+            // spec 0.16.0: a file may compile its texts with variants allowed (spec/rules.md).
+            bool variants = root.TryGetProperty("variants", out JsonElement flag) && flag.GetBoolean();
+            AssertKeys(root, root.TryGetProperty("variants", out _) ? CaseKeys.Append("variants").ToArray() : CaseKeys);
             Assert.Contains(root.GetProperty("spec_version").GetString(), SpecVersions);
             Assert.Equal("rules", root.GetProperty("family").GetString());
             Assert.Equal("bit-exact", root.GetProperty("tier").GetString());
@@ -58,27 +62,34 @@ namespace HeatonLife.Tests
                 {
                     bool pinned = entry.TryGetProperty("reason", out JsonElement want);
                     AssertKeys(entry, pinned ? ReasonKeys : ErrorKeys);
-                    Assert.False(RuleString.TryCompile(text, out _), text);
-                    Assert.False(RuleString.TryCompile(text, out LifeRule? none, out string? reason), text);
+                    if (!variants)
+                        Assert.False(RuleString.TryCompile(text, out _), text);
+                    Assert.False(RuleString.TryCompile(text, variants, out LifeRule? none, out string? reason), text);
                     Assert.Null(none);
                     Assert.NotNull(reason);
-                    ArgumentException thrown = Assert.Throws<ArgumentException>(() => RuleString.Compile(text));
+                    ArgumentException thrown = Assert.Throws<ArgumentException>(() => RuleString.Compile(text, variants));
                     Assert.StartsWith($"invalid rule '{text}': {reason} (spec/rules.md)", thrown.Message);
                     if (pinned)
                         Assert.True(want.GetString() == reason, $"{text}: {reason}");
                     continue;
                 }
-                AssertKeys(entry, RuleKeys);
-                Assert.True(RuleString.TryCompile(text, out LifeRule? compiled, out string? noReason), text);
+                AssertKeys(entry, variants ? VariantKeys : RuleKeys);
+                Assert.True(RuleString.TryCompile(text, variants, out LifeRule? compiled, out string? noReason), text);
                 Assert.Null(noReason);
-                LifeRule rule = RuleString.Compile(text);
+                LifeRule rule = RuleString.Compile(text, variants);
                 Assert.Equal(rule.Canonical, compiled!.Canonical);
                 Assert.True(entry.GetProperty("canonical").GetString() == rule.Canonical, text);
                 Assert.True(entry.GetProperty("neighborhood").GetString() == Name(rule.Neighborhood), text);
                 Assert.True(entry.GetProperty("table").GetString() == Hex(rule.Table), text);
+                if (variants)
+                {
+                    Assert.True(entry.GetProperty("states").GetInt32() == rule.States, text);
+                    Assert.True(entry.GetProperty("base").GetString() == rule.Base.Canonical, text);
+                }
                 // The canonical string compiles to the same rule (spec/rules.md "Canonical form").
-                LifeRule again = RuleString.Compile(rule.Canonical);
+                LifeRule again = RuleString.Compile(rule.Canonical, variants);
                 Assert.Equal(rule.Canonical, again.Canonical);
+                Assert.Equal(rule.Variant, again.Variant);
                 Assert.True(rule.Table.SequenceEqual(again.Table), text);
             }
         }

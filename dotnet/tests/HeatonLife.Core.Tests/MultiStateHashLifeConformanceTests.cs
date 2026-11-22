@@ -63,6 +63,7 @@ namespace HeatonLife.Tests
             ["step"] = new HashSet<string> { "n" },
             ["clear"] = new HashSet<string>(),
             ["set_rule"] = new HashSet<string> { "rule" },
+            ["fill_random"] = new HashSet<string> { "x0", "y0", "x1", "y1", "density", "seed" },
             ["get_rect"] = new HashSet<string> { "x0", "y0", "x1", "y1", "expect" },
             ["bounding_box_in"] = new HashSet<string> { "x0", "y0", "x1", "y1", "expect" },
         };
@@ -130,22 +131,38 @@ namespace HeatonLife.Tests
                     }
                 case "grid":
                     {
-                        var (width, height, grid) = StatesPng(Path.Combine(dir, Text(meta, "grid")));
+                        // A History rule's grid is Life-like, its PNGs the states themselves
+                        // (spec/history.md); Wireworld's are states × 85.
+                        string ruleName = Text(meta, "rule");
+                        bool history = RuleString.TryCompile(ruleName, true, out LifeRule? life, out _)
+                            && life.Variant == RuleVariant.History;
+                        int scale = history ? 1 : 85;
+                        var (width, height, grid) = StatesPng(Path.Combine(dir, Text(meta, "grid")), scale);
                         long x = long.Parse(meta.GetProperty("origin")[0].GetString()!);
                         long y = long.Parse(meta.GetProperty("origin")[1].GetString()!);
-                        var u = new MultiStateHashLife(Text(meta, "rule"));
+                        var u = new MultiStateHashLife(ruleName);
                         u.SetRect(x, y, grid, width, height);
-                        var w = new Wireworld(width, height, grid);
+                        Wireworld? wire = history ? null : new Wireworld(width, height, grid);
+                        LifeLike? lifeLike = null;
+                        if (history)
+                        {
+                            lifeLike = new LifeLike(ruleName, width, height, Boundary.Dead);
+                            lifeLike.SetState(grid);
+                        }
                         foreach (JsonElement entry in meta.GetProperty("checkpoints").EnumerateArray())
                         {
                             foreach (JsonProperty property in entry.EnumerateObject())
                                 Assert.True(StateKeys.Contains(property.Name) || property.Name == "cells", property.Name);
                             BigInteger gen = BigInteger.Parse(Text(entry, "generation"));
                             u.Step(gen - u.Generation);
-                            w.Step((int)gen - w.Generation);
+                            if (wire != null)
+                                wire.Step((int)gen - wire.Generation);
+                            else
+                                lifeLike!.Step((int)gen - lifeLike.Generation);
                             ExpectState(dir, u, entry);
-                            byte[] cells = StatesPng(Path.Combine(dir, Text(entry, "cells"))).Cells;
-                            Assert.True(w.State.SequenceEqual(cells), $"{caseName}: the grid family at {gen}");
+                            byte[] cells = StatesPng(Path.Combine(dir, Text(entry, "cells")), scale).Cells;
+                            ReadOnlySpan<byte> gridState = wire != null ? wire.State : lifeLike!.State;
+                            Assert.True(gridState.SequenceEqual(cells), $"{caseName}: the grid family at {gen}");
                             Assert.True(
                                 u.GetRect(x, y, x + width - 1, y + height - 1).AsSpan().SequenceEqual(cells),
                                 $"{caseName}: the plane under the grid at {gen}");
@@ -269,12 +286,13 @@ namespace HeatonLife.Tests
                 Field("name"), Field("author"), notes.GetProperty("comments").EnumerateArray().Select(c => c.GetString()!).ToArray());
         }
 
-        /// <summary>A grid stored as the wireworld vectors store one: states × 85.</summary>
-        private static (int Width, int Height, byte[] Cells) StatesPng(string path)
+        /// <summary>A grid stored as the wireworld vectors store one, states × 85, or, with a
+        /// <paramref name="scale"/> of 1, as the lifelike-history vectors store one.</summary>
+        private static (int Width, int Height, byte[] Cells) StatesPng(string path, int scale = 85)
         {
             var (width, height, channels, pixels) = Png.Read(path);
             Assert.Equal(1, channels);
-            return (width, height, pixels.Select(p => (byte)(p / 85)).ToArray());
+            return (width, height, pixels.Select(p => (byte)(p / scale)).ToArray());
         }
 
         private static (byte[] Cells, int Width, int Height) Cells(JsonElement rows)
@@ -388,6 +406,11 @@ namespace HeatonLife.Tests
                     break;
                 case "set_rule":
                     u.Rule = Text(op, "rule");
+                    break;
+                case "fill_random": // History rules only (spec/hashlife-multistate.md "Editing")
+                    u.FillRandom(
+                        Long(op, "x0"), Long(op, "y0"), Long(op, "x1"), Long(op, "y1"),
+                        op.GetProperty("density").GetDouble(), op.GetProperty("seed").GetUInt64());
                     break;
                 case "get_rect":
                     {

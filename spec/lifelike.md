@@ -1,10 +1,12 @@
 # Life-like cellular automata
 
-Conformance tier: **bit-exact**. Vectors: [`vectors/lifelike/`](../vectors/lifelike/).
+Conformance tier: **bit-exact**. Vectors: [`vectors/lifelike/`](../vectors/lifelike/);
+History rules [`vectors/lifelike-history/`](../vectors/lifelike-history/).
 
 ## State
 
-- 2-D grid of cells with values `0` (dead) or `1` (alive), stored as unsigned bytes.
+- 2-D grid of cells with values `0` (dead) or `1` (alive), stored as unsigned bytes. Under
+  a [History rule](history.md) a cell is any of its seven states, 0–6.
 - Shape `(height, width)`, row-major, origin top-left, index `i = y * width + x`.
 
 ## Gather
@@ -44,6 +46,12 @@ implementation conveniences, not part of the wire format.
 B0 rules run as written: on a torus (or any topology but the plane) every dead cell
 without live neighbors is born at once, and with `dead` boundaries the cells outside the
 grid stay dead.
+
+A [History rule](history.md) (`B3/S23History`, any rule with the `History` variant) runs
+here too, on every topology: the halo copies the states, the base rule's table is read at
+the index of the block's on cells (the odd states), and history.md's table gives each
+cell's next state. Its `soup`, `blob` and `single` are the base rule's, states 0 and 1;
+`array` and set states take 0–6.
 
 ## Parameters
 
@@ -88,7 +96,8 @@ one opens as that world ([formats.md](formats.md#bounded-grids)).
 
 ## Vector encoding
 
-State PNGs are 8-bit grayscale, pixel = `state * 255`.
+State PNGs are 8-bit grayscale, pixel = `state * 255`. Runs of History rules live in
+`vectors/lifelike-history/`, whose PNGs hold the state itself ([history.md](history.md#vector-encoding)).
 
 ## Oracles (implementation tests)
 

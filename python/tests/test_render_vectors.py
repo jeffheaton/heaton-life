@@ -90,7 +90,7 @@ def _same_f64(got: np.ndarray, want: np.ndarray) -> bool:
 
 
 def test_render_vectors_exist() -> None:
-    kinds = {json.loads(c.read_text())["kind"] for c in CASES}
+    kinds = {json.loads(c.read_text(encoding="utf-8"))["kind"] for c in CASES}
     assert kinds == {"lut", "apply", "frame", "fractal-render", *STRICT_KEYS}
 
 
@@ -171,7 +171,7 @@ def _color_case(case: Path, meta: dict[str, Any]) -> None:
 
 def _build_sim(sim_family: str, p: dict[str, Any], initial: np.ndarray) -> Any:
     size = (p["width"], p["height"])
-    if sim_family == "lifelike":
+    if sim_family in ("lifelike", "lifelike-history"):  # a History rule's states (0–6)
         return LifeLike(p["rule"], size=size, init=initial, boundary=p["boundary"])
     if sim_family == "cyclic":
         return Cyclic(
@@ -216,7 +216,7 @@ def _build_sim(sim_family: str, p: dict[str, Any], initial: np.ndarray) -> Any:
 
 @pytest.mark.parametrize("case", CASES, ids=lambda p: p.parent.name)
 def test_render_vector(case: Path) -> None:
-    meta = json.loads(case.read_text())
+    meta = json.loads(case.read_text(encoding="utf-8"))
     kind = meta["kind"]
     if meta["spec_version"] == "0.7.0":
         _color_case(case, meta)

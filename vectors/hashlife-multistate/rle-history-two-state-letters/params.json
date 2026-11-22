@@ -1,0 +1,17 @@
+{
+  "bounding_box": [
+    "0",
+    "0",
+    "2",
+    "0"
+  ],
+  "family": "hashlife-multistate",
+  "generation": "0",
+  "input": "input.rle",
+  "kind": "rle",
+  "population": "2",
+  "rle": "canonical.rle",
+  "spec_version": "0.16.0",
+  "state": "canonical.mc",
+  "tier": "bit-exact"
+}

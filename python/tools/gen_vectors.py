@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from heaton_life.boids import BoidsParams
 from heaton_life.ca import LifeLike, Wireworld, wireworld_from_text
-from heaton_life.ca.rulestring import compile_rule
+from heaton_life.ca.rulestring import compile_rule, try_compile_rule
 from heaton_life.conformance import CODECS, TIERS, build_sim
 from heaton_life.core import decimal_text
 from heaton_life.core.bignum import reference_orbit, reference_orbit_x, working_bits
@@ -999,6 +999,9 @@ def main() -> None:
 
     # -- Multi-state HashLife: Wireworld on the unbounded plane (spec/hashlife-multistate.md)
     write_multistate_cases()
+
+    # -- History rules: seven states over any Life-like rule (spec/history.md) ----------------
+    write_history_cases()
 
     print("done")
 
@@ -6946,7 +6949,10 @@ def _hashlife_entry(d: Path, u: Any, label: str) -> dict[str, Any]:
     else:
         entry["state_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
         entry["state_lines"] = text.count("\n")
-    if compile_rule(u.rule).has_b0:  # from spec 0.16.0 (spec/hashlife.md "Rules with B0")
+    # From spec 0.16.0 a two-state rule with B0 gives its background (spec/hashlife.md
+    # "Rules with B0"); the multi-state universe's rules (WireWorld, History) give none.
+    two_state, _ = try_compile_rule(u.rule)
+    if two_state is not None and two_state.has_b0:
         entry["background"] = u.background
     return entry
 
@@ -8888,6 +8894,612 @@ def write_multistate_cases() -> None:
         [9],
         PatternMetadata(),
     )
+
+
+# -- History rules (spec 0.16.0) ------------------------------------------------------------
+
+HISTORY_SPEC_VERSION = "0.16.0"
+
+
+def write_history_cases() -> None:
+    """History rules (spec/history.md): History rule texts (vectors/rules/history,
+    history-two-state), grid runs on every topology (vectors/lifelike-history/), RLE read
+    and written, stamps, random fill and Advance Selection in History worlds
+    (vectors/patterns/*-history*), a frame (vectors/render/frame-lifelike-history), files
+    read into a grid, measured and refused by the two-state universe (vectors/formats/), and
+    the unbounded plane through the multi-state universe (vectors/hashlife-multistate/):
+    grids run beside it cell for cell inside walls of boundary cells, evolution, files and
+    edits. Every case is new."""
+    import io
+
+    from PIL import Image
+
+    from heaton_life.ca.hashlife import read_universe
+    from heaton_life.ca.hashlife.multistate import MultiStateHashLife, read_multistate_universe
+    from heaton_life.init import (
+        PatternMetadata,
+        fill_random,
+        measure_pattern,
+        read_pattern,
+        rle_decode,
+        rle_encode,
+        soup,
+        stamp,
+    )
+
+    def directory(family: str, name: str) -> Path:
+        d = VECTOR_ROOT / family / name
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def save(d: Path, family: str, meta: dict[str, Any]) -> None:
+        full = {"spec_version": HISTORY_SPEC_VERSION, "family": family, "tier": "bit-exact"}
+        full.update(meta)
+        _gap_save(d, full)
+
+    def gray_png(arr: Any) -> bytes:
+        buf = io.BytesIO()
+        Image.fromarray(np.asarray(arr).astype(np.uint8), mode="L").save(buf, format="PNG")
+        return buf.getvalue()
+
+    def picture(d: Path, file: str, arr: Any) -> dict[str, Any]:
+        (d / file).write_bytes(gray_png(arr))
+        return {"file": file, "shape": list(np.asarray(arr).shape)}
+
+    def notes(m: PatternMetadata) -> dict[str, Any]:
+        return {"name": m.name, "author": m.author, "comments": list(m.comments)}
+
+    def framed(width: int, height: int, seed: int) -> NDArray[np.uint8]:
+        """A soup inside a wall of boundary cells (6): nothing gets out, so a dead-edged grid
+        and the plane hold the same cells forever (spec/history.md "Evolution")."""
+        grid = np.full((height, width), 6, np.uint8)
+        grid[1:-1, 1:-1] = soup((width - 2, height - 2), density=0.4, seed=seed)
+        return grid
+
+    def marked(width: int, height: int, seed: int) -> NDArray[np.uint8]:
+        """A soup with every state in it: marked on and off cells, start-on cells, an
+        envelope patch, and a short wall of boundary cells."""
+        grid = soup((width, height), density=0.4, seed=seed)
+        grid[2:5, 3:7] = np.where(grid[2:5, 3:7] == 1, 3, 4)
+        grid[height // 2, width // 2 - 3 : width // 2 + 3] = 5
+        grid[height - 6 : height - 3, 2:5] = 2
+        grid[height // 3, width - 9 : width - 2] = 6
+        return grid
+
+    # -- rules: History rule texts, with variants and without ---------------------------
+    def table_hex(table: bytes) -> str:  # spec/rules.md "Vector encoding"
+        return int("".join(map(str, table)), 2).to_bytes(64, "big").hex()
+
+    def rules(name: str, valid: list[str], invalid: list[str], variants: bool) -> None:
+        cases: list[dict[str, Any]] = []
+        for text in valid:
+            rule = compile_rule(text, presets=False, variants=variants)
+            entry: dict[str, Any] = {
+                "input": text,
+                "canonical": rule.canonical,
+                "neighborhood": rule.neighborhood,
+                "table": table_hex(rule.table),
+            }
+            if variants:
+                entry["states"] = rule.states
+                entry["base"] = rule.base.canonical
+            cases.append(entry)
+        for text in invalid:
+            found, reason = try_compile_rule(text, presets=False, variants=variants)
+            assert found is None and reason is not None, text
+            cases.append({"input": text, "error": True, "reason": reason})
+        meta: dict[str, Any] = {"cases": cases}
+        if variants:
+            meta["variants"] = True
+        save(directory("rules", name), "rules", meta)
+
+    life_map = "MAP" + "".join(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"[
+            int("".join(map(str, [*compile_rule("B3/S23").table, 0, 0, 0, 0][i : i + 6])), 2)
+        ]
+        for i in range(0, 516, 6)
+    )
+    rules(
+        "history",
+        [
+            "B3/S23History",
+            "b3/s23history",
+            "LifeHistory",
+            " LIFEHISTORY\t",
+            "B36/S23History",
+            "B2-a/S12History",
+            "b3/s2-i34qHISTORY",
+            "B2/S34HHistory",
+            "b2/s34hhistory",
+            "B2/S013VHistory",
+            "B0/S8History",
+            life_map + "History",
+            life_map + "==history",
+            "MAPFgFoF2gXgH5oF4B+AH4A6AHistory",
+            "MAPHmkphg==History",
+            "B3/S23",
+            "MAP" + "A" * 79 + "History",
+        ],
+        [
+            "B3/S23Histor",
+            "B3/S23 History",
+            "B3/S23HistoryHistory",
+            "B3/S23HistoryH",
+            "B9/S23History",
+            "B1kn/SHistory",
+            "B3/S23HHistoryx",
+            "LifeHistoryX",
+            "Life History",
+            "History",
+            "MAP" + "A" * 80 + "History",
+        ],
+        True,
+    )
+    rules(
+        "history-two-state",
+        ["B3/S23", "MAP" + "A" * 79 + "History"],
+        [
+            "B3/S23History",
+            "LifeHistory",
+            "b2/s34hhistory",
+            life_map + "History",
+            "B3/S23Histor",
+            "B9/S23History",
+        ],
+        False,
+    )
+
+    # -- grids: History runs on every topology ------------------------------------------
+    def run(name: str, rule: str, size: tuple[int, int], steps: list[int], **kw: Any) -> None:
+        sim = LifeLike(rule, size=size, **kw)
+        assert sim.rule.variant == "History", name
+        write_case("lifelike-history", name, sim, steps, spec_version=HISTORY_SPEC_VERSION)
+
+    run("life-soup-48x40-torus", "B3/S23History", (48, 40), [0, 1, 10, 100], seed=41)
+    run(
+        "life-marks-40x32-dead",
+        "B3/S23History",
+        (40, 32),
+        [0, 1, 2, 10, 60],
+        init=marked(40, 32, 42),
+        boundary="dead",
+    )
+    run(
+        "life-walls-30x24-dead",
+        "B3/S23History",
+        (30, 24),
+        [0, 1, 5, 50, 200],
+        init=framed(30, 24, 43),
+        boundary="dead",
+    )
+    run(
+        "highlife-marks-40x32-klein-x-shift",
+        "B36/S23History",
+        (40, 32),
+        [0, 1, 20, 100],
+        init=marked(40, 32, 44),
+        boundary="klein",
+        shift=2,
+        axis="x",
+    )
+    run(
+        "hexagonal-marks-32-sphere",
+        "B2/S34HHistory",
+        (32, 32),
+        [0, 1, 10, 50],
+        init=marked(32, 32, 45),
+        boundary="sphere",
+    )
+    run(
+        "vonneumann-soup-36x28-cross",
+        "B2/S013VHistory",
+        (36, 28),
+        [0, 1, 10, 50],
+        seed=46,
+        boundary="cross",
+    )
+    run(
+        "isotropic-marks-40x30-torus-shift-y",
+        "B3/S2-i34qHistory",
+        (40, 30),
+        [0, 1, 10, 100],
+        init=marked(40, 30, 47),
+        boundary="torus",
+        shift=3,
+        axis="y",
+    )
+    run("map-soup-32-torus", life_map + "History", (32, 32), [0, 1, 25], seed=48)
+    run(
+        "b0-anti-life-24-torus",
+        "B0123478/S01234678History",
+        (24, 24),
+        [0, 1, 2, 10],
+        init=marked(24, 24, 49),
+    )
+
+    # -- patterns: RLE, stamps, random fill and Advance Selection in History worlds ------
+    def rle_case(name: str, text: str) -> None:
+        d = directory("patterns", name)
+        (d / "input.rle").write_text(text, encoding="utf-8", newline="\n")
+        grid, rule = rle_decode(text)
+        canonical = rle_encode(grid, rule if rule is not None else "B3/S23")
+        (d / "canonical.rle").write_text(canonical, encoding="utf-8", newline="\n")
+        meta = {
+            "kind": "rle",
+            "input": "input.rle",
+            "rule": rule,
+            "grid": picture(d, "grid.png", grid),
+            "canonical": "canonical.rle",
+        }
+        save(d, "patterns", meta)
+
+    rle_case(
+        "rle-history-lifehistory",
+        "#N Every state\nx = 8, y = 3, rule = LifeHistory\n.ABA$CDEF.2A$2BF!\n",
+    )
+    rle_case(
+        "rle-history-bounded-cxrle",
+        "#CXRLE Pos=-2,-1 Gen=9\nx = 4, y = 2, rule = b36/s23history:T12,8\nFFAB$.CDE!\n",
+    )
+    rle_case("rle-history-two-state-letters", "x = 3, y = 2, rule = B3/S23History\nbo$obo!\n")
+    rle_case("rle-history-uppercase-b-is-envelope", "x = 3, y = 1, rule = LifeHistory\nBAB!\n")
+
+    def stamp_case(name: str, grid: Any, pattern: Any, x: int, y: int, mode: str) -> None:
+        d = directory("patterns", name)
+        target = np.asarray(grid, dtype=np.uint8).copy()
+        meta: dict[str, Any] = {
+            "kind": "stamp",
+            "grid": picture(d, "grid.png", grid),
+            "pattern": picture(d, "pattern.png", pattern),
+            "x": x,
+            "y": y,
+            "torus": True,
+            "mode": mode,
+        }
+        try:
+            stamp(target, np.asarray(pattern, dtype=np.uint8), x, y, torus=True, mode=mode)  # type: ignore[arg-type]
+        except ValueError:
+            meta["error"] = True
+        else:
+            meta["expected"] = picture(d, "expected.png", target)
+        save(d, "patterns", meta)
+
+    history_grid = marked(10, 8, 50)
+    history_part = np.array([[0, 6, 3], [5, 0, 2]], np.uint8)
+    stamp_case("stamp-history-or", history_grid, history_part, 8, 6, "or")
+    stamp_case("stamp-history-xor-error", history_grid, history_part, 1, 1, "xor")
+
+    d = directory("patterns", "fill-random-history")
+    region = (2, 1, 9, 6)
+    filled = history_grid.copy()
+    fill_random(filled, *region, density=0.5, seed=51)
+    save(
+        d,
+        "patterns",
+        {
+            "kind": "fill-random",
+            "grid": picture(d, "grid.png", history_grid),
+            "region": list(region),
+            "density": 0.5,
+            "seed": 51,
+            "expected": picture(d, "expected.png", filled),
+        },
+    )
+
+    def advance_case(
+        name: str, world: dict[str, Any], grid: Any, box: Any, n: int, out: bool
+    ) -> None:
+        d = directory("patterns", name)
+        size = (grid.shape[1], grid.shape[0])
+        w = LifeLike(world["rule"], size=size, init=grid, boundary=world["boundary"])
+        (w.advance_outside if out else w.advance_selection)(*box, n)
+        meta = {
+            "kind": "advance",
+            "world": world,
+            "grid": picture(d, "grid.png", grid),
+            "region": list(box),
+            "n": n,
+            "outside": out,
+            "expected": picture(d, "expected.png", w.state),
+        }
+        save(d, "patterns", meta)
+
+    history_torus = {"family": "lifelike", "rule": "B3/S23History", "boundary": "torus"}
+    advance_case(
+        "advance-selection-life-history", history_torus, marked(16, 12, 52), (3, 2, 11, 9), 6, False
+    )
+    history_dead = {"family": "lifelike", "rule": "B36/S23History", "boundary": "dead"}
+    advance_case(
+        "advance-outside-life-history-dead", history_dead, marked(16, 12, 53), (4, 4, 9, 8), 5, True
+    )
+
+    # -- render: a History grid's frame is its states -------------------------------------
+    d = directory("render", "frame-lifelike-history")
+    framing = LifeLike("B3/S23History", size=(24, 20), init=marked(24, 20, 54))
+    framing.step(7)
+    state = np.asarray(framing.state)
+    (d / "state.png").write_bytes(CODECS["lifelike-history"].encode(state))
+    (d / "frame.png").write_bytes(gray_png(framing.frame()))
+    assert np.array_equal(framing.frame(), state)
+    _gap_save(
+        d,
+        {
+            "spec_version": HISTORY_SPEC_VERSION,
+            "family": "render",
+            "tier": "bit-exact",
+            "kind": "frame",
+            "sim_family": "lifelike-history",
+            "params": {"boundary": "torus", "height": 20, "rule": "B3/S23History", "width": 24},
+            "input": {"file": "state.png"},
+            "output": {"file": "frame.png", "shape": list(state.shape)},
+        },
+    )
+
+    # -- formats: read into a grid, measured, refused by the two-state universe ----------
+    def read_case(name: str, data: bytes, ext: str) -> None:
+        d = directory("formats", f"read-{name}")
+        (d / f"input.{ext}").write_bytes(data)
+        f = read_pattern(data)
+        topology = None if f.bounded_grid is None else f.bounded_grid.topology
+        canonical = rle_encode(f.cells, f.rule or "B3/S23", metadata=f.metadata, topology=topology)
+        (d / "canonical.rle").write_text(canonical, encoding="utf-8", newline="\n")
+        meta: dict[str, Any] = {
+            "kind": "read",
+            "input": f"input.{ext}",
+            "trim": False,
+            "limit": "default",
+            "format": f.format,
+            "x": _signed_text(f.x),
+            "y": _signed_text(f.y),
+            "rule": f.rule,
+            "generation": decimal_text.digits_of(f.generation),
+            "metadata": notes(f.metadata),
+            "grid": picture(d, "grid.png", f.cells),
+            "canonical": "canonical.rle",
+        }
+        if f.bounded_grid is not None:
+            meta["bounded_grid"] = f.bounded_grid.suffix
+        save(d, "formats", meta)
+
+    def measure_case(name: str, data: bytes, ext: str) -> None:
+        d = directory("formats", f"measure-{name}")
+        (d / f"input.{ext}").write_bytes(data)
+        e = measure_pattern(data)
+        meta: dict[str, Any] = {
+            "kind": "measure",
+            "input": f"input.{ext}",
+            "format": e.format,
+            "width": decimal_text.digits_of(e.width),
+            "height": decimal_text.digits_of(e.height),
+            "x": _signed_text(e.x),
+            "y": _signed_text(e.y),
+            "rule": e.rule,
+            "generation": decimal_text.digits_of(e.generation),
+            "metadata": notes(e.metadata),
+            "two_state": e.two_state,
+        }
+        if e.bounded_grid is not None:
+            meta["bounded_grid"] = e.bounded_grid.suffix
+        save(d, "formats", meta)
+
+    def refused_case(name: str, data: bytes, ext: str) -> None:
+        d = directory("formats", f"universe-error-{name}")
+        (d / f"input.{ext}").write_bytes(data)
+        try:
+            read_universe(data)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(name)
+        save(d, "formats", {"kind": "universe", "input": f"input.{ext}", "error": True})
+
+    history_rle = (
+        b"#N A marked blinker\n#CXRLE Pos=5,-2 Gen=3\nx = 5, y = 3, rule = LifeHistory\n"
+        b"2.B$CEC.D$2.F!\n"
+    )
+    read_case("rle-history", history_rle, "rle")
+    read_case(
+        "rle-history-bounded",
+        b"x = 3, y = 2, rule = B3/S23History:K8*,6\nFAF$BEB!\n",
+        "rle",
+    )
+    read_case("life105-history-rule", b"#Life 1.05\n#R B3/S23History\n#P -1 0\n.*\n**\n", "lif")
+    measure_case("rle-history", history_rle, "rle")
+    refused_case("history-rle", history_rle, "rle")
+    refused_case("history-life105", b"#Life 1.05\n#R B3/S23History\n#P 0 0\n**\n", "lif")
+    refused_case("history-macrocell", b"[M2] (example 1.0)\n#R LifeHistory\n1 0 1 2 3\n", "mc")
+
+    # -- the unbounded plane: the multi-state universe -----------------------------------
+    multi = {"spec_version": HISTORY_SPEC_VERSION, "family": "hashlife-multistate"}
+    multi["tier"] = "bit-exact"
+
+    def multi_case(name: str, kind: str) -> tuple[Path, dict[str, Any]]:
+        return directory("hashlife-multistate", name), {**multi, "kind": kind}
+
+    def grid_case(
+        name: str, rule: str, grid: NDArray[np.uint8], origin: tuple[int, int], gens: list[int]
+    ) -> None:
+        d, meta = multi_case(f"grid-{name}", "grid")
+        (d / "grid.png").write_bytes(gray_png(grid))  # the states themselves
+        height, width = grid.shape
+        x, y = origin
+        u = MultiStateHashLife(rule)
+        u.set_rect(x, y, grid)
+        w = LifeLike(rule, size=(width, height), init=grid, boundary="dead")
+        checkpoints = []
+        for gen in gens:
+            u.step(gen - u.generation)
+            w.step(gen - w.generation)
+            assert np.array_equal(u.get_rect(x, y, x + width - 1, y + height - 1), w.state)
+            assert u.population == int(np.count_nonzero(w.state))
+            entry = _hashlife_entry(d, u, f"state-{gen}")
+            (d / f"cells-{gen}.png").write_bytes(gray_png(w.state))
+            entry["cells"] = f"cells-{gen}.png"
+            checkpoints.append(entry)
+        meta.update(
+            {
+                "rule": rule,
+                "grid": "grid.png",
+                "origin": [_signed_text(x), _signed_text(y)],
+                "checkpoints": checkpoints,
+            }
+        )
+        _gap_save(d, meta)
+
+    walled = framed(34, 28, 55)
+    walled[8, 6], walled[14, 20], walled[20, 9] = 3, 4, 5
+    grid_case("history-wall", "B3/S23History", walled, (-9, 4), [0, 1, 2, 10, 100, 1000])
+    grid_case(
+        "history-hexagonal-wall", "B2/S34HHistory", framed(30, 26, 56), (3, -40), [0, 1, 7, 64, 300]
+    )
+    grid_case(
+        "history-vonneumann-wall", "B2/S013VHistory", framed(26, 30, 57), (0, 0), [0, 1, 7, 64, 300]
+    )
+    inner = framed(40, 32, 58)
+    inner[10:22, 20] = 6  # a wall across the middle, as stamp collections use one
+    inner[5:8, 5:8] = np.where(inner[5:8, 5:8] == 1, 3, 4)
+    grid_case(
+        "history-marks-far",
+        "B36/S23History",
+        inner,
+        (999_999_950, -1_000_000_000),
+        [0, 1, 3, 30, 333],
+    )
+
+    def evolve_case(name: str, file_name: str, data: bytes, gens: list[int]) -> None:
+        d, meta = multi_case(f"evolve-{name}", "evolve")
+        (d / file_name).write_bytes(data)
+        u = read_multistate_universe(data).universe
+        checkpoints = []
+        for gen in gens:
+            u.step(gen - u.generation)
+            checkpoints.append(_hashlife_entry(d, u, f"state-{len(checkpoints)}"))
+        meta.update({"input": file_name, "checkpoints": checkpoints})
+        _gap_save(d, meta)
+
+    evolve_case(
+        "history-glider-trail",
+        "input.rle",
+        b"#C A glider leaves its envelope behind it.\nx = 3, y = 3, rule = LifeHistory\n"
+        b".A$2.A$3A!\n",
+        [0, 4, 100, 2**40, 2**64 + 1],
+    )
+    soup_history = MultiStateHashLife("B3/S23History")
+    soup_history.fill_random(-16, -12, 15, 11, density=0.37, seed=59)
+    soup_history.set_generation(10)
+    evolve_case(
+        "history-soup-from-macrocell",
+        "input.mc",
+        soup_history.to_macrocell().replace("#R B3/S23History", "#R lifehistory").encode(),
+        [10, 11, 50, 1000, 2**30],
+    )
+
+    def file_case(kind: str, name: str, text: str, error: bool = False) -> None:
+        d, meta = multi_case(f"{kind}-{name}", kind)
+        ext = "mc" if kind == "macrocell" else "rle"
+        (d / f"input.{ext}").write_text(text, encoding="utf-8", newline="\n")
+        meta["input"] = f"input.{ext}"
+        reader = (
+            MultiStateHashLife.from_macrocell
+            if kind == "macrocell"
+            else MultiStateHashLife.from_rle
+        )
+        try:
+            u = reader(text)
+        except ValueError:
+            assert error, name
+            meta["error"] = True
+            _gap_save(d, meta)
+            return
+        assert not error, name
+        meta.update(_hashlife_entry(d, u, "canonical"))
+        (d / "canonical.rle").write_text(u.to_rle(), encoding="utf-8", newline="\n")
+        meta["rle"] = "canonical.rle"
+        _gap_save(d, meta)
+
+    file_case(
+        "macrocell",
+        "history",
+        "[M2] (example 1.0)\n#R LifeHistory\n#G 7\n1 1 2 3 0\n1 4 5 6 1\n2 1 0 2 1\n",
+    )
+    file_case("macrocell", "history-hexagonal", "[M2]\n#R b2/s34hhistory\n1 6 6 6 6\n2 1 0 0 1\n")
+    file_case("macrocell", "error-history-b0", "[M2]\n#R B0/S8History\n1 1 0 0 0\n", True)
+    file_case("macrocell", "error-history-state-7", "[M2]\n#R LifeHistory\n1 7 0 0 0\n", True)
+    file_case(
+        "rle",
+        "history",
+        "#CXRLE Pos=-4,9 Gen=12\nx = 8, y = 3, rule = LifeHistory\n.ABA$CDEF.2A$2BF!\n",
+    )
+    file_case("rle", "history-two-state-letters", "x = 3, y = 1, rule = B36/S23History\nobo!\n")
+    file_case("rle", "error-history-state-7", "x = 1, y = 1, rule = LifeHistory\nG!\n", True)
+
+    def apply(u: MultiStateHashLife, op: dict[str, Any]) -> None:
+        kind = op["op"]
+        box = tuple(op[k] for k in ("x0", "y0", "x1", "y1") if k in op)
+        if kind == "set_cell":
+            u.set_cell(op["x"], op["y"], op["state"])
+        elif kind == "set_rect":
+            u.set_rect(
+                op["x"],
+                op["y"],
+                np.array([[int(c, 36) for c in r] for r in op["cells"]], np.uint8),
+                op["mode"],
+            )
+        elif kind == "fill_random":
+            u.fill_random(*box, op["density"], op["seed"])
+        elif kind == "rotate_rect":
+            op["expect"] = list(u.rotate_rect(*box, clockwise=op["clockwise"]))
+        elif kind == "advance_selection":
+            u.advance_selection(*box, int(op["n"]))
+        elif kind == "step":
+            u.step(int(op["n"]))
+        elif kind == "set_rule":
+            u.rule = op["rule"]
+        elif kind == "get_rect":
+            op["expect"] = [
+                "".join("0123456789abcdefghijklmnopqrstuvwxyz"[v] for v in row)
+                for row in u.get_rect(*box)
+            ]
+        else:
+            raise AssertionError(kind)
+
+    d, meta = multi_case("edit-history", "edit")
+    u = MultiStateHashLife("B3/S23History")
+    ops: list[dict[str, Any]] = [
+        {"op": "fill_random", "x0": -10, "y0": -8, "x1": 9, "y1": 7, "density": 0.4, "seed": 60},
+        {"op": "set_rect", "x": -3, "y": -3, "mode": "or", "cells": ["0660", "3005", "0440"]},
+        {"op": "set_cell", "x": 12, "y": 0, "state": 6},
+        {"op": "set_cell", "x": 13, "y": 0, "state": 7, "error": True},
+        {"op": "step", "n": "9"},
+        {"op": "advance_selection", "x0": -5, "y0": -5, "x1": 4, "y1": 4, "n": "6"},
+        {"op": "rotate_rect", "x0": -6, "y0": -4, "x1": 7, "y1": 5, "clockwise": True},
+        {"op": "set_rule", "rule": "b36/s23history"},
+        {"op": "set_rule", "rule": "WireWorld", "error": True},
+        {
+            "op": "fill_random",
+            "x0": 0,
+            "y0": 0,
+            "x1": 0,
+            "y1": 0,
+            "density": 2.0,
+            "seed": 1,
+            "error": True,
+        },
+        {"op": "step", "n": "40"},
+        {"op": "get_rect", "x0": -6, "y0": -6, "x1": 6, "y1": 6},
+    ]
+    for op in ops:
+        before = (u.to_macrocell(), u.generation, u.rule)
+        try:
+            apply(u, op)
+        except ValueError:
+            assert op.get("error"), op
+            assert (u.to_macrocell(), u.generation, u.rule) == before, op
+        else:
+            assert not op.get("error"), op
+    meta.update({"rule": "B3/S23History", "ops": ops})
+    meta.update(_hashlife_entry(d, u, "final"))
+    _gap_save(d, meta)
 
 
 if __name__ == "__main__":

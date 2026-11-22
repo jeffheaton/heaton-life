@@ -54,6 +54,18 @@ def _life_rule(rule: str) -> str | None:
         return None
 
 
+def _written_rule(rule: str) -> str:
+    """The rule an encoder writes: a Life-like rule's canonical form, with its variant
+    (``LifeHistory`` is written ``B3/S23History``, spec/history.md "Files"), any other rule
+    as given."""
+    from heaton_life.ca.rulestring import compile_rule
+
+    try:
+        return compile_rule(rule, presets=False, variants=True).canonical
+    except ValueError:
+        return rule
+
+
 def _is_extended(body: str, rule: str | None) -> bool:
     """Dialect detection (spec/patterns.md): uppercase B/O are dead/alive in two-state
     files but states 2/15 in extended RLE. Extended iff the body holds '.', any state
@@ -379,7 +391,7 @@ def rle_encode(
             line = ""
         line += tok
     body_lines.append(line)
-    written = _life_rule(survival_birth_rule(rule)) or rule
+    written = _written_rule(survival_birth_rule(rule))
     header = f"x = {width}, y = {height}, rule = {written}{suffix}"
     return "\n".join([*notes, header, *body_lines]) + "\n"
 

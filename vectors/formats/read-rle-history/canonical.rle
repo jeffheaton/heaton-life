@@ -1,0 +1,4 @@
+#N A marked blinker
+#C XRLE Pos=5,-2 Gen=3
+x = 5, y = 3, rule = B3/S23History
+2.B$CEC.D$2.F!

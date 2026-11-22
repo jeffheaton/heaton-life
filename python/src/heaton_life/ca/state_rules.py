@@ -102,8 +102,16 @@ def state_rule(text: str) -> StateRule:
     for rule in _known():
         if _ascii_lower(rule.canonical) == key:
             return rule
+    # History rules, a family named by any Life-like rule's text (spec/history.md).
+    from heaton_life.ca.history import history_rule
+
+    history = history_rule(text)
+    if history is not None:
+        return history
     names = ", ".join(rule.canonical for rule in _known())
-    raise ValueError(f"{text!r} is not a state rule (known: {names})")
+    raise ValueError(
+        f"{text!r} is not a state rule (known: {names}, and History rules such as B3/S23History)"
+    )
 
 
 def names_rule(text: str, rule: StateRule) -> bool:

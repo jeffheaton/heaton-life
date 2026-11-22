@@ -20,25 +20,88 @@ namespace HeatonLife
         VonNeumann,
     }
 
+    /// <summary>The word that gives a two-state rule more states (spec/rules.md "Variants").</summary>
+    public enum RuleVariant
+    {
+        /// <summary>A two-state rule.</summary>
+        None,
+
+        /// <summary>Seven states: off, on, envelope, marked on and off, start on, boundary
+        /// (spec/history.md).</summary>
+        History,
+    }
+
     /// <summary>
     /// A Life-like rule compiled to its transition table (spec/rules.md). <c>Table[i]</c> is the
     /// next state, 0 or 1, of a cell whose 3×3 block has neighborhood index i: NW 256, N 128,
     /// NE 64, W 32, the cell 16, E 8, SW 4, S 2, SE 1. Two rules behave identically exactly when
-    /// their tables are equal, whatever their notations. Made by <see cref="RuleString.Compile"/>;
-    /// the Python reference's <c>LifeRule</c>.
+    /// their tables are equal, whatever their notations. A rule with a <see cref="Variant"/> has
+    /// more states (History, seven: spec/history.md); its table is its base rule's, which its on
+    /// cells run. Made by <see cref="RuleString.Compile(string)"/>; the Python reference's
+    /// <c>LifeRule</c>.
     /// </summary>
     public sealed class LifeRule
     {
         /// <summary>Entries in every rule's table: one per filling of the 3×3 block.</summary>
         public const int TableSize = 512;
 
-        private readonly byte[] _table;
+        /// <summary>A History rule's number of states (spec/history.md "States").</summary>
+        public const int HistoryStates = 7;
 
-        internal LifeRule(string canonical, RuleNeighborhood neighborhood, byte[] table)
+        private readonly byte[] _table;
+        private LifeRule? _base;
+
+        internal LifeRule(
+            string canonical, RuleNeighborhood neighborhood, byte[] table, RuleVariant variant = RuleVariant.None)
         {
             Canonical = canonical;
             Neighborhood = neighborhood;
             _table = table;
+            Variant = variant;
+        }
+
+        /// <summary>The variant that gives the rule more states, or <see cref="RuleVariant.None"/>
+        /// for a two-state rule (spec/rules.md "Variants").</summary>
+        public RuleVariant Variant { get; }
+
+        /// <summary>The number of states a cell can have: 2, or 7 for a History rule.</summary>
+        public int States => Variant == RuleVariant.History ? HistoryStates : 2;
+
+        /// <summary>The two-state rule this one adds states to; a two-state rule is its own base.</summary>
+        public LifeRule Base
+        {
+            get
+            {
+                if (Variant == RuleVariant.None)
+                    return this;
+                return _base ??= new LifeRule(
+                    Canonical.Substring(0, Canonical.Length - Variant.ToString().Length), Neighborhood, _table);
+            }
+        }
+
+        /// <summary>Whether the two rules' bases behave identically (equal tables): a pattern of
+        /// one is at home in a world of the other (spec/rules.md "Variants").</summary>
+        public bool SameBase(LifeRule other)
+        {
+            if (other == null)
+                throw new ArgumentNullException(nameof(other));
+            return _table.AsSpan().SequenceEqual(other._table);
+        }
+
+        /// <summary>
+        /// Cells made this rule's states, in place (spec/history.md "Two states and seven"): a state
+        /// the rule has stays, and any other becomes 1 or 0 by its parity (odd on, even off). So a
+        /// History pattern under a two-state rule keeps its on cells, and a two-state pattern under
+        /// a History rule is unchanged. Allocates nothing.
+        /// </summary>
+        public void ConvertCells(Span<byte> cells)
+        {
+            int states = States;
+            for (int i = 0; i < cells.Length; i++)
+            {
+                if (cells[i] >= states)
+                    cells[i] = (byte)(cells[i] & 1);
+            }
         }
 
         /// <summary>The rule's canonical string (spec/rules.md "Canonical form").</summary>
@@ -49,6 +112,9 @@ namespace HeatonLife
 
         /// <summary>The 512 next states, indexed by the neighborhood index.</summary>
         public ReadOnlySpan<byte> Table => _table;
+
+        /// <summary>The table's own array, shared by the rules that run it (never written).</summary>
+        internal byte[] _TableArray() => _table;
 
         /// <summary>True when a dead cell with no live neighbors is born (<c>Table[0] == 1</c>).</summary>
         public bool HasB0 => _table[0] != 0;
@@ -118,32 +184,52 @@ namespace HeatonLife
 
         /// <summary>Compile rule text (spec/rules.md "Grammar") to its table and canonical
         /// string. Throws <see cref="ArgumentException"/> for text outside the grammar, its
-        /// message carrying the reason (spec/rules.md "Reasons").</summary>
-        public static LifeRule Compile(string rule)
+        /// message carrying the reason (spec/rules.md "Reasons"). A rule with a variant
+        /// (<c>B3/S23History</c>) is refused here, with the reason that it has more than two
+        /// states; <see cref="Compile(string, bool)"/> takes it.</summary>
+        public static LifeRule Compile(string rule) => Compile(rule, variants: false);
+
+        /// <summary>
+        /// <see cref="Compile(string)"/>, and with <paramref name="variants"/> a rule with a
+        /// variant compiles too (spec/rules.md "Variants"): its <see cref="LifeRule.Variant"/>,
+        /// <see cref="LifeRule.States"/> and <see cref="LifeRule.Base"/> say what it is.
+        /// </summary>
+        public static LifeRule Compile(string rule, bool variants)
         {
             if (rule == null)
                 throw new ArgumentNullException(nameof(rule));
-            LifeRule? compiled = Build(rule, out string why);
+            LifeRule? compiled = Build(rule, variants, out string why);
             if (compiled == null)
                 throw new ArgumentException(Invalid(rule, why), nameof(rule));
             return compiled;
         }
 
-        /// <summary>Like <see cref="Compile"/>, but answers false instead of throwing.</summary>
+        /// <summary>Like <see cref="Compile(string)"/>, but answers false instead of throwing.</summary>
         public static bool TryCompile(string? rule, [NotNullWhen(true)] out LifeRule? compiled)
             => TryCompile(rule, out compiled, out _);
 
         /// <summary>
-        /// Like <see cref="Compile"/>, but answers false instead of throwing, with the reason
+        /// Like <see cref="Compile(string)"/>, but answers false instead of throwing, with the reason
         /// (spec/rules.md "Reasons"): the phrase for the first problem a reading of the text
-        /// finds, such as "expected '/' after the birth counts", the one <see cref="Compile"/>'s
+        /// finds, such as "expected '/' after the birth counts", the one <see cref="Compile(string)"/>'s
         /// message carries. The reason is null when the text compiles. Null text reads as
         /// empty text.
         /// </summary>
         public static bool TryCompile(
             string? rule, [NotNullWhen(true)] out LifeRule? compiled, [NotNullWhen(false)] out string? reason)
+            => TryCompile(rule, false, out compiled, out reason);
+
+        /// <summary>
+        /// <see cref="TryCompile(string, out LifeRule, out string)"/>, and with
+        /// <paramref name="variants"/> a rule with a variant (<c>B3/S23History</c>) compiles too
+        /// (spec/rules.md "Variants"). Without it such a rule gives the reason that it has more
+        /// than two states.
+        /// </summary>
+        public static bool TryCompile(
+            string? rule, bool variants, [NotNullWhen(true)] out LifeRule? compiled,
+            [NotNullWhen(false)] out string? reason)
         {
-            compiled = Build(rule ?? "", out string why);
+            compiled = Build(rule ?? "", variants, out string why);
             reason = compiled == null ? why : null;
             return compiled != null;
         }
@@ -156,7 +242,7 @@ namespace HeatonLife
         /// rule whose table depends on nothing but the cell and its count of live neighbors has
         /// counts: isotropic letters that split a count, MAP strings that aren't outer-totalistic,
         /// and hexagonal or von Neumann rules throw <see cref="ArgumentException"/>.
-        /// <see cref="Compile"/> gives every rule's table.
+        /// <see cref="Compile(string)"/> gives every rule's table.
         /// </summary>
         public static (bool[] Birth, bool[] Survive) Parse(string rule)
         {
@@ -194,6 +280,46 @@ namespace HeatonLife
 
         private static string Invalid(string text, string reason) => $"invalid rule '{text}': {reason} (spec/rules.md)";
 
+        private const string HistoryWord = "history"; // the History variant, lowercase
+        private const string LifeHistory = "lifehistory"; // the name files give B3/S23History
+
+        /// <summary>A rule compiled, the variant refused unless <paramref name="variants"/>
+        /// (spec/rules.md "Reasons", last step).</summary>
+        private static LifeRule? Build(string text, bool variants, out string reason)
+        {
+            LifeRule? rule = Build(text, out reason);
+            if (rule != null && rule.Variant != RuleVariant.None && !variants)
+            {
+                reason = $"a {rule.Variant} rule has {rule.States} states, not 2";
+                return null;
+            }
+            return rule;
+        }
+
+        /// <summary>Whether text[start..end) is <paramref name="word"/> in ASCII letters of either
+        /// case (spec/rules.md reads only ASCII case).</summary>
+        private static bool IsWord(string text, int start, int end, string word)
+        {
+            if (start < 0 || end - start != word.Length)
+                return false;
+            for (int i = 0; i < word.Length; i++)
+            {
+                char c = text[start + i];
+                if (c >= 'A' && c <= 'Z')
+                    c = (char)(c + ('a' - 'A'));
+                if (c != word[i])
+                    return false;
+            }
+            return true;
+        }
+
+        /// <summary>The rule with its variant: the same table, the variant's word after its
+        /// canonical string.</summary>
+        private static LifeRule WithVariant(LifeRule rule, RuleVariant variant)
+            => variant == RuleVariant.None
+                ? rule
+                : new LifeRule(rule.Canonical + variant, rule.Neighborhood, rule._TableArray(), variant);
+
         private static LifeRule? Build(string text, out string reason)
         {
             int start = 0, end = text.Length;
@@ -201,6 +327,8 @@ namespace HeatonLife
                 start++;
             while (end > start && IsSpace(text[end - 1]))
                 end--;
+            if (IsWord(text, start, end, LifeHistory))
+                return WithVariant(Build("B3/S23", out reason)!, RuleVariant.History);
             if (end - start >= 3 && (text[start] == 'M' || text[start] == 'm')
                 && (text[start + 1] == 'A' || text[start + 1] == 'a')
                 && (text[start + 2] == 'P' || text[start + 2] == 'p'))
@@ -233,19 +361,25 @@ namespace HeatonLife
             if (!Groups(text, ref pos, end, survive, out reason))
                 return null;
 
-            // What follows the survival counts names the neighborhood. A variant with more states
-            // will add a suffix word here; until one is specified (spec/rules.md "Grammar"),
-            // nothing else may follow.
+            // What follows the survival counts names the neighborhood, then the variant, if any
+            // (spec/rules.md "Grammar"); nothing else may follow.
+            RuleVariant variant = RuleVariant.None;
+            int named = end;
+            if (IsWord(text, end - HistoryWord.Length, end, HistoryWord) && end - HistoryWord.Length >= pos)
+            {
+                named = end - HistoryWord.Length;
+                variant = RuleVariant.History;
+            }
             RuleNeighborhood neighborhood;
-            if (pos == end)
+            if (pos == named)
             {
                 neighborhood = RuleNeighborhood.Moore;
             }
-            else if (end - pos == 1 && (text[pos] == 'H' || text[pos] == 'h'))
+            else if (named - pos == 1 && (text[pos] == 'H' || text[pos] == 'h'))
             {
                 neighborhood = RuleNeighborhood.Hexagonal;
             }
-            else if (end - pos == 1 && (text[pos] == 'V' || text[pos] == 'v'))
+            else if (named - pos == 1 && (text[pos] == 'V' || text[pos] == 'v'))
             {
                 neighborhood = RuleNeighborhood.VonNeumann;
             }
@@ -264,7 +398,7 @@ namespace HeatonLife
             string suffix = neighborhood == RuleNeighborhood.Hexagonal ? "H"
                 : neighborhood == RuleNeighborhood.VonNeumann ? "V" : "";
             string canonical = "B" + Spell(born, neighborhood) + "/S" + Spell(stays, neighborhood) + suffix;
-            return new LifeRule(canonical, neighborhood, BsTable(born, stays, neighborhood));
+            return WithVariant(new LifeRule(canonical, neighborhood, BsTable(born, stays, neighborhood)), variant);
         }
 
         private static int SkipSpace(string text, int pos, int end)
@@ -458,8 +592,34 @@ namespace HeatonLife
 
         // -- MAP strings --------------------------------------------------------------------------
 
+        /// <summary>Whether text[start..end), without one final <c>==</c>, is a MAP payload.</summary>
+        private static bool IsPayload(string text, int start, int end)
+        {
+            int length = end - start;
+            if (length >= 2 && text[end - 1] == '=' && text[end - 2] == '=')
+                length -= 2;
+            if (length != 86 && length != 22 && length != 6)
+                return false;
+            for (int i = 0; i < length; i++)
+            {
+                if (Base64.IndexOf(text[start + i]) < 0)
+                    return false;
+            }
+            return true;
+        }
+
         private static LifeRule? BuildMap(string text, int start, int end, out string reason)
         {
+            // A payload ending in the History word is read without it first; no payload length
+            // less the word's 7 is a payload length, so only one reading can succeed.
+            RuleVariant variant = RuleVariant.None;
+            if (IsWord(text, end - HistoryWord.Length, end, HistoryWord)
+                && end - HistoryWord.Length >= start
+                && IsPayload(text, start, end - HistoryWord.Length))
+            {
+                end -= HistoryWord.Length;
+                variant = RuleVariant.History;
+            }
             reason = "";
             int length = end - start;
             if (length >= 2 && text[end - 1] == '=' && text[end - 2] == '=')
@@ -508,7 +668,7 @@ namespace HeatonLife
                     value = (value << 1) | (i < entries.Length ? entries[i] : 0);
                 canonical.Append(Base64[value]);
             }
-            return new LifeRule(canonical.ToString(), neighborhood, table);
+            return WithVariant(new LifeRule(canonical.ToString(), neighborhood, table), variant);
         }
 
         /// <summary>A Moore neighborhood index as the index of a MAP string's own neighborhood:

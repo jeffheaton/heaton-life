@@ -651,6 +651,35 @@ namespace HeatonLife
             PasteBlocks(blocks, tx, ty, x + width - 1, ty + height - 1, mode);
         }
 
+        /// <summary>
+        /// Replace the inclusive rectangle with the Life-like soup of the same size (PCG32 stream
+        /// 0, one draw per cell in row-major order, alive iff draw &lt; ⌊density · 2^32⌋), its
+        /// live cells state 1 and its dead ones 0: the cells <see cref="HashLife.FillRandom"/>
+        /// gives (spec/hashlife-multistate.md "Editing"). Random fill is a Life-like tool, so only
+        /// a History rule's universe has it; under any other rule it throws
+        /// <see cref="ArgumentException"/> and changes nothing.
+        /// </summary>
+        public void FillRandom(long x0, long y0, long x1, long y1, double density, ulong seed)
+        {
+            if (!(_rule is HistoryRule))
+                throw new ArgumentException(
+                    $"random fill is a Life-like tool; {_rule.Canonical} is no History rule "
+                    + "(spec/hashlife-multistate.md \"Editing\")");
+            HashLife.CheckBox(x0, y0, x1, y1);
+            if (x1 < x0 || y1 < y0)
+                throw new ArgumentException($"empty rectangle ({x0}, {y0})..({x1}, {y1})");
+            long width = x1 - x0 + 1, height = y1 - y0 + 1;
+            if (width * height > int.MaxValue)
+                throw new ArgumentOutOfRangeException(
+                    null, $"({x0}, {y0})..({x1}, {y1}) holds more cells than one soup can");
+            ulong threshold = Seeding.Threshold(density);
+            var rng = new Pcg32(seed);
+            var cells = new byte[width * height];
+            for (int i = 0; i < cells.Length; i++)
+                cells[i] = (byte)(rng.NextU32() < threshold ? 1 : 0);
+            SetRect(x0, y0, cells, (int)width, (int)height, HashLifePasteMode.Copy);
+        }
+
         /// <summary>Every cell of the inclusive rectangle becomes 0.</summary>
         public void ClearRect(long x0, long y0, long x1, long y1)
         {

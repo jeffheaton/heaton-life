@@ -5,6 +5,7 @@ This module is the Python side of the cross-language contract in ../../vectors/;
 the .NET implementation mirrors it. Encodings are per-family and spec'd:
 
 - lifelike:        PNG, pixel = state * 255                       (bit-exact)
+- lifelike-history: PNG, pixel = raw state (0–6), a History rule  (bit-exact)
 - elementary:      PNG, 1 x width, pixel = tape * 255             (bit-exact)
 - cyclic:          PNG, pixel = raw state                         (bit-exact)
 - wireworld:       PNG, pixel = state * 85                        (bit-exact)
@@ -152,6 +153,33 @@ class _Indexed:
         return Cyclic.from_params(CyclicParams.from_dict(params))
 
 
+class _History:
+    """Life-like grids under a History rule (spec/history.md): states 0–6 stored as the
+    raw pixel values of a grayscale PNG. Params are lifelike's, every key written."""
+
+    ext = "png"
+
+    def encode(self, state: StateArray) -> bytes:
+        return _png_bytes(Image.fromarray(np.asarray(state, dtype=np.uint8), mode="L"))
+
+    def decode(self, data: bytes, shape: Sequence[int] | None) -> StateArray:
+        with Image.open(io.BytesIO(data)) as img:
+            return np.asarray(img.convert("L")).astype(np.uint8)
+
+    def build(self, params: dict[str, Any], initial: StateArray | None) -> Simulation:
+        p = LifeLikeParams.from_dict(params)
+        if initial is not None:
+            return LifeLike(
+                p.rule,
+                size=(p.width, p.height),
+                init=initial,
+                boundary=p.boundary,  # type: ignore[arg-type]
+                shift=p.shift,
+                axis=p.axis,  # type: ignore[arg-type]
+            )
+        return LifeLike.from_params(p)
+
+
 class _Rgb:
     ext = "png"
 
@@ -196,6 +224,7 @@ class _Float64:
 
 CODECS: dict[str, Codec] = {
     "lifelike": _Binary("lifelike"),
+    "lifelike-history": _History(),
     "elementary": _Binary("elementary"),
     "cyclic": _Indexed("cyclic", scale=1),
     "wireworld": _Indexed("wireworld", scale=85),
@@ -210,6 +239,7 @@ CODECS: dict[str, Codec] = {
 # (tier, epsilon): epsilon is the max absolute deviation for cross-language replay.
 TIERS: dict[str, tuple[str, float | None]] = {
     "lifelike": ("bit-exact", None),
+    "lifelike-history": ("bit-exact", None),
     "elementary": ("bit-exact", None),
     "cyclic": ("bit-exact", None),
     "wireworld": ("bit-exact", None),

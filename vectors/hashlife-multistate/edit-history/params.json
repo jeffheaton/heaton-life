@@ -1,0 +1,122 @@
+{
+  "bounding_box": [
+    "-13",
+    "-12",
+    "12",
+    "15"
+  ],
+  "family": "hashlife-multistate",
+  "generation": "49",
+  "kind": "edit",
+  "ops": [
+    {
+      "density": 0.4,
+      "op": "fill_random",
+      "seed": 60,
+      "x0": -10,
+      "x1": 9,
+      "y0": -8,
+      "y1": 7
+    },
+    {
+      "cells": [
+        "0660",
+        "3005",
+        "0440"
+      ],
+      "mode": "or",
+      "op": "set_rect",
+      "x": -3,
+      "y": -3
+    },
+    {
+      "op": "set_cell",
+      "state": 6,
+      "x": 12,
+      "y": 0
+    },
+    {
+      "error": true,
+      "op": "set_cell",
+      "state": 7,
+      "x": 13,
+      "y": 0
+    },
+    {
+      "n": "9",
+      "op": "step"
+    },
+    {
+      "n": "6",
+      "op": "advance_selection",
+      "x0": -5,
+      "x1": 4,
+      "y0": -5,
+      "y1": 4
+    },
+    {
+      "clockwise": true,
+      "expect": [
+        -4,
+        -6,
+        5,
+        7
+      ],
+      "op": "rotate_rect",
+      "x0": -6,
+      "x1": 7,
+      "y0": -4,
+      "y1": 5
+    },
+    {
+      "op": "set_rule",
+      "rule": "b36/s23history"
+    },
+    {
+      "error": true,
+      "op": "set_rule",
+      "rule": "WireWorld"
+    },
+    {
+      "density": 2.0,
+      "error": true,
+      "op": "fill_random",
+      "seed": 1,
+      "x0": 0,
+      "x1": 0,
+      "y0": 0,
+      "y1": 0
+    },
+    {
+      "n": "40",
+      "op": "step"
+    },
+    {
+      "expect": [
+        "2222222220022",
+        "2222222202221",
+        "2222222222020",
+        "0222220224000",
+        "0222222240600",
+        "1022222240600",
+        "1222222224200",
+        "1222222222220",
+        "2222221111222",
+        "2222221122222",
+        "2222212212222",
+        "2222221221122",
+        "2220222122112"
+      ],
+      "op": "get_rect",
+      "x0": -6,
+      "x1": 6,
+      "y0": -6,
+      "y1": 6
+    }
+  ],
+  "population": "439",
+  "rule": "B3/S23History",
+  "spec_version": "0.16.0",
+  "state": "final.mc",
+  "tier": "bit-exact"
+}

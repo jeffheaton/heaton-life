@@ -50,7 +50,14 @@ namespace HeatonLife
                 throw new ArgumentNullException(nameof(name));
             if (Names(name, WireworldRule.Instance))
                 return WireworldRule.Instance;
-            throw new ArgumentException($"'{name}' is not a state rule (known: {WireworldRule.Instance.Canonical})", nameof(name));
+            // History rules, a family named by any Life-like rule's text (spec/history.md).
+            HistoryRule? history = HistoryRule.FromText(name);
+            if (history != null)
+                return history;
+            throw new ArgumentException(
+                $"'{name}' is not a state rule (known: {WireworldRule.Instance.Canonical}, and History rules "
+                + "such as B3/S23History)",
+                nameof(name));
         }
 
         /// <summary>Whether <paramref name="text"/> names <paramref name="rule"/>: its canonical

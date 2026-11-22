@@ -136,6 +136,7 @@ indexing rule), or raw RGB (passed through).
 | family | frame | shape |
 |---|---|---|
 | life-like | `state * 255` | index bytes |
+| life-like, History rule | the state itself, 0–6 ([history.md](history.md)), for a color per state | index bytes |
 | elementary | space-time diagram `* 255` | index bytes |
 | cyclic | `state * 255 / max(states - 1, 1)` (integer math) | index bytes |
 | wireworld | `state * 85` (hits the `wireworld` anchors exactly) | index bytes |

@@ -15,6 +15,9 @@ import functools
 import operator
 from typing import Literal, TypeAlias
 
+import numpy as np
+from numpy.typing import NDArray
+
 RULE_PRESETS = {
     "life": "B3/S23",
     "highlife": "B36/S23",
@@ -108,6 +111,14 @@ _MAP_LENGTH: dict[int, Neighborhood] = {86: "moore", 22: "hexagonal", 6: "vonneu
 _MAP_CELLS: dict[Neighborhood, int] = {"moore": 9, "hexagonal": 7, "vonneumann": 5}
 _MAP_PAYLOAD: dict[Neighborhood, int] = {nb: length for length, nb in _MAP_LENGTH.items()}
 
+Variant = Literal["", "History"]
+VARIANTS: tuple[Variant, ...] = ("History",)
+"""The words that give a two-state rule more states (spec/rules.md "Variants")."""
+VARIANT_STATES: dict[str, int] = {"": 2, "History": 7}
+"""How many states a rule of each variant has; "" is a two-state rule's."""
+_HISTORY = "history"  # the History word, lowercased (spec/rules.md "Grammar")
+_LIFE_HISTORY = "lifehistory"  # LifeHistory, the name files have long given B3/S23History
+
 Group: TypeAlias = tuple[int, bool, str]  # (count, minus, letters) as written
 Key: TypeAlias = tuple[int, str]  # (count, letter class); counts 0 and 8, and H and V, use ""
 
@@ -119,15 +130,50 @@ class LifeRule:
     ``table[i]`` is the next state, 0 or 1, of a cell whose 3×3 block has neighborhood
     index ``i``: NW 256, N 128, NE 64, W 32, the cell 16, E 8, SW 4, S 2, SE 1. Two rules
     behave identically exactly when their tables are equal, whatever their notations.
+
+    A rule with a ``variant`` (spec/rules.md "Variants") has more states: ``History``
+    gives seven (spec/history.md). Its ``table`` is its base rule's, which its on cells
+    run, and its ``canonical`` string ends in the variant's word.
     """
 
     canonical: str
     neighborhood: Neighborhood
     table: bytes
+    variant: Variant = ""
 
     def __post_init__(self) -> None:
         if len(self.table) != TABLE_SIZE or any(v > 1 for v in self.table):
             raise ValueError(f"a rule table holds {TABLE_SIZE} entries of 0 or 1")
+        if self.variant not in VARIANT_STATES:
+            raise ValueError(f"unknown variant {self.variant!r}; expected one of {VARIANTS}")
+
+    @property
+    def states(self) -> int:
+        """The number of states: 2, or the variant's (7 for History)."""
+        return VARIANT_STATES[self.variant]
+
+    @property
+    def base(self) -> LifeRule:
+        """The two-state rule this one adds states to; a two-state rule is its own base."""
+        if not self.variant:
+            return self
+        return LifeRule(self.canonical[: -len(self.variant)], self.neighborhood, self.table)
+
+    def same_base(self, other: LifeRule) -> bool:
+        """Whether the two rules' bases behave identically (equal tables): a pattern of one
+        is at home in a world of the other (spec/rules.md "Variants")."""
+        return self.table == other.table
+
+    def convert_cells(self, cells: NDArray[np.generic]) -> NDArray[np.uint8]:
+        """``cells`` as this rule's states (spec/history.md "Two states and seven"): a state
+        the rule has stays, and any other becomes 1 or 0 by its parity (odd on, even off).
+        A new array; ``cells`` is untouched."""
+        array = np.asarray(cells)
+        if array.dtype.kind not in "biu" or (array.size and int(array.min()) < 0):
+            raise ValueError("cells are states: integers of at least 0")
+        states = array.astype(np.int64)
+        kept = np.where(states < self.states, states, states & 1)
+        return kept.astype(np.uint8)
 
     @property
     def has_b0(self) -> bool:
@@ -152,28 +198,33 @@ class LifeRule:
         return 1 if self.has_smax else generation & 1
 
 
-def compile_rule(rule: str, *, presets: bool = True) -> LifeRule:
+def compile_rule(rule: str, *, presets: bool = True, variants: bool = False) -> LifeRule:
     """Compile rule text (spec/rules.md "Grammar") to its table and canonical string.
 
     With ``presets`` a RULE_PRESETS name (``life``, ``highlife``…) stands for its rule, a
-    convenience where people type rules; file formats pass ``presets=False``. Raises
-    ValueError for text outside the grammar.
+    convenience where people type rules; file formats pass ``presets=False``. A rule with a
+    variant (``B3/S23History``) compiles only with ``variants``; without it, it is refused
+    with the reason that it has more than two states. Raises ValueError for text outside
+    the grammar.
     """
     if presets:
         named = RULE_PRESETS.get(rule.strip().lower())
         if named is not None:
             rule = named
-    return _compile(rule)
+    compiled = _compile(rule)
+    if compiled.variant and not variants:
+        raise _invalid(rule, f"a {compiled.variant} rule has {compiled.states} states, not 2")
+    return compiled
 
 
 def try_compile_rule(
-    rule: str, *, presets: bool = True
+    rule: str, *, presets: bool = True, variants: bool = False
 ) -> tuple[LifeRule, None] | tuple[None, str]:
     """``compile_rule`` without raising: ``(rule, None)`` when the text compiles, else
     ``(None, reason)``, the phrase spec/rules.md "Reasons" gives for the first problem a
     reading of the text finds (``compile_rule``'s error message carries the same one)."""
     try:
-        return compile_rule(rule, presets=presets), None
+        return compile_rule(rule, presets=presets, variants=variants), None
     except _RuleError as error:
         return None, error.reason
 
@@ -233,11 +284,26 @@ def _compile(text: str) -> LifeRule:
     while end > start and text[end - 1] in _SPACE:
         end -= 1
     body = text[start:end]
+    if _lower(body) == _LIFE_HISTORY:
+        return _with_variant(_compile("B3/S23"), "History")
     if len(body) >= 3 and body[0] in "Mm" and body[1] in "Aa" and body[2] in "Pp":
         return _compile_map(text, body[3:])
     if body[:1] in ("B", "b"):
         return _compile_bs(text, body)
     raise _invalid(text, "expected B…/S… or MAP…")
+
+
+def _lower(text: str) -> str:
+    """ASCII letters lowercased, everything else as it is (rules.md reads only ASCII case)."""
+    return "".join(chr(ord(ch) + 32) if "A" <= ch <= "Z" else ch for ch in text)
+
+
+def _with_variant(rule: LifeRule, variant: Variant) -> LifeRule:
+    """``rule`` with ``variant`` added: the same table, the variant's word after its
+    canonical string."""
+    if not variant:
+        return rule
+    return LifeRule(rule.canonical + variant, rule.neighborhood, rule.table, variant)
 
 
 def _compile_bs(text: str, body: str) -> LifeRule:
@@ -249,27 +315,31 @@ def _compile_bs(text: str, body: str) -> LifeRule:
     if pos >= len(body) or body[pos] not in "Ss":
         raise _invalid(text, "expected S after '/'")
     survive, pos = _groups(text, body, pos + 1)
-    # What follows the survival counts names the neighborhood. A variant with more states
-    # will add a suffix word here; until one is specified (spec/rules.md "Grammar"),
-    # nothing else may follow.
+    # What follows the survival counts names the neighborhood, then the variant, if any
+    # (spec/rules.md "Grammar"); nothing else may follow.
     rest = body[pos:]
+    variant: Variant = ""
+    named = rest
+    if _lower(rest[-len(_HISTORY) :]) == _HISTORY:
+        named, variant = rest[: -len(_HISTORY)], "History"
     neighborhood: Neighborhood
-    if rest == "":
+    if named == "":
         neighborhood = "moore"
-    elif rest in ("H", "h"):
+    elif named in ("H", "h"):
         neighborhood = "hexagonal"
-    elif rest in ("V", "v"):
+    elif named in ("V", "v"):
         neighborhood = "vonneumann"
     else:
         raise _invalid(text, f"unexpected '{rest}' after the survival counts")
     born = _side(text, birth, neighborhood)
     stays = _side(text, survive, neighborhood)
     canonical = f"B{_spell(born, neighborhood)}/S{_spell(stays, neighborhood)}"
-    return LifeRule(
+    rule = LifeRule(
         canonical + _SUFFIX[neighborhood],
         neighborhood,
         _bs_table(born, stays, neighborhood),
     )
+    return _with_variant(rule, variant)
 
 
 def _skip_space(body: str, pos: int) -> int:
@@ -401,10 +471,25 @@ def _letter_classes() -> dict[Key, frozenset[int]]:
 _CLASSES = _letter_classes()
 
 
-def _compile_map(text: str, payload: str) -> LifeRule:
-    payload = payload.removesuffix("==")
+def _map_payload(payload: str) -> Neighborhood | None:
+    """The neighborhood a MAP payload (without its ``==``) names, or None for no payload."""
     neighborhood = _MAP_LENGTH.get(len(payload))
     if neighborhood is None or any(ch not in _BASE64_VALUE for ch in payload):
+        return None
+    return neighborhood
+
+
+def _compile_map(text: str, payload: str) -> LifeRule:
+    # A payload ending in the History word is read without it first; no payload length
+    # less the word's 7 is a payload length, so only one reading can succeed.
+    variant: Variant = ""
+    if _lower(payload[-len(_HISTORY) :]) == _HISTORY:
+        stem = payload[: -len(_HISTORY)]
+        if _map_payload(stem.removesuffix("==")) is not None:
+            payload, variant = stem, "History"
+    payload = payload.removesuffix("==")
+    neighborhood = _map_payload(payload)
+    if neighborhood is None:
         raise _invalid(
             text, "a MAP payload is 86, 22 or 6 base64 characters, optionally followed by =="
         )
@@ -413,7 +498,9 @@ def _compile_map(text: str, payload: str) -> LifeRule:
         for i in range(1 << _MAP_CELLS[neighborhood])
     ]
     table = bytes(entries[_project(index, neighborhood)] for index in range(TABLE_SIZE))
-    return LifeRule("MAP" + _base64(entries, neighborhood), neighborhood, table)
+    return _with_variant(
+        LifeRule("MAP" + _base64(entries, neighborhood), neighborhood, table), variant
+    )
 
 
 def _project(index: int, neighborhood: Neighborhood) -> int:

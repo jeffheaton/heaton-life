@@ -97,6 +97,17 @@ namespace HeatonLife.Tests
                         AssertByteFrame(caseName, caseDir, outputFile, sim.Frame());
                         break;
                     }
+                case "lifelike-history": // a History rule: the state PNG and the frame are the states
+                    {
+                        var sim = new LifeLike(
+                            p.GetProperty("rule").GetString()!, width, height,
+                            p.GetProperty("boundary").GetString() == "dead" ? Boundary.Dead : Boundary.Torus);
+                        var (_, _, channels, pixels) = Png.Read(Path.Combine(caseDir, inputFile));
+                        Assert.Equal(1, channels);
+                        sim.SetState(pixels);
+                        AssertByteFrame(caseName, caseDir, outputFile, sim.Frame());
+                        break;
+                    }
                 case "cyclic":
                     {
                         var sim = new Cyclic(
