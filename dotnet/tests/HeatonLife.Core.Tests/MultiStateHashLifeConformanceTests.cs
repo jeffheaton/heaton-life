@@ -45,6 +45,7 @@ namespace HeatonLife.Tests
                 ["names"] = Of(common, new[] { "cases" }),
                 ["measure"] = Of(common, new[] { "input", "rule", "error", "extent", "rule_named" }),
                 ["convert"] = Of(common, new[] { "input", "from", "rule", "error" }, state),
+                ["carried-rule"] = Of(common, new[] { "inputs", "rule_text" }),
             };
         }
 
@@ -295,6 +296,22 @@ namespace HeatonLife.Tests
                         {
                             back.Universe.Restore(back.Frames[i]);
                             ExpectState(dir, back.Universe, expected[i]);
+                        }
+                        break;
+                    }
+                case "carried-rule":
+                    {
+                        // A rule carried after a pattern has one text, whichever file carries it
+                        // (spec/ruletable.md "Files"): the loaded universe's rule's, and Embedded's.
+                        string want = Encoding.UTF8.GetString(File.ReadAllBytes(Path.Combine(dir, Text(meta, "rule_text"))));
+                        foreach (JsonElement input in meta.GetProperty("inputs").EnumerateArray())
+                        {
+                            byte[] data = File.ReadAllBytes(Path.Combine(dir, input.GetString()!));
+                            RuleTable rule = Assert.IsType<RuleTable>(MultiStateFiles.ReadUniverse(data).Universe.StateRule);
+                            Assert.Equal(want, rule.Text);
+                            RuleTable? carried = RuleTables.Embedded(PatternText.Decode(PatternText.Inflate(data)));
+                            Assert.NotNull(carried);
+                            Assert.Equal(want, carried!.Text);
                         }
                         break;
                     }

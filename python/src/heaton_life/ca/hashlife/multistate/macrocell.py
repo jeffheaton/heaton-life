@@ -24,6 +24,7 @@ from heaton_life.ca.hashlife.macrocell import (
     _number,
     _power,
     _step,
+    _text,
 )
 from heaton_life.ca.hashlife.multistate.store import StateStore, pack, unpack
 from heaton_life.ca.hashlife.multistate.universe import MultiStateHashLife
@@ -201,7 +202,8 @@ class _Scanned:
 
 def _scan(source: str | bytes, sink: _Nodes) -> _Scanned:
     """Read a Macrocell file's lines into ``sink``. Raises ValueError for a malformed file."""
-    lines, start = _lines(source)
+    text = _text(source)
+    lines, start = _lines(text)
     generation = 0
     named: str | None = None
     notes = MetadataReader()
@@ -227,7 +229,10 @@ def _scan(source: str | bytes, sink: _Nodes) -> _Scanned:
         if not line:
             continue
         if line.startswith("@RULE"):  # a rule file appended to the pattern (spec/ruletable.md)
-            rule_text = "\n".join(lines[number - 1 :])
+            # Imported here: heaton_life.ca, the rule-table module's package, imports this one.
+            from heaton_life.ca.ruletable import appended_rule_text
+
+            rule_text = appended_rule_text(text.splitlines(keepends=True), number - 1)
             break
         if line[0] == "#":
             if line.startswith("#R"):

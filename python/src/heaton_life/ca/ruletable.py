@@ -86,32 +86,41 @@ def starter_pattern(name: str) -> NDArray[np.uint8]:
 
 def embedded_rule(text: str) -> RuleTable | None:
     """The rule file appended to an RLE or Macrocell pattern (spec/ruletable.md "Files"):
-    in RLE the text from the first line after the pattern's ``!`` that starts with
-    ``@RULE``, in Macrocell (a text whose first line that isn't blank starts with ``[M2]``)
-    the text from the first line after the header that starts with ``@RULE``, read as a rule
-    file; None when the text has none. RLE's comment lines (``#``) and header come before
-    the pattern, so its end is the first ``!`` in a line after them. An appended text that
-    is no rule file raises ``RuleFileError``."""
+    in RLE from the first line after the pattern's ``!`` that starts with ``@RULE``, in
+    Macrocell (a text whose first line that isn't blank starts with ``[M2]``) from the first
+    line after the header that starts with ``@RULE``; None when the text has none. Its text
+    is ``appended_rule_text``'s, the same whichever file carries the rule. RLE's comment
+    lines (``#``) and header come before the pattern, so its end is the first ``!`` in a
+    line after them. An appended text that is no rule file raises ``RuleFileError``."""
     from heaton_life.init.rle import is_rle_header
 
-    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-    first = next((i for i, line in enumerate(lines) if line.strip()), len(lines))
-    if first < len(lines) and lines[first].strip().startswith("[M2]"):
-        for later in range(first + 1, len(lines)):
-            if lines[later].strip().startswith("@RULE"):
-                return parse_rule_file("\n".join(lines[later:]))
-        return None
-    index = 0
-    while index < len(lines) and (not lines[index].strip() or lines[index].strip().startswith("#")):
-        index += 1
-    if index < len(lines) and is_rle_header(lines[index].strip()):
-        index += 1
-    while index < len(lines) and "!" not in lines[index]:
-        index += 1
-    for later in range(index + 1, len(lines)):
-        if lines[later].strip().startswith("@RULE"):
-            return parse_rule_file("\n".join(lines[later:]))
+    lines = text.splitlines(keepends=True)  # spec/formats.md "Lines"
+    stripped = [line.strip() for line in lines]
+    first = next((i for i, line in enumerate(stripped) if line), len(lines))
+    if first < len(lines) and stripped[first].startswith("[M2]"):
+        after = first + 1
+    else:
+        index = 0
+        while index < len(lines) and (not stripped[index] or stripped[index].startswith("#")):
+            index += 1
+        if index < len(lines) and is_rle_header(stripped[index]):
+            index += 1
+        while index < len(lines) and "!" not in lines[index]:
+            index += 1
+        after = index + 1
+    for later in range(after, len(lines)):
+        if stripped[later].startswith("@RULE"):
+            return parse_rule_file(appended_rule_text(lines, later))
     return None
+
+
+def appended_rule_text(lines: list[str], index: int) -> str:
+    """The text of a rule file appended to a pattern file whose ``@RULE`` line is line
+    ``index`` of ``lines``, the file's lines with their line ends kept
+    (``str.splitlines(keepends=True)``): the rest of the text from the start of that line,
+    a final line end included, with ``\\r\\n`` and ``\\r`` read as ``\\n`` (spec/ruletable.md
+    "Files"). Every carrier, and both ports, give a rule this one text."""
+    return "".join(lines[index:]).replace("\r\n", "\n").replace("\r", "\n")
 
 
 def append_rule(rle: str, rule: RuleTable) -> str:

@@ -1034,6 +1034,9 @@ def main() -> None:
     # -- Macrocell files carrying their rule; converting between the engines ---------------
     write_rule_file_and_convert_cases()
 
+    # -- One text for a carried rule, whichever file carries it (spec/ruletable.md "Files") -
+    write_carried_rule_cases()
+
     print("done")
 
 
@@ -13074,6 +13077,76 @@ def write_rule_file_and_convert_cases() -> None:
         "multistate",
         "B0/S",
         error=True,
+    )
+
+
+CARRIED_RULE_SPEC_VERSION = "0.16.0"
+
+
+def write_carried_rule_cases() -> None:
+    """A rule carried after a pattern has one text, whichever file carries it
+    (spec/ruletable.md "Files"): RLE or Macrocell, with LF, CRLF or CR line ends, gzipped or
+    not, under vectors/hashlife-multistate/carried-rule-*."""
+    import gzip
+
+    from heaton_life.ca.hashlife import MultiStateHashLife, read_multistate_universe
+    from heaton_life.ca.rulefile import RuleTable, parse_rule_file
+    from heaton_life.ca.ruletable import append_rule, embedded_rule, starter_pattern, starter_rule
+    from heaton_life.init.formats import recognize
+
+    mine = parse_rule_file(
+        starter_rule("Byl-Loop").text.replace("@RULE Byl-Loop", "@RULE My-Byl", 1)
+    )
+    u = MultiStateHashLife(mine)
+    u.set_rect(-3, 2, starter_pattern("Byl-Loop"))
+    u.step(9)
+    macrocell = append_rule(u.to_macrocell(), mine)
+    rle = append_rule(u.to_rle(), mine)
+    assert macrocell.endswith("\n") and rle.endswith("\n")
+
+    def carried_case(name: str, inputs: dict[str, bytes], text: str) -> None:
+        d = VECTOR_ROOT / "hashlife-multistate" / f"carried-rule-{name}"
+        d.mkdir(parents=True, exist_ok=True)
+        for file, data in inputs.items():
+            (d / file).write_bytes(data)
+            rule = read_multistate_universe(data).universe.state_rule
+            assert isinstance(rule, RuleTable) and rule.text == text, (name, file)
+            carried = embedded_rule(recognize(data).text)
+            assert carried is not None and carried.text == text, (name, file)
+        (d / "rule.txt").write_bytes(text.encode("utf-8"))
+        meta = {
+            "spec_version": CARRIED_RULE_SPEC_VERSION,
+            "family": "hashlife-multistate",
+            "tier": "bit-exact",
+            "kind": "carried-rule",
+            "inputs": list(inputs),
+            "rule_text": "rule.txt",
+        }
+        _gap_save(d, meta)
+
+    def crlf(text: str) -> str:
+        return text.replace("\n", "\r\n")
+
+    def cr(text: str) -> str:
+        return text.replace("\n", "\r")
+
+    carried_case(
+        "every-carrier",
+        {
+            "input.mc": macrocell.encode(),
+            "input-crlf.mc": crlf(macrocell).encode(),
+            "input-cr.mc": cr(macrocell).encode(),
+            "input.mc.gz": gzip.compress(macrocell.encode(), mtime=0),
+            "input.rle": rle.encode(),
+            "input-crlf.rle": crlf(rle).encode(),
+            "input-cr.rle": cr(rle).encode(),
+        },
+        mine.text,
+    )
+    carried_case(
+        "no-final-line-end",
+        {"input.mc": macrocell.rstrip("\n").encode(), "input.rle": rle.rstrip("\n").encode()},
+        mine.text.rstrip("\n"),
     )
 
 

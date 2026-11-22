@@ -190,8 +190,9 @@ square of states, and a node of level k ≥ 2 has four children of level k − 1
 - The root is the last node line, placed as "Reading", step 4, says: a level-1 root
   covers the cells x ∈ {−1, 0}, y ∈ {0, 1}.
 - **A rule appended to the file.** A line that starts with `@RULE` ends the file's
-  Macrocell lines: it and the whole rest of the text are a rule file appended to the
-  pattern ([ruletable.md](ruletable.md#files)), as an RLE file carries one. When `#R`
+  Macrocell lines: it and the whole rest of the text, a final line end included, are a rule
+  file appended to the pattern ([ruletable.md](ruletable.md#files)), the same text an RLE
+  file carrying the rule gives it. When `#R`
   names that rule, and the reader isn't given a rule object of that name, the file runs
   under it, before the name is looked up.
 

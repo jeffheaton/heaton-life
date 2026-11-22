@@ -394,44 +394,57 @@ namespace HeatonLife
 
         /// <summary>
         /// The rule file appended to an RLE or Macrocell pattern (spec/ruletable.md "Files"): in RLE
-        /// the text from the first line after the pattern's <c>!</c> that starts with <c>@RULE</c>,
-        /// in Macrocell (a text whose first line that isn't blank starts with <c>[M2]</c>) the text
-        /// from the first line after the header that starts with <c>@RULE</c>, read as a rule file;
-        /// null when the text has none. An appended text that is no rule file throws
-        /// <see cref="RuleFileException"/>.
+        /// from the first line after the pattern's <c>!</c> that starts with <c>@RULE</c>, in
+        /// Macrocell (a text whose first line that isn't blank starts with <c>[M2]</c>) from the
+        /// first line after the header that starts with <c>@RULE</c>; null when the text has none.
+        /// Its text is <see cref="AppendedText"/>'s, the same whichever file carries the rule. An
+        /// appended text that is no rule file throws <see cref="RuleFileException"/>.
         /// </summary>
         public static RuleTable? Embedded(string text)
         {
             if (text == null)
                 throw new ArgumentNullException(nameof(text));
-            string[] lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+            List<string> lines = TextLines.Split(text); // spec/formats.md "Lines"
+            var stripped = new string[lines.Count];
+            for (int i = 0; i < stripped.Length; i++)
+                stripped[i] = TextLines.Strip(lines[i]);
             int first = 0;
-            while (first < lines.Length && TextLines.Strip(lines[first]).Length == 0)
+            while (first < stripped.Length && stripped[first].Length == 0)
                 first++;
-            if (first < lines.Length && TextLines.Strip(lines[first]).StartsWith("[M2]", StringComparison.Ordinal))
+            int after;
+            if (first < stripped.Length && stripped[first].StartsWith("[M2]", StringComparison.Ordinal))
             {
-                for (int later = first + 1; later < lines.Length; later++)
-                {
-                    if (TextLines.Strip(lines[later]).StartsWith("@RULE", StringComparison.Ordinal))
-                        return RuleTable.Parse(string.Join("\n", lines, later, lines.Length - later));
-                }
-                return null;
+                after = first + 1;
             }
-            int index = 0;
-            while (index < lines.Length
-                && (TextLines.Strip(lines[index]).Length == 0 || TextLines.Strip(lines[index]).StartsWith("#", StringComparison.Ordinal)))
-                index++;
-            if (index < lines.Length && Patterns.TryParseHeader(TextLines.Strip(lines[index]), out _, out _, out _))
-                index++;
-            while (index < lines.Length && lines[index].IndexOf('!') < 0)
-                index++;
-            for (int later = index + 1; later < lines.Length; later++)
+            else
             {
-                if (TextLines.Strip(lines[later]).StartsWith("@RULE", StringComparison.Ordinal))
-                    return RuleTable.Parse(string.Join("\n", lines, later, lines.Length - later));
+                int index = 0;
+                while (index < stripped.Length
+                    && (stripped[index].Length == 0 || stripped[index].StartsWith("#", StringComparison.Ordinal)))
+                    index++;
+                if (index < stripped.Length && Patterns.TryParseHeader(stripped[index], out _, out _, out _))
+                    index++;
+                while (index < lines.Count && lines[index].IndexOf('!') < 0)
+                    index++;
+                after = index + 1;
+            }
+            for (int later = after; later < stripped.Length; later++)
+            {
+                if (stripped[later].StartsWith("@RULE", StringComparison.Ordinal))
+                    return RuleTable.Parse(AppendedText(text, later));
             }
             return null;
         }
+
+        /// <summary>
+        /// The text of a rule file appended to a pattern file whose <c>@RULE</c> line is line
+        /// <paramref name="line"/> of <paramref name="text"/> (spec/formats.md "Lines"): the rest of
+        /// the text from the start of that line, a final line end included, with <c>\r\n</c> and
+        /// <c>\r</c> read as <c>\n</c> (spec/ruletable.md "Files"). Every carrier, and both ports,
+        /// give a rule this one text.
+        /// </summary>
+        internal static string AppendedText(string text, int line)
+            => TextLines.Rest(text, line).Replace("\r\n", "\n").Replace('\r', '\n');
 
         /// <summary>A pattern file's text, RLE or Macrocell, with <paramref name="rule"/>'s file
         /// appended after it (spec/ruletable.md "Files"), so the pattern carries its rule.</summary>

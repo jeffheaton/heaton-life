@@ -360,6 +360,7 @@ and `state_lines`.
 | `timeline` | `input` (a pattern), `generations` (a frame at each, from the input's own), `metadata` | `timeline`: the file [macrocell.md](macrocell.md#timelines) writes; reading it back gives each frame's state (`frames`) again |
 | `names` | `cases`, a list of texts, each an `input` | for each, the rule's `canonical` and `states`; or `error: true` and the `reason` (Names, "Reasons") |
 | `convert` | `input` (a file, loaded by content: by the two-state reader when `from` is `two-state`, by the multi-state reader when it is `multistate`), `from`, and `rule` (the new universe's) | the new universe's state, pinned as its own engine pins one (a two-state universe's canonical Macrocell text is [hashlife.md](hashlife.md#vector-encoding)'s); or `error: true` |
+| `carried-rule` | `inputs`: files carrying a rule after the pattern ([ruletable.md](ruletable.md#files)), each loaded by content | `rule_text`: the file holding the one text every input's rule has, the loaded universe's rule's `text` and `embedded_rule`'s |
 | `measure` | `input` (a file, loaded by content), and `rule` (the reader's rule) when given | `extent`: `format`, `width`, `height`, `x`, `y` (decimal strings), `rule` (or null), `generation`, `metadata` and `two_state` (Measuring); and `rule_named`, what loading the file with the same rule gives, its universe's bounding box the extent's; or `error: true`, both measuring and loading refusing it |
 
 Runners are strict: an unknown key, kind, op, or `spec_version` fails the case.

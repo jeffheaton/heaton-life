@@ -79,10 +79,13 @@ Advance Selection and Advance Outside, whose blank is 0 and which can be cancele
     file's Macrocell lines (its node, leaf and `#` lines come before it, a timeline's
     `#FRAME` lines among them).
 
-  In either, the whole rest of the text from that line is read as one rule file.
-  `embedded_rule(text)` (.NET `RuleTables.Embedded`) gives it, reading a text whose first
-  line that isn't blank starts with `[M2]` as Macrocell and any other as RLE, or nothing
-  when there is none; an appended text that is no rule file is an error. A reader of the
+  Lines are those of [formats.md](formats.md#bytes-and-text) ("Lines"). In either, the rule
+  file is the rest of the text from the start of that line to the text's end, a final line
+  end included, its `\r\n` and `\r` line ends read as `\n`: so a rule has one text, its
+  `text`, whichever file carries it and in either port. `embedded_rule(text)` (.NET
+  `RuleTables.Embedded`) gives it, reading a text whose first line that isn't blank starts
+  with `[M2]` as Macrocell and any other as RLE, or nothing when there is none; an appended
+  text that is no rule file is an error. A reader of the
   [multi-state universe](hashlife-multistate.md#pattern-io) takes an appended rule whose
   name the header or `#R` names before it looks the name up. `append_rule(text, rule)`
   (.NET `RuleTables.Append`) writes the rule's file text after a pattern file's text, RLE

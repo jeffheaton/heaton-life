@@ -1,0 +1,107 @@
+@RULE My-Byl
+
+Byl's self-reproducing loop of twelve cells.
+
+Source: J. Byl, "Self-reproduction in small cellular automata", Physica D 34
+(1989) 295-299: Table II, the transition function for Fig. 3. As in the paper,
+each transition is CTRBL->I (center, top, right, bottom and left, then the
+center's next state), here the six digits C N E S W C'; rotations are not
+listed (the rotate4 symmetry), and a group's default "C----", which applies
+to any other neighborhood of that center, is the line with variables at the
+end of the group.
+
+Table II prints 56 entries, its defaults among them, where the paper's text
+counts 57. With them alone, the run follows Fig. 3 until generation 22 and
+then differs in one cell; the transition 31523 -> 1 makes every generation of
+Fig. 3 come out, so it is added, marked, in its place among the 3s.
+
+Fig. 3 is drawn as the mirror image (left and right swapped) of what Table II
+gives under the paper's reading of the neighbors. The starter pattern
+(Byl-Loop.rle) is therefore Fig. 3's loop mirrored, and its run is Fig. 3's,
+mirrored: at generation 25 an exact copy of the loop of generation 0 stands
+beside its parent.
+
+Re-authored for heaton-life from the paper (spec/ruletable.md).
+
+@TABLE
+n_states:6
+neighborhood:vonNeumann
+symmetries:rotate4
+
+var a={0,1,2,3,4,5}
+var b={a}
+var c={a}
+var d={a}
+
+# C N E S W C'
+000031
+000122
+000131
+000152
+000255
+000315
+000323
+000422
+0,a,b,c,d,0
+
+100000
+100010
+100033
+100040
+100330
+100431
+103213
+112531
+124533
+1,a,b,c,d,4
+
+200000
+200155
+200220
+202020
+202155
+202353
+202525
+2,a,b,c,d,2
+
+300010
+300030
+300110
+300121
+301211
+301231
+311221
+311231
+312151
+312231
+312331
+312355
+314321
+314525
+# The one transition Fig. 3 needs that Table II doesn't print (spec/ruletable.md):
+315231
+3,a,b,c,d,3
+
+400035
+400434
+402124
+402324
+402424
+402520
+403255
+4,a,b,c,d,3
+
+500225
+500325
+502124
+502220
+503220
+5,a,b,c,d,2
+
+@NAMES
+0 quiescent
+1 data path
+2 outer wall
+3 extend
+4 turn left
+5 disconnect and copy

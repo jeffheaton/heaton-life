@@ -1277,5 +1277,32 @@ namespace HeatonLife.Tests
             history.SetGeneration(5);
             Assert.Throws<ArgumentException>(() => history.ToTwoState("B0/S"));
         }
+
+        [Fact]
+        public void ACarriedRuleHasOneTextWhicheverFileCarriesIt()
+        {
+            // spec/ruletable.md "Files": the rest of the text from the @RULE line, a final line end
+            // included, CRLF and CR read as LF; Macrocell and RLE alike.
+            RuleTable mine = MyByl();
+            var u = new MultiStateHashLife(mine);
+            u.SetRect(0, 0, BylLoop(), 16, 16);
+            foreach (string plain in new[] { u.ToMacrocell(), u.ToRle() })
+            {
+                string text = RuleTables.Append(plain, mine);
+                var carriers = new (string Text, string Want)[]
+                {
+                    (text, mine.Text),
+                    (text.Replace("\n", "\r\n"), mine.Text),
+                    (text.Replace("\n", "\r"), mine.Text),
+                    (text.TrimEnd('\n'), mine.Text.TrimEnd('\n')),
+                };
+                foreach (var (carrier, want) in carriers)
+                {
+                    RuleTable rule = Assert.IsType<RuleTable>(MultiStateFiles.ReadUniverse(carrier).Universe.StateRule);
+                    Assert.Equal(want, rule.Text);
+                    Assert.Equal(want, RuleTables.Embedded(carrier)!.Text);
+                }
+            }
+        }
     }
 }

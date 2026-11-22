@@ -25,11 +25,13 @@ from heaton_life.ca.hashlife.multistate import (
     read_timeline,
     write_timeline,
 )
+from heaton_life.ca.rulefile import RuleTable
 from heaton_life.ca.rulestring import try_compile_rule
-from heaton_life.ca.ruletable import RuleTableCA, starter_rule_or_none
+from heaton_life.ca.ruletable import RuleTableCA, embedded_rule, starter_rule_or_none
 from heaton_life.ca.state_rules import check_state_rule, state_rule, try_state_rule
 from heaton_life.ca.wireworld import Wireworld
 from heaton_life.init import PatternMetadata
+from heaton_life.init.formats import recognize
 
 VECTOR_ROOT = Path(__file__).resolve().parents[2] / "vectors" / "hashlife-multistate"
 CASES = sorted(VECTOR_ROOT.glob("*/params.json"))
@@ -48,6 +50,7 @@ _KEYS = {
     "names": _COMMON | {"cases"},
     "measure": _COMMON | {"input", "rule", "error", "extent", "rule_named"},
     "convert": _COMMON | {"input", "from", "rule", "error"} | _STATE,
+    "carried-rule": _COMMON | {"inputs", "rule_text"},
 }
 _EXTENT = {"format", "width", "height", "x", "y", "rule", "generation", "metadata", "two_state"}
 _EDIT_OPS = {
@@ -302,6 +305,16 @@ def test_multistate_vector(case: Path) -> None:
         for frame, entry in zip(back.frames, meta["frames"], strict=True):
             back.universe.restore(frame)
             _expect_state(d, back.universe, entry)
+    elif kind == "carried-rule":
+        # A rule carried after a pattern has one text, whichever file carries it
+        # (spec/ruletable.md "Files"): the loaded universe's rule's, and embedded_rule's.
+        want = (d / meta["rule_text"]).read_bytes().decode("utf-8")
+        for name in meta["inputs"]:
+            data = (d / name).read_bytes()
+            rule = read_multistate_universe(data).universe.state_rule
+            assert isinstance(rule, RuleTable) and rule.text == want, name
+            carried = embedded_rule(recognize(data).text)
+            assert carried is not None and carried.text == want, name
     elif kind == "convert":
         # A Life-like world converted between the engines (spec/hashlife-multistate.md
         # "Converting between the engines"), its state pinned as its new engine pins one.

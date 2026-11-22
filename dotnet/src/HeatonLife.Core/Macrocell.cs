@@ -824,6 +824,26 @@ namespace HeatonLife
             => c == '\n' || c == '\r' || c == '\x0b' || c == '\x0c' || c == '\x1c' || c == '\x1d'
                 || c == '\x1e' || c == '\x85' || c == (char)0x2028 || c == (char)0x2029;
 
+        /// <summary>The text from the start of line <paramref name="line"/>, as <see cref="Split"/>
+        /// counts lines, to the text's end, every character kept; empty past the last line.</summary>
+        internal static string Rest(string text, int line)
+        {
+            int i = 0, start = 0, count = 0;
+            while (count < line && i < text.Length)
+            {
+                char c = text[i];
+                if (!IsBreak(c))
+                {
+                    i++;
+                    continue;
+                }
+                i += c == '\r' && i + 1 < text.Length && text[i + 1] == '\n' ? 2 : 1;
+                start = i;
+                count++;
+            }
+            return count == line ? text.Substring(start) : "";
+        }
+
         internal static List<string> Split(string text)
         {
             var lines = new List<string>();

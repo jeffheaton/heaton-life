@@ -458,9 +458,12 @@ and an RLE header naming any Life-like rule making the file two-state.
   starts with `@RULE` to the end, and the multi-state readers (and the measure) take it
   when `#R` names it. `embedded_rule` (.NET `RuleTables.Embedded`) finds it in either
   format, and `append_rule` (`RuleTables.Append`) appends one to either; the canonical
-  Macrocell text stays the cells'. New vectors: `hashlife-multistate/macrocell-ruletable-*`,
-  `macrocell-error-appended-not-a-rule-file`, `evolve-ruletable-macrocell-appended` and
-  `measure-macrocell-appended-rule`.
+  Macrocell text stays the cells'. A carried rule has one text, its `text`, whichever file
+  carries it and in either port: the rest of the file from the `@RULE` line, a final line
+  end included, its CRLF and CR read as LF. New vectors:
+  `hashlife-multistate/macrocell-ruletable-*`, `macrocell-error-appended-not-a-rule-file`,
+  `evolve-ruletable-macrocell-appended`, `measure-macrocell-appended-rule` and
+  `carried-rule-*` (kind `carried-rule`).
 - **Converting a Life-like world between the engines** without its cells becoming a grid
   ([spec/hashlife-multistate.md](spec/hashlife-multistate.md) "Converting between the
   engines"): `HashLife.to_multistate(rule)` (.NET `ToMultiState`) gives a History or Super

@@ -1,0 +1,16 @@
+{
+  "family": "hashlife-multistate",
+  "inputs": [
+    "input.mc",
+    "input-crlf.mc",
+    "input-cr.mc",
+    "input.mc.gz",
+    "input.rle",
+    "input-crlf.rle",
+    "input-cr.rle"
+  ],
+  "kind": "carried-rule",
+  "rule_text": "rule.txt",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

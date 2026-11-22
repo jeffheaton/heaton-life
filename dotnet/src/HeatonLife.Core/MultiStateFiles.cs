@@ -242,7 +242,7 @@ namespace HeatonLife
                     continue;
                 if (line.StartsWith("@RULE", StringComparison.Ordinal)) // an appended rule file (spec/ruletable.md)
                 {
-                    ruleText = string.Join("\n", lines.GetRange(index, lines.Count - index));
+                    ruleText = RuleTables.AppendedText(text, index);
                     break;
                 }
                 if (line[0] == '#')

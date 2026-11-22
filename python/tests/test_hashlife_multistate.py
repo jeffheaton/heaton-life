@@ -1029,3 +1029,27 @@ def test_a_b0_world_converts_where_its_background_is_dead() -> None:
     history.set_generation(5)
     with pytest.raises(ValueError, match="background"):
         history.to_two_state("B0/S")
+
+
+def test_a_carried_rule_has_one_text_whichever_file_carries_it() -> None:
+    """spec/ruletable.md "Files": the rest of the text from the @RULE line, a final line end
+    included, CRLF and CR read as LF; Macrocell and RLE alike."""
+    from heaton_life.ca.ruletable import append_rule, embedded_rule, starter_pattern
+
+    mine = _my_byl()
+    u = MultiStateHashLife(mine)
+    u.set_rect(0, 0, starter_pattern("Byl-Loop"))
+    for plain in (u.to_macrocell(), u.to_rle()):
+        text = append_rule(plain, mine)
+        for carrier, want in (
+            (text, mine.text),
+            (text.replace("\n", "\r\n"), mine.text),
+            (text.replace("\n", "\r"), mine.text),
+            (gzip.compress(text.encode(), mtime=0), mine.text),
+            (text.rstrip("\n"), mine.text.rstrip("\n")),
+        ):
+            rule = read_multistate_universe(carrier).universe.state_rule
+            assert isinstance(rule, RuleTable) and rule.text == want
+            decoded = carrier if isinstance(carrier, str) else gzip.decompress(carrier).decode()
+            found = embedded_rule(decoded)
+            assert found is not None and found.text == want
