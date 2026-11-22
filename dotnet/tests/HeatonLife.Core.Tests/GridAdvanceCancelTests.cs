@@ -94,6 +94,20 @@ namespace HeatonLife.Tests
                                     generations.AdvanceSelection(X0, Y0, X1, Y1, n, token);
                             });
                     }
+                case "ltl":
+                    {
+                        var ltl = new LargerThanLife(LtlRule.Bosco, size, size);
+                        ltl.SeedSoup(0.5, 15);
+                        return new World(
+                            () => ltl.State.ToArray(), () => ltl.Generation, n => ltl.Step(n), _ => ltl.Reset(),
+                            (n, outside, token) =>
+                            {
+                                if (outside)
+                                    ltl.AdvanceOutside(X0, Y0, X1, Y1, n, token);
+                                else
+                                    ltl.AdvanceSelection(X0, Y0, X1, Y1, n, token);
+                            });
+                    }
                 default:
                     {
                         var cyclic = new Cyclic(8, size, size, threshold: 2, reach: 2);
@@ -113,7 +127,7 @@ namespace HeatonLife.Tests
 
         public static IEnumerable<object[]> Cases()
         {
-            foreach (string family in new[] { "lifelike", "wireworld", "cyclic", "generations" })
+            foreach (string family in new[] { "lifelike", "wireworld", "cyclic", "generations", "ltl" })
             {
                 yield return new object[] { family, false };
                 yield return new object[] { family, true };

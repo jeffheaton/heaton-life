@@ -44,7 +44,8 @@ namespace HeatonLife
 
         /// <summary>The rule a name gives: <c>WireWorld</c>, a History rule (spec/history.md), or
         /// a Generations rule in either spelling (spec/generations.md "Rules"). Any text that
-        /// names no rule throws <see cref="ArgumentException"/>.</summary>
+        /// names no rule throws <see cref="ArgumentException"/>, a Larger than Life rule with the
+        /// reason that it runs on grids only (spec/ltl.md).</summary>
         public static StateRule Compile(string name)
         {
             if (name == null)
@@ -58,6 +59,9 @@ namespace HeatonLife
             // Generations rules, in either spelling (spec/generations.md).
             if (GenerationsRule.TryCompile(name, out GenerationsRule? generations, out _))
                 return generations;
+            string? ltl = LtlRule.Refusal(name); // Larger than Life: grids only (spec/ltl.md)
+            if (ltl != null)
+                throw new ArgumentException(ltl, nameof(name));
             throw new ArgumentException(
                 $"'{name}' is not a state rule (known: {WireworldRule.Instance.Canonical}, History rules "
                 + "such as B3/S23History, and Generations rules such as B2/S345/C4)",

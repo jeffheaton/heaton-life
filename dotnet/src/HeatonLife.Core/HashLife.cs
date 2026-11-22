@@ -279,12 +279,15 @@ namespace HeatonLife
         /// states (spec/rules.md), B0 included (spec/hashlife.md "Rules with B0"). A rule with a
         /// variant (History) is refused, since it has more states than the universe holds, and so
         /// is a Generations rule (spec/generations.md), each saying that
-        /// <see cref="MultiStateHashLife"/> runs it; anything else throws
-        /// <see cref="ArgumentException"/> too.</summary>
+        /// <see cref="MultiStateHashLife"/> runs it; a Larger than Life rule is refused as one
+        /// (spec/ltl.md "Topologies"); anything else throws <see cref="ArgumentException"/> too.</summary>
         internal static string CheckedRule(string rule)
         {
             if (rule == null)
                 throw new ArgumentNullException(nameof(rule));
+            string? ltl = LtlRule.Refusal(rule);
+            if (ltl != null)
+                throw new ArgumentException(ltl, nameof(rule));
             if (!RuleString.TryCompile(rule, true, out LifeRule? compiled, out _))
             {
                 if (GenerationsRule.TryCompile(rule, out GenerationsRule? generations, out _))

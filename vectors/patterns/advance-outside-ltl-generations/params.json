@@ -1,0 +1,35 @@
+{
+  "expected": {
+    "file": "expected.png",
+    "shape": [
+      24,
+      30
+    ]
+  },
+  "family": "patterns",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      24,
+      30
+    ]
+  },
+  "kind": "advance",
+  "n": 9,
+  "outside": true,
+  "region": [
+    8,
+    6,
+    19,
+    15
+  ],
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "world": {
+    "axis": "x",
+    "boundary": "dead",
+    "family": "ltl",
+    "rule": "R2,C5,M0,S3..8,B4..6,NM",
+    "shift": 0
+  }
+}

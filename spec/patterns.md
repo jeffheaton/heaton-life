@@ -21,6 +21,7 @@ A pattern is `(family, width, height, cells, rule)`:
 | wireworld | byte 0..3 | 0 (empty) | 0 (empty) |
 | cyclic | byte 0..states−1 | 0 | 0 |
 | generations | byte 0..C−1 ([generations.md](generations.md)) | 0 (dead) | 0 (dead) |
+| ltl | byte 0..S−1 ([ltl.md](ltl.md), Larger than Life) | 0 (dead) | 0 (dead) |
 | mergelife | RGB byte triple | — (opaque only) | (0, 0, 0) black |
 | lenia (each variant its own family) | float64 [0,1] | 0.0 | 0.0 |
 | gray-scott | (u, v) float64 pair | — (opaque only) | (1.0, 0.0) substrate |
@@ -28,7 +29,8 @@ A pattern is `(family, width, height, cells, rule)`:
   Elementary, boids, and fractals have no patterns (a space-time diagram, a
   point cloud, and a coordinate view are not cell regions).
 - `rule` — the origin context, informative: the rulestring (life-like), states
-  count (cyclic), the Generations rule (generations), or MergeLife rule. Stamping into the same family under a
+  count (cyclic), the Generations rule (generations), the Larger than Life rule (ltl), or
+  MergeLife rule. Stamping into the same family under a
   *different* rule is allowed — that is the point of a zoo — but implementations
   surface the origin rule so the user knows the pattern's home.
 
@@ -40,6 +42,8 @@ A pattern is `(family, width, height, cells, rule)`:
    [History](history.md) pattern under a two-state rule) is converted first, each such
    cell 1 or 0 by its parity (`convert_cells`, [history.md](history.md#two-states-and-seven));
    a two-state pattern pastes into a History world unchanged.
+4. Larger than Life: `max(cells) < target.states`, else reject, as for cyclic
+   ([ltl.md](ltl.md#editing)).
 
 ## RLE text encoding (life-like, wireworld, cyclic)
 
@@ -242,7 +246,9 @@ same ones on the unbounded plane.
   region keeps its cells.
 
 Advance Selection and Advance Outside are defined for life-like, wireworld, cyclic and
-generations grids. (MergeLife pads its edges with the most common value of the whole
+generations grids, and for [Larger than Life](ltl.md#editing) grids, which also take random
+fill and every paste mode (`xor` and `and` on two-state cells only), as life-like grids do.
+(MergeLife pads its edges with the most common value of the whole
 grid, so no part of a MergeLife world evolves on its own; the continuous
 families don't have them.)
 

@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from heaton_life.ca import Cyclic, LifeLike, Wireworld
+from heaton_life.ca import Cyclic, LargerThanLife, LifeLike, Wireworld
 from heaton_life.ca.hashlife import EDIT_LIMIT, HashLife
 from heaton_life.init import (
     extract,
@@ -72,6 +72,9 @@ def _world(desc: dict, grid: np.ndarray):  # type: ignore[no-untyped-def, type-a
     if family == "wireworld":
         assert {"family", "boundary"} <= set(desc) <= {"family", *_TOPOLOGY}
         return Wireworld(size=size, init=grid, **topology)
+    if family == "ltl":  # spec/ltl.md: every key of the topology written
+        assert set(desc) == {"family", "rule", *_TOPOLOGY}
+        return LargerThanLife(desc["rule"], size=size, init=grid, **topology)
     assert family == "cyclic"
     assert set(desc) == {"family", "states", "threshold", "reach", "neighborhood"}
     return Cyclic(

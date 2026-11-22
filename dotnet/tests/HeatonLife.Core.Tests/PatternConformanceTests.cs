@@ -358,6 +358,17 @@ namespace HeatonLife.Tests
                             ? () => cyclic.AdvanceOutside(r[0], r[1], r[2], r[3], n)
                             : () => cyclic.AdvanceSelection(r[0], r[1], r[2], r[3], n));
                     }
+                case "ltl":
+                    {
+                        Assert.Equal(new HashSet<string>(topologyKeys) { "family", "rule" }, keys);
+                        var ltl = new LargerThanLife(
+                            world.GetProperty("rule").GetString()!, width, height,
+                            Edge(world.GetProperty("boundary").GetString()!));
+                        ltl.SetState(grid);
+                        return (() => ltl.State.ToArray(), () => ltl.Generation, outside
+                            ? () => ltl.AdvanceOutside(r[0], r[1], r[2], r[3], n)
+                            : () => ltl.AdvanceSelection(r[0], r[1], r[2], r[3], n));
+                    }
                 default:
                     throw new InvalidDataException($"unknown world {world}");
             }

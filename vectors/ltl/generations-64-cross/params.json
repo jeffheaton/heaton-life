@@ -1,0 +1,34 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_00001.png",
+      "step": 1
+    },
+    {
+      "file": "state_00010.png",
+      "step": 10
+    },
+    {
+      "file": "state_00100.png",
+      "step": 100
+    }
+  ],
+  "family": "ltl",
+  "params": {
+    "axis": "x",
+    "boundary": "cross",
+    "density": 0.4,
+    "height": 64,
+    "init": "soup",
+    "rule": "R2,C5,M0,S3..8,B4..6,NM",
+    "seed": 5,
+    "shift": 0,
+    "width": 64
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

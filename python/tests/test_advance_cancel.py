@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from heaton_life.ca import Cyclic, Generations, LifeLike, Wireworld
+from heaton_life.ca import Cyclic, Generations, LargerThanLife, LifeLike, Wireworld
 from heaton_life.ca._advance import AdvanceRegion
 from heaton_life.ca.hashlife import StepCanceled
 from heaton_life.init import soup
@@ -39,11 +39,16 @@ def _generations() -> Generations:
     return Generations("B2/S345/C4", size=(SIZE, SIZE), init="soup", density=0.35, seed=15)
 
 
+def _ltl() -> LargerThanLife:
+    return LargerThanLife(size=(SIZE, SIZE), density=0.5, seed=15)
+
+
 WORLDS: dict[str, Callable[[], AdvanceRegion]] = {
     "lifelike": _life,
     "wireworld": _wire,
     "cyclic": _cyclic,
     "generations": _generations,
+    "ltl": _ltl,
 }
 
 

@@ -1,0 +1,271 @@
+{
+  "cases": [
+    {
+      "birth": [
+        34,
+        45
+      ],
+      "canonical": "R5,C0,M1,S34..58,B34..45,NM",
+      "input": "R5,C0,M1,S34..58,B34..45,NM",
+      "middle": true,
+      "neighborhood": "moore",
+      "range": 5,
+      "size": 121,
+      "states": 2,
+      "survival": [
+        34,
+        58
+      ]
+    },
+    {
+      "birth": [
+        34,
+        45
+      ],
+      "canonical": "R5,C0,M1,S34..58,B34..45,NM",
+      "input": "5,34,45,34,58",
+      "middle": true,
+      "neighborhood": "moore",
+      "range": 5,
+      "size": 121,
+      "states": 2,
+      "survival": [
+        34,
+        58
+      ]
+    },
+    {
+      "birth": [
+        34,
+        45
+      ],
+      "canonical": "R5,C0,M1,S34..58,B34..45,NM",
+      "input": "r5,c2,m1,s34..58,b34..45",
+      "middle": true,
+      "neighborhood": "moore",
+      "range": 5,
+      "size": 121,
+      "states": 2,
+      "survival": [
+        34,
+        58
+      ]
+    },
+    {
+      "birth": [
+        34,
+        45
+      ],
+      "canonical": "R5,C0,M1,S34..58,B34..45,NM",
+      "input": "  R005,C00,M1,S034..58,B34..045,nm\t",
+      "middle": true,
+      "neighborhood": "moore",
+      "range": 5,
+      "size": 121,
+      "states": 2,
+      "survival": [
+        34,
+        58
+      ]
+    },
+    {
+      "birth": [
+        3,
+        3
+      ],
+      "canonical": "R1,C3,M0,S2..3,B3..3,NC",
+      "input": "R1,C3,M0,S2..3,B3..3,NC",
+      "middle": false,
+      "neighborhood": "circular",
+      "range": 1,
+      "size": 9,
+      "states": 3,
+      "survival": [
+        2,
+        3
+      ]
+    },
+    {
+      "birth": [
+        41,
+        81
+      ],
+      "canonical": "R4,C0,M1,S41..81,B41..81,NM",
+      "input": "R4,C0,M1,S41..81,B41..81",
+      "middle": true,
+      "neighborhood": "moore",
+      "range": 4,
+      "size": 81,
+      "states": 2,
+      "survival": [
+        41,
+        81
+      ]
+    },
+    {
+      "birth": [
+        4,
+        6
+      ],
+      "canonical": "R2,C5,M0,S3..8,B4..6,NN",
+      "input": "R2,C5,M0,S3..8,B4..6,NN",
+      "middle": false,
+      "neighborhood": "vonneumann",
+      "range": 2,
+      "size": 13,
+      "states": 5,
+      "survival": [
+        3,
+        8
+      ]
+    },
+    {
+      "birth": [
+        0,
+        0
+      ],
+      "canonical": "R500,C256,M0,S0..1002001,B0..0,NN",
+      "input": "R500,C256,M0,S0..1002001,B0..0,NN",
+      "middle": false,
+      "neighborhood": "vonneumann",
+      "range": 500,
+      "size": 501001,
+      "states": 256,
+      "survival": [
+        0,
+        1002001
+      ]
+    },
+    {
+      "birth": [
+        3,
+        3
+      ],
+      "canonical": "R1,C0,M1,S2..3,B3..3,NM",
+      "input": "1,3,3,2,3",
+      "middle": true,
+      "neighborhood": "moore",
+      "range": 1,
+      "size": 9,
+      "states": 2,
+      "survival": [
+        2,
+        3
+      ]
+    },
+    {
+      "error": true,
+      "input": "",
+      "reason": "expected R…,C…,M…,S…,B…,N… or five numbers r,bmin,bmax,smin,smax"
+    },
+    {
+      "error": true,
+      "input": "B3/S23",
+      "reason": "expected R…,C…,M…,S…,B…,N… or five numbers r,bmin,bmax,smin,smax"
+    },
+    {
+      "error": true,
+      "input": "R5,C0,M1,S34..58",
+      "reason": "expected the fields R, C, M, S, B and N, in that order"
+    },
+    {
+      "error": true,
+      "input": "R5,C0,M1,S1..2,B1..2,NM,X",
+      "reason": "expected the fields R, C, M, S, B and N, in that order"
+    },
+    {
+      "error": true,
+      "input": "Rx,C0,M1,S1..2,B1..2",
+      "reason": "expected R and the range, not 'Rx'"
+    },
+    {
+      "error": true,
+      "input": "R5,K0,M1,S1..2,B1..2",
+      "reason": "expected C and the number of states, not 'K0'"
+    },
+    {
+      "error": true,
+      "input": "R5,C0,M2,S1..2,B1..2",
+      "reason": "expected M0 or M1, not 'M2'"
+    },
+    {
+      "error": true,
+      "input": "R5,C0,M1,S1-2,B1..2",
+      "reason": "expected S and a range of counts S<min>..<max>, not 'S1-2'"
+    },
+    {
+      "error": true,
+      "input": "R5,C0,M1,S1..2,B1",
+      "reason": "expected B and a range of counts B<min>..<max>, not 'B1'"
+    },
+    {
+      "error": true,
+      "input": "R5,C0,M1,S1..2,B1..2,NX",
+      "reason": "expected NM, NN or NC, not 'NX'"
+    },
+    {
+      "error": true,
+      "input": "R5, C0,M1,S1..2,B1..2",
+      "reason": "expected C and the number of states, not ' C0'"
+    },
+    {
+      "error": true,
+      "input": "5,34,45,34",
+      "reason": "expected five numbers r,bmin,bmax,smin,smax"
+    },
+    {
+      "error": true,
+      "input": "5,34,45,34,5x",
+      "reason": "expected five numbers r,bmin,bmax,smin,smax"
+    },
+    {
+      "error": true,
+      "input": "R0,C0,M1,S1..2,B1..2",
+      "reason": "the range is 1 to 500, not 0"
+    },
+    {
+      "error": true,
+      "input": "R501,C0,M1,S1..2,B1..2",
+      "reason": "the range is 1 to 500, not 501"
+    },
+    {
+      "error": true,
+      "input": "R5,C1,M1,S1..2,B1..2",
+      "reason": "C is 0 or 2 (two states) or 3 to 256, not 1"
+    },
+    {
+      "error": true,
+      "input": "R5,C257,M1,S1..2,B1..2",
+      "reason": "C is 0 or 2 (two states) or 3 to 256, not 257"
+    },
+    {
+      "error": true,
+      "input": "R5,C0,M1,S1..1002002,B1..2",
+      "reason": "a count is at most 1002001"
+    },
+    {
+      "error": true,
+      "input": "R5,C0,M1,S9..2,B1..2",
+      "reason": "S9..2 is empty"
+    },
+    {
+      "error": true,
+      "input": "R5,C0,M1,S1..2,B09..2",
+      "reason": "B9..2 is empty"
+    },
+    {
+      "error": true,
+      "input": "R99999999999,C0,M1,S1..2,B1..2",
+      "reason": "the range is 1 to 500, not 99999999999"
+    },
+    {
+      "error": true,
+      "input": "R٥,C0,M1,S1..2,B1..2",
+      "reason": "expected R and the range, not 'R٥'"
+    }
+  ],
+  "family": "ltl-rules",
+  "kind": "rules",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

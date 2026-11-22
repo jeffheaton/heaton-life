@@ -11,6 +11,7 @@ the .NET implementation mirrors it. Encodings are per-family and spec'd:
 - wireworld:       PNG, pixel = state * 85                        (bit-exact)
 - generations:     PNG, pixel = raw state                         (bit-exact)
 - mergelife:       RGB PNG, raw bytes                             (bit-exact)
+- ltl:             PNG, pixel = raw state (0 to S − 1)            (bit-exact)
 - grayscott:       .f64 raw little-endian float64, shape (2,H,W)  (epsilon)
 - lenia-classic:   .f64, shape (H,W)                              (epsilon)
 - lenia-asymptotic:.f64, shape (H,W)                              (epsilon)
@@ -39,6 +40,8 @@ from heaton_life.ca import (
     ElementaryParams,
     Generations,
     GenerationsParams,
+    LargerThanLife,
+    LargerThanLifeParams,
     LifeLike,
     LifeLikeParams,
     MergeLife,
@@ -195,6 +198,33 @@ class _History:
         return LifeLike.from_params(p)
 
 
+class _Ltl:
+    """Larger than Life grids (spec/ltl.md): states 0 to S − 1 stored as the raw pixel values
+    of a grayscale PNG. Params are every key of LargerThanLifeParams."""
+
+    ext = "png"
+
+    def encode(self, state: StateArray) -> bytes:
+        return _png_bytes(Image.fromarray(np.asarray(state, dtype=np.uint8), mode="L"))
+
+    def decode(self, data: bytes, shape: Sequence[int] | None) -> StateArray:
+        with Image.open(io.BytesIO(data)) as img:
+            return np.asarray(img.convert("L")).astype(np.uint8)
+
+    def build(self, params: dict[str, Any], initial: StateArray | None) -> Simulation:
+        p = LargerThanLifeParams.from_dict(params)
+        if initial is not None:
+            return LargerThanLife(
+                p.rule,
+                size=(p.width, p.height),
+                init=initial,
+                boundary=p.boundary,  # type: ignore[arg-type]
+                shift=p.shift,
+                axis=p.axis,  # type: ignore[arg-type]
+            )
+        return LargerThanLife.from_params(p)
+
+
 class _Rgb:
     ext = "png"
 
@@ -245,6 +275,7 @@ CODECS: dict[str, Codec] = {
     "wireworld": _Indexed("wireworld", scale=85),
     "generations": _Indexed("generations", scale=1),
     "mergelife": _Rgb(),
+    "ltl": _Ltl(),
     "grayscott": _Float64(lambda p: GrayScott.from_params(GrayScottParams.from_dict(p))),
     "lenia-classic": _Float64(lambda p: ClassicLenia.from_params(LeniaParams.from_dict(p))),
     "lenia-asymptotic": _Float64(lambda p: AsymptoticLenia.from_params(LeniaParams.from_dict(p))),
@@ -261,6 +292,7 @@ TIERS: dict[str, tuple[str, float | None]] = {
     "wireworld": ("bit-exact", None),
     "generations": ("bit-exact", None),
     "mergelife": ("bit-exact", None),
+    "ltl": ("bit-exact", None),
     "grayscott": ("epsilon", 1e-9),
     "lenia-classic": ("epsilon", 1e-6),
     "lenia-asymptotic": ("epsilon", 1e-6),

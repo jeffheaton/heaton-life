@@ -105,7 +105,8 @@ Cyclic its torus, MergeLife its padding.
 
 `r` is at least 1. A torus, a Klein bottle and the plane take any radius. The
 cross-surface and the sphere take a radius up to `min(W, H)`, the reach of the formulas
-above.
+above. A family may ask more: a [Larger than Life](ltl.md#topologies) world of range r is
+at least `2r + 1` cells wide and high, on every topology.
 
 ## Errors
 

@@ -1,0 +1,35 @@
+{
+  "expected": {
+    "file": "expected.png",
+    "shape": [
+      40,
+      48
+    ]
+  },
+  "family": "patterns",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      40,
+      48
+    ]
+  },
+  "kind": "advance",
+  "n": 12,
+  "outside": false,
+  "region": [
+    6,
+    4,
+    33,
+    27
+  ],
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "world": {
+    "axis": "x",
+    "boundary": "torus",
+    "family": "ltl",
+    "rule": "R5,C0,M1,S34..58,B34..45,NM",
+    "shift": 0
+  }
+}

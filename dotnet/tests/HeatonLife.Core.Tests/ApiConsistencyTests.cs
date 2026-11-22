@@ -22,6 +22,7 @@ namespace HeatonLife.Tests
             new AsymptoticLenia(32, 32, radius: 8),
             new FlowLenia(32, 32, radius: 8),
             new Boids(8, 64, 64),
+            new LargerThanLife(LtlRule.Bosco, 16, 16),
         };
 
         /// <summary>A family's frame, read polymorphically, as comparable bytes.</summary>
@@ -189,6 +190,7 @@ namespace HeatonLife.Tests
                 new FlowLenia(32, 32, radius: 8),
                 new Boids(8, 64, 64),
                 new Generations("B2/S345/C4", 16, 16),
+                new LargerThanLife(LtlRule.Bosco, 16, 16),
             };
             foreach (var sim in sims)
             {
@@ -256,6 +258,11 @@ namespace HeatonLife.Tests
             var generationsExplicit = new Generations("B2/S/C3", 24, 24);
             generationsExplicit.SeedSoup(0.35, 0);
             Assert.Equal(generationsExplicit.State.ToArray(), generations.State.ToArray());
+
+            var ltl = new LargerThanLife(LtlRule.Bosco, 24, 24);
+            var ltlExplicit = new LargerThanLife(LtlRule.Bosco, 24, 24);
+            ltlExplicit.SeedSoup(0.5, 0);
+            Assert.Equal(ltlExplicit.State.ToArray(), ltl.State.ToArray());
         }
 
         [Fact]

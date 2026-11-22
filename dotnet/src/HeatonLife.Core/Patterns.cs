@@ -564,6 +564,9 @@ namespace HeatonLife
                 if (bounded != null) // spec/patterns.md "RLE in the unbounded universe"
                     throw new FormatException(
                         $"the unbounded universe has no bounded grid ('{bounded.Suffix}' in the rule): open the file in a grid world (spec/topology.md)");
+                string? ltl = LtlRule.Refusal(rule); // a Larger than Life rule is refused as one (spec/ltl.md)
+                if (ltl != null)
+                    throw new FormatException(ltl);
             }
             string body = string.Concat(lines);
             bool extended = rule != null && !IsLifelikeRule(rule);
@@ -1227,8 +1230,9 @@ namespace HeatonLife
 
         /// <summary>
         /// The spec compatibility check: patterns are family-bound (a glider cannot
-        /// enter Wireworld or MergeLife); cyclic and Generations patterns must also fit the
-        /// target's state count. Returns the rejection reason, or null when stampable.
+        /// enter Wireworld or MergeLife); cyclic, Generations and Larger than Life (<c>ltl</c>)
+        /// patterns must also fit the target's state count. Returns the rejection reason, or
+        /// null when stampable.
         /// </summary>
         public static string? Compatible(
             string patternFamily, string targetFamily,
@@ -1236,7 +1240,8 @@ namespace HeatonLife
         {
             if (patternFamily != targetFamily)
                 return $"'{patternFamily}' patterns cannot be stamped into '{targetFamily}'";
-            if ((targetFamily == "cyclic" || targetFamily == "generations") && targetStates > 0)
+            bool counted = targetFamily == "cyclic" || targetFamily == "generations" || targetFamily == "ltl";
+            if (counted && targetStates > 0)
             {
                 int top = 0;
                 foreach (byte cell in patternCells)

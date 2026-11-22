@@ -311,6 +311,19 @@ and an RLE header naming any Life-like rule making the file two-state.
   `patterns/`, `formats/` and `hashlife-multistate/`: on the plane a pattern evolves cell
   for cell as on a grid with dead edges, for as long as it stays inside the grid.
 
+- **Larger than Life** ([spec/ltl.md](spec/ltl.md); `LargerThanLife`, `LtlRule`,
+  `parse_ltl_rule` / `try_parse_ltl_rule`, .NET `LargerThanLife` and `LtlRule.Parse` /
+  `TryParse`): Life over a Moore box, a von Neumann diamond or a circle of range 1 to 500,
+  birth and survival as ranges of counts, the middle cell counted or not, and two states or
+  up to 256 that decay as Generations rules do. Rule text in the published notation
+  (`R5,C0,M1,S34..58,B34..45,NM`, Bosco's Rule, or the five-number short form), with a
+  canonical form and a reason for every refusal. Counts are exact integers from summed-area
+  tables and row prefix sums. LtL runs on bounded grids of any topology, read through the
+  radius-r halo, and has every grid editing tool, cancelable Advance included; RLE files
+  naming an LtL rule (with a bounded-grid suffix or not) read into it, a world past 24
+  states writing its dying states with RLE's two-letter tags, and both HashLife universes
+  refuse an LtL rule with that reason. .NET's `Step` and `WriteFrame` allocate nothing.
+
 ### Changed
 
 - **Canonical RLE writes a run of k ≥ 2 row ends as one `k$`** (`rle_encode`,

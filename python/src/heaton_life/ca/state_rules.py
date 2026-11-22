@@ -116,6 +116,11 @@ def state_rule(text: str) -> StateRule:
     generations, _ = try_compile_generations_rule(text)
     if generations is not None:
         return generations
+    from heaton_life.ca.ltl import ltl_refusal  # Larger than Life: grids only (spec/ltl.md)
+
+    refusal = ltl_refusal(text)
+    if refusal is not None:
+        raise ValueError(refusal)
     names = ", ".join(rule.canonical for rule in _known())
     raise ValueError(
         f"{text!r} is not a state rule (known: {names}, History rules such as B3/S23History, "

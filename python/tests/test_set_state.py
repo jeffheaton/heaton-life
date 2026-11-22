@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 from heaton_life.boids import Boids
-from heaton_life.ca import Cyclic, Elementary, LifeLike, MergeLife, Wireworld
+from heaton_life.ca import Cyclic, Elementary, LargerThanLife, LifeLike, MergeLife, Wireworld
 from heaton_life.lenia import AsymptoticLenia, ClassicLenia, FlowLenia
 from heaton_life.rd import GrayScott
 
@@ -26,6 +26,7 @@ FAMILIES: dict[str, Callable[[], Any]] = {
     "lenia-asymptotic": lambda: AsymptoticLenia(size=(32, 32), radius=8, blobs=3),
     "lenia-flow": lambda: FlowLenia(size=(32, 32), radius=8),
     "boids": lambda: Boids(8, size=(64, 64), seed=6),
+    "ltl": lambda: LargerThanLife(size=(16, 12), seed=7),
 }
 
 

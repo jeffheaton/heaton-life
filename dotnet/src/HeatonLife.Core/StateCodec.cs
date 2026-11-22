@@ -39,6 +39,7 @@ namespace HeatonLife
                 case GrayScott gray: return DoubleBytes(gray.State);
                 case LeniaBase lenia: return DoubleBytes(lenia.State);
                 case Boids boids: return DoubleBytes(boids.State);
+                case LargerThanLife ltl: return ltl.State.ToArray();
                 default:
                     throw new ArgumentException(
                         $"no state serializer for {sim.GetType().Name}", nameof(sim));
@@ -77,6 +78,7 @@ namespace HeatonLife
                 case GrayScott gray: gray.SetState(Doubles(bytes), generation, keepStart); break;
                 case LeniaBase lenia: lenia.SetState(Doubles(bytes), generation, keepStart); break;
                 case Boids boids: boids.SetState(Doubles(bytes), generation, keepStart); break;
+                case LargerThanLife ltl: ltl.SetState(bytes, generation, keepStart); break;
                 default:
                     throw new ArgumentException(
                         $"no state restorer for {sim.GetType().Name}", nameof(sim));

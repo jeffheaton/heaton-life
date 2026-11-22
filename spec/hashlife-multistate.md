@@ -62,6 +62,9 @@ family's. Any other text is an error. The names so far:
 A text is first matched against the fixed names, then read as a History rule, then as a
 Generations rule in either of its spellings (`345/2/4` names `B2/S345/C4`).
 
+A [Larger than Life](ltl.md) rule names no state rule: it is refused with the reason that it
+runs on bounded grids only.
+
 A port may also take a state rule as an object (Python a `StateRule`, .NET a `StateRule`),
 for a family's own rules; files still name a rule by its canonical name (Pattern I/O,
 below).

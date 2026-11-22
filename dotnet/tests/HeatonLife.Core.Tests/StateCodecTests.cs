@@ -24,6 +24,7 @@ namespace HeatonLife.Tests
             new AsymptoticLenia(32, 32, radius: 8),
             new FlowLenia(32, 32, radius: 8),
             new Boids(8, 64, 64),
+            new LargerThanLife(LtlRule.Bosco, 16, 16),
         };
 
         [Fact]

@@ -59,6 +59,12 @@ def build_rle(universe: HashLife, text: str) -> tuple[int, int, int, str]:
             f"the unbounded universe has no bounded grid ('{info.bounded_grid.suffix}' "
             "in the rule): open the file in a grid world (spec/topology.md)"
         )
+    if info.rule is not None:  # a Larger than Life rule is refused as one (spec/ltl.md)
+        from heaton_life.ca.ltl import ltl_refusal
+
+        refusal = ltl_refusal(info.rule)
+        if refusal is not None:
+            raise ValueError(refusal)
     if info.extended:
         raise ValueError("HashLife reads two-state RLE only (this file is extended RLE)")
     rule = _hashlife_rule(info.rule or "B3/S23", presets=False)

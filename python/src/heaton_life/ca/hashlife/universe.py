@@ -176,10 +176,16 @@ def _hashlife_rule(rule: str, *, presets: bool = True) -> str:
     """The canonical form of a rule the universe can run: any Life-like rule of two states,
     B0 included (spec/hashlife.md "Rules with B0"). A rule with a variant (History) is
     refused: it has more states than the universe holds. So is a Generations rule
-    (spec/generations.md); each refusal says that MultiStateHashLife runs it. ``presets``
-    lets a preset name (``life``) stand for its rule, as where a person types one; a rule
-    read from a file passes ``presets=False``, since a file names its rule, never a preset
-    (spec/formats.md "Reading into the unbounded universe")."""
+    (spec/generations.md); each refusal says that MultiStateHashLife runs it. A Larger than
+    Life rule is refused as one (spec/ltl.md "Topologies"). ``presets`` lets a preset name
+    (``life``) stand for its rule, as where a person types one; a rule read from a file
+    passes ``presets=False``, since a file names its rule, never a preset (spec/formats.md
+    "Reading into the unbounded universe")."""
+    from heaton_life.ca.ltl import ltl_refusal  # here: heaton_life.ca imports this package
+
+    refusal = ltl_refusal(rule)
+    if refusal is not None:  # spec/ltl.md "Topologies"
+        raise ValueError(refusal)
     try:
         compiled = compile_rule(rule, presets=presets, variants=True)
     except ValueError:

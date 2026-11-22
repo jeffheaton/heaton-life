@@ -16,7 +16,7 @@ namespace HeatonLife.Tests
     {
         /// <summary>Bit-exact families the C# port implements; cases are auto-discovered.</summary>
         private static readonly string[] ByteFamilies =
-            { "lifelike", "lifelike-history", "elementary", "cyclic", "wireworld", "mergelife", "generations" };
+            { "lifelike", "lifelike-history", "elementary", "cyclic", "wireworld", "mergelife", "generations", "ltl" };
 
         /// <summary>ε-tier (float64) families the C# port implements.</summary>
         private static readonly string[] FloatFamilies =
@@ -254,6 +254,7 @@ namespace HeatonLife.Tests
                 case "cyclic": // pixel = raw state
                 case "lifelike-history": // a History rule's states 0–6, raw (spec/history.md)
                 case "generations": // states 0 … C − 1, raw (spec/generations.md)
+                case "ltl": // a Larger than Life rule's states, raw (spec/ltl.md "Vector encoding")
                     return pixels;
                 case "wireworld": // pixel = state * 85
                     {
@@ -375,6 +376,23 @@ namespace HeatonLife.Tests
                             sim.SeedSoup(p.GetProperty("seed").GetUInt32());
                         else
                             throw new InvalidDataException($"unsupported mergelife init '{init}'");
+                        return new Sim(sim.Step, () => sim.State.ToArray());
+                    }
+                case "ltl":
+                    {
+                        var sim = new LargerThanLife(
+                            p.GetProperty("rule").GetString()!, width, height, ParseTopology(p));
+                        Assert.Equal(p.GetProperty("rule").GetString(), sim.Rule.Canonical); // params name it canonically
+                        if (initial != null)
+                            sim.SetState(initial);
+                        else if (init == "soup")
+                            sim.SeedSoup(p.GetProperty("density").GetDouble(), p.GetProperty("seed").GetUInt32());
+                        else if (init == "blob")
+                            sim.SeedBlob(p.GetProperty("density").GetDouble(), p.GetProperty("seed").GetUInt32());
+                        else if (init == "single")
+                            sim.SeedSingle();
+                        else
+                            throw new InvalidDataException($"unsupported ltl init '{init}'");
                         return new Sim(sim.Step, () => sim.State.ToArray());
                     }
                 default:

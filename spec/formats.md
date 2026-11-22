@@ -364,6 +364,8 @@ universe.
   universe can't hold (the [multi-state universe](hashlife-multistate.md) reads it), and
   a [preset name](rules.md#preset-names) such as `life`: a file names its rule, never a
   preset.
+- **Larger than Life.** A file whose rule is a [Larger than Life](ltl.md) rule is refused
+  with that reason: LtL runs on bounded grids only.
 - **Bounded grids.** An RLE file whose rule carries a [bounded-grid
   suffix](topology.md#the-bounded-grid-suffix) is an error, whatever its topology: the
   universe has no edges to give it.

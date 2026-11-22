@@ -1006,6 +1006,9 @@ def main() -> None:
     # -- Generations: grids, rule texts, RLE's two-letter tags, the unbounded plane ----------
     write_generations_cases()
 
+    # -- Larger than Life: grid runs, rule texts, neighborhoods, files (spec/ltl.md) ---------
+    write_ltl_cases()
+
     print("done")
 
 
@@ -9932,6 +9935,301 @@ def write_generations_cases() -> None:
             {"op": "step", "n": "7"},
         ],
     )
+
+
+LTL_SPEC_VERSION = "0.16.0"
+
+
+def write_ltl_cases() -> None:
+    """Larger than Life (spec/ltl.md): grid runs on every neighborhood and topology under
+    vectors/ltl/; rule texts (canonical forms and the reasons for refusals) and the
+    neighborhoods' half-widths under vectors/ltl-rules/; Advance Selection / Outside on LtL
+    worlds under vectors/patterns/; LtL files read, and refused by the universe, under
+    vectors/formats/. Every case is new; nothing existing changes."""
+    import io
+
+    from PIL import Image
+
+    from heaton_life.ca import LargerThanLife
+    from heaton_life.ca.hashlife import read_universe
+    from heaton_life.ca.ltl import half_widths, try_parse_ltl_rule
+    from heaton_life.init import PatternMetadata, read_pattern, rle_encode, soup
+
+    def save(family: str, name: str, meta: dict[str, Any]) -> Path:
+        d = VECTOR_ROOT / family / name
+        d.mkdir(parents=True, exist_ok=True)
+        full = {"spec_version": LTL_SPEC_VERSION, "family": family, "tier": "bit-exact"}
+        full.update(meta)
+        (d / "params.json").write_text(
+            json.dumps(full, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        print(f"wrote {d.relative_to(REPO_ROOT)}")
+        return d
+
+    def case_dir(family: str, name: str) -> Path:
+        d = VECTOR_ROOT / family / name
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def gray_png(arr: Any) -> bytes:
+        buf = io.BytesIO()
+        Image.fromarray(np.asarray(arr).astype(np.uint8), mode="L").save(buf, format="PNG")
+        return buf.getvalue()
+
+    # -- grid runs: every neighborhood, two and more states, every topology -----------------
+    runs: list[tuple[str, str, tuple[int, int], dict[str, Any], float, int, list[int]]] = [
+        (
+            "bosco-128-torus",
+            "R5,C0,M1,S34..58,B34..45,NM",
+            (128, 128),
+            {},
+            0.5,
+            1,
+            [0, 1, 10, 50, 100],
+        ),
+        (
+            "majority-96-dead",
+            "R4,C0,M1,S41..81,B41..81,NM",
+            (96, 96),
+            {"boundary": "dead"},
+            0.5,
+            2,
+            [0, 1, 10, 40],
+        ),
+        ("diamond-80-torus", "R2,C0,M1,S4..7,B4..5,NN", (80, 80), {}, 0.4, 3, [0, 1, 10, 100]),
+        (
+            "circle-80x72-klein-x-shift",
+            "R4,C0,M1,S20..35,B18..25,NC",
+            (80, 72),
+            {"boundary": "klein", "shift": 1},
+            0.4,
+            4,
+            [0, 1, 10, 100],
+        ),
+        (
+            "generations-64-cross",
+            "R2,C5,M0,S3..8,B4..6,NM",
+            (64, 64),
+            {"boundary": "cross"},
+            0.4,
+            5,
+            [0, 1, 10, 100],
+        ),
+        (
+            "waffle-100-torus-shift-y",
+            "R7,C0,M1,S100..200,B75..170,NM",
+            (100, 100),
+            {"shift": -9, "axis": "y"},
+            0.5,
+            6,
+            [0, 1, 10, 50],
+        ),
+        (
+            "globe-128-torus",
+            "R8,C0,M0,S163..223,B74..252,NM",
+            (128, 128),
+            {},
+            0.5,
+            7,
+            [0, 1, 10, 50],
+        ),
+        (
+            "range10-128-torus",
+            "R10,C0,M1,S123..212,B123..170,NM",
+            (128, 128),
+            {},
+            0.45,
+            11,
+            [0, 1, 10, 50],
+        ),
+        (
+            "circle-61-sphere-generations",
+            "R3,C3,M1,S9..20,B9..14,NC",
+            (61, 61),
+            {"boundary": "sphere"},
+            0.5,
+            8,
+            [0, 1, 10, 100],
+        ),
+    ]
+    for name, rule, size, topology, density, seed, steps in runs:
+        world = LargerThanLife(rule, size=size, density=density, seed=seed, **topology)
+        write_case("ltl", name, world, steps, spec_version=LTL_SPEC_VERSION)
+
+    # -- rule texts: canonical forms, and the reasons for refusals ---------------------------
+    rule_cases: list[dict[str, Any]] = []
+    for text in [
+        "R5,C0,M1,S34..58,B34..45,NM",
+        "5,34,45,34,58",
+        "r5,c2,m1,s34..58,b34..45",
+        "  R005,C00,M1,S034..58,B34..045,nm\t",
+        "R1,C3,M0,S2..3,B3..3,NC",
+        "R4,C0,M1,S41..81,B41..81",
+        "R2,C5,M0,S3..8,B4..6,NN",
+        "R500,C256,M0,S0..1002001,B0..0,NN",
+        "1,3,3,2,3",
+        "",
+        "B3/S23",
+        "R5,C0,M1,S34..58",
+        "R5,C0,M1,S1..2,B1..2,NM,X",
+        "Rx,C0,M1,S1..2,B1..2",
+        "R5,K0,M1,S1..2,B1..2",
+        "R5,C0,M2,S1..2,B1..2",
+        "R5,C0,M1,S1-2,B1..2",
+        "R5,C0,M1,S1..2,B1",
+        "R5,C0,M1,S1..2,B1..2,NX",
+        "R5, C0,M1,S1..2,B1..2",
+        "5,34,45,34",
+        "5,34,45,34,5x",
+        "R0,C0,M1,S1..2,B1..2",
+        "R501,C0,M1,S1..2,B1..2",
+        "R5,C1,M1,S1..2,B1..2",
+        "R5,C257,M1,S1..2,B1..2",
+        "R5,C0,M1,S1..1002002,B1..2",
+        "R5,C0,M1,S9..2,B1..2",
+        "R5,C0,M1,S1..2,B09..2",
+        "R99999999999,C0,M1,S1..2,B1..2",
+        "R٥,C0,M1,S1..2,B1..2",
+    ]:
+        rule, reason = try_parse_ltl_rule(text)
+        if rule is None:
+            rule_cases.append({"input": text, "error": True, "reason": reason})
+            continue
+        rule_cases.append(
+            {
+                "input": text,
+                "canonical": rule.canonical,
+                "range": rule.range,
+                "states": rule.states,
+                "middle": rule.middle,
+                "survival": list(rule.survival),
+                "birth": list(rule.birth),
+                "neighborhood": rule.neighborhood,
+                "size": rule.size,
+            }
+        )
+    save("ltl-rules", "rules", {"kind": "rules", "cases": rule_cases})
+
+    hood_cases: list[dict[str, Any]] = []
+    for hood in ("moore", "vonneumann", "circular"):
+        for radius in [*range(1, 13), 20, 37, 50, 100, 500]:
+            widths = half_widths(radius, hood)  # type: ignore[arg-type]
+            hood_cases.append(
+                {
+                    "neighborhood": hood,
+                    "range": radius,
+                    "half_widths": list(widths),
+                    "size": sum(2 * w + 1 for w in widths),
+                }
+            )
+    save("ltl-rules", "neighborhoods", {"kind": "neighborhoods", "cases": hood_cases})
+
+    # -- Advance Selection / Outside on LtL worlds --------------------------------------------
+    def advance(
+        name: str, desc: dict[str, Any], grid: Any, region: tuple[int, ...], n: int, outside: bool
+    ) -> None:
+        size = (grid.shape[1], grid.shape[0])
+        world = LargerThanLife(
+            desc["rule"],
+            size=size,
+            init=grid,
+            boundary=desc["boundary"],
+            shift=desc["shift"],
+            axis=desc["axis"],
+        )
+        (world.advance_outside if outside else world.advance_selection)(*region, n)
+        assert world.generation == 0
+        d = case_dir("patterns", name)
+        (d / "grid.png").write_bytes(gray_png(grid))
+        (d / "expected.png").write_bytes(gray_png(world.state))
+        save(
+            "patterns",
+            name,
+            {
+                "kind": "advance",
+                "world": desc,
+                "grid": {"file": "grid.png", "shape": list(grid.shape)},
+                "expected": {"file": "expected.png", "shape": list(world.state.shape)},
+                "region": list(region),
+                "n": n,
+                "outside": outside,
+            },
+        )
+
+    bosco = {"family": "ltl", "rule": "R5,C0,M1,S34..58,B34..45,NM", "boundary": "torus"}
+    bosco |= {"shift": 0, "axis": "x"}
+    advance(
+        "advance-selection-ltl",
+        bosco,
+        soup((48, 40), density=0.5, seed=21),
+        (6, 4, 33, 27),
+        12,
+        False,
+    )
+    decaying = {"family": "ltl", "rule": "R2,C5,M0,S3..8,B4..6,NM", "boundary": "dead"}
+    decaying |= {"shift": 0, "axis": "x"}
+    mixed = soup((30, 24), density=0.45, seed=22) * np.uint8(1)
+    mixed[soup((30, 24), density=0.2, seed=23) == 1] = 3  # some dying cells
+    advance("advance-outside-ltl-generations", decaying, mixed, (8, 6, 19, 15), 9, True)
+
+    # -- files: read into a grid, and refused by the universe -------------------------------
+    def notes(m: PatternMetadata) -> dict[str, Any]:
+        return {"name": m.name, "author": m.author, "comments": list(m.comments)}
+
+    def read(name: str, text: str) -> None:
+        d = case_dir("formats", f"read-{name}")
+        data = text.encode("utf-8")
+        (d / "input.rle").write_bytes(data)
+        f = read_pattern(data)
+        (d / "grid.png").write_bytes(gray_png(f.cells))
+        topology = None if f.bounded_grid is None else f.bounded_grid.topology
+        canonical = rle_encode(f.cells, f.rule or "B3/S23", metadata=f.metadata, topology=topology)
+        (d / "canonical.rle").write_text(canonical, encoding="utf-8", newline="\n")
+        meta: dict[str, Any] = {
+            "kind": "read",
+            "input": "input.rle",
+            "trim": False,
+            "limit": "default",
+            "format": f.format,
+            "x": _signed_text(f.x),
+            "y": _signed_text(f.y),
+            "rule": f.rule,
+            "generation": decimal_text.digits_of(f.generation),
+            "metadata": notes(f.metadata),
+            "grid": {"file": "grid.png", "shape": list(f.cells.shape)},
+            "canonical": "canonical.rle",
+        }
+        if f.bounded_grid is not None:
+            meta["bounded_grid"] = f.bounded_grid.suffix
+        save("formats", f"read-{name}", meta)
+
+    def refused(name: str, text: str, ext: str) -> None:
+        d = case_dir("formats", f"universe-{name}")
+        data = text.encode("utf-8")
+        (d / f"input.{ext}").write_bytes(data)
+        try:
+            read_universe(data)
+        except ValueError as error:
+            assert "Larger than Life" in str(error), error
+            save(
+                "formats",
+                f"universe-{name}",
+                {"kind": "universe", "input": f"input.{ext}", "error": True},
+            )
+            return
+        raise AssertionError(f"universe-{name} was meant to be refused")
+
+    read(
+        "ltl-bounded",
+        "#N Bosco bug\nx = 12, y = 10, rule = R5,C0,M1,S34..58,B34..45,NM:T40,30\n"
+        "3b5o$2b7o$b9o$11o$11o$11o$11o$b9o$2b7o$3b5o!\n",
+    )
+    read("ltl-generations", "x = 5, y = 3, rule = R2,C5,M0,S3..8,B4..6,NM\n.A2B$CD2.A$5A!\n")
+    read("ltl-short-form", "x = 3, y = 3, rule = 5,34,45,34,58\nobo$3o$obo!\n")
+    refused("error-ltl", "x = 3, y = 1, rule = R5,C0,M1,S34..58,B34..45,NM\n3o!\n", "rle")
+    refused("error-ltl-macrocell", "[M2]\n#R 5,34,45,34,58\n$$$$$$$$.***$\n", "mc")
 
 
 if __name__ == "__main__":
