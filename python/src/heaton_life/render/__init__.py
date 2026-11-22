@@ -14,6 +14,8 @@ from heaton_life.render.image import to_image
 from heaton_life.render.palette import (
     HISTORY_COLORS,
     HISTORY_ZOOM_ORDER,
+    SUPER_COLORS,
+    SUPER_ZOOM_ORDER,
     colormap_palette,
     default_palette,
     default_zoom_order,
@@ -24,12 +26,15 @@ from heaton_life.render.palette import (
     multistate_palette,
     rule_table_palette,
     shade_colormap,
+    super_palette,
 )
 from heaton_life.render.window import WINDOW_MODES, WindowMode, sample_window, zoom_ranks
 
 __all__ = [
     "HISTORY_COLORS",
     "HISTORY_ZOOM_ORDER",
+    "SUPER_COLORS",
+    "SUPER_ZOOM_ORDER",
     "WINDOW_MODES",
     "Animation",
     "WindowMode",
@@ -51,6 +56,7 @@ __all__ = [
     "rule_table_palette",
     "sample_window",
     "shade_colormap",
+    "super_palette",
     "to_image",
     "zoom_ranks",
 ]

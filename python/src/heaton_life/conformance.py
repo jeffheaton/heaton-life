@@ -7,6 +7,7 @@ the .NET implementation mirrors it. Encodings are per-family and spec'd:
 - lifelike:        PNG, pixel = state * 255                       (bit-exact)
 - lifelike-history: PNG, pixel = raw state (0–6), a History rule  (bit-exact)
 - ruletable:       PNG, pixel = raw state; rule_text for a rule file (bit-exact)
+- lifelike-super:  PNG, pixel = raw state (0–25), a Super rule    (bit-exact)
 - elementary:      PNG, 1 x width, pixel = tape * 255             (bit-exact)
 - cyclic:          PNG, pixel = raw state                         (bit-exact)
 - wireworld:       PNG, pixel = state * 85                        (bit-exact)
@@ -176,8 +177,9 @@ class _Indexed:
 
 
 class _History:
-    """Life-like grids under a History rule (spec/history.md): states 0–6 stored as the
-    raw pixel values of a grayscale PNG. Params are lifelike's, every key written."""
+    """Life-like grids under a History or Super rule (spec/history.md, spec/super.md): the
+    states stored as the raw pixel values of a grayscale PNG. Params are lifelike's, every
+    key written."""
 
     ext = "png"
 
@@ -306,6 +308,7 @@ CODECS: dict[str, Codec] = {
     "lifelike": _Binary("lifelike"),
     "lifelike-history": _History(),
     "ruletable": _RuleTable(),
+    "lifelike-super": _History(),
     "elementary": _Binary("elementary"),
     "cyclic": _Indexed("cyclic", scale=1),
     "wireworld": _Indexed("wireworld", scale=85),
@@ -324,6 +327,7 @@ TIERS: dict[str, tuple[str, float | None]] = {
     "lifelike": ("bit-exact", None),
     "lifelike-history": ("bit-exact", None),
     "ruletable": ("bit-exact", None),
+    "lifelike-super": ("bit-exact", None),
     "elementary": ("bit-exact", None),
     "cyclic": ("bit-exact", None),
     "wireworld": ("bit-exact", None),

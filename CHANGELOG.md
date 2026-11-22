@@ -374,6 +374,36 @@ and an RLE header naming any Life-like rule making the file two-state.
     `frame_values` and `default_palette` take a `RuleTableCA` world.
   - New vectors: the `ruletable/` and `ruletable-files/` families,
     `hashlife-multistate/*-ruletable-*`, and `render/palette-*ruletable*`.
+- **Super rules** ([spec/super.md](spec/super.md); [spec/rules.md](spec/rules.md)
+  "Variants"). A `Super` suffix on any Life-like rule, in every notation and neighborhood
+  (`B3/S23Super`, `B2/S34HSuper`, `MAP…Super`; `LifeSuper` is `B3/S23Super`), gives 26
+  states: History's seven, which behave exactly as under the History rule, and on cells
+  that leave no trail, two more trails with envelopes of their own, a no-trail pair of
+  marks, and labels that vanish, wait to be cleared, cycle, or appear when touched. The on
+  cells run the base rule exactly, and a newborn takes its state from its parents: parents
+  that agree pass their state on, a mixture of no-trail cells gives 13, and any other
+  mixture 1. The states read and write as RLE's letters with `pA` for 25, so LifeSuper
+  files shared online open as they were written.
+  - The rule compiler takes it as it takes History (`variants=True`, .NET `variants:
+    true`); without variants it is refused with the reason `a Super rule has 26 states,
+    not 2`. `RuleVariant.Super` and `LifeRule.SuperStates` are new in .NET.
+  - Life-like grids run Super rules on every topology, their frames the states
+    themselves; .NET `Step` and `WriteFrame` allocate nothing, and an advance cancels
+    within a generation. `convert_cells` takes a Super pattern into a two-state world (odd
+    states on) or a History world (states 0–6 kept), and a History pattern pastes into a
+    Super world unchanged; `same_base` makes a Life pattern native there.
+  - On the unbounded plane, the multi-state universe runs every Super rule whose base has
+    no B0 (`MultiStateHashLife("LifeSuper")`, .NET `SuperRule` and the `Super` class), with
+    random fill; the two-state `HashLife` refuses Super rules with a reason. Random fill
+    there now works under Generations rules too.
+  - Super's default state palette (`super_palette`, .NET `StatePalettes.ForSuper`):
+    History's colors for states 0–6 and a color of its own for each other state, the
+    colors published for LifeSuper but for state 13, whose white is marked on's here. Its
+    zoom order extends History's, the live and marked cells showing over trails and
+    labels. `default_palette` and `default_zoom_order` give both on grids and the plane.
+  - New vectors: the `lifelike-super/` family, `rules/super*`, and Super cases under
+    `patterns/`, `render/` (among them `palette-*super*` and `window-super-*`), `formats/`
+    and `hashlife-multistate/`, and `hashlife-multistate/edit-generations-fill-random`.
 
 ### Changed
 

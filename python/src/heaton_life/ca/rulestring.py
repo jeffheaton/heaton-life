@@ -111,13 +111,17 @@ _MAP_LENGTH: dict[int, Neighborhood] = {86: "moore", 22: "hexagonal", 6: "vonneu
 _MAP_CELLS: dict[Neighborhood, int] = {"moore": 9, "hexagonal": 7, "vonneumann": 5}
 _MAP_PAYLOAD: dict[Neighborhood, int] = {nb: length for length, nb in _MAP_LENGTH.items()}
 
-Variant = Literal["", "History"]
-VARIANTS: tuple[Variant, ...] = ("History",)
+Variant = Literal["", "History", "Super"]
+VARIANTS: tuple[Variant, ...] = ("History", "Super")
 """The words that give a two-state rule more states (spec/rules.md "Variants")."""
-VARIANT_STATES: dict[str, int] = {"": 2, "History": 7}
+VARIANT_STATES: dict[str, int] = {"": 2, "History": 7, "Super": 26}
 """How many states a rule of each variant has; "" is a two-state rule's."""
 _HISTORY = "history"  # the History word, lowercased (spec/rules.md "Grammar")
 _LIFE_HISTORY = "lifehistory"  # LifeHistory, the name files have long given B3/S23History
+_SUPER = "super"  # the Super word, lowercased
+_LIFE_SUPER = "lifesuper"  # LifeSuper, the name files have long given B3/S23Super
+# Each variant by its word, lowercased, for the parsers below.
+_VARIANT_WORDS: tuple[tuple[str, Variant], ...] = ((_HISTORY, "History"), (_SUPER, "Super"))
 
 Group: TypeAlias = tuple[int, bool, str]  # (count, minus, letters) as written
 Key: TypeAlias = tuple[int, str]  # (count, letter class); counts 0 and 8, and H and V, use ""
@@ -132,8 +136,9 @@ class LifeRule:
     behave identically exactly when their tables are equal, whatever their notations.
 
     A rule with a ``variant`` (spec/rules.md "Variants") has more states: ``History``
-    gives seven (spec/history.md). Its ``table`` is its base rule's, which its on cells
-    run, and its ``canonical`` string ends in the variant's word.
+    gives seven (spec/history.md) and ``Super`` 26 (spec/super.md). Its ``table`` is its
+    base rule's, which its on cells run, and its ``canonical`` string ends in the variant's
+    word.
     """
 
     canonical: str
@@ -149,7 +154,7 @@ class LifeRule:
 
     @property
     def states(self) -> int:
-        """The number of states: 2, or the variant's (7 for History)."""
+        """The number of states: 2, or the variant's (7 for History, 26 for Super)."""
         return VARIANT_STATES[self.variant]
 
     @property
@@ -286,6 +291,8 @@ def _compile(text: str) -> LifeRule:
     body = text[start:end]
     if _lower(body) == _LIFE_HISTORY:
         return _with_variant(_compile("B3/S23"), "History")
+    if _lower(body) == _LIFE_SUPER:
+        return _with_variant(_compile("B3/S23"), "Super")
     if len(body) >= 3 and body[0] in "Mm" and body[1] in "Aa" and body[2] in "Pp":
         return _compile_map(text, body[3:])
     if body[:1] in ("B", "b"):
@@ -320,8 +327,10 @@ def _compile_bs(text: str, body: str) -> LifeRule:
     rest = body[pos:]
     variant: Variant = ""
     named = rest
-    if _lower(rest[-len(_HISTORY) :]) == _HISTORY:
-        named, variant = rest[: -len(_HISTORY)], "History"
+    for word, which in _VARIANT_WORDS:
+        if _lower(rest[-len(word) :]) == word:
+            named, variant = rest[: -len(word)], which
+            break
     neighborhood: Neighborhood
     if named == "":
         neighborhood = "moore"
@@ -480,13 +489,15 @@ def _map_payload(payload: str) -> Neighborhood | None:
 
 
 def _compile_map(text: str, payload: str) -> LifeRule:
-    # A payload ending in the History word is read without it first; no payload length
-    # less the word's 7 is a payload length, so only one reading can succeed.
+    # A payload ending in a variant's word is read without it first; no payload length
+    # less the word's length (7 or 5) is a payload length, so only one reading can succeed.
     variant: Variant = ""
-    if _lower(payload[-len(_HISTORY) :]) == _HISTORY:
-        stem = payload[: -len(_HISTORY)]
-        if _map_payload(stem.removesuffix("==")) is not None:
-            payload, variant = stem, "History"
+    for word, which in _VARIANT_WORDS:
+        if _lower(payload[-len(word) :]) == word:
+            stem = payload[: -len(word)]
+            if _map_payload(stem.removesuffix("==")) is not None:
+                payload, variant = stem, which
+                break
     payload = payload.removesuffix("==")
     neighborhood = _map_payload(payload)
     if neighborhood is None:

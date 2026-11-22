@@ -27,6 +27,7 @@ FAMILIES: dict[str, Callable[[], Any]] = {
     "lenia-flow": lambda: FlowLenia(size=(32, 32), radius=8),
     "boids": lambda: Boids(8, size=(64, 64), seed=6),
     "ltl": lambda: LargerThanLife(size=(16, 12), seed=7),
+    "super": lambda: LifeLike("B3/S23Super", size=(16, 12), seed=8),
 }
 
 

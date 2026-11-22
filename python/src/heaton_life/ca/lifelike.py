@@ -1,5 +1,6 @@
 """Life-like cellular automata (spec/lifelike.md): binary state, any rule of spec/rules.md,
-and the seven states of a History rule (spec/history.md)."""
+the seven states of a History rule (spec/history.md) and the 26 of a Super rule
+(spec/super.md)."""
 
 from __future__ import annotations
 
@@ -10,7 +11,7 @@ from typing import cast
 import numpy as np
 from numpy.typing import NDArray
 
-from heaton_life.ca import history
+from heaton_life.ca import history, super_rules
 from heaton_life.ca._advance import AdvanceRegion
 from heaton_life.ca.rulestring import LifeRule, compile_rule
 from heaton_life.core.neighbors import moore_index
@@ -39,7 +40,8 @@ class LifeLikeParams(Params):
 
 class LifeLike(AdvanceRegion):
     """A Life-like CA. State is uint8 0/1, shape (height, width), row-major; under a History
-    rule (``B3/S23History``) a cell is any of the seven states 0–6 (spec/history.md)."""
+    rule (``B3/S23History``) a cell is any of the seven states 0–6 (spec/history.md), and
+    under a Super rule (``B3/S23Super``) any of the 26 states 0–25 (spec/super.md)."""
 
     def __init__(
         self,
@@ -125,8 +127,8 @@ class LifeLike(AdvanceRegion):
     def set_state(
         self, state: NDArray[np.generic], generation: int = 0, *, keep_start: bool = False
     ) -> None:
-        """Replace the state, nonzero cells alive (History's states 0–6 kept as they are,
-        under a History rule), and set the generation (spec/README.md "A world's state and
+        """Replace the state, nonzero cells alive (a History or Super rule's states kept as
+        they are), and set the generation (spec/README.md "A world's state and
         its start"). The state also becomes the start ``reset()``
         returns to (``init`` ``array``), unless ``keep_start``: then the start stays as it
         was, and no copy of the state is kept for it."""
@@ -145,17 +147,21 @@ class LifeLike(AdvanceRegion):
         self._generation = generation
 
     def _cells(self, cells: NDArray[np.generic]) -> NDArray[np.uint8]:
-        """Cells as this world's states: nonzero alive under a two-state rule, and History's
-        states 0–6 under a History rule (anything else an error)."""
-        if self._rule.variant:
+        """Cells as this world's states: nonzero alive under a two-state rule, History's
+        states 0–6 under a History rule, and Super's 0–25 under a Super rule (anything else
+        an error)."""
+        if self._rule.variant == "History":
             return history.check_cells(cells)
+        if self._rule.variant == "Super":
+            return super_rules.check_cells(cells)
         return (np.asarray(cells) > 0).astype(np.uint8)
 
     def step(self, n: int = 1) -> None:
         halo = self._halo
         if self._rule.variant:
+            variant = history if self._rule.variant == "History" else super_rules
             for _ in range(n):
-                self._state = history.step(self._state, halo, self._rule)
+                self._state = variant.step(self._state, halo, self._rule)
         else:
             for _ in range(n):
                 self._state = self._table[moore_index(self._state, halo=halo)]
@@ -168,7 +174,8 @@ class LifeLike(AdvanceRegion):
 
     @property
     def states(self) -> int:
-        """The number of states a cell can have: 2, or 7 under a History rule."""
+        """The number of states a cell can have: 2, 7 under a History rule, or 26 under a
+        Super rule."""
         return self._rule.states
 
     @property
@@ -202,8 +209,9 @@ class LifeLike(AdvanceRegion):
         fill_random(self._state, x0, y0, x1, y1, density=density, seed=seed)
 
     def frame(self) -> NDArray[np.uint8]:
-        """spec/render.md: ``state * 255``, and under a History rule the state itself (0–6),
-        for a color per state (History's palette, spec/render.md "State palettes")."""
+        """spec/render.md: ``state * 255``, and under a History or Super rule the state
+        itself (0–6 or 0–25), for a color per state (their palettes, spec/render.md "State
+        palettes")."""
         if self._rule.variant:
             return self._state.copy()
         return self._state * np.uint8(255)

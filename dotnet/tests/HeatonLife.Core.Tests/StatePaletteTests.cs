@@ -256,5 +256,51 @@ namespace HeatonLife.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => StatePalettes.ForMultiState(count));
             Assert.Throws<ArgumentOutOfRangeException>(() => StatePalettes.Gradient(count, (0, 0, 0), (1, 1, 1)));
         }
+
+        /// <summary>Super's 26 colors (spec/render.md "Default palettes"): History's for states 0–6
+        /// and none twice; its zoom order extends History's, every on state before every off one and
+        /// the envelopes last ("Zoomed out").</summary>
+        [Fact]
+        public void SupersPaletteAndZoomOrder()
+        {
+            byte[] palette = StatePalettes.ForSuper();
+            byte[] history = StatePalettes.ForHistory();
+            Assert.Equal(768, palette.Length);
+            for (int i = 0; i < 21; i++)
+                Assert.Equal(history[i], palette[i]); // states 0–6 are History's
+            var colors = new HashSet<(byte, byte, byte)>();
+            for (int s = 0; s < 26; s++)
+                colors.Add((palette[3 * s], palette[3 * s + 1], palette[3 * s + 2]));
+            Assert.Equal(26, colors.Count);
+            Assert.Equal(((byte)255, (byte)216, (byte)255), (palette[39], palette[40], palette[41])); // 13: white is 3's
+            for (int i = 78; i < palette.Length; i++)
+                Assert.Equal(0, palette[i]);
+            byte[] order = StatePalettes.DefaultZoomOrder(new LifeLike("B3/S23Super", 8, 8));
+            var sorted = (byte[])order.Clone();
+            Array.Sort(sorted);
+            for (int i = 0; i < 25; i++)
+                Assert.Equal(i + 1, sorted[i]);
+            var historyOnly = new List<byte>();
+            foreach (byte v in order)
+            {
+                if (v < 7)
+                    historyOnly.Add(v);
+            }
+            Assert.Equal(new byte[] { 3, 5, 1, 4, 6, 2 }, historyOnly.ToArray());
+            for (int i = 0; i < 13; i++)
+                Assert.Equal(1, order[i] & 1); // the 13 on states first
+            Assert.Equal(new byte[] { 2, 10, 12 }, new[] { order[22], order[23], order[24] });
+            foreach (LifeLike world in new[] { new LifeLike("B3/S23Super", 8, 8), new LifeLike("B2/S013VSuper", 8, 8) })
+            {
+                Assert.Equal(palette, StatePalettes.Default(world));
+                Assert.Equal(order, StatePalettes.DefaultZoomOrder(world));
+                Assert.Equal(26, StatePalettes.FrameValues(world).Length);
+            }
+            var universe = new MultiStateHashLife("LifeSuper");
+            Assert.Equal(palette, StatePalettes.Default(universe));
+            Assert.Equal(order, StatePalettes.DefaultZoomOrder(universe));
+            universe.ZoomOrder = StatePalettes.DefaultZoomOrder(universe); // the host sets it
+            Assert.Equal(history, StatePalettes.Default(new LifeLike("LifeHistory", 8, 8)));
+        }
     }
 }

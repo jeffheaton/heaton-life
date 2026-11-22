@@ -137,6 +137,7 @@ indexing rule), or raw RGB (passed through).
 |---|---|---|
 | life-like | `state * 255` | index bytes |
 | life-like, History rule | the state itself, 0–6 ([history.md](history.md)), for a color per state | index bytes |
+| life-like, Super rule | the state itself, 0–25 ([super.md](super.md)), for a color per state | index bytes |
 | elementary | space-time diagram `* 255` | index bytes |
 | cyclic | `state * 255 / max(states - 1, 1)` (integer math) | index bytes |
 | wireworld | `state * 85` (hits the `wireworld` anchors exactly) | index bytes |
@@ -193,13 +194,14 @@ be edited state by state.
 |---|---|
 | Life-like, a two-state rule | `phosphor`'s: (6, 10, 6) and (170, 255, 190) |
 | Life-like, a [History](history.md) rule | History's |
+| Life-like, a [Super](super.md) rule | Super's |
 | Elementary | `gray`'s |
 | Cyclic | `rainbow`'s |
 | Wireworld | `wireworld`'s: the classic empty, head, tail and conductor colors |
 | Generations | Generations' of its C |
 | a [rule table](ruletable.md)'s grid | the rule table's |
 | the two-state universe | `phosphor`'s |
-| a multi-state universe | its rule's on a grid: History's, Generations' of its C, `wireworld`'s for `WireWorld`, a rule table's; for any other rule, the multi-state palette of its S |
+| a multi-state universe | its rule's on a grid: History's, Super's, Generations' of its C, `wireworld`'s for `WireWorld`, a rule table's; for any other rule, the multi-state palette of its S |
 
 A colormap's palette there keeps the look of the frames through the colormap the app
 and the playground give that family. The rest are defined here:
@@ -216,6 +218,35 @@ and the playground give that family. The rest are defined here:
   | 4 | marked off | red (255, 0, 0) |
   | 5 | start on | yellow (255, 255, 0) |
   | 6 | boundary | gray (128, 128, 128) |
+
+- **Super's** (`super_palette`, .NET `StatePalettes.ForSuper`): History's colors for states
+  0–6, and for the rest the colors published for LifeSuper, with one change: state 13 is
+  pale pink, since the white it has there is marked on's here.
+
+  | State | | Color |
+  |---|---|---|
+  | 7 | marked on, no trail | magenta (255, 0, 255) |
+  | 8 | marked off, no trail | purple (128, 0, 128) |
+  | 9 | second trail: on | deep sky blue (0, 191, 255) |
+  | 10 | second trail: envelope | dark cerulean (0, 64, 128) |
+  | 11 | third trail: on | turquoise (64, 224, 208) |
+  | 12 | third trail: envelope | bluish green (0, 128, 64) |
+  | 13 | no trail 1 | pale pink (255, 216, 255) |
+  | 14 | vanishing label | tomato (255, 99, 71) |
+  | 15 | no trail 2 | salmon (250, 128, 114) |
+  | 16 | clearable label | pale violet red (219, 112, 147) |
+  | 17 | no trail 3 | orange (255, 165, 0) |
+  | 18 | cycling label 1 | wheat (245, 222, 179) |
+  | 19 | no trail 4 | cyan (0, 255, 255) |
+  | 20 | cycling label 2 | silver (192, 192, 192) |
+  | 21 | no trail 5 | yellow-green (192, 255, 128) |
+  | 22 | cycling label 3 | light pink (255, 182, 193) |
+  | 23 | no trail 6 | spring green (0, 255, 127) |
+  | 24 | hidden label | all but black (1, 1, 1) |
+  | 25 | no trail 7 | rose (255, 0, 127) |
+
+  The hidden label is all but the black of the dead, as hidden as a color can be while
+  still a color of its own. The 26 colors are distinct.
 
 - **Generations'** (`generations_palette(C)`, .NET `ForGenerations`) is `fire`'s palette
   of a Generations world of C states: entry 0 is `fire`'s entry 0, and entry s ≥ 1 is
@@ -238,8 +269,6 @@ and the playground give that family. The rest are defined here:
 
 - *Larger than Life*: with two states, `phosphor`'s palette; with C of three or more,
   Generations' of its C, since its dying cells are Generations' dying cells.
-- *Super* rules (26 states): states 0 to 6 take History's colors; the other 19, and
-  Super's zoom order, are defined with Super.
 
 ### Zoomed out
 
@@ -251,6 +280,10 @@ its [window](#sampling-a-window-of-a-grid). `default_zoom_order(world)` (.NET
 - a History rule: (3, 5, 1, 4, 6, 2). The on states come first, marked ones before plain
   ones; then marked off and the boundary; and last the envelope, which covers everything
   a pattern has touched and would otherwise hide the cells alive in it.
+- a Super rule: History's order extended, (3, 5, 7, 1, 9, 11, 13, 15, 17, 19, 21, 23, 25,
+  4, 8, 6, 14, 16, 18, 20, 22, 24, 2, 10, 12). The on states come first, the marked ones
+  (3, 5, 7) before the others; then the marked off states (4, 8) and the boundary; then
+  the labels; and last the three envelopes. Read over states 0–6 alone it is History's.
 - every other world: the empty order, the lowest non-zero state first. A Generations cell
   alive shows before one dying, and the younger dying before the older; a Wireworld
   electron's head before its tail, and both before the wire.
@@ -331,7 +364,7 @@ Vectors in [`../vectors/render/`](../vectors/render/):
   `hashlife-multistate`, carries its rule file as `rule_text` unless the `rule` is in the
   starter set), with its `frame_values` and `zoom_order`; with a `cmap` as well,
   that colormap's palette for the world instead; or a palette made by name (`builder`:
-  `history`, `generations`, `multistate` or `gradient`, with their arguments).
+  `history`, `super`, `generations`, `multistate` or `gradient`, with their arguments).
 - `palette-shade-<case>/` — the shade between a `background` and a `color`, as a 1×256
   RGB PNG (`lut.png`).
 - `window-<case>/` — a grid of bytes (`cells.png`, 8-bit grayscale, the values as they

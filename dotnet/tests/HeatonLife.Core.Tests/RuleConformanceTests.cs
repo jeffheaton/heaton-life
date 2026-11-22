@@ -38,7 +38,7 @@ namespace HeatonLife.Tests
             foreach (string name in new[]
             {
                 "totalistic", "isotropic", "isotropic-classes", "map", "hexagonal", "von-neumann", "errors", "reasons",
-                "history", "history-two-state",
+                "history", "history-two-state", "super", "super-two-state",
             })
                 Assert.Contains(name, names);
         }

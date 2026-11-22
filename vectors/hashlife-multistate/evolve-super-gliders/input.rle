@@ -1,0 +1,3 @@
+#C A glider of each kind: the second trail, no trail, and plain.
+x = 13, y = 3, rule = LifeSuper
+.I4.M4.A$2.I4.M4.A$3I2.3M2.3A!

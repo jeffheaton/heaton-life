@@ -1,0 +1,58 @@
+{
+  "bounding_box": [
+    "-14",
+    "-9",
+    "12",
+    "8"
+  ],
+  "family": "hashlife-multistate",
+  "generation": "5",
+  "kind": "edit",
+  "ops": [
+    {
+      "density": 0.3,
+      "op": "fill_random",
+      "seed": 82,
+      "x0": -9,
+      "x1": 8,
+      "y0": -6,
+      "y1": 5
+    },
+    {
+      "n": "5",
+      "op": "step"
+    },
+    {
+      "density": 0.6,
+      "op": "fill_random",
+      "seed": 83,
+      "x0": 0,
+      "x1": 3,
+      "y0": 0,
+      "y1": 3
+    },
+    {
+      "expect": [
+        "002210000",
+        "000000000",
+        "202000020",
+        "200000000",
+        "201001110",
+        "022001110",
+        "111010010",
+        "000010010",
+        "000002100"
+      ],
+      "op": "get_rect",
+      "x0": -4,
+      "x1": 4,
+      "y0": -4,
+      "y1": 4
+    }
+  ],
+  "population": "117",
+  "rule": "B2/S/C3",
+  "spec_version": "0.16.0",
+  "state": "final.mc",
+  "tier": "bit-exact"
+}

@@ -23,6 +23,7 @@ namespace HeatonLife.Tests
             new FlowLenia(32, 32, radius: 8),
             new Boids(8, 64, 64),
             new LargerThanLife(LtlRule.Bosco, 16, 16),
+            new LifeLike("B3/S23Super", 16, 16),
         };
 
         /// <summary>A family's frame, read polymorphically, as comparable bytes.</summary>
@@ -191,6 +192,7 @@ namespace HeatonLife.Tests
                 new Boids(8, 64, 64),
                 new Generations("B2/S345/C4", 16, 16),
                 new LargerThanLife(LtlRule.Bosco, 16, 16),
+                new LifeLike("B3/S23Super", 16, 16),
             };
             foreach (var sim in sims)
             {

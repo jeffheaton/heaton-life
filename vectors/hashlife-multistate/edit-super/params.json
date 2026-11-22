@@ -1,0 +1,112 @@
+{
+  "bounding_box": [
+    "-12",
+    "-10",
+    "11",
+    "10"
+  ],
+  "family": "hashlife-multistate",
+  "generation": "49",
+  "kind": "edit",
+  "ops": [
+    {
+      "density": 0.4,
+      "op": "fill_random",
+      "seed": 81,
+      "x0": -10,
+      "x1": 9,
+      "y0": -8,
+      "y1": 7
+    },
+    {
+      "cells": [
+        "0p60",
+        "d00h",
+        "0ec0"
+      ],
+      "mode": "or",
+      "op": "set_rect",
+      "x": -3,
+      "y": -3
+    },
+    {
+      "op": "set_cell",
+      "state": 25,
+      "x": 12,
+      "y": 0
+    },
+    {
+      "error": true,
+      "op": "set_cell",
+      "state": 26,
+      "x": 13,
+      "y": 0
+    },
+    {
+      "error": true,
+      "op": "set_rule",
+      "rule": "LifeHistory"
+    },
+    {
+      "n": "9",
+      "op": "step"
+    },
+    {
+      "n": "6",
+      "op": "advance_selection",
+      "x0": -5,
+      "x1": 4,
+      "y0": -5,
+      "y1": 4
+    },
+    {
+      "clockwise": true,
+      "expect": [
+        -4,
+        -6,
+        5,
+        7
+      ],
+      "op": "rotate_rect",
+      "x0": -6,
+      "x1": 7,
+      "y0": -4,
+      "y1": 5
+    },
+    {
+      "op": "set_rule",
+      "rule": "b36/s23super"
+    },
+    {
+      "n": "40",
+      "op": "step"
+    },
+    {
+      "expect": [
+        "2222222220222",
+        "2222222222222",
+        "2222220222220",
+        "2222222200020",
+        "2221122202000",
+        "22211222c2600",
+        "2222222220220",
+        "2222222222220",
+        "2222222222220",
+        "2222222222220",
+        "2222222222220",
+        "2222222222220",
+        "2222222222222"
+      ],
+      "op": "get_rect",
+      "x0": -6,
+      "x1": 6,
+      "y0": -6,
+      "y1": 6
+    }
+  ],
+  "population": "348",
+  "rule": "B3/S23Super",
+  "spec_version": "0.16.0",
+  "state": "final.mc",
+  "tier": "bit-exact"
+}

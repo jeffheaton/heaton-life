@@ -131,14 +131,14 @@ namespace HeatonLife.Tests
                     }
                 case "grid":
                     {
-                        // Wireworld's grid PNGs are states × 85. A History rule's grid is Life-like
-                        // (spec/history.md), and a Generations rule's (spec/generations.md) and a
-                        // rule table's (spec/ruletable.md) are their own families, their PNGs the
-                        // states themselves.
+                        // Wireworld's grid PNGs are states × 85. A History or Super rule's grid is
+                        // Life-like (spec/history.md, spec/super.md), and a Generations rule's
+                        // (spec/generations.md) and a rule table's (spec/ruletable.md) are their own
+                        // families, their PNGs the states themselves.
                         string rule = Text(meta, "rule");
                         bool wire = rule == "WireWorld";
-                        bool history = RuleString.TryCompile(rule, true, out LifeRule? life, out _)
-                            && life.Variant == RuleVariant.History;
+                        bool variant = RuleString.TryCompile(rule, true, out LifeRule? life, out _)
+                            && life.Variant != RuleVariant.None;
                         RuleTable? table = RuleTables.StarterOrNull(rule);
                         int scale = wire ? 85 : 1;
                         var (width, height, grid) = StatesPng(Path.Combine(dir, Text(meta, "grid")), scale);
@@ -153,7 +153,7 @@ namespace HeatonLife.Tests
                             var wireworld = new Wireworld(width, height, grid);
                             (w, state) = (wireworld, () => wireworld.State.ToArray());
                         }
-                        else if (history)
+                        else if (variant)
                         {
                             var lifeLike = new LifeLike(rule, width, height, Boundary.Dead);
                             lifeLike.SetState(grid);
@@ -304,7 +304,7 @@ namespace HeatonLife.Tests
         }
 
         /// <summary>A grid stored as its family's vectors store one: Wireworld's states × 85
-        /// (<paramref name="scale"/> 85), a History or Generations rule's raw states (1).</summary>
+        /// (<paramref name="scale"/> 85), a History, Super or Generations rule's raw states (1).</summary>
         private static (int Width, int Height, byte[] Cells) StatesPng(string path, int scale)
         {
             var (width, height, channels, pixels) = Png.Read(path);
@@ -424,7 +424,7 @@ namespace HeatonLife.Tests
                 case "set_rule":
                     u.Rule = Text(op, "rule");
                     break;
-                case "fill_random": // History rules only (spec/hashlife-multistate.md "Editing")
+                case "fill_random": // History, Super and Generations rules (spec/hashlife-multistate.md "Editing")
                     u.FillRandom(
                         Long(op, "x0"), Long(op, "y0"), Long(op, "x1"), Long(op, "y1"),
                         op.GetProperty("density").GetDouble(), op.GetProperty("seed").GetUInt64());

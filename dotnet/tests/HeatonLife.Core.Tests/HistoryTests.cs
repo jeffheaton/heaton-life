@@ -292,7 +292,7 @@ namespace HeatonLife.Tests
             RlePattern decoded = Patterns.RleDecode(text);
             Assert.Equal("LifeHistory", decoded.Rule);
             Assert.Equal(new byte[] { 0, 1, 2, 1, 0, 3, 4, 5, 6, 0, 2, 2, 0, 0, 0 }, decoded.Cells);
-            string written = Patterns.RleEncode(decoded.Cells, decoded.Width, decoded.Height, decoded.Rule);
+            string written = Patterns.RleEncode(decoded.Cells, decoded.Width, decoded.Height, decoded.Rule!);
             Assert.Equal("x = 5, y = 3, rule = B3/S23History\n.ABA$CDEF$2B!\n", written);
             // Two-state letters under a History header: the file is extended, b and o still 0 and 1.
             Assert.Equal(new byte[] { 0, 1, 0 }, Patterns.RleDecode("x = 3, y = 1, rule = B3/S23History\nbob!\n").Cells);

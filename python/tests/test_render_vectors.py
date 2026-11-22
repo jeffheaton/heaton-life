@@ -44,6 +44,7 @@ from heaton_life.render import (
     multistate_palette,
     sample_window,
     shade_colormap,
+    super_palette,
 )
 
 VECTOR_ROOT = Path(__file__).resolve().parents[2] / "vectors" / "render"
@@ -125,6 +126,7 @@ PALETTE_KEYS = {
 WORLD_PALETTE_KEYS = {"world", "frame_values", "zoom_order", "output"}
 BUILDER_KEYS = {
     "history": {"name"},
+    "super": {"name"},
     "generations": {"name", "states"},
     "multistate": {"name", "states"},
     "gradient": {"name", "states", "first", "last", "background"},
@@ -190,6 +192,8 @@ def _palette_case(case: Path, meta: dict[str, Any]) -> None:
             assert set(builder) == BUILDER_KEYS[builder["name"]], builder
             if builder["name"] == "history":
                 palette = history_palette()
+            elif builder["name"] == "super":
+                palette = super_palette()
             elif builder["name"] == "generations":
                 palette = generations_palette(builder["states"])
             elif builder["name"] == "multistate":
@@ -311,7 +315,7 @@ def _color_case(case: Path, meta: dict[str, Any]) -> None:
 
 def _build_sim(sim_family: str, p: dict[str, Any], initial: np.ndarray) -> Any:
     size = (p["width"], p["height"])
-    if sim_family in ("lifelike", "lifelike-history"):  # a History rule's states (0–6)
+    if sim_family in ("lifelike", "lifelike-history", "lifelike-super"):  # variants' states
         return LifeLike(p["rule"], size=size, init=initial, boundary=p["boundary"])
     if sim_family == "cyclic":
         return Cyclic(

@@ -9,13 +9,15 @@ namespace HeatonLife
     /// Python implementation and the conformance vectors. Bit-exact tier. The rule is any
     /// Life-like rule (spec/rules.md), run through its 512-entry table, on any topology
     /// (spec/topology.md), read through the grid's halo. Under a History rule
-    /// (<c>B3/S23History</c>, spec/history.md) a cell is any of the seven states 0–6.
+    /// (<c>B3/S23History</c>, spec/history.md) a cell is any of the seven states 0–6, and under a
+    /// Super rule (<c>B3/S23Super</c>, spec/super.md) any of the 26 states 0–25.
     /// </summary>
     public sealed class LifeLike : IIndexedFrameSource, IRegionWorld
     {
         private readonly byte[] _table; // next state by 3×3 neighborhood index (spec/rules.md)
         private readonly bool _history; // a History rule: seven states (spec/history.md)
-        private readonly int _near; // History: the neighbors whose boundary cells keep a cell off
+        private readonly bool _super; // a Super rule: 26 states (spec/super.md)
+        private readonly int _near; // History and Super: the neighbors the variant's states look at
         private readonly Halo _halo; // the cells past the edges (spec/topology.md "The halo")
         private readonly byte[] _padded; // the halo each generation reads
         private byte[] _cells;
@@ -36,7 +38,8 @@ namespace HeatonLife
         /// <summary>The compiled rule: its table, its variant and its number of states.</summary>
         public LifeRule CompiledRule { get; }
 
-        /// <summary>The number of states a cell can have: 2, or 7 under a History rule.</summary>
+        /// <summary>The number of states a cell can have: 2, 7 under a History rule, or 26 under a
+        /// Super rule.</summary>
         public int States => CompiledRule.States;
 
         public ReadOnlySpan<byte> State => _cells;
@@ -59,6 +62,7 @@ namespace HeatonLife
             Rule = compiled.Canonical;
             _table = compiled.Table.ToArray();
             _history = compiled.Variant == RuleVariant.History;
+            _super = compiled.Variant == RuleVariant.Super;
             _near = History.NeighborBits(compiled.Neighborhood);
             _halo = new Halo(topology, width, height);
             _padded = new byte[_halo.Length];
@@ -166,16 +170,18 @@ namespace HeatonLife
             Generation = generation;
         }
 
-        /// <summary>The cells as this world's states: nonzero alive, or History's states as they
-        /// are, checked before any is written.</summary>
+        /// <summary>The cells as this world's states: nonzero alive, or a History or Super rule's
+        /// states as they are, checked before any is written.</summary>
         private void Load(ReadOnlySpan<byte> cells)
         {
-            if (_history)
+            if (_history || _super)
             {
+                int states = CompiledRule.States;
                 for (int i = 0; i < cells.Length; i++)
                 {
-                    if (cells[i] >= History.States)
-                        throw new ArgumentException($"state {cells[i]} is not a History state (0 to 6)");
+                    if (cells[i] >= states)
+                        throw new ArgumentException(
+                            $"state {cells[i]} is not a {CompiledRule.Variant} state (0 to {states - 1})");
                 }
                 cells.CopyTo(_cells);
                 return;
@@ -184,16 +190,18 @@ namespace HeatonLife
                 _cells[i] = (byte)(cells[i] > 0 ? 1 : 0);
         }
 
-        /// <summary>Paint one cell in place (0/1, nonzero alive; under a History rule a state 0–6);
-        /// does not reset the generation.</summary>
+        /// <summary>Paint one cell in place (0/1, nonzero alive; under a History rule a state 0–6,
+        /// under a Super rule 0–25); does not reset the generation.</summary>
         public void SetCell(int x, int y, byte value)
         {
             if (x < 0 || x >= Width || y < 0 || y >= Height)
                 throw new ArgumentOutOfRangeException($"cell ({x}, {y}) outside {Width}x{Height}");
-            if (_history)
+            if (_history || _super)
             {
-                if (value >= History.States)
-                    throw new ArgumentOutOfRangeException(nameof(value), value, "a History state is 0 to 6");
+                int states = CompiledRule.States;
+                if (value >= states)
+                    throw new ArgumentOutOfRangeException(
+                        nameof(value), value, $"a {CompiledRule.Variant} state is 0 to {states - 1}");
                 _cells[y * Width + x] = value;
                 return;
             }
@@ -250,14 +258,14 @@ namespace HeatonLife
             Generation += n;
         }
 
-        /// <summary>Frame per spec/render.md: palette index = state * 255, and under a History
-        /// rule the state itself (0–6), for a color per state (the host's palette, until
-        /// multi-state rendering defines History's).</summary>
+        /// <summary>Frame per spec/render.md: palette index = state * 255, and under a History or
+        /// Super rule the state itself (0–6 or 0–25), for a color per state (the host's palette,
+        /// until multi-state rendering defines theirs).</summary>
         public void WriteFrame(byte[] frame)
         {
             if (frame.Length != _cells.Length)
                 throw new ArgumentException($"expected {_cells.Length} bytes, got {frame.Length}");
-            if (_history)
+            if (_history || _super)
             {
                 Array.Copy(_cells, frame, _cells.Length);
                 return;
@@ -279,6 +287,11 @@ namespace HeatonLife
             if (_history)
             {
                 StepHistory(cancellationToken);
+                return;
+            }
+            if (_super)
+            {
+                StepSuper(cancellationToken);
                 return;
             }
             int w = Width, h = Height, stride = _halo.Columns;
@@ -342,6 +355,34 @@ namespace HeatonLife
                         | (s == wall ? 2 : 0) | (se == wall ? 1 : 0);
                     int on = (boundary & near) == 0 ? table[index] : 0;
                     _scratch[row + x] = next[2 * c + on];
+                }
+            }
+            (_cells, _scratch) = (_scratch, _cells);
+        }
+
+        /// <summary>
+        /// One generation of a Super rule (spec/super.md "Evolution"): each cell's next state from
+        /// its 3 × 3 block by <see cref="Super"/>'s cell function, the one the multi-state universe
+        /// runs. Allocates nothing.
+        /// </summary>
+        private void StepSuper(CancellationToken cancellationToken)
+        {
+            int w = Width, h = Height, stride = _halo.Columns, near = _near;
+            byte[] p = _padded, table = _table;
+            _halo.Fill(_cells, p, 0);
+            for (int y = 0; y < h; y++)
+            {
+                // Polled each row, as in the two-state step (spec/patterns.md "Canceling").
+                if (cancellationToken.IsCancellationRequested)
+                    throw GridRegion.Canceled(cancellationToken, Generation);
+                int up = y * stride + 1, mid = up + stride, down = mid + stride, row = y * w;
+                for (int x = 0; x < w; x++)
+                {
+                    _scratch[row + x] = Super.Next(
+                        table, near,
+                        p[up + x - 1], p[up + x], p[up + x + 1],
+                        p[mid + x - 1], p[mid + x], p[mid + x + 1],
+                        p[down + x - 1], p[down + x], p[down + x + 1]);
                 }
             }
             (_cells, _scratch) = (_scratch, _cells);

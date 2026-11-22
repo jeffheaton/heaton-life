@@ -43,10 +43,10 @@ namespace HeatonLife
         public static StateRule Wireworld => WireworldRule.Instance;
 
         /// <summary>The rule a name gives: <c>WireWorld</c> or a rule of the rule-table starter set
-        /// (spec/ruletable.md), a History rule (spec/history.md), or a Generations rule in either
-        /// spelling (spec/generations.md "Rules"). Any text that
-        /// names no rule throws <see cref="ArgumentException"/>, a Larger than Life rule with the
-        /// reason that it runs on grids only (spec/ltl.md).</summary>
+        /// (spec/ruletable.md), a History rule (spec/history.md), a Super rule (spec/super.md), or a
+        /// Generations rule in either spelling (spec/generations.md "Rules"). Any text that names no
+        /// rule throws <see cref="ArgumentException"/>, a Larger than Life rule with the reason that
+        /// it runs on grids only (spec/ltl.md).</summary>
         public static StateRule Compile(string name)
         {
             if (name == null)
@@ -57,6 +57,10 @@ namespace HeatonLife
             HistoryRule? history = HistoryRule.FromText(name);
             if (history != null)
                 return history;
+            // Super rules, the same for the Super variant (spec/super.md).
+            SuperRule? super = SuperRule.FromText(name);
+            if (super != null)
+                return super;
             // Generations rules, in either spelling (spec/generations.md).
             if (GenerationsRule.TryCompile(name, out GenerationsRule? generations, out _))
                 return generations;
@@ -70,7 +74,7 @@ namespace HeatonLife
             throw new ArgumentException(
                 $"'{name}' is not a state rule (known: {WireworldRule.Instance.Canonical}, "
                 + $"{string.Join(", ", RuleTables.StarterNames)}, History rules such as B3/S23History, "
-                + "and Generations rules such as B2/S345/C4)",
+                + "Super rules such as B3/S23Super, and Generations rules such as B2/S345/C4)",
                 nameof(name));
         }
 

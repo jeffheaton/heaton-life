@@ -86,15 +86,16 @@ def _expect_state(case_dir: Path, u: MultiStateHashLife, entry: dict[str, Any]) 
 
 def _states_png(path: Path, scale: int = 85) -> np.ndarray[Any, np.dtype[np.uint8]]:
     """A grid stored as its family's vectors store one: Wireworld's states × 85, or, with
-    ``scale`` 1, a History or Generations rule's: the states themselves."""
+    ``scale`` 1, a History, Super or Generations rule's: the states themselves."""
     with Image.open(path) as img:
         return (np.asarray(img.convert("L")) // scale).astype(np.uint8)
 
 
-def _is_history(rule: str) -> bool:
-    """Whether a case's rule is a History rule (spec/history.md), whose grid is Life-like."""
+def _is_variant(rule: str) -> bool:
+    """Whether a case's rule is a History or Super rule (spec/history.md, spec/super.md),
+    whose grid is Life-like."""
     compiled, _ = try_compile_rule(rule, presets=False, variants=True)
-    return compiled is not None and compiled.variant == "History"
+    return compiled is not None and compiled.variant != ""
 
 
 def _cells(rows: list[str]) -> np.ndarray[Any, np.dtype[np.uint8]]:
@@ -130,7 +131,7 @@ def _apply(u: MultiStateHashLife, op: dict[str, Any]) -> None:
         u.clear()
     elif kind == "set_rule":
         u.rule = op["rule"]
-    elif kind == "fill_random":  # History rules only (spec/hashlife-multistate.md "Editing")
+    elif kind == "fill_random":  # History, Super and Generations rules (hashlife-multistate.md)
         u.fill_random(*box, op["density"], op["seed"])
     elif kind == "get_rect":
         rows = ["".join(_DIGITS[v] for v in row) for row in u.get_rect(*box)]
@@ -210,11 +211,12 @@ def test_multistate_vector(case: Path) -> None:
             u.step(int(entry["generation"]) - u.generation)
             _expect_state(d, u, entry)
     elif kind == "grid":
-        # Wireworld's grid PNGs are states × 85. A History rule's grid is Life-like
-        # (spec/history.md), and a Generations rule's (spec/generations.md) and a rule
-        # table's (spec/ruletable.md) are their own families, their PNGs the states themselves.
+        # Wireworld's grid PNGs are states × 85. A History or Super rule's grid is Life-like
+        # (spec/history.md, spec/super.md), and a Generations rule's (spec/generations.md) and
+        # a rule table's (spec/ruletable.md) are their own families, their PNGs the states
+        # themselves.
         wire = meta["rule"] == "WireWorld"
-        history = _is_history(meta["rule"])
+        life_like = _is_variant(meta["rule"])
         table = starter_rule_or_none(meta["rule"])  # a rule table (spec/ruletable.md)
         scale = 85 if wire else 1
         grid = _states_png(d / meta["grid"], scale)
@@ -225,7 +227,7 @@ def test_multistate_vector(case: Path) -> None:
         w: Wireworld | LifeLike | Generations | RuleTableCA
         if wire:
             w = Wireworld(size=(width, height), init=grid)
-        elif history:
+        elif life_like:
             w = LifeLike(meta["rule"], size=(width, height), init=grid, boundary="dead")
         elif table is not None:
             w = RuleTableCA(table, size=(width, height), init=grid)

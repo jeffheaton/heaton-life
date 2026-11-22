@@ -28,6 +28,43 @@ namespace HeatonLife
 
         private static readonly byte[] HistoryOrder = { 3, 5, 1, 4, 6, 2 };
 
+        // Super's colors: History's for states 0–6, and for 7–25 the colors published for
+        // LifeSuper, but for state 13's, white there, which is marked on's here.
+        private static readonly byte[] SuperColors =
+        {
+            0, 0, 0, // 0 off: black
+            0, 255, 0, // 1 on: green
+            0, 0, 160, // 2 envelope: blue
+            255, 255, 255, // 3 marked on: white
+            255, 0, 0, // 4 marked off: red
+            255, 255, 0, // 5 start on: yellow
+            128, 128, 128, // 6 boundary: gray
+            255, 0, 255, // 7 marked on, no trail: magenta
+            128, 0, 128, // 8 marked off, no trail: purple
+            0, 191, 255, // 9 second trail, on: deep sky blue
+            0, 64, 128, // 10 second trail's envelope: dark cerulean
+            64, 224, 208, // 11 third trail, on: turquoise
+            0, 128, 64, // 12 third trail's envelope: bluish green
+            255, 216, 255, // 13 no trail 1: pale pink
+            255, 99, 71, // 14 vanishing label: tomato
+            250, 128, 114, // 15 no trail 2: salmon
+            219, 112, 147, // 16 clearable label: pale violet red
+            255, 165, 0, // 17 no trail 3: orange
+            245, 222, 179, // 18 cycling label 1: wheat
+            0, 255, 255, // 19 no trail 4: cyan
+            192, 192, 192, // 20 cycling label 2: silver
+            192, 255, 128, // 21 no trail 5: yellow-green
+            255, 182, 193, // 22 cycling label 3: light pink
+            0, 255, 127, // 23 no trail 6: spring green
+            1, 1, 1, // 24 hidden label: all but black
+            255, 0, 127, // 25 no trail 7: rose
+        };
+
+        // History's order extended: the on states, marked before plain; the marked off states
+        // and the boundary; the labels; and the three envelopes last.
+        private static readonly byte[] SuperOrder =
+            { 3, 5, 7, 1, 9, 11, 13, 15, 17, 19, 21, 23, 25, 4, 8, 6, 14, 16, 18, 20, 22, 24, 2, 10, 12 };
+
         private static readonly byte[] WireworldValues = { 0, 85, 170, 255 };
 
         private static readonly byte[] TwoStateValues = { 0, 255 };
@@ -101,7 +138,7 @@ namespace HeatonLife
 
         /// <summary>
         /// A world's default palette (spec/render.md "Default palettes"): History's under a
-        /// History rule, Generations' for Generations, a rule table's (<see cref="ForRuleTable"/>)
+        /// History rule, Super's under a Super rule, Generations' for Generations, a rule table's (<see cref="ForRuleTable"/>)
         /// on its grid, and otherwise the palette of the
         /// colormap the family is shown with: phosphor for a two-state Life-like world, gray
         /// for Elementary, rainbow for Cyclic, wireworld for Wireworld.
@@ -113,10 +150,15 @@ namespace HeatonLife
                 case null:
                     throw new ArgumentNullException(nameof(world));
                 case LifeLike life:
-                    // Super rules (26 states) plug in here when they land.
-                    return life.CompiledRule.Variant == RuleVariant.None
-                        ? FromColormap(life, Colormaps.Get("phosphor"))
-                        : ForHistory();
+                    switch (life.CompiledRule.Variant)
+                    {
+                        case RuleVariant.None:
+                            return FromColormap(life, Colormaps.Get("phosphor"));
+                        case RuleVariant.Super:
+                            return ForSuper();
+                        default:
+                            return ForHistory();
+                    }
                 case Elementary elementary:
                     return FromColormap(elementary, Colormaps.Get("gray"));
                 case Cyclic cyclic:
@@ -137,7 +179,7 @@ namespace HeatonLife
 
         /// <summary>
         /// A multi-state universe's default palette: the one its rule has on a grid (History's,
-        /// Generations' of its C, wireworld's for WireWorld, a rule table's with its
+        /// Super's, Generations' of its C, wireworld's for WireWorld, a rule table's with its
         /// <c>@COLORS</c>), or for any other rule the multi-state palette of its S.
         /// </summary>
         public static byte[] Default(MultiStateHashLife universe)
@@ -148,6 +190,8 @@ namespace HeatonLife
             {
                 case HistoryRule _:
                     return ForHistory();
+                case SuperRule _:
+                    return ForSuper();
                 case GenerationsRule generations:
                     return ForGenerations(generations.States);
                 case WireworldRule _:
@@ -155,22 +199,21 @@ namespace HeatonLife
                 case RuleTable table:
                     return ForRuleTable(table);
                 default:
-                    // Super rules plug in here when they land (spec/render.md "Still to come").
                     return ForMultiState(universe.States);
             }
         }
 
         /// <summary>
         /// The zoom order that goes with a world's default palette (spec/render.md "Zoomed
-        /// out"): History's, (3, 5, 1, 4, 6, 2), under a History rule; empty (the lowest
-        /// non-zero state first) for every other world. Pass it to
-        /// <see cref="GridWindow.Sample"/>; nothing sets it for the host.
+        /// out"): History's, (3, 5, 1, 4, 6, 2), under a History rule, and Super's, which
+        /// extends it, under a Super rule; empty (the lowest non-zero state first) for every
+        /// other world. Pass it to <see cref="GridWindow.Sample"/>; nothing sets it for the host.
         /// </summary>
         public static byte[] DefaultZoomOrder(ISimulation world)
         {
             FrameValues(world); // refuses a world without byte states, as the palettes do
             if (world is LifeLike life && life.CompiledRule.Variant != RuleVariant.None)
-                return (byte[])HistoryOrder.Clone();
+                return (byte[])(life.CompiledRule.Variant == RuleVariant.Super ? SuperOrder : HistoryOrder).Clone();
             return Array.Empty<byte>();
         }
 
@@ -183,14 +226,22 @@ namespace HeatonLife
         }
 
         /// <summary>
-        /// A multi-state universe's zoom order: History's under a History rule, else empty.
-        /// Set it as the universe's <see cref="MultiStateHashLife.ZoomOrder"/>.
+        /// A multi-state universe's zoom order: History's under a History rule, Super's under a
+        /// Super rule, else empty. Set it as the universe's <see cref="MultiStateHashLife.ZoomOrder"/>.
         /// </summary>
         public static byte[] DefaultZoomOrder(MultiStateHashLife universe)
         {
             if (universe == null)
                 throw new ArgumentNullException(nameof(universe));
-            return universe.StateRule is HistoryRule ? (byte[])HistoryOrder.Clone() : Array.Empty<byte>();
+            switch (universe.StateRule)
+            {
+                case HistoryRule _:
+                    return (byte[])HistoryOrder.Clone();
+                case SuperRule _:
+                    return (byte[])SuperOrder.Clone();
+                default:
+                    return Array.Empty<byte>();
+            }
         }
 
         /// <summary>
@@ -201,6 +252,18 @@ namespace HeatonLife
         {
             var palette = new byte[768];
             Buffer.BlockCopy(HistoryColors, 0, palette, 0, HistoryColors.Length);
+            return palette;
+        }
+
+        /// <summary>
+        /// Super's palette (spec/render.md "Default palettes"): History's colors for states 0–6,
+        /// then a color for each of the no-trail cells, the trails and their envelopes, the
+        /// no-trail marks and the labels, 26 in all and none twice.
+        /// </summary>
+        public static byte[] ForSuper()
+        {
+            var palette = new byte[768];
+            Buffer.BlockCopy(SuperColors, 0, palette, 0, SuperColors.Length);
             return palette;
         }
 

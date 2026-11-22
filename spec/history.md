@@ -122,10 +122,12 @@ is 0. The step reads on and off from them as above. The two-state rules run as b
 - Random fill there is the grid's: states 1 and 0, the draws of the two-state universe's
   `fill_random`.
 
-## Later: Super
+## Super
 
-A `Super` variant of 26 states, whose states 0–6 behave as these do, is planned on the
-same model: one more variant word with its own table of states and its own cell function.
+The [Super](super.md) variant has 26 states. Its states 0–6 are these and behave as they
+do here, so a History pattern is a Super pattern as it stands, and a Super pattern under a
+History rule keeps states 0–6 and turns each other state into its parity
+(`convert_cells`).
 
 ## Vector encoding
 

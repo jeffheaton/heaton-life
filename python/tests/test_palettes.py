@@ -10,6 +10,8 @@ from heaton_life.rd import GrayScott
 from heaton_life.render import (
     HISTORY_COLORS,
     HISTORY_ZOOM_ORDER,
+    SUPER_COLORS,
+    SUPER_ZOOM_ORDER,
     apply_colormap,
     colormap_palette,
     default_palette,
@@ -22,6 +24,7 @@ from heaton_life.render import (
     list_colormaps,
     multistate_palette,
     shade_colormap,
+    super_palette,
 )
 
 
@@ -223,3 +226,31 @@ def test_colors_are_three_bytes() -> None:
             shade_colormap((0, 0, 0), bad)
     with pytest.raises(ValueError, match="uint8"):
         colormap_palette(LifeLike("B3/S23", size=(8, 8)), np.zeros((256, 3), dtype=np.int64))
+
+
+def test_supers_palette_and_zoom_order() -> None:
+    """Super's 26 colors (spec/render.md "Default palettes"): History's for states 0–6 and
+    none twice; its zoom order extends History's, every on state before every off one and
+    the envelopes last ("Zoomed out")."""
+    palette = super_palette()
+    assert [tuple(c) for c in palette[:26].tolist()] == list(SUPER_COLORS)
+    assert SUPER_COLORS[:7] == HISTORY_COLORS and len(set(SUPER_COLORS)) == 26
+    assert SUPER_COLORS[13] == (255, 216, 255)  # pale pink: white is marked on's (state 3)
+    assert not palette[26:].any()
+    assert sorted(SUPER_ZOOM_ORDER) == list(range(1, 26))
+    assert tuple(s for s in SUPER_ZOOM_ORDER if s < 7) == HISTORY_ZOOM_ORDER
+    on = sum(1 for s in SUPER_ZOOM_ORDER if s & 1)
+    assert all(s & 1 for s in SUPER_ZOOM_ORDER[:on])
+    assert SUPER_ZOOM_ORDER[-3:] == (2, 10, 12)
+    for world in (
+        LifeLike("B3/S23Super", size=(8, 8)),
+        LifeLike("B2/S013VSuper", size=(8, 8)),
+        MultiStateHashLife("LifeSuper"),
+    ):
+        assert np.array_equal(default_palette(world), palette)
+        assert default_zoom_order(world) == SUPER_ZOOM_ORDER
+        assert frame_values(world) == tuple(range(26))
+    universe = MultiStateHashLife("B3/S23Super")
+    universe.zoom_order = default_zoom_order(universe)  # the host sets it
+    assert universe.zoom_order == SUPER_ZOOM_ORDER
+    assert np.array_equal(default_palette(LifeLike("LifeHistory", size=(8, 8))), history_palette())

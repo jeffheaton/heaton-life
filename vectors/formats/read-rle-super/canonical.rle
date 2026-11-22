@@ -1,0 +1,4 @@
+#N A filtered blinker
+#C XRLE Pos=5,-2 Gen=3
+x = 6, y = 3, rule = B3/S23Super
+2.H$MpAMDX$2.F!

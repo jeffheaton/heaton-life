@@ -1,0 +1,16 @@
+{
+  "canonical": "canonical.rle",
+  "family": "patterns",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      2,
+      13
+    ]
+  },
+  "input": "input.rle",
+  "kind": "rle",
+  "rule": "LifeSuper",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

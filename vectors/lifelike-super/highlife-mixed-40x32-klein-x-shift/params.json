@@ -1,0 +1,34 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_00001.png",
+      "step": 1
+    },
+    {
+      "file": "state_00020.png",
+      "step": 20
+    },
+    {
+      "file": "state_00100.png",
+      "step": 100
+    }
+  ],
+  "family": "lifelike-super",
+  "params": {
+    "axis": "x",
+    "boundary": "klein",
+    "density": 0.35,
+    "height": 32,
+    "init": "array",
+    "rule": "B36/S23Super",
+    "seed": 0,
+    "shift": 2,
+    "width": 40
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

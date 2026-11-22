@@ -79,23 +79,23 @@ in those cells.
 ## Grammar
 
 ```
-rule    = ws* ( bs | map | "LifeHistory" ) ws*
+rule    = ws* ( bs | map | "LifeHistory" | "LifeSuper" ) ws*
 bs      = "B" counts ws* "/" ws* "S" counts [ "H" | "V" ] [ variant ]
 counts  = { digit [ [ "-" ] letter { letter } ] }
 map     = "MAP" payload [ "==" ] [ variant ]
-variant = "History"
+variant = "History" | "Super"
 ```
 
-- `B`, `S`, `H`, `V`, `MAP`, the letters, `History` and `LifeHistory` may be written in
-  either case. A MAP payload is base64 and keeps its case.
+- `B`, `S`, `H`, `V`, `MAP`, the letters, `History`, `Super`, `LifeHistory` and
+  `LifeSuper` may be written in either case. A MAP payload is base64 and keeps its case.
 - `digit` is an ASCII digit `0`–`8`, limited further by the neighborhood (the table
   above). `letter` is one of `c e k a i n y q j r t w z` (next section).
 - `ws` is a whitespace character: U+0009–U+000D, U+0020, U+0085, U+00A0, U+1680,
   U+2000–U+200A, U+2028, U+2029, U+202F, U+205F or U+3000. It may appear only at the two
   ends and on either side of the `/`.
 - Nothing may follow the rule but a [variant](#variants), the word that gives it more
-  states: `History`. `LifeHistory` is `B3/S23History`, the name files have long given
-  that rule. A
+  states: `History` or `Super`. `LifeHistory` is `B3/S23History` and `LifeSuper` is
+  `B3/S23Super`, the names files have long given those rules. A
   [bounded-grid suffix](topology.md#the-bounded-grid-suffix) (`B3/S23:T30,20`) names a
   world, not a rule: where a text may carry one, it is taken off at its `:` before the
   rule is read.
@@ -166,25 +166,27 @@ arrangements of eight neighbors between them, each arrangement in exactly one cl
 
 A **variant** gives a two-state rule more states. The two-state rule it is built on is its
 **base**: the variant's cells are on or off, the on cells evolve as the base rule says,
-and the other states record or mark things beside them. One variant is defined:
+and the other states record or mark things beside them. Two variants are defined:
 
 | Word | States | Page |
 |---|---|---|
 | `History` | 7 | [history.md](history.md) |
+| `Super` | 26 | [super.md](super.md) |
 
 The variant word follows the whole two-state rule, its `H` or `V` and a MAP payload's `==`
-included: `B36/S23History`, `B2/S34HHistory`, `MAP…History`. A MAP payload ending in the
-word is still read unambiguously, since no payload length less 7 is a payload length. A
+included: `B36/S23History`, `B2/S34HHistory`, `MAP…History`, `B3/S23Super`. A MAP payload
+ending in a word is still read unambiguously, since no payload length less 7 (History) or
+less 5 (Super) is a payload length. A
 rule without a variant is its own base, of two states. Two rules have the **same base**
 when their base tables are equal; such rules behave identically on two states, so a
 pattern of one is at home in a world of the other (a Life pattern in a `B3/S23History`
 world).
 
 Every engine, format and reader on two states wants a rule without a variant, and its
-compiler refuses one with the reason `a History rule has 7 states, not 2` (Reasons,
-below). A compiler asked for variants gives the rule, its number of states and its base;
-the [Life-like](lifelike.md) grids and the [multi-state universe](hashlife-multistate.md)
-run History rules.
+compiler refuses one with the reason `a History rule has 7 states, not 2` or `a Super
+rule has 26 states, not 2` (Reasons, below). A compiler asked for variants gives the
+rule, its number of states and its base; the [Life-like](lifelike.md) grids and the
+[multi-state universe](hashlife-multistate.md) run History and Super rules.
 
 ## Canonical form
 
@@ -204,8 +206,9 @@ canonical string gives the same table, and canonicalizing it again gives the sam
   `B4acknqtw/S` (eight characters either way).
 - **MAP rules:** `MAP` and the payload at its neighborhood's length, without `==`, the
   unused low bits of its last character zero.
-- **Variants:** the base rule's canonical string, then `History`. So `b3/s23history` and
-  `LifeHistory` are `B3/S23History`, and `MAP…==history` is `MAP…History`.
+- **Variants:** the base rule's canonical string, then `History` or `Super`. So
+  `b3/s23history` and `LifeHistory` are `B3/S23History`, `MAP…==history` is
+  `MAP…History`, and `LifeSuper` and `b3/s23SUPER` are `B3/S23Super`.
 
 A rule keeps its notation. A MAP string stays a MAP string even when digits or letters
 could write its table, and `B/S`, `B/SH`, `B/SV` and the all-`A` MAP strings all name the
@@ -224,13 +227,13 @@ alphabet, or `=` other than a final `==`; anything after the rule.
 Every error has a **reason**, a phrase saying what is wrong, the same in every port. The
 text is read as the grammar reads it, and the reason is that of the first problem found:
 
-1. Whitespace at the two ends is skipped. What is left is `LifeHistory` (in either case),
-   or starts with `MAP` or `B`, in either case, or else: `expected B…/S… or MAP…` (empty
-   text included).
+1. Whitespace at the two ends is skipped. What is left is `LifeHistory` or `LifeSuper`
+   (in either case), or starts with `MAP` or `B`, in either case, or else: `expected B…/S…
+   or MAP…` (empty text included).
 2. A MAP payload that, without one final `==`, is not 86, 22 or 6 characters of the
    alphabet: `a MAP payload is 86, 22 or 6 base64 characters, optionally followed by ==`.
-   A payload that ends in `History` (in either case) is first read without it; when what
-   is left is a payload, that is the rule's, with the variant.
+   A payload that ends in `History` or `Super` (in either case) is first read without
+   it; when what is left is a payload, that is the rule's, with the variant.
 3. A `B…/S…` rule is read from the left. Each side is a run of groups, each a digit `0`–`8`,
    an optional `-`, and the letters that follow (`c e k a i n y q j r t w z`, in either
    case):
@@ -240,8 +243,8 @@ text is read as the grammar reads it, and the reason is that of the first proble
      birth counts`;
    - after the `/` and any whitespace, anything but `S`: `expected S after '/'`;
    - after the survival groups, anything but the end, `H`, `V`, or either of them or
-     nothing followed by `History`: `unexpected 'TEXT' after the survival counts`, TEXT
-     everything from there to the end, as written.
+     nothing followed by `History` or `Super`: `unexpected 'TEXT' after the survival
+     counts`, TEXT everything from there to the end, as written.
 4. Then each group is checked, the birth side's before the survival side's, and each
    side's in the order written:
    - a digit past the neighborhood's largest count: `the hexagonal neighborhood has 6
@@ -253,7 +256,7 @@ text is read as the grammar reads it, and the reason is that of the first proble
      letter as written, in lowercase.
 
 5. Last, a rule with a variant where two states are wanted: `a History rule has 7 states,
-   not 2`.
+   not 2`, or `a Super rule has 26 states, not 2`.
 
 So `B9/S23` gives `expected '/' after the birth counts` (9 is no digit of the grammar, so
 the birth groups end before it), `B1kn/S` gives `k is not a letter class of 1`, and
@@ -266,8 +269,9 @@ compiled rule and no reason, or no rule and the reason, without raising; .NET's
 reads null as empty text. All of these want two states. With variants (Python
 `compile_rule(text, variants=True)` and `try_compile_rule(text, variants=True)`, .NET
 `RuleString.Compile(text, variants: true)` and `RuleString.TryCompile(text, true, out
-rule, out reason)`) a History rule compiles too. The compiled rule gives `variant` (`""` or
-`"History"`; .NET `Variant`, `RuleVariant.None` or `History`), `states` (2 or 7),
+rule, out reason)`) History and Super rules compile too. The compiled rule gives `variant`
+(`""`, `"History"` or `"Super"`; .NET `Variant`, `RuleVariant.None`, `History` or `Super`),
+`states` (2, 7 or 26),
 `base` (the base rule) and `same_base(other)` (.NET `SameBase`), and its `table` is its
 base's.
 
@@ -292,6 +296,6 @@ Each case under `vectors/rules/` has a `params.json` with `family: "rules"`,
 From spec 0.16.0 a file may carry `variants` (true or false; false without it): its texts
 are compiled with variants allowed or not. With variants, each rule also gives `states`
 and `base` (the base rule's canonical string), and `table` is the base's (`history`,
-`history-two-state`).
+`history-two-state`, `super`, `super-two-state`).
 
 Runners are strict: an unknown key or `spec_version` fails the case.

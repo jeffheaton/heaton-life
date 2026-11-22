@@ -34,6 +34,11 @@ def _cyclic() -> Cyclic:
     return Cyclic(8, size=(SIZE, SIZE), threshold=2, reach=2, seed=14)
 
 
+def _super() -> LifeLike:
+    # A Super rule's 26 states (spec/super.md).
+    return LifeLike("B3/S23Super", size=(SIZE, SIZE), init="soup", density=0.35, seed=16)
+
+
 def _generations() -> Generations:
     # Star Wars: births and survival among live cells, dying states between.
     return Generations("B2/S345/C4", size=(SIZE, SIZE), init="soup", density=0.35, seed=15)
@@ -49,6 +54,7 @@ WORLDS: dict[str, Callable[[], AdvanceRegion]] = {
     "cyclic": _cyclic,
     "generations": _generations,
     "ltl": _ltl,
+    "super": _super,
 }
 
 

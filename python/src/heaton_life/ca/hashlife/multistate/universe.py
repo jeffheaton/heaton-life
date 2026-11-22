@@ -485,15 +485,18 @@ class MultiStateHashLife:
         """Replace the inclusive rectangle with lifelike's PCG32 soup of the same size, its
         live cells state 1 and its dead ones 0: the cells the two-state universe's
         ``fill_random`` gives (spec/hashlife-multistate.md "Editing"). Random fill is a
-        Life-like tool, so only a History rule's universe has it; under any other rule it
-        is an error that changes nothing."""
+        Life-like tool, so only the universe of a History, Super or Generations rule has
+        it; under any other rule it is an error that changes nothing."""
+        from heaton_life.ca.generations import GenerationsRule
         from heaton_life.ca.history import is_history
+        from heaton_life.ca.super_rules import is_super
         from heaton_life.init.seeding import soup
 
-        if not is_history(self._rule):
+        rule = self._rule
+        if not (is_history(rule) or is_super(rule) or isinstance(rule, GenerationsRule)):
             raise ValueError(
-                f"random fill is a Life-like tool; {self.rule} is no History rule "
-                '(spec/hashlife-multistate.md "Editing")'
+                f"random fill is a Life-like tool; {self.rule} is no History, Super or "
+                'Generations rule (spec/hashlife-multistate.md "Editing")'
             )
         x0, y0, x1, y1, seed = _ints(x0, y0, x1, y1, seed)
         check_box(x0, y0, x1, y1)

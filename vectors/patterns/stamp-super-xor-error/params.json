@@ -1,0 +1,25 @@
+{
+  "error": true,
+  "family": "patterns",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      8,
+      10
+    ]
+  },
+  "kind": "stamp",
+  "mode": "xor",
+  "pattern": {
+    "file": "pattern.png",
+    "shape": [
+      2,
+      3
+    ]
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "torus": true,
+  "x": 1,
+  "y": 1
+}

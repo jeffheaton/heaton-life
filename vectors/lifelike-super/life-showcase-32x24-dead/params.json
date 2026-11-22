@@ -1,0 +1,54 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_00001.png",
+      "step": 1
+    },
+    {
+      "file": "state_00002.png",
+      "step": 2
+    },
+    {
+      "file": "state_00003.png",
+      "step": 3
+    },
+    {
+      "file": "state_00004.png",
+      "step": 4
+    },
+    {
+      "file": "state_00008.png",
+      "step": 8
+    },
+    {
+      "file": "state_00016.png",
+      "step": 16
+    },
+    {
+      "file": "state_00040.png",
+      "step": 40
+    },
+    {
+      "file": "state_00100.png",
+      "step": 100
+    }
+  ],
+  "family": "lifelike-super",
+  "params": {
+    "axis": "x",
+    "boundary": "dead",
+    "density": 0.35,
+    "height": 24,
+    "init": "array",
+    "rule": "B3/S23Super",
+    "seed": 0,
+    "shift": 0,
+    "width": 32
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

@@ -413,16 +413,24 @@ namespace HeatonLife.Tests
                 u.WriteFrame(frame, 128, 96, view, MultiStateRenderMode.State);
                 u.WriteFrame(frame, 128, 96, view, MultiStateRenderMode.Density);
             }
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (int round = 0; round < 5; round++)
+            // Up to three measured batches, one of which must allocate nothing: a frame that
+            // allocates does so in every batch, while the runtime's one-off work under a loaded
+            // machine (tiering up the warm methods) does not repeat.
+            long allocated = -1;
+            for (int attempt = 0; attempt < 3 && allocated != 0; attempt++)
             {
-                foreach (LifeView view in views)
+                long before = GC.GetAllocatedBytesForCurrentThread();
+                for (int round = 0; round < 5; round++)
                 {
-                    u.WriteFrame(frame, 128, 96, view, MultiStateRenderMode.State);
-                    u.WriteFrame(frame, 128, 96, view, MultiStateRenderMode.Density);
+                    foreach (LifeView view in views)
+                    {
+                        u.WriteFrame(frame, 128, 96, view, MultiStateRenderMode.State);
+                        u.WriteFrame(frame, 128, 96, view, MultiStateRenderMode.Density);
+                    }
                 }
+                allocated = GC.GetAllocatedBytesForCurrentThread() - before;
             }
-            Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+            Assert.Equal(0, allocated);
         }
 
         // -- editing --------------------------------------------------------------------------------

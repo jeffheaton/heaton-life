@@ -29,6 +29,10 @@ namespace HeatonLife
         /// <summary>Seven states: off, on, envelope, marked on and off, start on, boundary
         /// (spec/history.md).</summary>
         History,
+
+        /// <summary>26 states: History's seven, on cells that leave no trail, two more trails,
+        /// and labels (spec/super.md).</summary>
+        Super,
     }
 
     /// <summary>
@@ -36,8 +40,8 @@ namespace HeatonLife
     /// next state, 0 or 1, of a cell whose 3×3 block has neighborhood index i: NW 256, N 128,
     /// NE 64, W 32, the cell 16, E 8, SW 4, S 2, SE 1. Two rules behave identically exactly when
     /// their tables are equal, whatever their notations. A rule with a <see cref="Variant"/> has
-    /// more states (History, seven: spec/history.md); its table is its base rule's, which its on
-    /// cells run. Made by <see cref="RuleString.Compile(string)"/>; the Python reference's
+    /// more states (History, seven: spec/history.md; Super, 26: spec/super.md); its table is its
+    /// base rule's, which its on cells run. Made by <see cref="RuleString.Compile(string)"/>; the Python reference's
     /// <c>LifeRule</c>.
     /// </summary>
     public sealed class LifeRule
@@ -47,6 +51,9 @@ namespace HeatonLife
 
         /// <summary>A History rule's number of states (spec/history.md "States").</summary>
         public const int HistoryStates = 7;
+
+        /// <summary>A Super rule's number of states (spec/super.md "States").</summary>
+        public const int SuperStates = 26;
 
         private readonly byte[] _table;
         private LifeRule? _base;
@@ -64,8 +71,9 @@ namespace HeatonLife
         /// for a two-state rule (spec/rules.md "Variants").</summary>
         public RuleVariant Variant { get; }
 
-        /// <summary>The number of states a cell can have: 2, or 7 for a History rule.</summary>
-        public int States => Variant == RuleVariant.History ? HistoryStates : 2;
+        /// <summary>The number of states a cell can have: 2, 7 for a History rule, or 26 for a
+        /// Super rule.</summary>
+        public int States => Variant == RuleVariant.History ? HistoryStates : Variant == RuleVariant.Super ? SuperStates : 2;
 
         /// <summary>The two-state rule this one adds states to; a two-state rule is its own base.</summary>
         public LifeRule Base
@@ -282,6 +290,27 @@ namespace HeatonLife
 
         private const string HistoryWord = "history"; // the History variant, lowercase
         private const string LifeHistory = "lifehistory"; // the name files give B3/S23History
+        private const string SuperWord = "super"; // the Super variant, lowercase
+        private const string LifeSuper = "lifesuper"; // the name files give B3/S23Super
+
+        /// <summary>The variant whose word, in ASCII letters of either case, ends text[start..end)
+        /// (the word lying wholly inside it), or <see cref="RuleVariant.None"/>;
+        /// <paramref name="word"/> is the word's length (spec/rules.md "Grammar").</summary>
+        private static RuleVariant EndingVariant(string text, int start, int end, out int word)
+        {
+            if (end - HistoryWord.Length >= start && IsWord(text, end - HistoryWord.Length, end, HistoryWord))
+            {
+                word = HistoryWord.Length;
+                return RuleVariant.History;
+            }
+            if (end - SuperWord.Length >= start && IsWord(text, end - SuperWord.Length, end, SuperWord))
+            {
+                word = SuperWord.Length;
+                return RuleVariant.Super;
+            }
+            word = 0;
+            return RuleVariant.None;
+        }
 
         /// <summary>A rule compiled, the variant refused unless <paramref name="variants"/>
         /// (spec/rules.md "Reasons", last step).</summary>
@@ -329,6 +358,8 @@ namespace HeatonLife
                 end--;
             if (IsWord(text, start, end, LifeHistory))
                 return WithVariant(Build("B3/S23", out reason)!, RuleVariant.History);
+            if (IsWord(text, start, end, LifeSuper))
+                return WithVariant(Build("B3/S23", out reason)!, RuleVariant.Super);
             if (end - start >= 3 && (text[start] == 'M' || text[start] == 'm')
                 && (text[start + 1] == 'A' || text[start + 1] == 'a')
                 && (text[start + 2] == 'P' || text[start + 2] == 'p'))
@@ -363,13 +394,8 @@ namespace HeatonLife
 
             // What follows the survival counts names the neighborhood, then the variant, if any
             // (spec/rules.md "Grammar"); nothing else may follow.
-            RuleVariant variant = RuleVariant.None;
-            int named = end;
-            if (IsWord(text, end - HistoryWord.Length, end, HistoryWord) && end - HistoryWord.Length >= pos)
-            {
-                named = end - HistoryWord.Length;
-                variant = RuleVariant.History;
-            }
+            RuleVariant variant = EndingVariant(text, pos, end, out int word);
+            int named = end - word;
             RuleNeighborhood neighborhood;
             if (pos == named)
             {
@@ -610,16 +636,13 @@ namespace HeatonLife
 
         private static LifeRule? BuildMap(string text, int start, int end, out string reason)
         {
-            // A payload ending in the History word is read without it first; no payload length
-            // less the word's 7 is a payload length, so only one reading can succeed.
-            RuleVariant variant = RuleVariant.None;
-            if (IsWord(text, end - HistoryWord.Length, end, HistoryWord)
-                && end - HistoryWord.Length >= start
-                && IsPayload(text, start, end - HistoryWord.Length))
-            {
-                end -= HistoryWord.Length;
-                variant = RuleVariant.History;
-            }
+            // A payload ending in a variant's word is read without it first; no payload length
+            // less the word's length (7 or 5) is a payload length, so only one reading can succeed.
+            RuleVariant variant = EndingVariant(text, start, end, out int word);
+            if (variant != RuleVariant.None && IsPayload(text, start, end - word))
+                end -= word;
+            else
+                variant = RuleVariant.None;
             reason = "";
             int length = end - start;
             if (length >= 2 && text[end - 1] == '=' && text[end - 2] == '=')

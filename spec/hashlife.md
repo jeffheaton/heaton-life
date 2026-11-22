@@ -19,9 +19,10 @@ engine (torus or dead edges); this page is its unbounded counterpart.
   below); for every other rule those are simply the live cells. A rule with a variant
   ([rules.md](rules.md#variants)) is refused, with the reason that it has more than two
   states: the [multi-state universe](hashlife-multistate.md) runs
-  [History rules](history.md). So is a [Generations](generations.md) rule, with a reason
-  that says it is one and that the multi-state universe runs it. A [Larger than
-  Life](ltl.md) rule is refused with the reason that it runs on bounded grids only.
+  [History](history.md) and [Super](super.md) rules. So is a [Generations](generations.md)
+  rule, with a reason that says it is one and that the multi-state universe runs it. A
+  [Larger than Life](ltl.md) rule is refused with the reason that it runs on bounded grids
+  only.
 - Coordinates, generations, and populations are unbounded integers wherever the API takes
   or returns them. Ports use big integers at their public edges and whatever they like
   inside.

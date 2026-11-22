@@ -1,0 +1,49 @@
+{
+  "cases": [
+    {
+      "canonical": "B3/S23",
+      "input": "B3/S23",
+      "neighborhood": "moore",
+      "table": "0116177e16687ee816687ee86880e88016687ee86880e8806880e8808000800016687ee86880e8806880e880800080006880e880800080008000800000000000"
+    },
+    {
+      "canonical": "MAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAASupeg",
+      "input": "MAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAASuper",
+      "neighborhood": "moore",
+      "table": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000012ba97a"
+    },
+    {
+      "error": true,
+      "input": "B3/S23Super",
+      "reason": "a Super rule has 26 states, not 2"
+    },
+    {
+      "error": true,
+      "input": "LifeSuper",
+      "reason": "a Super rule has 26 states, not 2"
+    },
+    {
+      "error": true,
+      "input": "b2/s34hsuper",
+      "reason": "a Super rule has 26 states, not 2"
+    },
+    {
+      "error": true,
+      "input": "MAPARYXfhZofugWaH7oaIDogBZofuhogOiAaIDogIAAgAAWaH7oaIDogGiA6ICAAIAAaIDogIAAgACAAIAAAAAAAASuper",
+      "reason": "a Super rule has 26 states, not 2"
+    },
+    {
+      "error": true,
+      "input": "B3/S23Supe",
+      "reason": "unexpected 'Supe' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "B9/S23Super",
+      "reason": "expected '/' after the birth counts"
+    }
+  ],
+  "family": "rules",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

@@ -96,8 +96,9 @@ def _known() -> tuple[StateRule, ...]:
 def state_rule(text: str) -> StateRule:
     """The state rule a text gives (spec/hashlife-multistate.md "Names"): a name, with
     whitespace at the two ends allowed and ASCII case ignored (WireWorld and the rule-table
-    starter set, spec/ruletable.md), a History rule (spec/history.md), or a Generations rule
-    in either spelling (spec/generations.md). Raises ValueError for any other text."""
+    starter set, spec/ruletable.md), a History rule (spec/history.md), a Super rule
+    (spec/super.md), or a Generations rule in either spelling (spec/generations.md). Raises
+    ValueError for any other text."""
     if not isinstance(text, str):
         raise TypeError(f"a rule name is text, not {type(text).__name__}")
     key = _ascii_lower(_trimmed(text))
@@ -110,6 +111,12 @@ def state_rule(text: str) -> StateRule:
     history = history_rule(text)
     if history is not None:
         return history
+    # Super rules, the same for the Super variant (spec/super.md).
+    from heaton_life.ca.super_rules import super_rule
+
+    sup = super_rule(text)
+    if sup is not None:
+        return sup
     # Generations rules, in either spelling (spec/generations.md).
     from heaton_life.ca.generations import try_compile_generations_rule
 
@@ -130,7 +137,7 @@ def state_rule(text: str) -> StateRule:
     names = ", ".join([*(rule.canonical for rule in _known()), *STARTER_RULES])
     raise ValueError(
         f"{text!r} is not a state rule (known: {names}, History rules such as B3/S23History, "
-        "and Generations rules such as B2/S345/C4)"
+        "Super rules such as B3/S23Super, and Generations rules such as B2/S345/C4)"
     )
 
 

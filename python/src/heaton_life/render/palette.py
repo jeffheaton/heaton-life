@@ -36,6 +36,40 @@ HISTORY_ZOOM_ORDER: tuple[int, ...] = (3, 5, 1, 4, 6, 2)
 """The zoom order of a History rule (spec/render.md "Zoomed out"): the on states, marked
 before plain, then marked off and the boundary, and the envelope last."""
 
+SUPER_COLORS: tuple[RGB, ...] = (
+    *HISTORY_COLORS,  # 0-6 as History's
+    (255, 0, 255),  # 7 marked on, no trail: magenta
+    (128, 0, 128),  # 8 marked off, no trail: purple
+    (0, 191, 255),  # 9 second trail, on: deep sky blue
+    (0, 64, 128),  # 10 second trail's envelope: dark cerulean
+    (64, 224, 208),  # 11 third trail, on: turquoise
+    (0, 128, 64),  # 12 third trail's envelope: bluish green
+    (255, 216, 255),  # 13 no trail 1: pale pink (white is marked on's, state 3)
+    (255, 99, 71),  # 14 vanishing label: tomato
+    (250, 128, 114),  # 15 no trail 2: salmon
+    (219, 112, 147),  # 16 clearable label: pale violet red
+    (255, 165, 0),  # 17 no trail 3: orange
+    (245, 222, 179),  # 18 cycling label 1: wheat
+    (0, 255, 255),  # 19 no trail 4: cyan
+    (192, 192, 192),  # 20 cycling label 2: silver
+    (192, 255, 128),  # 21 no trail 5: yellow-green
+    (255, 182, 193),  # 22 cycling label 3: light pink
+    (0, 255, 127),  # 23 no trail 6: spring green
+    (1, 1, 1),  # 24 hidden label: all but black
+    (255, 0, 127),  # 25 no trail 7: rose
+)
+"""Super's colors, state by state (spec/render.md "Default palettes"): History's for states
+0–6, and for 7–25 the colors published for LifeSuper, but for state 13's, white there, which
+is marked on's here."""
+
+SUPER_ZOOM_ORDER: tuple[int, ...] = (
+    *(3, 5, 7, 1, 9, 11, 13, 15, 17, 19, 21, 23, 25),
+    *(4, 8, 6, 14, 16, 18, 20, 22, 24, 2, 10, 12),
+)
+"""The zoom order of a Super rule (spec/render.md "Zoomed out"), History's extended: the on
+states, marked before plain; then the marked off states and the boundary; then the labels;
+and the three envelopes last."""
+
 
 def _count(states: int) -> int:
     count = operator.index(states)
@@ -118,6 +152,15 @@ def history_palette() -> NDArray[np.uint8]:
     return palette
 
 
+def super_palette() -> NDArray[np.uint8]:
+    """Super's palette (spec/render.md "Default palettes"): History's colors for states 0–6,
+    then a color for each of the no-trail cells, the trails and their envelopes, the
+    no-trail marks and the labels, 26 in all and none twice."""
+    palette = np.zeros((256, 3), dtype=np.uint8)
+    palette[: len(SUPER_COLORS)] = SUPER_COLORS
+    return palette
+
+
 def generations_palette(states: int) -> NDArray[np.uint8]:
     """Generations' palette of C states: ``fire`` at the Generations frame values, so a live
     cell is pale yellow and the dying states fade through orange and red toward black."""
@@ -195,24 +238,26 @@ def _rule_palette(rule: object) -> NDArray[np.uint8]:
     from heaton_life.ca.history import HistoryRule
     from heaton_life.ca.rulefile import RuleTable
     from heaton_life.ca.state_rules import StateRule
+    from heaton_life.ca.super_rules import SuperRule
     from heaton_life.ca.wireworld import WireworldRule
 
     if isinstance(rule, HistoryRule):
         return history_palette()
+    if isinstance(rule, SuperRule):
+        return super_palette()
     if isinstance(rule, GenerationsRule):
         return generations_palette(rule.states)
     if isinstance(rule, WireworldRule):
         return _sampled(get_colormap("wireworld"), (0, 85, 170, 255))
     if isinstance(rule, RuleTable):
         return rule_table_palette(rule)
-    # Super rules plug in here when they land (spec/render.md "Still to come").
     assert isinstance(rule, StateRule)
     return multistate_palette(rule.states)
 
 
 def default_palette(world: object) -> NDArray[np.uint8]:
     """A world's default palette (spec/render.md "Default palettes"): History's under a
-    History rule, Generations' for Generations, a rule table's (its ``@COLORS`` over the
+    History rule, Super's under a Super rule, Generations' for Generations, a rule table's (its ``@COLORS`` over the
     multi-state palette) on its grid, the rule's own on a multi-state universe, and
     otherwise the palette of the colormap its family is shown with (``phosphor`` for
     two-state Life-like worlds and the two-state universe, ``gray`` for Elementary,
@@ -222,7 +267,8 @@ def default_palette(world: object) -> NDArray[np.uint8]:
     from heaton_life.ca.ruletable import RuleTableCA
 
     if isinstance(world, LifeLike):
-        # Super rules (26 states) plug in here when they land.
+        if world.rule.variant == "Super":
+            return super_palette()
         if world.rule.variant:
             return history_palette()
         return colormap_palette(world, "phosphor")
@@ -245,16 +291,21 @@ def default_palette(world: object) -> NDArray[np.uint8]:
 
 def default_zoom_order(world: object) -> tuple[int, ...]:
     """The zoom order that goes with a world's default palette (spec/render.md "Zoomed
-    out"): History's for a History rule, on a grid or the plane; the empty order (lowest
-    non-zero state first) for every other world. Set it on a universe (``zoom_order``) or
-    pass it to ``sample_window``; nothing sets it for the host."""
+    out"): History's for a History rule and Super's for a Super rule, on a grid or the
+    plane; the empty order (lowest non-zero state first) for every other world. Set it on a
+    universe (``zoom_order``) or pass it to ``sample_window``; nothing sets it for the
+    host."""
     from heaton_life.ca import LifeLike
     from heaton_life.ca.hashlife import MultiStateHashLife
     from heaton_life.ca.history import HistoryRule
+    from heaton_life.ca.super_rules import SuperRule
 
     frame_values(world)  # refuses a world without byte states, as the palettes do
     if isinstance(world, LifeLike) and world.rule.variant:
-        return HISTORY_ZOOM_ORDER
-    if isinstance(world, MultiStateHashLife) and isinstance(world.state_rule, HistoryRule):
-        return HISTORY_ZOOM_ORDER
+        return SUPER_ZOOM_ORDER if world.rule.variant == "Super" else HISTORY_ZOOM_ORDER
+    if isinstance(world, MultiStateHashLife):
+        if isinstance(world.state_rule, HistoryRule):
+            return HISTORY_ZOOM_ORDER
+        if isinstance(world.state_rule, SuperRule):
+            return SUPER_ZOOM_ORDER
     return ()

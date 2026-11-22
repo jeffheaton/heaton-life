@@ -1,12 +1,14 @@
 # Life-like cellular automata
 
 Conformance tier: **bit-exact**. Vectors: [`vectors/lifelike/`](../vectors/lifelike/);
-History rules [`vectors/lifelike-history/`](../vectors/lifelike-history/).
+History rules [`vectors/lifelike-history/`](../vectors/lifelike-history/); Super rules
+[`vectors/lifelike-super/`](../vectors/lifelike-super/).
 
 ## State
 
 - 2-D grid of cells with values `0` (dead) or `1` (alive), stored as unsigned bytes. Under
-  a [History rule](history.md) a cell is any of its seven states, 0–6.
+  a [History rule](history.md) a cell is any of its seven states, 0–6, and under a
+  [Super rule](super.md) any of its 26, 0–25.
 - Shape `(height, width)`, row-major, origin top-left, index `i = y * width + x`.
 
 ## Gather
@@ -51,7 +53,8 @@ A [History rule](history.md) (`B3/S23History`, any rule with the `History` varia
 here too, on every topology: the halo copies the states, the base rule's table is read at
 the index of the block's on cells (the odd states), and history.md's table gives each
 cell's next state. Its `soup`, `blob` and `single` are the base rule's, states 0 and 1;
-`array` and set states take 0–6.
+`array` and set states take 0–6. A [Super rule](super.md) (`B3/S23Super`) runs the same
+way, super.md's evolution giving each cell's next state, and takes states 0–25.
 
 ## Parameters
 
@@ -97,7 +100,8 @@ one opens as that world ([formats.md](formats.md#bounded-grids)).
 ## Vector encoding
 
 State PNGs are 8-bit grayscale, pixel = `state * 255`. Runs of History rules live in
-`vectors/lifelike-history/`, whose PNGs hold the state itself ([history.md](history.md#vector-encoding)).
+`vectors/lifelike-history/`, whose PNGs hold the state itself ([history.md](history.md#vector-encoding)),
+and runs of Super rules in `vectors/lifelike-super/`, likewise ([super.md](super.md#vector-encoding)).
 
 ## Oracles (implementation tests)
 

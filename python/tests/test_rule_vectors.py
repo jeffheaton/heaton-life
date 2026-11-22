@@ -31,7 +31,8 @@ def _hex(table: bytes) -> str:
 def test_rule_vectors_exist() -> None:
     names = {case.parent.name for case in CASES}
     expected = {"totalistic", "isotropic", "isotropic-classes", "map", "hexagonal"}
-    assert expected | {"von-neumann", "errors", "reasons", "history", "history-two-state"} <= names
+    expected |= {"von-neumann", "errors", "reasons", "history", "history-two-state"}
+    assert expected | {"super", "super-two-state"} <= names
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda p: p.parent.name)

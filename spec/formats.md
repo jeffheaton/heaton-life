@@ -239,7 +239,7 @@ none), the generation, and the metadata.
 | format | grid | x, y | rule | generation |
 |---|---|---|---|---|
 | `rle` | the RLE decode of [patterns.md](patterns.md#rle-text-encoding-life-like-wireworld-cyclic): the declared size, either dialect, states up to 255; for a [bounded grid](#bounded-grids), its whole world | `#CXRLE Pos`, or (0, 0); for a bounded grid, the world's top-left | the header's, without a [bounded-grid suffix](topology.md#the-bounded-grid-suffix), as written or, [in survival/birth order](#rules-in-survivalbirth-order), as `B…/S…`; or none | `#CXRLE Gen`, or 0 |
-| `macrocell` | the live cells' bounding box | the box's top-left | `#R` in [canonical form](rules.md#canonical-form), or `B3/S23`; a rule of more than two states (a [History](history.md) or [Generations](generations.md) rule among them) is an error here, since such a file is the [multi-state universe's](hashlife-multistate.md#pattern-io) | `#G`, or 0 |
+| `macrocell` | the live cells' bounding box | the box's top-left | `#R` in [canonical form](rules.md#canonical-form), or `B3/S23`; a rule of more than two states (a [History](history.md), [Super](super.md) or [Generations](generations.md) rule among them) is an error here, since such a file is the [multi-state universe's](hashlife-multistate.md#pattern-io) | `#G`, or 0 |
 | `plaintext` | the rows: the longest row's width × the number of rows | (0, 0) | none | 0 |
 | `life-1.05`, `life-1.06` | the live cells' bounding box | the box's top-left | from `#N` or `#R`, or none | 0 |
 | `png`, `bmp` | the image | (0, 0) | none | 0 |
@@ -249,7 +249,8 @@ what the file holds, the cells that differ from the unbounded universe's backgro
 the file's generation ([hashlife.md](hashlife.md#rules-with-b0)), and a grid runs them
 as its own cells. An RLE file of a [History rule](history.md) (`rule = B3/S23History`,
 or `LifeHistory`) is extended, so its cells are History's states 0–6 and its rule as
-written: a Life-like world of that rule takes them.
+written: a Life-like world of that rule takes them. So is one of a
+[Super rule](super.md) (`rule = B3/S23Super`, or `LifeSuper`), its cells states 0–25.
 
 With `trim`, a grid that is not already a bounding box is cut to its live cells' box, and
 (x, y) moves with it. A pattern without a live cell is an error for the bounding-box
@@ -360,7 +361,7 @@ universe.
   [rules.md](rules.md), B0 included: the cells of a file of a rule with B0 are the
   universe's cells at its generation ([hashlife.md](hashlife.md#rules-with-b0)). A rule
   that is not a Life-like rule is an error, and so is a rule with a
-  [variant](rules.md#variants) such as `B3/S23History`, whose states the two-state
+  [variant](rules.md#variants) such as `B3/S23History` or `B3/S23Super`, whose states the two-state
   universe can't hold (the [multi-state universe](hashlife-multistate.md) reads it), and
   a [preset name](rules.md#preset-names) such as `life`: a file names its rule, never a
   preset.

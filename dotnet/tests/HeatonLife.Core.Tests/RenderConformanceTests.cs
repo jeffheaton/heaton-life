@@ -107,6 +107,7 @@ namespace HeatonLife.Tests
                         break;
                     }
                 case "lifelike-history": // a History rule: the state PNG and the frame are the states
+                case "lifelike-super": // a Super rule, likewise
                     {
                         var sim = new LifeLike(
                             p.GetProperty("rule").GetString()!, width, height,
@@ -389,6 +390,10 @@ namespace HeatonLife.Tests
                     case "history":
                         AssertKeySet(builder, caseName, "name");
                         palette = StatePalettes.ForHistory();
+                        break;
+                    case "super":
+                        AssertKeySet(builder, caseName, "name");
+                        palette = StatePalettes.ForSuper();
                         break;
                     case "generations":
                         AssertKeySet(builder, caseName, "name", "states");

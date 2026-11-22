@@ -656,14 +656,14 @@ namespace HeatonLife
         /// 0, one draw per cell in row-major order, alive iff draw &lt; ⌊density · 2^32⌋), its
         /// live cells state 1 and its dead ones 0: the cells <see cref="HashLife.FillRandom"/>
         /// gives (spec/hashlife-multistate.md "Editing"). Random fill is a Life-like tool, so only
-        /// a History rule's universe has it; under any other rule it throws
-        /// <see cref="ArgumentException"/> and changes nothing.
+        /// the universe of a History, Super or Generations rule has it; under any other rule it
+        /// throws <see cref="ArgumentException"/> and changes nothing.
         /// </summary>
         public void FillRandom(long x0, long y0, long x1, long y1, double density, ulong seed)
         {
-            if (!(_rule is HistoryRule))
+            if (!(_rule is HistoryRule || _rule is SuperRule || _rule is GenerationsRule))
                 throw new ArgumentException(
-                    $"random fill is a Life-like tool; {_rule.Canonical} is no History rule "
+                    $"random fill is a Life-like tool; {_rule.Canonical} is no History, Super or Generations rule "
                     + "(spec/hashlife-multistate.md \"Editing\")");
             HashLife.CheckBox(x0, y0, x1, y1);
             if (x1 < x0 || y1 < y0)

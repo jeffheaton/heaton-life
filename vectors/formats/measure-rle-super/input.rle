@@ -1,0 +1,4 @@
+#N A filtered blinker
+#CXRLE Pos=5,-2 Gen=3
+x = 6, y = 3, rule = LifeSuper
+2.H$MpAMDX$2.F!

@@ -1,0 +1,28 @@
+{
+  "bounded_grid": ":K8*,6",
+  "canonical": "canonical.rle",
+  "family": "formats",
+  "format": "rle",
+  "generation": "0",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      6,
+      8
+    ]
+  },
+  "input": "input.rle",
+  "kind": "read",
+  "limit": "default",
+  "metadata": {
+    "author": null,
+    "comments": [],
+    "name": null
+  },
+  "rule": "B3/S23Super",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "trim": false,
+  "x": "-4",
+  "y": "-3"
+}

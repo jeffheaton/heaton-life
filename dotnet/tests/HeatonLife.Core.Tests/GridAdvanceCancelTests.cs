@@ -78,6 +78,21 @@ namespace HeatonLife.Tests
                                     wire.AdvanceSelection(X0, Y0, X1, Y1, n, token);
                             });
                     }
+                case "super":
+                    {
+                        // A Super rule's 26 states (spec/super.md), stepped with the per-row poll.
+                        var super = new LifeLike("B3/S23Super", size, size);
+                        super.SeedSoup(0.35, 16);
+                        return new World(
+                            () => super.State.ToArray(), () => super.Generation, n => super.Step(n), _ => super.Reset(),
+                            (n, outside, token) =>
+                            {
+                                if (outside)
+                                    super.AdvanceOutside(X0, Y0, X1, Y1, n, token);
+                                else
+                                    super.AdvanceSelection(X0, Y0, X1, Y1, n, token);
+                            });
+                    }
                 case "generations":
                     {
                         // Star Wars: births and survival among live cells, dying states between.
@@ -127,7 +142,7 @@ namespace HeatonLife.Tests
 
         public static IEnumerable<object[]> Cases()
         {
-            foreach (string family in new[] { "lifelike", "wireworld", "cyclic", "generations", "ltl" })
+            foreach (string family in new[] { "lifelike", "wireworld", "cyclic", "generations", "ltl", "super" })
             {
                 yield return new object[] { family, false };
                 yield return new object[] { family, true };

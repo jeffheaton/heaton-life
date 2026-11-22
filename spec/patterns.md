@@ -41,9 +41,11 @@ A pattern is `(family, width, height, cells, rule)`:
    reject (values outside the target state range would corrupt the world).
    Rule tables ([ruletable.md](ruletable.md)) check the same against the target rule's S.
 3. Life-like: a pattern holding states the target's rule lacks (a
-   [History](history.md) pattern under a two-state rule) is converted first, each such
-   cell 1 or 0 by its parity (`convert_cells`, [history.md](history.md#two-states-and-seven));
-   a two-state pattern pastes into a History world unchanged.
+   [History](history.md) pattern under a two-state rule, a [Super](super.md) pattern under
+   a two-state or History rule) is converted first, each such cell 1 or 0 by its parity
+   (`convert_cells`, [history.md](history.md#two-states-and-seven)); a two-state pattern
+   pastes into a History or Super world unchanged, and a History pattern into a Super
+   world.
 4. Larger than Life: `max(cells) < target.states`, else reject, as for cyclic
    ([ltl.md](ltl.md#editing)).
 
@@ -74,8 +76,8 @@ but states 2/15 in extended RLE. **Dialect detection** (normative): the pattern
 is extended iff its body contains `.`, or any letter `A`–`X` other than `B`/`O`, or
 any letter `p`–`y`, or its header rule is present and is not a Life-like rule of two
 states ([rules.md](rules.md): any of its notations, preset names excluded; a rule with a
-[variant](rules.md#variants), such as `B3/S23History`, makes the file extended, and so
-does a [Generations](generations.md) rule).
+[variant](rules.md#variants), such as `B3/S23History` or `B3/S23Super`, makes the file
+extended, and so does a [Generations](generations.md) rule).
 Otherwise it is two-state. Then:
 
 - Two-state: `b`/`B` = 0, `o`/`O` = 1.
@@ -237,7 +239,8 @@ same ones on the unbounded plane.
   `draw < floor(density · 2³²)`, `density` in [0, 1]. The draws depend on the
   region's size alone, not on where it lies, so HashLife's `fill_random` of a
   rectangle of the same size and seed gives the same cells. Under a
-  [History rule](history.md) the live cells are state 1 and the dead ones 0.
+  [History](history.md) or [Super](super.md) rule the live cells are state 1 and the dead
+  ones 0.
 - **Advance Selection**`(x0, y0, x1, y1, n)` — the region evolves n ≥ 0
   generations as if nothing else existed: make a copy of the world in which
   every cell outside the region is the family blank, run the copy n generations
