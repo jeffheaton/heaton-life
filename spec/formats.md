@@ -4,17 +4,18 @@ Conformance tier: **bit-exact**: what a file reads as (its format, cells, positi
 generation, and metadata), what it measures as, and the canonical text the writers make.
 Vectors: [`vectors/formats/`](../vectors/formats/).
 
-Life patterns travel in seven file formats, and a reader recognizes each by its content,
+Life patterns travel in eight file formats, and a reader recognizes each by its content,
 never by the file's name:
 
 - RLE ([patterns.md](patterns.md#rle-text-encoding-life-like-wireworld-cyclic)),
 - Macrocell ([macrocell.md](macrocell.md)), including its timelines,
 - plaintext (`.cells`),
 - Life 1.05 and Life 1.06 (`.lif`, `.life`),
+- [MCell](#mcell) (`.mcl`),
 - PNG and BMP images.
 
 Any of them may arrive gzip-compressed. This page defines how bytes become text, how a
-format is recognized, what the five formats without a page of their own mean, the
+format is recognized, what the six formats without a page of their own mean, the
 metadata every text format can carry, and the readers built on top: one that gives a
 dense grid, one that gives a [HashLife](hashlife.md) universe, and one that reads into a
 universe that exists. A file can also be
@@ -57,6 +58,7 @@ The first rule that matches names the format.
    - starts with `[M2]`: `macrocell`;
    - starts with `#Life 1.05`: `life-1.05`;
    - starts with `#Life 1.06`: `life-1.06`;
+   - starts with `#MCell`: `mcell`;
    - starts with `!`: `plaintext`.
 7. Skipping blank lines and the lines that start with `#` once stripped, the first line
    left is an RLE header (`x = <digits>, y = <digits>`, read as
@@ -66,7 +68,7 @@ The first rule that matches names the format.
 9. Anything else: `rle`. (The RLE reader then reports what it can't read.)
 
 The names above are the formats' names everywhere (results, vectors): `rle`,
-`macrocell`, `plaintext`, `life-1.05`, `life-1.06`, `png`, `bmp`. Python's
+`macrocell`, `plaintext`, `life-1.05`, `life-1.06`, `mcell`, `png`, `bmp`. Python's
 `detect_format(source)` and .NET's `PatternFiles.Detect` give the name alone.
 
 ## Metadata
@@ -83,6 +85,7 @@ them as the pattern's **metadata**:
 | RLE, Macrocell | `#N <text>` | `#O <text>` | `#C <text>`, `#c <text>` |
 | plaintext | `!Name: <text>` | `!Author: <text>` | any other line that starts with `!` |
 | Life 1.05, Life 1.06 | — | — | `#D <text>`, `#C <text>` |
+| MCell | — | — | `#D <text>` |
 | PNG, BMP | — | — | — |
 
 Lines are stripped first. A value is the rest of its line after the tag (`#N`, `!Name:`,
@@ -98,7 +101,8 @@ and the universe's, [patterns.md](patterns.md#rle-in-the-unbounded-universe)) an
 name, `#O <author>` when there is an author, then `#C <text>` for each comment, or `#C`
 alone for an empty one. Values are written stripped, and a value that holds a line end
 (any character that ends a line, above) is an error. Without metadata the writers make
-exactly the canonical text their own pages describe.
+exactly the canonical text their own pages describe. The [MCell](#mcell) writer has only
+`#D` lines, and writes the name, the author and the comments as those.
 
 **API.** Python: `PatternMetadata(name, author, comments)`; `rle_metadata(text)`; the
 `metadata=` argument of `rle_encode`, `HashLife.to_rle`, `HashLife.to_macrocell`,
@@ -167,6 +171,137 @@ stripped, two integers `<x> <y>` (each an optional `-` and one or more ASCII dig
 size) separated by whitespace, with nothing else. Any other line is an error. x grows to
 the right and y grows downward. A cell may be listed more than once. The file names no
 generation.
+
+## MCell
+
+MCell files (`.mcl`) come from MCell, a cellular automaton program for Windows, and its
+predecessor MCLife. This section follows the format's description by MCell's author,
+for the families this library runs: Life, Generations and Larger than Life. MCell has no
+[History](history.md) rules; what it calls a cell's history is the dying states of its
+Generations and Larger than Life rules, which those families here keep.
+
+The first non-blank line starts with `#MCell`, then a version (`#MCell 4.20`) that is not
+checked. Every later line is read stripped: a blank line is skipped, and any other line
+must start with `#`. A line's **keyword** is its text up to its first whitespace, and its
+**value** the rest, stripped. Keywords are matched exactly as written:
+
+| keyword | meaning |
+|---|---|
+| `#GAME <family>` | the rule's family; without one, `Life` |
+| `#RULE <text>` | the rule; the values of every `#RULE` line, joined in order with nothing between (MCell splits a long rule); without one, `23/3` |
+| `#BOARD <w>x<h>` | the board: `w` columns and `h` rows |
+| `#WRAP 1` or `#WRAP 0` | whether the board's edges wrap |
+| `#D <text>` | a comment line ([Metadata](#metadata)) |
+| `#L <data>` | cell data: the values of every `#L` line, joined in order |
+
+Of `#GAME`, `#BOARD` and `#WRAP` the last line counts. Every other line that starts with
+`#` is ignored: `#SPEED`, `#CCOLORS`, `#COLORING`, `#PALETTE` and `#DIV` say how MCell
+shows and runs a pattern, not what the pattern is, and later versions may add more.
+
+**Families.** `#GAME`'s value, with ASCII case ignored, names the family, and the family
+says how the rule reads:
+
+- `Life`: survival/birth digits, read in [survival/birth order](#rules-in-survivalbirth-order):
+  `23/3` is `B3/S23`. MCell's Life rules have one bit per cell, so every cell state from 1
+  to 255 is alive, state 1.
+- `Generations`: survival/birth/states digits, `<digits>/<digits>/<digits>`, read by
+  [generations.md](generations.md#rules) as written: `345/2/4` is `B2/S345/C4`.
+- `Larger than Life`: [ltl.md](ltl.md#rule-text)'s rule text, its whitespace dropped first
+  (MCell's own lists space the fields: `R5,C0,M1, S34..58, B34..45,NM`).
+
+The reader reports the rule as these give it: Life's as `B…/S…`, Generations' as written,
+and Larger than Life's without its whitespace. In the last two a cell keeps its state,
+which must be below the rule's number of states. Any other family (`Weighted Life`,
+`Vote for Life`, `Rules table`, `Cyclic CA`, `1-D totalistic`, `Neumann binary`,
+`General binary`, `Margolus`, `User DLL`, `Special rules`, …) is an error.
+
+**Cell data.** The joined data is [extended RLE](patterns.md#rle-text-encoding-life-like-wireworld-cyclic)
+without a header or an end mark. Whitespace is ignored, and the rest is items, each an
+optional run count (ASCII digits) and a tag:
+
+- `.` is state 0, and `A`–`X` are states 1–24;
+- a prefix `a`–`j` and a letter `A`–`X` make one tag: the prefix adds 24 (`a`) to 240
+  (`j`) to the letter's state, so `aA` is 25, `aX` 48, `bA` 49 and `jO` 255;
+- `$` ends a row.
+
+A run count repeats its tag, a two-letter tag included (`9aB` is nine cells of state 26),
+and a count of 0 makes nothing. Rows run top to bottom from y = 0, each left to right from
+x = 0, and the cells past a row's end are dead. As in RLE's extent, a row is as long as its
+runs add up to (dead runs included), the pattern is as wide as its longest row, and its
+rows are one more than its row ends; data without an item has no rows.
+
+**The board.** A file with a `#BOARD` line is a [bounded grid](#bounded-grids): a world
+of `w × h` cells that is a torus when `#WRAP` is 1 or missing, and the plane when it is 0.
+Without `#BOARD` the file is a pattern alone, and `#WRAP`, which must still be 0 or 1,
+plays no part. `#BOARD`'s value is ASCII digits, `x` or `X`, and ASCII digits, with
+whitespace allowed around the `x`; each side is 1 to 2,000,000,000.
+
+**Errors.** A file that breaks these rules is refused, with the message `invalid MCell
+file: ` and one of these reasons (the vectors pin them). The checks run in this order, and
+the first problem found is the one reported: the lines top to bottom, the family, the
+rule, `#BOARD`, `#WRAP`, the cell data from its start, and last, for a board, whether
+the pattern fits it.
+
+| problem | reason |
+|---|---|
+| a line that doesn't start with `#` | `line <n> does not start with '#'` |
+| a family not read here | `the family '<value>' is not read here (Life, Generations and Larger than Life are)` |
+| a Life rule of another form | `a Life rule is survival/birth digits, such as 23/3, not '<rule>'` |
+| a Generations rule of another form | `a Generations rule is survival/birth/states digits, such as 345/2/4, not '<rule>'` |
+| a rule its family's parser refuses | that parser's own message |
+| a bad `#BOARD` | `#BOARD is <width>x<height>, not '<value>'` |
+| a bad `#WRAP` | `#WRAP is 0 or 1, not '<value>'` |
+| any other character in the data | `'<character>' in the cell data is no run count, state or '$'` |
+| a run count with nothing after it | `a run count in the cell data has no state or '$' after it` |
+| a prefix without its letter | `'<prefix>' in the cell data has no state letter A to X after it` |
+| a two-letter state past 255 | `the cell data's state <n> is past 255` |
+| a state at or past the rule's count | `the cell data's state <n> is past the rule's <count> states` |
+| a live cell outside the board | `the pattern reaches past its board (<suffix>)`, the board's world written as its [suffix](topology.md#the-bounded-grid-suffix) |
+
+Here `<n>` counts lines from 1, `<value>` and `<rule>` are as written (a rule as joined),
+and `<character>` and `<prefix>` are the one character found.
+
+**Writing.** `mcell_encode(cells, rule, topology=None, metadata=None)` (.NET
+`Patterns.McellEncode`) writes a grid as an MCell file that reads back as the same cells,
+rule and world, its metadata all comments:
+
+```
+#MCell 4.00
+#GAME <family>
+#RULE <rule>
+#BOARD <w>x<h>
+#WRAP <1 or 0>
+#D <text>
+#L <data>
+```
+
+- **The rule** picks the family. A Life-like rule whose [canonical form](rules.md#canonical-form)
+  is `B<digits>/S<digits>`, an outer totalistic rule of the Moore neighborhood (B0
+  included), is `Life`, written survival/birth: `B3/S23` as `23/3`. A
+  [Generations](generations.md) rule whose Life-like rule is one is `Generations`, written
+  `<survival>/<birth>/<states>`: `B2/S345/C4` as `345/2/4`. A [Larger than Life](ltl.md)
+  rule is `Larger than Life`, written in canonical form. Any other rule (isotropic,
+  hexagonal, von Neumann or MAP rules, a History rule, Wireworld, …) is an error: no
+  family of MCell's holds it.
+- **The world.** With a topology, `#BOARD` is the grid's size and `#WRAP` is 1 for the
+  torus and 0 for the plane; any other topology, a shifted torus included, is an error.
+  Without one there is no `#BOARD` and no `#WRAP` line.
+- **Metadata**: a `#D` line for the name and one for the author when there are any, then
+  one for each comment (`#D` alone for an empty one), stripped; a value that holds a line
+  end is an error.
+- **Cells**: each below the rule's number of states (0 or 1 for a Life rule), else an
+  error. A grid with no rows or no columns is an error too.
+- **The data** decodes to exactly the grid: each row as runs of equal states, with its
+  trailing dead cells left out; rows ended by `$`, k ≥ 2 row ends in a row written `k$`,
+  so an empty row is one more row end and empty rows at the end are row ends after the
+  last row; and when no row reaches the grid's last column, the first row is padded with
+  dead cells to the grid's width. States are written `.`, `A`–`X`, and `aA`–`jO` past
+  24. The data is cut into `#L` lines of at most 70 characters after `#L `, between
+  items.
+
+The MCell reader also feeds [measuring](#measuring) and both unbounded universes: the
+[two-state one](#reading-into-the-unbounded-universe) reads a Life file, and the
+[multi-state one](hashlife-multistate.md#pattern-io) a Generations file.
 
 ## Images
 
@@ -242,6 +377,7 @@ none), the generation, and the metadata.
 | `macrocell` | the live cells' bounding box | the box's top-left | `#R` in [canonical form](rules.md#canonical-form), or `B3/S23`; a rule of more than two states (a [History](history.md), [Super](super.md) or [Generations](generations.md) rule among them) is an error here, since such a file is the [multi-state universe's](hashlife-multistate.md#pattern-io) | `#G`, or 0 |
 | `plaintext` | the rows: the longest row's width × the number of rows | (0, 0) | none | 0 |
 | `life-1.05`, `life-1.06` | the live cells' bounding box | the box's top-left | from `#N` or `#R`, or none | 0 |
+| `mcell` | the [cell data's](#mcell) rows; for a board, its whole world | (0, 0); for a board, the world's top-left | the family's, as [MCell](#mcell) reports it | 0 |
 | `png`, `bmp` | the image | (0, 0) | none | 0 |
 
 A grid takes a file's cells as written, whatever its rule. Under a rule with B0 they are
@@ -290,8 +426,11 @@ Measuring a bounded file gives the world's size and top-left and its `bounded_gr
 refuses a pattern that reaches past its world, from the pattern's live box (no cell is
 decoded).
 
-Bounded grids are RLE's alone: a Macrocell, Life 1.05 or Life 1.06 rule with a suffix is
-read as written, which no rule compiler accepts.
+An [MCell](#mcell) file with a `#BOARD` line is placed the same way: its world is the
+board, and the pattern is the cell data, its decoded size centered on the origin.
+
+Bounded grids are RLE's and MCell's alone: a Macrocell, Life 1.05 or Life 1.06 rule with
+a suffix is read as written, which no rule compiler accepts.
 
 ## Measuring
 
@@ -310,15 +449,15 @@ a reader asks for memory. The extent holds:
   Macrocell, Life 1.05 and Life 1.06, and an image's own size;
 - `rule`, `generation` and `metadata`, as the table gives them;
 - `two_state`: false for an RLE file in the extended dialect, whatever states it uses,
-  and true for every other file. Only a two-state file can be read into the unbounded
-  universe;
+  and for an MCell file of the Generations or Larger than Life family; true for every
+  other file. Only a two-state file can be read into the unbounded universe;
 - `bounded_grid`: the world a [bounded file](#bounded-grids) names, or none. Only a file
   without one can be read into the unbounded universe.
 
 Each format is measured without a cell being kept:
 
 - **RLE** by the scan of patterns.md "Extent", which keeps only counters, and its
-  `#CXRLE` line.
+  `#CXRLE` line; **MCell** by the same kind of scan of its cell data.
 - **Plaintext** by its rows' lengths; **Life 1.05** and **Life 1.06** by their cells'
   coordinates, each of which only widens a box.
 - **Macrocell** from its tree: each node line's live cells have a bounding box, a leaf's
@@ -352,9 +491,9 @@ universe.
 
 - **Cells.** Two states only: an extended RLE, or an RLE state above 1, is an error.
 - **Placement.** RLE as [patterns.md](patterns.md#rle-in-the-unbounded-universe) places
-  it; Macrocell by its tree coordinates ([macrocell.md](macrocell.md)); plaintext and
-  images with their top-left cell at (0, 0); Life 1.05 and Life 1.06 with every cell at
-  its own coordinates.
+  it; Macrocell by its tree coordinates ([macrocell.md](macrocell.md)); plaintext,
+  [MCell](#mcell) and images with their top-left cell at (0, 0); Life 1.05 and Life 1.06
+  with every cell at its own coordinates.
 - **Editing box.** Every live cell must lie in the [editing box](hashlife.md#editing),
   |x|, |y| ≤ 10⁹, or the file is refused — except Macrocell, which carries anything.
 - **Rule.** The format's rule, or `B3/S23` without one, in any notation of
@@ -369,7 +508,10 @@ universe.
   with that reason: LtL runs on bounded grids only.
 - **Bounded grids.** An RLE file whose rule carries a [bounded-grid
   suffix](topology.md#the-bounded-grid-suffix) is an error, whatever its topology: the
-  universe has no edges to give it.
+  universe has no edges to give it. So is an [MCell](#mcell) file with a `#BOARD` line:
+  `the unbounded universe has no bounded grid (the MCell board '<suffix>'): open the file
+  in a grid world (spec/topology.md)`, the board's world written as its suffix. An MCell
+  file of the Generations or Larger than Life family is refused by its rule, as above.
 - **Generation.** RLE's `Gen`, Macrocell's `#G`, otherwise 0.
 
 An empty pattern gives an empty universe.
@@ -414,15 +556,17 @@ are decimal strings; metadata is `{"name", "author", "comments"}` with `null` fo
 
 | kind | inputs | expected |
 |---|---|---|
-| `read` | `input` (a file in any format, perhaps gzip-compressed); `trim`; `limit` (`"default"`, a number, or `null`) | `format`, `x`, `y`, `rule`, `generation`, `metadata`; `grid` (raw cell values in an 8-bit grayscale PNG, and its `shape`); `canonical`: the grid as canonical RLE with the metadata, under the rule or `B3/S23` (and, untrimmed, the bounded grid's topology); `bounded_grid`, the canonical suffix, in the cases of a bounded file (absent: none) — or `error: true` |
+| `read` | `input` (a file in any format, perhaps gzip-compressed); `trim`; `limit` (`"default"`, a number, or `null`) | `format`, `x`, `y`, `rule`, `generation`, `metadata`; `grid` (raw cell values in an 8-bit grayscale PNG, and its `shape`); `canonical`: the grid as canonical RLE with the metadata, under the rule or `B3/S23` (and, untrimmed, the bounded grid's topology); `bounded_grid`, the canonical suffix, in the cases of a bounded file (absent: none); in some cases `mcell`, the same grid as [MCell](#mcell) writes it, or `mcell_error: true` when the writer refuses it — or `error: true` |
 | `universe` | `input` | `format`, `metadata`, and the universe's state as [hashlife.md](hashlife.md#vector-encoding) pins one (`generation`, `population`, `bounding_box`, `state`); `with_metadata`: its canonical Macrocell with the metadata; `rle`: its RLE with the metadata, or `rle_error: true`; for a timeline, `step` and `frames` (each frame's state), and a case without them gives no frames — or `error: true` |
 | `detect` | `inputs`: a list of byte strings in hex | each one's `format`, or `error: true` |
 | `measure` | `input` (a file in any format, perhaps gzip-compressed) | `format`, `width`, `height`, `x`, `y`, `rule`, `generation`, `metadata`, `two_state`; `bounded_grid` as for `read` — or `error: true` |
 | `timeline-read` | `input.mc` | `count`, `first`, `step`, `metadata`, the file's own state, and `frames`: each frame's state, its canonical Macrocell in `frame-<i>.mc` — or `error: true` |
 | `timeline-write` | `input` (a pattern), `generations` (a frame at each), `metadata` | `timeline`: the file [macrocell.md](macrocell.md#timelines) writes; reading it back gives each frame's state again |
+| `mcell-reasons` | `cases`, each an `input` (MCell text) | each one's `message`: the full message of the error reading it into a grid gives |
 
 The round trips (write, then read: the same cells and metadata) are property-tested in
-both suites, and so is measuring against reading: every `read` case's input that reads
+both suites, and a case's `mcell` file reads back as its grid, rule and bounded grid,
+its metadata all comments (the name, the author, then the comments), and so is measuring against reading: every `read` case's input that reads
 untrimmed measures as that read gives it. So is reading into a universe that exists: every
 `universe` case's input, read with `read_snapshot` into a universe that already holds a
 state and a snapshot, is accepted or refused as the case says, gives a snapshot and frames

@@ -213,8 +213,12 @@ that goes with it (`default_zoom_order`), which the host sets. The zoom order ch
   every state up to 255 included); a pattern outside the editing box is an error:
   Macrocell carries it.
 - **Loading by content**: Macrocell and RLE, gzip-compressed or not, recognized as
-  [formats.md](formats.md#detection) says. The other formats hold two states and are
-  refused.
+  [formats.md](formats.md#detection) says, and [MCell](formats.md#mcell) files of the
+  Generations family: the cell data's states as written, the top-left cell at (0, 0), and
+  a file with a `#BOARD` line refused as the two-state universe refuses it. An MCell file
+  of the Life family is two-state (that universe reads it) and one of Larger than Life
+  runs on grids only, so both are refused by their rules. The other formats hold two
+  states and are refused.
 - **The rule.** A file names its rule by its canonical name (Macrocell's `#R`, RLE's
   header). The name is read as "Names" above says; a reader given a state rule object
   also takes that rule where the file's name matches its canonical name, ignoring ASCII

@@ -1,0 +1,12 @@
+
+#MCell 4.20
+
+#SPEED 50
+#PALETTE MCell standard
+#DIV #NOISE,act=1,cycl=1,cell=3,stt=1
+#FUTURE something
+#GAME Life
+#RULE 23/36
+#BOARD 20x16
+#WRAP 1
+#L 2A$2A

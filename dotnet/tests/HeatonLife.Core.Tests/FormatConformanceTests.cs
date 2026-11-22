@@ -13,7 +13,8 @@ namespace HeatonLife.Tests
     /// <summary>
     /// Pattern file conformance: replay vectors/formats/ — every format read into a grid, into a
     /// new unbounded universe and into one that exists, measured without a grid, detection,
-    /// metadata read and written, and Macrocell timelines (spec/formats.md, spec/macrocell.md).
+    /// metadata read and written, Macrocell timelines, MCell files written and every MCell
+    /// refusal's reason (spec/formats.md, spec/macrocell.md).
     /// Bit-exact, and as strict as the Python runner (python/tests/test_format_vectors.py): an
     /// unknown key, kind, or spec_version fails the case.
     /// </summary>
@@ -33,7 +34,7 @@ namespace HeatonLife.Tests
                 ["read"] = Of(common, new[]
                 {
                     "input", "trim", "limit", "error", "format", "x", "y", "rule", "generation", "metadata", "grid",
-                    "canonical", "bounded_grid",
+                    "canonical", "bounded_grid", "mcell", "mcell_error",
                 }),
                 ["universe"] = Of(
                     common, new[] { "input", "error", "format", "metadata", "with_metadata", "rle", "rle_error", "frames", "step" },
@@ -46,6 +47,7 @@ namespace HeatonLife.Tests
                 }),
                 ["timeline-read"] = Of(common, new[] { "input", "error", "count", "first", "step", "metadata", "universe", "frames" }),
                 ["timeline-write"] = Of(common, new[] { "input", "generations", "metadata", "timeline", "frames" }),
+                ["mcell-reasons"] = Of(common, new[] { "cases" }),
             };
         }
 
@@ -70,6 +72,18 @@ namespace HeatonLife.Tests
                 kinds.Add(doc.RootElement.GetProperty("kind").GetString()!);
             }
             Assert.Equal(new HashSet<string>(Keys.Keys), kinds);
+        }
+
+        /// <summary>A rule's canonical form in the family that reads it, so that two spellings
+        /// of one rule (<c>345/2/4</c> and <c>B2/S345/C4</c>) compare equal.</summary>
+        private static string CanonicalRule(string text)
+        {
+            string rule = PatternFiles.LifeRule(text);
+            if (RuleString.TryCompile(rule, true, out LifeRule? life, out _))
+                return life.Canonical;
+            if (GenerationsRule.TryCompile(text, out GenerationsRule? generations, out _))
+                return generations.Canonical;
+            return LtlRule.TryParse(text, out LtlRule? ltl, out _) ? ltl!.Canonical : text;
         }
 
         internal static PatternMetadata Metadata(JsonElement e)
@@ -180,6 +194,42 @@ namespace HeatonLife.Tests
                         PatternFile again = PatternFiles.Read(canonical); // the round trip
                         Assert.Equal(found.Cells, again.Cells);
                         Assert.Equal(found.Metadata, again.Metadata);
+                        string writerRule = found.Rule ?? "B3/S23";
+                        if (root.TryGetProperty("mcell_error", out JsonElement refused) && refused.GetBoolean())
+                        {
+                            Assert.ThrowsAny<ArgumentException>(
+                                () => Patterns.McellEncode(found.Cells, found.Width, found.Height, writerRule, found.Metadata, topology));
+                        }
+                        else if (root.TryGetProperty("mcell", out JsonElement mcell))
+                        {
+                            string text = Patterns.McellEncode(found.Cells, found.Width, found.Height, writerRule, found.Metadata, topology);
+                            Assert.Equal(File.ReadAllText(Path.Combine(dir, mcell.GetString()!)), text);
+                            PatternFile back = PatternFiles.Read(text); // the same grid, rule and world
+                            Assert.Equal(found.Cells, back.Cells);
+                            Assert.Equal(CanonicalRule(writerRule), CanonicalRule(back.Rule!));
+                            Assert.Equal(topology == null ? null : found.BoundedGrid, back.BoundedGrid);
+                            PatternMetadata notes = found.Metadata;
+                            var flat = new List<string>();
+                            if (notes.Name != null)
+                                flat.Add(notes.Name);
+                            if (notes.Author != null)
+                                flat.Add(notes.Author);
+                            flat.AddRange(notes.Comments);
+                            Assert.Equal(new PatternMetadata(null, null, flat), back.Metadata); // all comments
+                        }
+                        break;
+                    }
+                case "mcell-reasons":
+                    {
+                        foreach (JsonElement entry in root.GetProperty("cases").EnumerateArray())
+                        {
+                            Assert.Equal(
+                                new HashSet<string> { "input", "message" },
+                                new HashSet<string>(entry.EnumerateObject().Select(p => p.Name)));
+                            string input = entry.GetProperty("input").GetString()!;
+                            FormatException e = Assert.Throws<FormatException>(() => PatternFiles.Read(input));
+                            Assert.Equal(entry.GetProperty("message").GetString(), e.Message);
+                        }
                         break;
                     }
                 case "universe":

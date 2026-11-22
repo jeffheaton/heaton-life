@@ -1,7 +1,7 @@
 """Pattern files in every format, recognized by content (spec/formats.md).
 
-RLE, Macrocell, plaintext (``.cells``), Life 1.05, Life 1.06, and PNG and BMP images,
-any of them gzip-compressed. ``detect_format`` names a file's format; ``read_pattern``
+RLE, Macrocell, plaintext (``.cells``), Life 1.05, Life 1.06, MCell (``.mcl``), and PNG
+and BMP images, any of them gzip-compressed. ``detect_format`` names a file's format; ``read_pattern``
 gives its cells as a dense grid with their position, rule, generation, and metadata, and
 ``measure_pattern`` gives all of that but the cells without making the grid. The HashLife
 universe's reader, ``heaton_life.ca.hashlife.read_universe``, builds on the same
@@ -27,6 +27,13 @@ from heaton_life.init.images import (
     png_cells,
     png_size,
 )
+from heaton_life.init.mcell import (
+    MCellExtent,
+    MCellHeader,
+    board_placement,
+    mcell_runs,
+    read_mcell_header,
+)
 from heaton_life.init.metadata import (
     MetadataReader,
     PatternMetadata,
@@ -47,13 +54,16 @@ from heaton_life.init.rle import (
     survival_birth_rule,
 )
 
-PatternFormat = Literal["rle", "macrocell", "plaintext", "life-1.05", "life-1.06", "png", "bmp"]
+PatternFormat = Literal[
+    "rle", "macrocell", "plaintext", "life-1.05", "life-1.06", "mcell", "png", "bmp"
+]
 PATTERN_FORMATS: tuple[PatternFormat, ...] = (
     "rle",
     "macrocell",
     "plaintext",
     "life-1.05",
     "life-1.06",
+    "mcell",
     "png",
     "bmp",
 )
@@ -150,6 +160,8 @@ def recognize(source: bytes | bytearray | memoryview | str) -> Recognized:
         fmt = "life-1.05"
     elif first.startswith("#Life 1.06"):
         fmt = "life-1.06"
+    elif first.startswith("#MCell"):
+        fmt = "mcell"
     elif first.startswith("!"):
         fmt = "plaintext"
     else:
@@ -362,6 +374,8 @@ def read_pattern(
         return _read_rle(found.text, max_cells, trim)
     if fmt == "macrocell":
         return _read_macrocell(found.text, max_cells)
+    if fmt == "mcell":
+        return _read_mcell(found.text, max_cells, trim)
     live = live_runs(found)
     box = runs_box(live.runs)
     if fmt == "plaintext" and not trim:
@@ -439,6 +453,46 @@ def _read_macrocell(text: str, max_cells: int | None) -> PatternFile:
     return PatternFile("macrocell", cells, x0, y0, universe.rule, universe.generation, metadata)
 
 
+def _mcell_cells(
+    header: MCellHeader, width: int, height: int, dx: int, dy: int, max_cells: int | None
+) -> NDArray[np.uint8]:
+    """A ``width × height`` grid holding the cell data's runs, each moved by (dx, dy)."""
+    _check(width, height, max_cells)
+    cells = np.zeros((height, width), dtype=np.uint8)
+
+    def put(x: int, y: int, length: int, state: int) -> None:
+        cells[y + dy, x + dx : x + dx + length] = state
+
+    mcell_runs(header, put)
+    return cells
+
+
+def _read_mcell(text: str, max_cells: int | None, trim: bool) -> PatternFile:
+    """An MCell file as a grid (spec/formats.md "MCell"): its cell data's rows at (0, 0), or
+    for a board its whole world, the pattern centered in it."""
+    header = read_mcell_header(text)
+    extent = mcell_runs(header)  # the data checked, its size and live box found
+    world = header.board
+    x0 = y0 = 0
+    if world is not None:
+        x0, y0, left, top = board_placement(world, extent)
+    if trim:
+        if extent.live is None:
+            raise ValueError("the pattern has no live cells")
+        lx0, ly0, lx1, ly1 = extent.live
+        cells = _mcell_cells(header, lx1 - lx0 + 1, ly1 - ly0 + 1, -lx0, -ly0, max_cells)
+        return PatternFile(
+            "mcell", cells, x0 + lx0, y0 + ly0, header.rule, 0, header.metadata, world
+        )
+    if world is not None:
+        cells = _mcell_cells(header, world.width, world.height, x0 - left, y0 - top, max_cells)
+        return PatternFile("mcell", cells, left, top, header.rule, 0, header.metadata, world)
+    if extent.width == 0 or extent.height == 0:
+        raise ValueError("the MCell pattern has no cells")
+    cells = _mcell_cells(header, extent.width, extent.height, 0, 0, max_cells)
+    return PatternFile("mcell", cells, 0, 0, header.rule, 0, header.metadata)
+
+
 # -- measuring -------------------------------------------------------------------------------
 
 
@@ -461,6 +515,8 @@ def measure_pattern(source: bytes | bytearray | memoryview | str) -> PatternExte
         return PatternExtent(fmt, width, height, 0, 0, None, 0, PatternMetadata(), True)
     if fmt == "rle":
         return _measure_rle(found.text)
+    if fmt == "mcell":
+        return _measure_mcell(found.text)
     box: tuple[int, int, int, int] | None
     if fmt == "macrocell":
         from heaton_life.ca.hashlife.macrocell import measure_macrocell
@@ -512,4 +568,30 @@ def _measure_rle(text: str) -> PatternExtent:
         rle_metadata(text),
         not extent.extended,
         info.bounded_grid,
+    )
+
+
+def _measure_mcell(text: str) -> PatternExtent:
+    header = read_mcell_header(text)
+    extent: MCellExtent = mcell_runs(header)  # the data checked as reading checks it
+    world = header.board
+    if world is not None:  # the world, whatever the pattern's own size
+        _, _, left, top = board_placement(world, extent)
+        return PatternExtent(
+            "mcell",
+            world.width,
+            world.height,
+            left,
+            top,
+            header.rule,
+            0,
+            header.metadata,
+            header.two_state,
+            world,
+        )
+    width, height = extent.width, extent.height
+    if width == 0 or height == 0:
+        width = height = 0
+    return PatternExtent(
+        "mcell", width, height, 0, 0, header.rule, 0, header.metadata, header.two_state
     )

@@ -1,7 +1,8 @@
 """Pattern file conformance: replay vectors/formats/ — every format read into a grid, into a
 new unbounded universe and into one that exists, measured without a grid, detection,
-metadata read and written, and Macrocell timelines (spec/formats.md, spec/macrocell.md).
-Bit-exact; the .NET suite replays the same files."""
+metadata read and written, Macrocell timelines, MCell files written and every MCell
+refusal's reason (spec/formats.md, spec/macrocell.md). Bit-exact; the .NET suite replays
+the same files."""
 
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ from heaton_life.core import BoundedGrid, parse_bounded_grid
 from heaton_life.init import (
     PatternMetadata,
     detect_format,
+    mcell_encode,
     measure_pattern,
     read_pattern,
     rle_encode,
@@ -32,7 +34,7 @@ _STATE = {"generation", "population", "bounding_box", "state", "state_sha256", "
 _KEYS = {
     "read": _COMMON
     | {"input", "trim", "limit", "error", "format", "x", "y", "rule", "generation"}
-    | {"metadata", "grid", "canonical", "bounded_grid"},
+    | {"metadata", "grid", "canonical", "bounded_grid", "mcell", "mcell_error"},
     "universe": _COMMON
     | {"input", "error", "format", "metadata", "with_metadata", "rle", "rle_error"}
     | {"frames", "step"}
@@ -44,6 +46,7 @@ _KEYS = {
     "timeline-read": _COMMON
     | {"input", "error", "count", "first", "step", "metadata", "universe", "frames"},
     "timeline-write": _COMMON | {"input", "generations", "metadata", "timeline", "frames"},
+    "mcell-reasons": _COMMON | {"cases"},
 }
 
 
@@ -77,6 +80,25 @@ def test_format_vectors_exist() -> None:
 def _bounded(meta: dict[str, Any]) -> BoundedGrid | None:
     """A case's bounded grid (spec/topology.md): its canonical suffix, or none if absent."""
     return parse_bounded_grid(meta["bounded_grid"]) if "bounded_grid" in meta else None
+
+
+def _canonical_rule(text: str) -> str:
+    """A rule's canonical form in the family that reads it, so that two spellings of one
+    rule (``345/2/4`` and ``B2/S345/C4``) compare equal."""
+    from heaton_life.ca.generations import try_compile_generations_rule
+    from heaton_life.ca.ltl import try_parse_ltl_rule
+    from heaton_life.ca.rulestring import compile_rule
+    from heaton_life.init.rle import survival_birth_rule
+
+    try:
+        return compile_rule(survival_birth_rule(text), presets=False, variants=True).canonical
+    except ValueError:
+        pass
+    generations, _ = try_compile_generations_rule(text)
+    if generations is not None:
+        return generations.canonical
+    ltl, _ = try_parse_ltl_rule(text)
+    return text if ltl is None else ltl.canonical
 
 
 def _read(meta: dict[str, Any], data: bytes | str) -> Any:
@@ -119,6 +141,26 @@ def test_format_vector(case: Path) -> None:
         again = read_pattern(canonical)  # the round trip: same cells and metadata
         assert np.array_equal(again.cells, found.cells)
         assert again.metadata == found.metadata
+        rule = found.rule or "B3/S23"
+        if meta.get("mcell_error"):
+            with pytest.raises(ValueError):
+                mcell_encode(found.cells, rule, topology=topology, metadata=found.metadata)
+        elif "mcell" in meta:
+            text = mcell_encode(found.cells, rule, topology=topology, metadata=found.metadata)
+            assert text == (d / meta["mcell"]).read_text(encoding="utf-8")
+            back = read_pattern(text)  # the same grid, rule and world; the metadata comments
+            assert np.array_equal(back.cells, found.cells)
+            assert _canonical_rule(back.rule) == _canonical_rule(rule)
+            assert back.bounded_grid == world
+            notes = found.metadata
+            flat = tuple(v for v in (notes.name, notes.author) if v is not None)
+            assert back.metadata == PatternMetadata(None, None, flat + notes.comments)
+    elif kind == "mcell-reasons":
+        for entry in meta["cases"]:
+            assert set(entry) == {"input", "message"}, entry
+            with pytest.raises(ValueError) as error:
+                read_pattern(entry["input"])
+            assert str(error.value) == entry["message"]
     elif kind == "universe":
         data = (d / meta["input"]).read_bytes()
         if meta.get("error"):

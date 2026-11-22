@@ -18,6 +18,10 @@ namespace HeatonLife
         Life106,
         Png,
         Bmp,
+
+        /// <summary>MCell (<c>.mcl</c>), spec/formats.md "MCell"; last, so that no earlier value
+        /// changes.</summary>
+        MCell,
     }
 
     /// <summary>A pattern file read into a grid (spec/formats.md "Reading into a grid").</summary>
@@ -198,7 +202,7 @@ namespace HeatonLife
     public static class PatternFiles
     {
         /// <summary>The format's name in the spec and the vectors: "rle", "macrocell",
-        /// "plaintext", "life-1.05", "life-1.06", "png" or "bmp".</summary>
+        /// "plaintext", "life-1.05", "life-1.06", "mcell", "png" or "bmp".</summary>
         public static string FormatName(PatternFormat format) => format switch
         {
             PatternFormat.Rle => "rle",
@@ -208,6 +212,7 @@ namespace HeatonLife
             PatternFormat.Life106 => "life-1.06",
             PatternFormat.Png => "png",
             PatternFormat.Bmp => "bmp",
+            PatternFormat.MCell => "mcell",
             _ => throw new ArgumentOutOfRangeException(nameof(format), format, "unknown pattern format"),
         };
 
@@ -335,6 +340,8 @@ namespace HeatonLife
                 format = PatternFormat.Life105;
             else if (first.StartsWith("#Life 1.06", StringComparison.Ordinal))
                 format = PatternFormat.Life106;
+            else if (first.StartsWith("#MCell", StringComparison.Ordinal))
+                format = PatternFormat.MCell;
             else if (first[0] == '!')
                 format = PatternFormat.Plaintext;
             else
@@ -679,6 +686,8 @@ namespace HeatonLife
                 return ReadRle(found.Text!, maxCells, trim);
             if (format == PatternFormat.Macrocell)
                 return ReadMacrocell(found.Text!, maxCells);
+            if (format == PatternFormat.MCell)
+                return ReadMCell(found.Text!, maxCells, trim);
             LiveRuns live = Runs(found);
             if (format == PatternFormat.Plaintext && !trim)
             {
@@ -758,6 +767,54 @@ namespace HeatonLife
                 throw new ArgumentException($"the pattern reaches past its bounded grid ({world.Suffix})");
         }
 
+        /// <summary>A <paramref name="width"/> × <paramref name="height"/> grid holding an MCell
+        /// file's runs, each moved by (<paramref name="dx"/>, <paramref name="dy"/>).</summary>
+        private static byte[] MCellCells(
+            MCellHeader header, BigInteger width, BigInteger height, BigInteger dx, BigInteger dy, long? maxCells)
+        {
+            Check(width, height, maxCells);
+            int w = (int)width;
+            var cells = new byte[(long)w * (int)height];
+            MCell.Runs(header, (x, y, length, state) =>
+                cells.AsSpan((int)(y + dy) * w + (int)(x + dx), (int)length).Fill((byte)state));
+            return cells;
+        }
+
+        /// <summary>An MCell file as a grid (spec/formats.md "MCell"): its cell data's rows at
+        /// (0, 0), or for a board its whole world, the pattern centered in it.</summary>
+        private static PatternFile ReadMCell(string text, long? maxCells, bool trim)
+        {
+            MCellHeader header = MCell.ReadHeader(text);
+            MCellExtent extent = MCell.Runs(header, null); // the data checked, its size and live box found
+            BoundedGrid? world = header.Board;
+            BigInteger x0 = BigInteger.Zero, y0 = BigInteger.Zero, left = BigInteger.Zero, top = BigInteger.Zero;
+            if (world != null)
+                MCell.Placement(world, extent, out x0, out y0, out left, out top);
+            if (trim)
+            {
+                if (extent.Live == null)
+                    throw new FormatException("the pattern has no live cells");
+                CellBox live = extent.Live.Value;
+                BigInteger w = live.X1 - live.X0 + 1, h = live.Y1 - live.Y0 + 1;
+                byte[] box = MCellCells(header, w, h, -live.X0, -live.Y0, maxCells);
+                return new PatternFile(
+                    PatternFormat.MCell, box, (int)w, (int)h, x0 + live.X0, y0 + live.Y0, header.Rule, 0,
+                    header.Metadata, world);
+            }
+            if (world != null)
+            {
+                byte[] cells = MCellCells(header, world.Width, world.Height, x0 - left, y0 - top, maxCells);
+                return new PatternFile(
+                    PatternFormat.MCell, cells, world.Width, world.Height, left, top, header.Rule, 0, header.Metadata,
+                    world);
+            }
+            if (extent.Width.IsZero || extent.Height.IsZero)
+                throw new FormatException("the MCell pattern has no cells");
+            byte[] grid = MCellCells(header, extent.Width, extent.Height, 0, 0, maxCells);
+            return new PatternFile(
+                PatternFormat.MCell, grid, (int)extent.Width, (int)extent.Height, 0, 0, header.Rule, 0, header.Metadata);
+        }
+
         private static PatternFile ReadMacrocell(string text, long? maxCells)
         {
             HashLife universe = Macrocell.ReadWithMetadata(text, HashLife.DefaultMaxMemoryMb, out PatternMetadata metadata);
@@ -787,6 +844,8 @@ namespace HeatonLife
             }
             if (format == PatternFormat.Rle)
                 return MeasureRle(found.Text!);
+            if (format == PatternFormat.MCell)
+                return MeasureMCell(found.Text!);
             if (format == PatternFormat.Macrocell)
             {
                 CellBox? box = Macrocell.Measure(
@@ -838,6 +897,25 @@ namespace HeatonLife
             return new PatternExtent(
                 PatternFormat.Rle, width, height, x, y, extent.Rule, generation, Patterns.RleMetadata(text),
                 twoState: !extent.Extended, world);
+        }
+
+        private static PatternExtent MeasureMCell(string text)
+        {
+            MCellHeader header = MCell.ReadHeader(text);
+            MCellExtent extent = MCell.Runs(header, null); // the data checked as reading checks it
+            BoundedGrid? world = header.Board;
+            if (world != null)
+            {
+                // The world, whatever the pattern's own size.
+                MCell.Placement(world, extent, out _, out _, out BigInteger left, out BigInteger top);
+                return new PatternExtent(
+                    PatternFormat.MCell, world.Width, world.Height, left, top, header.Rule, 0, header.Metadata,
+                    header.TwoState, world);
+            }
+            bool empty = extent.Width.IsZero || extent.Height.IsZero;
+            return new PatternExtent(
+                PatternFormat.MCell, empty ? BigInteger.Zero : extent.Width, empty ? BigInteger.Zero : extent.Height, 0,
+                0, header.Rule, 0, header.Metadata, header.TwoState);
         }
 
         // ---- reading into the unbounded universe -----------------------------------------------
@@ -920,6 +998,19 @@ namespace HeatonLife
                     : PatternImages.BmpLive(found.Data!, null, out width, out height);
                 (read.Root, read.Level) = universe.Build(
                     () => universe.SetRect(0, 0, image, width, height, HashLifePasteMode.Or));
+                return read;
+            }
+            if (format == PatternFormat.MCell)
+            {
+                MCellHeader header = MCell.ReadHeader(found.Text!);
+                if (header.Board != null) // spec/formats.md "Reading into the unbounded universe"
+                    throw new FormatException(MCell.BoardRefusal(header.Board));
+                // A Generations or Larger than Life rule is refused here, with its reason.
+                read.Rule = HashLife.CheckedRule(header.Rule);
+                read.Metadata = header.Metadata;
+                var runs = new LiveRuns(keep: true);
+                MCell.Runs(header, (x, y, length, state) => runs.Add(new LiveRun(x, y, MCell.Capped(length))));
+                (read.Root, read.Level) = universe.Build(() => Place(universe, runs));
                 return read;
             }
             LiveRuns live = Runs(found);

@@ -406,6 +406,19 @@ and an RLE header naming any Life-like rule making the file two-state.
     `patterns/`, `render/` (among them `palette-*super*` and `window-super-*`), `formats/`
     and `hashlife-multistate/`, and `hashlife-multistate/edit-generations-fill-random`.
 
+- **MCell files** (`.mcl`; [spec/formats.md](spec/formats.md) "MCell"; `mcell_encode`, .NET
+  `Patterns.McellEncode`, and the `mcell` format of every reader): files of MCell's Life,
+  Generations and Larger than Life families read into grids, measured, and written back. A
+  Life rule's survival/birth digits read as `B…/S…`, a Generations rule's
+  survival/birth/states digits through the Generations family, and a Larger than Life rule
+  through its own; `#BOARD` and `#WRAP` make a bounded world (the torus or the plane), `#D`
+  lines are comments, and `#L` cell data holds states up to 255 (`aA` to `jO` past 24).
+  The two-state universe reads a Life file and the multi-state universe a Generations file,
+  both refusing a file with a board. Every other family (Weighted Life, Vote for Life,
+  Rules table, Cyclic CA, and the rest) is refused, and every refusal has a reason, the same
+  in both ports. MCell has no History rules: its "history" is the Generations families'
+  dying states.
+
 ### Changed
 
 - **Canonical RLE writes a run of k ≥ 2 row ends as one `k$`** (`rle_encode`,

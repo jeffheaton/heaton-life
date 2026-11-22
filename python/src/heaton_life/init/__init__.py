@@ -10,6 +10,7 @@ from heaton_life.init.formats import (
     measure_pattern,
     read_pattern,
 )
+from heaton_life.init.mcell import MCELL_FAMILIES, MCellError, mcell_encode
 from heaton_life.init.metadata import PatternMetadata
 from heaton_life.init.patterns import (
     STAMP_MODES,
@@ -43,9 +44,11 @@ from heaton_life.init.seeding import blob, single, soup
 __all__ = [
     "BUILTIN_PATTERNS",
     "DEFAULT_MAX_CELLS",
+    "MCELL_FAMILIES",
     "PATTERN_FORMATS",
     "STAMP_MODES",
     "BuiltinPattern",
+    "MCellError",
     "PatternExtent",
     "PatternFile",
     "PatternFormat",
@@ -62,6 +65,7 @@ __all__ = [
     "fill_random",
     "flip_h",
     "flip_v",
+    "mcell_encode",
     "measure_pattern",
     "mergelife_from_png",
     "mergelife_to_png",

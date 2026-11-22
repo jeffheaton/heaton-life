@@ -1,0 +1,7 @@
+#MCell 4.20
+#GAME larger than life
+#RULE R2,C0,M0,S3..8,B4..6,NN
+#BOARD 12x9
+#WRAP 0
+#D von Neumann
+#L 3.A$2.3A$3.A

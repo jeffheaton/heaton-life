@@ -1,0 +1,30 @@
+{
+  "canonical": "canonical.rle",
+  "family": "formats",
+  "format": "mcell",
+  "generation": "0",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      3,
+      3
+    ]
+  },
+  "input": "input.mcl",
+  "kind": "read",
+  "limit": "default",
+  "mcell": "canonical.mcl",
+  "metadata": {
+    "author": null,
+    "comments": [
+      "A glider"
+    ],
+    "name": null
+  },
+  "rule": "B3/S23",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "trim": false,
+  "x": "0",
+  "y": "0"
+}

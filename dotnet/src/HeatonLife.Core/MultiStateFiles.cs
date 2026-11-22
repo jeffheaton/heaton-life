@@ -619,8 +619,46 @@ namespace HeatonLife
                 }
                 return read;
             }
+            if (format == PatternFormat.MCell)
+                return ReadMCell(universe, text(), fallback);
             throw new FormatException(
-                $"a multi-state universe reads Macrocell and RLE files; {PatternFiles.FormatName(format)} holds two states");
+                $"a multi-state universe reads Macrocell, RLE and MCell files; {PatternFiles.FormatName(format)} holds two states");
+        }
+
+        /// <summary>
+        /// An MCell file of the Generations family (spec/formats.md "MCell"): its cell data's
+        /// states with the top-left cell at (0, 0). A Life file's rule is no state rule and a Larger
+        /// than Life file's runs on grids only, so both are refused by their rules, and a file with
+        /// a board is refused as the two-state universe refuses it.
+        /// </summary>
+        private static Read ReadMCell(MultiStateHashLife universe, string text, StateRule fallback)
+        {
+            MCellHeader header = MCell.ReadHeader(text);
+            if (header.Board != null)
+                throw new FormatException(MCell.BoardRefusal(header.Board));
+            StateRule rule = FileRule(header.Rule, fallback);
+            var blocks = new Dictionary<long, int>();
+            MCellExtent extent = MCell.Runs(header, (x, y, length, state) =>
+            {
+                // Refused before a long run is spelled out.
+                HashLife.CheckBox(MCell.Capped(x), MCell.Capped(y), MCell.Capped(x + length - 1), MCell.Capped(y));
+                AddRun(blocks, (long)x, (long)y - 1, (long)length, state); // tree row: one above the cell's y
+            });
+            var (root, level) = universe.Build(() =>
+            {
+                if (blocks.Count > 0 && extent.Live is CellBox box)
+                    universe.PasteBlocks(
+                        blocks, (long)box.X0, (long)box.Y0 - 1, (long)box.X1, (long)box.Y1 - 1, HashLifePasteMode.Or);
+            });
+            return new Read
+            {
+                Format = PatternFormat.MCell,
+                Root = root,
+                Level = level,
+                Generation = BigInteger.Zero,
+                Rule = rule,
+                Metadata = header.Metadata,
+            };
         }
 
         /// <summary>A universe from RLE text of either dialect; <paramref name="rule"/> is the rule

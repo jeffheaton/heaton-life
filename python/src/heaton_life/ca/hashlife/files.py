@@ -1,8 +1,9 @@
 """Any two-state pattern file into the unbounded universe (spec/formats.md "Reading into
 the unbounded universe", "Reading into a universe that exists").
 
-RLE and Macrocell keep their own readers; plaintext, Life 1.05, Life 1.06, and images
-land as runs of leaves, so cells that are far apart never become a grid between them.
+RLE and Macrocell keep their own readers; plaintext, Life 1.05, Life 1.06, MCell and
+images land as runs of leaves, so cells that are far apart never become a grid between
+them.
 Every format is built into a store first, the universe's state untouched, so one reading
 serves both a new universe and one that exists.
 """
@@ -28,6 +29,7 @@ from heaton_life.init.formats import (
     runs_box,
 )
 from heaton_life.init.images import bmp_cells, png_cells
+from heaton_life.init.mcell import board_refusal, mcell_runs, read_mcell_header
 from heaton_life.init.metadata import PatternMetadata
 from heaton_life.init.rle import rle_metadata
 
@@ -116,6 +118,16 @@ def _read_into(universe: HashLife, source: bytes | bytearray | memoryview | str)
         cells = (png_cells if fmt == "png" else bmp_cells)(found.data)
         root, level = universe._build(lambda: universe.set_rect(0, 0, cells, "or"))
         return _Read(fmt, root, level, 0, "B3/S23", PatternMetadata(), None, [])
+    if fmt == "mcell":
+        header = read_mcell_header(found.text)
+        if header.board is not None:  # spec/formats.md "Reading into the unbounded universe"
+            raise ValueError(board_refusal(header.board))
+        # A Generations or Larger than Life rule is refused here, with its reason.
+        mcell_rule = _hashlife_rule(header.rule, presets=False)
+        runs: list[Run] = []
+        mcell_runs(header, lambda x, y, length, state: runs.append((x, y, length)))
+        root, level = universe._build(lambda: _place(universe, tuple(runs)))
+        return _Read(fmt, root, level, 0, mcell_rule, header.metadata, None, [])
     live = live_runs(found)
     # A file names its rule, never a preset (spec/formats.md "Reading into the unbounded
     # universe"), so the rule is compiled with presets off.

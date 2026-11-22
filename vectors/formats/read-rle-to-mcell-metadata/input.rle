@@ -1,0 +1,6 @@
+#N Glider
+#O Someone
+#C first
+#C
+x = 3, y = 3, rule = B3/S23
+bo$2bo$3o!

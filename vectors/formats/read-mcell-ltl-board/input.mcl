@@ -1,0 +1,6 @@
+#MCell 4.20
+#GAME Larger than Life
+#RULE R5,C30,M1,
+#RULE  S34..58, B34..45,NM
+#BOARD 40 X 30
+#L 3aB$$A

@@ -1,0 +1,8 @@
+#C
+#C The universe of Worms.
+#C
+#C Discovered by Mirek Wojtowicz
+#C 1999.04.08
+x = 13, y = 48, rule = B25/S3467/C6
+2.DE.DED$.CE.E.2D$BDBA2BC$.CA2CEC$.A.BD.B$2.B3C$3.3A$2.4A$3.2A31$8.2A$
+7.4A$7.3A$7.3CB$6.B.DB.A$6.CE2CAC$6.C2BABDB$5.2D.E.EC$5.DED.ED!

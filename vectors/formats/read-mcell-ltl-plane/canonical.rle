@@ -1,0 +1,3 @@
+#C von Neumann
+x = 12, y = 9, rule = R2,C0,M0,S3..8,B4..6,NN:P12,9
+3$7bo$6b3o$7bo3$!

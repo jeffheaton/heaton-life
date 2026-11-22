@@ -31,6 +31,7 @@ from heaton_life.init import (
     rle_measure,
     rle_metadata,
 )
+from heaton_life.init.mcell import read_mcell_header
 from heaton_life.init.metadata import inflate, metadata_lines, text_from_bytes
 
 GLIDER = np.array([[0, 1, 0], [0, 0, 1], [1, 1, 1]], dtype=np.uint8)
@@ -401,6 +402,8 @@ def test_measuring_agrees_with_reading(path: Path) -> None:
     assert (extent.height, extent.width) == found.cells.shape
     if found.format == "rle":
         assert extent.two_state is not rle_measure(text_from_bytes(inflate(data))).extended
+    elif found.format == "mcell":  # two states for the Life family alone
+        assert extent.two_state is read_mcell_header(text_from_bytes(inflate(data))).two_state
     else:
         assert extent.two_state
 

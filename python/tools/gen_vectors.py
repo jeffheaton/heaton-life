@@ -1022,6 +1022,9 @@ def main() -> None:
     # -- Larger than Life's default palettes (spec/render.md "Default palettes") ------------
     write_ltl_palette_cases()
 
+    # -- MCell files: Life, Generations and Larger than Life (spec/formats.md "MCell") ------
+    write_mcell_cases()
+
     print("done")
 
 
@@ -12166,6 +12169,349 @@ def write_ltl_palette_cases() -> None:
 
     write("palette-ltl-two-states", "R5,C0,M1,S34..58,B34..45,NM")  # Bosco's Rule
     write("palette-ltl-c5", "R2,C5,M0,S3..8,B4..6,NM")
+
+
+MCELL_SPEC_VERSION = "0.16.0"
+
+
+def write_mcell_cases() -> None:
+    """MCell files (spec/formats.md "MCell"): files of the Life, Generations and Larger than
+    Life families read into grids (each with the file the MCell writer makes of it), RLE
+    files the writer takes or refuses, measures, the unbounded universes' reads and
+    refusals, detection, every refusal's reason under vectors/formats/, and a Generations
+    file read into the multi-state universe under vectors/hashlife-multistate/. Every case is
+    new; nothing existing changes."""
+    import gzip
+    import io
+
+    from PIL import Image
+
+    from heaton_life.ca.hashlife import read_universe
+    from heaton_life.ca.hashlife.multistate import read_multistate_universe
+    from heaton_life.core.rng import Pcg32
+    from heaton_life.init import (
+        PatternFile,
+        PatternMetadata,
+        detect_format,
+        mcell_encode,
+        measure_pattern,
+        read_pattern,
+        rle_encode,
+    )
+
+    def save(family: str, name: str, meta: dict[str, Any]) -> None:
+        d = VECTOR_ROOT / family / name
+        d.mkdir(parents=True, exist_ok=True)
+        full = {"spec_version": MCELL_SPEC_VERSION, "family": family, "tier": "bit-exact"}
+        full.update(meta)
+        _gap_save(d, full)
+
+    def case_dir(family: str, name: str) -> Path:
+        d = VECTOR_ROOT / family / name
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def gray_png(arr: Any) -> bytes:
+        buf = io.BytesIO()
+        Image.fromarray(np.asarray(arr).astype(np.uint8), mode="L").save(buf, format="PNG")
+        return buf.getvalue()
+
+    def notes(m: PatternMetadata) -> dict[str, Any]:
+        return {"name": m.name, "author": m.author, "comments": list(m.comments)}
+
+    def written(f: PatternFile, trim: bool) -> str | None:
+        """The file the MCell writer makes of a read, or None when it refuses."""
+        world = None if f.bounded_grid is None or trim else f.bounded_grid
+        try:
+            return mcell_encode(
+                f.cells,
+                f.rule or "B3/S23",
+                topology=None if world is None else world.topology,
+                metadata=f.metadata,
+            )
+        except ValueError:
+            return None
+
+    # -- read: into a grid, and back out through the MCell writer ---------------------------
+    def read(name: str, data: bytes, ext: str, *, trim: bool = False, error: bool = False) -> None:
+        d = case_dir("formats", f"read-{name}")
+        (d / f"input.{ext}").write_bytes(data)
+        meta: dict[str, Any] = {
+            "kind": "read",
+            "input": f"input.{ext}",
+            "trim": trim,
+            "limit": "default",
+        }
+        try:
+            f = read_pattern(data, trim=trim)
+        except ValueError:
+            assert error, f"read-{name} was meant to read"
+            meta["error"] = True
+            save("formats", f"read-{name}", meta)
+            return
+        assert not error, f"read-{name} was meant to be refused"
+        (d / "grid.png").write_bytes(gray_png(f.cells))
+        world = None if f.bounded_grid is None or trim else f.bounded_grid
+        topology = None if world is None else world.topology
+        canonical = rle_encode(f.cells, f.rule or "B3/S23", metadata=f.metadata, topology=topology)
+        (d / "canonical.rle").write_text(canonical, encoding="utf-8", newline="\n")
+        meta.update(
+            {
+                "format": f.format,
+                "x": _signed_text(f.x),
+                "y": _signed_text(f.y),
+                "rule": f.rule,
+                "generation": decimal_text.digits_of(f.generation),
+                "metadata": notes(f.metadata),
+                "grid": {"file": "grid.png", "shape": list(f.cells.shape)},
+                "canonical": "canonical.rle",
+            }
+        )
+        if f.bounded_grid is not None:
+            meta["bounded_grid"] = f.bounded_grid.suffix
+        text = written(f, trim)
+        if text is None:
+            meta["mcell_error"] = True
+        else:
+            (d / "canonical.mcl").write_text(text, encoding="utf-8", newline="\n")
+            meta["mcell"] = "canonical.mcl"
+            again = read_pattern(text)  # the round trip
+            assert np.array_equal(again.cells, f.cells), name
+            assert again.bounded_grid == world, name
+        save("formats", f"read-{name}", meta)
+
+    # MCell's own example of the format, from its author's description of .mcl files.
+    worms = (
+        "#MCell 3.00\n#GAME Generations\n#RULE 3467/25/6\n#SPEED 20\n#BOARD 300x300\n"
+        "#WRAP 0\n#D\n#D The universe of Worms.\n#D\n#D Discovered by Mirek Wojtowicz\n"
+        "#D 1999.04.08\n"
+        "#L ..DE.DED$.CE.E.DD$BDBABBC$.CACCEC$.A.BD.B$..B3C$3.3A$..4A$3.AA31$8.AA$\n"
+        "#L 7.4A$7.3A$7.3CB$6.B.DB.A$6.CECCAC$6.CBBABDB$5.DD.E.EC$5.DED.ED\n"
+    )
+    glider = "#MCell 4.20\n#GAME Life\n#RULE 23/3\n#D A glider\n#L .A$..A$3A\n"
+    read("mcell-worms-board", worms.encode(), "mcl")
+    read("mcell-worms-trimmed", worms.encode(), "mcl", trim=True)
+    read("mcell-life-glider", glider.encode(), "mcl")
+    read("mcell-gzip", gzip.compress(glider.encode(), mtime=0), "mcl.gz")
+    # No #GAME (Life) and no #RULE (23/3); Life's colors are alive; CRLF line ends.
+    read(
+        "mcell-life-colored-states",
+        b"#MCell 4.20\r\n#CCOLORS 16\r\n#COLORING 2\r\n#L 2.B$A.C$jO2.aB\r\n",
+        "mcl",
+    )
+    read("mcell-life-b0", b"#MCell 4.20\n#GAME Life\n#RULE 8/0\n#L A$.A\n", "mcl")
+    read(
+        "mcell-generations-two-letter-states",
+        b"#MCell 4.20\n#GAME Generations\n#RULE /2/256\n#D every two-letter prefix\n"
+        b"#L aA aX bA cB dC eD fE gF hG iH jI j\n#L O0$$.3.X$\n",
+        "mcl",
+    )
+    read(
+        "mcell-ltl-board",
+        b"#MCell 4.20\n#GAME Larger than Life\n#RULE R5,C30,M1,\n#RULE  S34..58, B34..45,NM\n"
+        b"#BOARD 40 X 30\n#L 3aB$$A\n",
+        "mcl",
+    )
+    read(
+        "mcell-ltl-plane",
+        b"#MCell 4.20\n#GAME larger than life\n#RULE R2,C0,M0,S3..8,B4..6,NN\n#BOARD 12x9\n"
+        b"#WRAP 0\n#D von Neumann\n#L 3.A$2.3A$3.A\n",
+        "mcl",
+    )
+    read(
+        "mcell-ignored-lines",
+        b"\n#MCell 4.20\n\n#SPEED 50\n#PALETTE MCell standard\n"
+        b"#DIV #NOISE,act=1,cycl=1,cell=3,stt=1\n#FUTURE something\n#GAME Life\n#RULE 23/36\n"
+        b"#BOARD 20x16\n#WRAP 1\n#L 2A$2A\n",
+        "mcl",
+    )
+    read("mcell-empty", b"#MCell 4.20\n#D only a comment\n", "mcl", error=True)
+    read("mcell-error-family", b"#MCell 4.20\n#GAME Vote for Life\n#L A\n", "mcl", error=True)
+    read("mcell-error-past-board", b"#MCell 4.20\n#BOARD 2x2\n#L 3A\n", "mcl", error=True)
+    # RLE files through the MCell writer: metadata as #D lines, a torus, Generations, and
+    # the rules and worlds no MCell family or board holds.
+    read(
+        "rle-to-mcell-metadata",
+        b"#N Glider\n#O Someone\n#C first\n#C\nx = 3, y = 3, rule = B3/S23\nbo$2bo$3o!\n",
+        "rle",
+    )
+    read("rle-to-mcell-torus", b"x = 6, y = 4, rule = B36/S23:T6,4\n2bo$3bo$b3o!\n", "rle")
+    read("rle-to-mcell-generations", b"x = 4, y = 2, rule = B2/S345/C4\n.ABC$2C!\n", "rle")
+    read("rle-to-mcell-error-isotropic", b"x = 3, y = 1, rule = B2a/S23\n3o!\n", "rle")
+    read("rle-to-mcell-error-klein", b"x = 4, y = 4, rule = B3/S23:K4*,4\nbo$2bo$3o!\n", "rle")
+    read("rle-to-mcell-error-history", b"x = 3, y = 1, rule = B3/S23History\n.AC!\n", "rle")
+
+    # -- measure ------------------------------------------------------------------------------
+    def measure(name: str, data: bytes, *, error: bool = False) -> None:
+        d = case_dir("formats", f"measure-{name}")
+        (d / "input.mcl").write_bytes(data)
+        meta: dict[str, Any] = {"kind": "measure", "input": "input.mcl"}
+        try:
+            e = measure_pattern(data)
+        except ValueError:
+            assert error, f"measure-{name} was meant to measure"
+            meta["error"] = True
+            save("formats", f"measure-{name}", meta)
+            return
+        assert not error, f"measure-{name} was meant to be refused"
+        meta.update(
+            {
+                "format": e.format,
+                "width": decimal_text.digits_of(e.width),
+                "height": decimal_text.digits_of(e.height),
+                "x": _signed_text(e.x),
+                "y": _signed_text(e.y),
+                "rule": e.rule,
+                "generation": decimal_text.digits_of(e.generation),
+                "metadata": notes(e.metadata),
+                "two_state": e.two_state,
+            }
+        )
+        if e.bounded_grid is not None:
+            meta["bounded_grid"] = e.bounded_grid.suffix
+        save("formats", f"measure-{name}", meta)
+
+    measure("mcell-worms-board", worms.encode())
+    measure("mcell-life-glider", glider.encode())
+    measure(
+        "mcell-generations-wide",
+        b"#MCell 4.20\n#GAME Generations\n#RULE 2/3/4\n#L A99999999999.C$3$B\n",
+    )
+    measure("mcell-empty", b"#MCell 4.20\n#D only a comment\n")
+    measure("mcell-error-board", b"#MCell 4.20\n#BOARD 300\n#L A\n", error=True)
+    measure(
+        "mcell-error-state",
+        b"#MCell 4.20\n#GAME Generations\n#RULE 2/3/4\n#L 9.D\n",
+        error=True,
+    )
+
+    # -- the two-state universe -----------------------------------------------------------
+    def universe(name: str, data: bytes, *, error: bool = False) -> None:
+        d = case_dir("formats", f"universe-{name}")
+        (d / "input.mcl").write_bytes(data)
+        meta: dict[str, Any] = {"kind": "universe", "input": "input.mcl"}
+        try:
+            found = read_universe(data)
+        except ValueError:
+            assert error, f"universe-{name} was meant to read"
+            meta["error"] = True
+            save("formats", f"universe-{name}", meta)
+            return
+        assert not error, f"universe-{name} was meant to be refused"
+        u = found.universe
+        meta["format"] = found.format
+        meta["metadata"] = notes(found.metadata)
+        meta.update(_hashlife_entry(d, u, "state"))
+        (d / "with-metadata.mc").write_text(
+            u.to_macrocell(found.metadata), encoding="utf-8", newline="\n"
+        )
+        meta["with_metadata"] = "with-metadata.mc"
+        (d / "with-metadata.rle").write_text(
+            u.to_rle(found.metadata), encoding="utf-8", newline="\n"
+        )
+        meta["rle"] = "with-metadata.rle"
+        save("formats", f"universe-{name}", meta)
+
+    universe("mcell-life", glider.encode())
+    universe(
+        "mcell-life-highlife-far",
+        b"#MCell 4.20\n#GAME Life\n#RULE 23/36\n#D a replicator\n#L 3.3A$2.A2.A$.A3.A$A3.A$A2.A$3A\n",
+    )
+    universe("error-mcell-board", b"#MCell 4.20\n#BOARD 64x64\n#L 3A\n", error=True)
+    universe(
+        "error-mcell-generations",
+        b"#MCell 4.20\n#GAME Generations\n#RULE 345/2/4\n#L A\n",
+        error=True,
+    )
+    universe(
+        "error-mcell-ltl",
+        b"#MCell 4.20\n#GAME Larger than Life\n#RULE R5,C0,M1,S34..58,B34..45,NM\n#L A\n",
+        error=True,
+    )
+
+    # -- detection ------------------------------------------------------------------------
+    inputs = [
+        glider.encode(),
+        b"\r\n  \n#MCell\n",
+        gzip.compress(glider.encode(), mtime=0),
+        b"#MCELL 4.20\n#L A\n",
+        b"# MCell 4.20\n#L A\n",
+    ]
+    entries: list[dict[str, Any]] = []
+    for data in inputs:
+        entries.append({"input": data.hex(), "format": detect_format(data)})
+    assert [e["format"] for e in entries] == ["mcell", "mcell", "mcell", "rle", "rle"]
+    save("formats", "detect-mcell", {"kind": "detect", "inputs": entries})
+
+    # -- every refusal's reason (spec/formats.md "MCell", "Errors") ---------------------------
+    refusals = [
+        "#MCell 4.20\n#L A\nA\n",
+        "#MCell 4.20\n\n\n#D fine\n  #L A\nx = 3\n",
+        "#MCell 4.20\n#GAME Weighted Life\n",
+        "#MCell 4.20\n#GAME Rules table\n#RULE 1,0,0\n",
+        "#MCell 4.20\n#GAME Cyclic CA\n",
+        "#MCell 4.20\n#GAME Special rules\n#RULE WireWorld\n",
+        "#MCell 4.20\n#RULE B3/S23\n",
+        "#MCell 4.20\n#RULE 23/39\n",
+        "#MCell 4.20\n#GAME Life\n#RULE\n",
+        "#MCell 4.20\n#GAME Generations\n#RULE B2/S345/C4\n",
+        "#MCell 4.20\n#GAME Generations\n#RULE 345/2\n",
+        "#MCell 4.20\n#GAME Generations\n#RULE 2/3/1\n",
+        "#MCell 4.20\n#GAME Generations\n#RULE 29/3/4\n",
+        "#MCell 4.20\n#GAME Larger than Life\n#RULE R5,C0,M1,S34..58\n",
+        "#MCell 4.20\n#GAME Larger than Life\n#RULE R11,C0,M1,S34..58,B34..45,NX\n",
+        "#MCell 4.20\n#GAME Larger than Life\n",
+        "#MCell 4.20\n#BOARD 0x5\n",
+        "#MCell 4.20\n#BOARD 30x\n",
+        "#MCell 4.20\n#BOARD 2000000001x5\n",
+        "#MCell 4.20\n#BOARD 30*30\n",
+        "#MCell 4.20\n#WRAP yes\n",
+        "#MCell 4.20\n#WRAP 1\n#WRAP 2\n",
+        "#MCell 4.20\n#L 2A!\n",
+        "#MCell 4.20\n#L A12\n",
+        "#MCell 4.20\n#L 3c.\n",
+        "#MCell 4.20\n#L kA\n",
+        "#MCell 4.20\n#L jP\n",
+        "#MCell 4.20\n#L jX\n",
+        "#MCell 4.20\n#GAME Generations\n#RULE 2/3/4\n#L ABCD\n",
+        "#MCell 4.20\n#GAME Larger than Life\n#RULE 5,34,45,34,58\n#L aA\n",
+        "#MCell 4.20\n#BOARD 2x2\n#L 3A\n",
+        "#MCell 4.20\n#BOARD 4x4\n#L A$$$$A\n",
+        "#MCell 4.20\n#GAME Rug Rule\n#BOARD 0x0\n#WRAP 9\n#L !\n",
+    ]
+    cases: list[dict[str, Any]] = []
+    for text in refusals:
+        try:
+            read_pattern(text)
+        except ValueError as error:
+            message = str(error)
+            assert message.startswith("invalid MCell file: "), message
+            cases.append({"input": text, "message": message})
+        else:
+            raise AssertionError(f"meant to be refused: {text!r}")
+    save("formats", "mcell-reasons", {"kind": "mcell-reasons", "cases": cases})
+
+    # -- the multi-state universe: a Generations file, run on the unbounded plane -------------
+    rng = Pcg32(31)
+    soup = np.zeros((24, 30), dtype=np.uint8)
+    for y in range(24):
+        for x in range(30):
+            draw = rng.next_u32()
+            soup[y, x] = 0 if draw % 5 < 3 else draw % 4
+    text = mcell_encode(soup, "B2/S345/C4", metadata=PatternMetadata(comments=("Star Wars",)))
+    d = case_dir("hashlife-multistate", "evolve-generations-from-mcell")
+    (d / "input.mcl").write_text(text, encoding="utf-8", newline="\n")
+    u = read_multistate_universe(text).universe
+    assert u.rule == "B2/S345/C4"
+    checkpoints = []
+    for i, generation in enumerate([0, 1, 10, 40]):
+        u.step(generation - u.generation)
+        checkpoints.append(_hashlife_entry(d, u, f"state-{i}"))
+    save(
+        "hashlife-multistate",
+        "evolve-generations-from-mcell",
+        {"kind": "evolve", "input": "input.mcl", "checkpoints": checkpoints},
+    )
 
 
 if __name__ == "__main__":

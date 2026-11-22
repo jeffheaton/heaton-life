@@ -1,0 +1,6 @@
+#MCell 4.20
+#GAME Generations
+#RULE /2/256
+#D every two-letter prefix
+#L aA aX bA cB dC eD fE gF hG iH jI j
+#L O0$$.3.X$

@@ -1,0 +1,28 @@
+{
+  "family": "formats",
+  "inputs": [
+    {
+      "format": "mcell",
+      "input": "234d43656c6c20342e32300a2347414d45204c6966650a2352554c452032332f330a2344204120676c696465720a234c202e41242e2e412433410a"
+    },
+    {
+      "format": "mcell",
+      "input": "0d0a20200a234d43656c6c0a"
+    },
+    {
+      "format": "mcell",
+      "input": "1f8b080000000000021353f6754ecdc95130d13332e0527677f47555f0c94c4be5520e0af571553032d637e6527651705448cfc94c492de252f651d07354d1036263472e0031dab5cb3b000000"
+    },
+    {
+      "format": "rle",
+      "input": "234d43454c4c20342e32300a234c20410a"
+    },
+    {
+      "format": "rle",
+      "input": "23204d43656c6c20342e32300a234c20410a"
+    }
+  ],
+  "kind": "detect",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

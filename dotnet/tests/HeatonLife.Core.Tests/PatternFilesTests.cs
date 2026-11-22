@@ -454,6 +454,8 @@ namespace HeatonLife.Tests
             Assert.Equal(new BigInteger(found.Height), extent.Height);
             bool extended = found.Format == PatternFormat.Rle
                 && Patterns.RleMeasure(PatternText.Decode(PatternText.Inflate(data))).Extended;
+            if (found.Format == PatternFormat.MCell) // two states for the Life family alone
+                extended = !MCell.ReadHeader(PatternText.Decode(PatternText.Inflate(data))).TwoState;
             Assert.Equal(!extended, extent.TwoState);
         }
 

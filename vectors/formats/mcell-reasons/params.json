@@ -1,0 +1,140 @@
+{
+  "cases": [
+    {
+      "input": "#MCell 4.20\n#L A\nA\n",
+      "message": "invalid MCell file: line 3 does not start with '#'"
+    },
+    {
+      "input": "#MCell 4.20\n\n\n#D fine\n  #L A\nx = 3\n",
+      "message": "invalid MCell file: line 6 does not start with '#'"
+    },
+    {
+      "input": "#MCell 4.20\n#GAME Weighted Life\n",
+      "message": "invalid MCell file: the family 'Weighted Life' is not read here (Life, Generations and Larger than Life are)"
+    },
+    {
+      "input": "#MCell 4.20\n#GAME Rules table\n#RULE 1,0,0\n",
+      "message": "invalid MCell file: the family 'Rules table' is not read here (Life, Generations and Larger than Life are)"
+    },
+    {
+      "input": "#MCell 4.20\n#GAME Cyclic CA\n",
+      "message": "invalid MCell file: the family 'Cyclic CA' is not read here (Life, Generations and Larger than Life are)"
+    },
+    {
+      "input": "#MCell 4.20\n#GAME Special rules\n#RULE WireWorld\n",
+      "message": "invalid MCell file: the family 'Special rules' is not read here (Life, Generations and Larger than Life are)"
+    },
+    {
+      "input": "#MCell 4.20\n#RULE B3/S23\n",
+      "message": "invalid MCell file: a Life rule is survival/birth digits, such as 23/3, not 'B3/S23'"
+    },
+    {
+      "input": "#MCell 4.20\n#RULE 23/39\n",
+      "message": "invalid MCell file: a Life rule is survival/birth digits, such as 23/3, not '23/39'"
+    },
+    {
+      "input": "#MCell 4.20\n#GAME Life\n#RULE\n",
+      "message": "invalid MCell file: a Life rule is survival/birth digits, such as 23/3, not ''"
+    },
+    {
+      "input": "#MCell 4.20\n#GAME Generations\n#RULE B2/S345/C4\n",
+      "message": "invalid MCell file: a Generations rule is survival/birth/states digits, such as 345/2/4, not 'B2/S345/C4'"
+    },
+    {
+      "input": "#MCell 4.20\n#GAME Generations\n#RULE 345/2\n",
+      "message": "invalid MCell file: a Generations rule is survival/birth/states digits, such as 345/2/4, not '345/2'"
+    },
+    {
+      "input": "#MCell 4.20\n#GAME Generations\n#RULE 2/3/1\n",
+      "message": "invalid MCell file: invalid Generations rule '2/3/1': a Generations rule has 2 to 256 states (spec/generations.md)"
+    },
+    {
+      "input": "#MCell 4.20\n#GAME Generations\n#RULE 29/3/4\n",
+      "message": "invalid MCell file: invalid Generations rule '29/3/4': expected '/C' and the number of states at the end (spec/generations.md)"
+    },
+    {
+      "input": "#MCell 4.20\n#GAME Larger than Life\n#RULE R5,C0,M1,S34..58\n",
+      "message": "invalid MCell file: invalid Larger than Life rule 'R5,C0,M1,S34..58': expected the fields R, C, M, S, B and N, in that order (spec/ltl.md)"
+    },
+    {
+      "input": "#MCell 4.20\n#GAME Larger than Life\n#RULE R11,C0,M1,S34..58,B34..45,NX\n",
+      "message": "invalid MCell file: invalid Larger than Life rule 'R11,C0,M1,S34..58,B34..45,NX': expected NM, NN or NC, not 'NX' (spec/ltl.md)"
+    },
+    {
+      "input": "#MCell 4.20\n#GAME Larger than Life\n",
+      "message": "invalid MCell file: invalid Larger than Life rule '23/3': expected five numbers r,bmin,bmax,smin,smax (spec/ltl.md)"
+    },
+    {
+      "input": "#MCell 4.20\n#BOARD 0x5\n",
+      "message": "invalid MCell file: #BOARD is <width>x<height>, not '0x5'"
+    },
+    {
+      "input": "#MCell 4.20\n#BOARD 30x\n",
+      "message": "invalid MCell file: #BOARD is <width>x<height>, not '30x'"
+    },
+    {
+      "input": "#MCell 4.20\n#BOARD 2000000001x5\n",
+      "message": "invalid MCell file: #BOARD is <width>x<height>, not '2000000001x5'"
+    },
+    {
+      "input": "#MCell 4.20\n#BOARD 30*30\n",
+      "message": "invalid MCell file: #BOARD is <width>x<height>, not '30*30'"
+    },
+    {
+      "input": "#MCell 4.20\n#WRAP yes\n",
+      "message": "invalid MCell file: #WRAP is 0 or 1, not 'yes'"
+    },
+    {
+      "input": "#MCell 4.20\n#WRAP 1\n#WRAP 2\n",
+      "message": "invalid MCell file: #WRAP is 0 or 1, not '2'"
+    },
+    {
+      "input": "#MCell 4.20\n#L 2A!\n",
+      "message": "invalid MCell file: '!' in the cell data is no run count, state or '$'"
+    },
+    {
+      "input": "#MCell 4.20\n#L A12\n",
+      "message": "invalid MCell file: a run count in the cell data has no state or '$' after it"
+    },
+    {
+      "input": "#MCell 4.20\n#L 3c.\n",
+      "message": "invalid MCell file: 'c' in the cell data has no state letter A to X after it"
+    },
+    {
+      "input": "#MCell 4.20\n#L kA\n",
+      "message": "invalid MCell file: 'k' in the cell data is no run count, state or '$'"
+    },
+    {
+      "input": "#MCell 4.20\n#L jP\n",
+      "message": "invalid MCell file: the cell data's state 256 is past 255"
+    },
+    {
+      "input": "#MCell 4.20\n#L jX\n",
+      "message": "invalid MCell file: the cell data's state 264 is past 255"
+    },
+    {
+      "input": "#MCell 4.20\n#GAME Generations\n#RULE 2/3/4\n#L ABCD\n",
+      "message": "invalid MCell file: the cell data's state 4 is past the rule's 4 states"
+    },
+    {
+      "input": "#MCell 4.20\n#GAME Larger than Life\n#RULE 5,34,45,34,58\n#L aA\n",
+      "message": "invalid MCell file: the cell data's state 25 is past the rule's 2 states"
+    },
+    {
+      "input": "#MCell 4.20\n#BOARD 2x2\n#L 3A\n",
+      "message": "invalid MCell file: the pattern reaches past its board (:T2,2)"
+    },
+    {
+      "input": "#MCell 4.20\n#BOARD 4x4\n#L A$$$$A\n",
+      "message": "invalid MCell file: the pattern reaches past its board (:T4,4)"
+    },
+    {
+      "input": "#MCell 4.20\n#GAME Rug Rule\n#BOARD 0x0\n#WRAP 9\n#L !\n",
+      "message": "invalid MCell file: the family 'Rug Rule' is not read here (Life, Generations and Larger than Life are)"
+    }
+  ],
+  "family": "formats",
+  "kind": "mcell-reasons",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

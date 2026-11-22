@@ -1,0 +1,31 @@
+{
+  "bounded_grid": ":P12,9",
+  "canonical": "canonical.rle",
+  "family": "formats",
+  "format": "mcell",
+  "generation": "0",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      9,
+      12
+    ]
+  },
+  "input": "input.mcl",
+  "kind": "read",
+  "limit": "default",
+  "mcell": "canonical.mcl",
+  "metadata": {
+    "author": null,
+    "comments": [
+      "von Neumann"
+    ],
+    "name": null
+  },
+  "rule": "R2,C0,M0,S3..8,B4..6,NN",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "trim": false,
+  "x": "-6",
+  "y": "-4"
+}

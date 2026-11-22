@@ -1,0 +1,35 @@
+{
+  "bounded_grid": ":P300,300",
+  "canonical": "canonical.rle",
+  "family": "formats",
+  "format": "mcell",
+  "generation": "0",
+  "grid": {
+    "file": "grid.png",
+    "shape": [
+      300,
+      300
+    ]
+  },
+  "input": "input.mcl",
+  "kind": "read",
+  "limit": "default",
+  "mcell": "canonical.mcl",
+  "metadata": {
+    "author": null,
+    "comments": [
+      "",
+      "The universe of Worms.",
+      "",
+      "Discovered by Mirek Wojtowicz",
+      "1999.04.08"
+    ],
+    "name": null
+  },
+  "rule": "3467/25/6",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "trim": false,
+  "x": "-150",
+  "y": "-150"
+}

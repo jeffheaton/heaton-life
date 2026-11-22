@@ -432,6 +432,19 @@ namespace HeatonLife
             return false;
         }
 
+        /// <summary>
+        /// A grid as an MCell file (spec/formats.md "MCell", "Writing"): <c>#GAME</c> the family
+        /// <paramref name="rule"/> belongs to (Life, Generations or Larger than Life), <c>#BOARD</c>
+        /// and <c>#WRAP</c> when a <paramref name="topology"/> is given (the torus or the plane), the
+        /// metadata as <c>#D</c> lines (name, author, comments), and <c>#L</c> cell data that reads
+        /// back as the same grid. A rule no MCell family holds, any other topology, a state past the
+        /// rule's, or a grid without rows or columns throws <see cref="ArgumentException"/>.
+        /// </summary>
+        public static string McellEncode(
+            ReadOnlySpan<byte> cells, int width, int height, string rule, PatternMetadata? metadata = null,
+            Topology? topology = null)
+            => MCell.Encode(cells, width, height, rule, metadata, topology);
+
         /// <summary>Canonical RLE; dialect chosen by content (states past 24 as two-letter tags).
         /// The header names a Life-like rule (with any variant, spec/history.md) or a Generations
         /// rule (spec/generations.md) in its canonical form, so it reads back as the same rule (one
