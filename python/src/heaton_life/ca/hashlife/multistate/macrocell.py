@@ -184,8 +184,9 @@ class _BoxNodes:
 @dataclasses.dataclass
 class _Scanned:
     """A Macrocell file's lines read into a node sink: the rule it names (or None), ``#G``,
-    the metadata, every node line as (id, level), the timeline lines, the largest state, and
-    whether every leaf is a two-state 8 × 8 line."""
+    the metadata, every node line as (id, level), the timeline lines, the largest state,
+    whether every leaf is a two-state 8 × 8 line, and the text of a rule file appended to
+    it (or None)."""
 
     named: str | None
     generation: int
@@ -195,6 +196,7 @@ class _Scanned:
     frame_lines: list[tuple[int, str]]
     top: int
     two_state: bool
+    rule_text: str | None
 
 
 def _scan(source: str | bytes, sink: _Nodes) -> _Scanned:
@@ -219,10 +221,14 @@ def _scan(source: str | bytes, sink: _Nodes) -> _Scanned:
             raise ValueError(f"line {number}: node {index} has level {found}, not {level}")
         return node
 
+    rule_text: str | None = None
     for number, raw in enumerate(lines[start + 1 :], start=start + 2):
         line = raw.strip()
         if not line:
             continue
+        if line.startswith("@RULE"):  # a rule file appended to the pattern (spec/ruletable.md)
+            rule_text = "\n".join(lines[number - 1 :])
+            break
         if line[0] == "#":
             if line.startswith("#R"):
                 named = line[2:].strip()
@@ -269,14 +275,40 @@ def _scan(source: str | bytes, sink: _Nodes) -> _Scanned:
     if not nodes:
         raise ValueError("Macrocell file has no nodes")
     return _Scanned(
-        named, generation, notes.result(), nodes, frames_lines, frame_lines, top, two_state
+        named,
+        generation,
+        notes.result(),
+        nodes,
+        frames_lines,
+        frame_lines,
+        top,
+        two_state,
+        rule_text,
     )
+
+
+def _named_rule(name: str, given: StateRule, rule_text: str | None) -> StateRule:
+    """The rule ``#R`` names: ``given`` when the name is its canonical name, else a rule file
+    appended to the pattern under that name (spec/ruletable.md "Files"), else the rule of
+    that name; as an RLE header's rule is found."""
+    if names_rule(name, given) or rule_text is None:
+        return file_rule(name, given)
+    # Imported here: heaton_life.ca, the rule-table module's package, imports this one.
+    from heaton_life.ca.rulefile import parse_rule_file
+
+    appended = parse_rule_file(rule_text)
+    if names_rule(name, appended):
+        return check_state_rule(appended)
+    return file_rule(name, given)
 
 
 def _checked_rule(scanned: _Scanned, fallback: StateRule) -> StateRule:
     """The rule a scanned file runs under: the one it names, else ``fallback``; a state
     the rule lacks is refused."""
-    rule = fallback if scanned.named is None else file_rule(scanned.named, fallback)
+    if scanned.named is None:
+        rule = fallback
+    else:
+        rule = _named_rule(scanned.named, fallback, scanned.rule_text)
     if scanned.top >= rule.states:
         raise ValueError(
             f"the file holds state {scanned.top}, which {rule.canonical} doesn't have "

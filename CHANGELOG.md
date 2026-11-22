@@ -452,6 +452,26 @@ and an RLE header naming any Life-like rule making the file two-state.
 - New vectors: `hashlife-multistate/edit-live-population-*` (the edit ops
   `live_population` and `live_population_in`) and `hashlife-multistate/measure-*` (kind
   `measure`).
+- **Macrocell files carry a rule table** outside the starter set
+  ([spec/ruletable.md](spec/ruletable.md) "Files", [spec/macrocell.md](spec/macrocell.md)
+  "Multi-state files"), as RLE files do: the rule file follows the tree, from a line that
+  starts with `@RULE` to the end, and the multi-state readers (and the measure) take it
+  when `#R` names it. `embedded_rule` (.NET `RuleTables.Embedded`) finds it in either
+  format, and `append_rule` (`RuleTables.Append`) appends one to either; the canonical
+  Macrocell text stays the cells'. New vectors: `hashlife-multistate/macrocell-ruletable-*`,
+  `macrocell-error-appended-not-a-rule-file`, `evolve-ruletable-macrocell-appended` and
+  `measure-macrocell-appended-rule`.
+- **Converting a Life-like world between the engines** without its cells becoming a grid
+  ([spec/hashlife-multistate.md](spec/hashlife-multistate.md) "Converting between the
+  engines"): `HashLife.to_multistate(rule)` (.NET `ToMultiState`) gives a History or Super
+  universe of the live cells as state 1; `MultiStateHashLife.to_two_state(rule)`
+  (`ToTwoState`) a two-state universe of the on cells, the odd states; and
+  `MultiStateHashLife.to_multistate(rule)` another History or Super universe, the states
+  the rule lacks turned into their parity (Super to History). The generation is kept, the
+  old universe is unchanged, and the tree is converted node by node, so a world of any
+  size converts in the time and memory its tree takes. A background that is alive (a rule
+  with B0) is refused, and so is any rule that isn't Life-like. New vectors:
+  `hashlife-multistate/convert-*` (kind `convert`).
 
 ### Changed
 

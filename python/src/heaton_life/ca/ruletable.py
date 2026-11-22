@@ -85,14 +85,22 @@ def starter_pattern(name: str) -> NDArray[np.uint8]:
 
 
 def embedded_rule(text: str) -> RuleTable | None:
-    """The rule file appended to an RLE pattern (spec/ruletable.md "Files"): the text from
-    the first line after the pattern's ``!`` that starts with ``@RULE``, read as a rule file;
-    None when the text has none. Comment lines (``#``) and the header come before the
-    pattern, so its end is the first ``!`` in a line after them. An appended text that is no
-    rule file raises ``RuleFileError``."""
+    """The rule file appended to an RLE or Macrocell pattern (spec/ruletable.md "Files"):
+    in RLE the text from the first line after the pattern's ``!`` that starts with
+    ``@RULE``, in Macrocell (a text whose first line that isn't blank starts with ``[M2]``)
+    the text from the first line after the header that starts with ``@RULE``, read as a rule
+    file; None when the text has none. RLE's comment lines (``#``) and header come before
+    the pattern, so its end is the first ``!`` in a line after them. An appended text that
+    is no rule file raises ``RuleFileError``."""
     from heaton_life.init.rle import is_rle_header
 
     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    first = next((i for i, line in enumerate(lines) if line.strip()), len(lines))
+    if first < len(lines) and lines[first].strip().startswith("[M2]"):
+        for later in range(first + 1, len(lines)):
+            if lines[later].strip().startswith("@RULE"):
+                return parse_rule_file("\n".join(lines[later:]))
+        return None
     index = 0
     while index < len(lines) and (not lines[index].strip() or lines[index].strip().startswith("#")):
         index += 1
@@ -107,8 +115,8 @@ def embedded_rule(text: str) -> RuleTable | None:
 
 
 def append_rule(rle: str, rule: RuleTable) -> str:
-    """An RLE pattern's text with ``rule``'s file appended after it (spec/ruletable.md
-    "Files"), so the pattern carries its rule."""
+    """A pattern file's text, RLE or Macrocell, with ``rule``'s file appended after it
+    (spec/ruletable.md "Files"), so the pattern carries its rule."""
     body = rle if rle.endswith("\n") else rle + "\n"
     text = rule.text.replace("\r\n", "\n").replace("\r", "\n")
     return body + text + ("" if text.endswith("\n") else "\n")

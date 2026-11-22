@@ -1,0 +1,18 @@
+{
+  "bounding_box": [
+    "-1",
+    "0",
+    "0",
+    "1"
+  ],
+  "family": "hashlife-multistate",
+  "from": "multistate",
+  "generation": "5",
+  "input": "input.mc",
+  "kind": "convert",
+  "population": "2",
+  "rule": "B36/S23",
+  "spec_version": "0.16.0",
+  "state": "state.mc",
+  "tier": "bit-exact"
+}

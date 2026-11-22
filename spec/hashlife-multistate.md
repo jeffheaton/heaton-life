@@ -201,6 +201,39 @@ leaves included; the empty universe has none. `measure_snapshots` counts them as
 [hashlife.md](hashlife.md#what-snapshots-hold) says. `estimated_bytes` is each port's
 estimate of those nodes in its store: 145 bytes a node in Python, 40 in .NET.
 
+## Converting between the engines
+
+A Life-like world moves between the two engines, and between History and Super rules,
+without its cells becoming a grid:
+
+- `HashLife.to_multistate(rule)` (.NET `HashLife.ToMultiState(rule)`): a new multi-state
+  universe of `rule`, a [History](history.md) or [Super](super.md) rule, its cells the
+  two-state universe's live cells as state 1.
+- `to_two_state(rule)` (.NET `ToTwoState(rule)`) on a universe of a History or Super rule:
+  a new two-state [HashLife](hashlife.md) universe of `rule`, a rule of rules.md without a
+  variant, whose live cells are the on cells, the odd states; every even state is a dead
+  cell.
+- `to_multistate(rule)` (.NET `ToMultiState(rule)`) on a universe of a History or Super
+  rule: a new multi-state universe of another History or Super rule, each state the rule
+  has kept and each other state turned into its parity, as `convert_cells` turns a grid's
+  ([history.md](history.md#two-states-and-seven)): a Super world under a History rule keeps
+  its states 0–6.
+
+The new universe has the old one's generation, its cells where they were, the old one's
+memory budget unless another is given (`max_memory_mb`, .NET `maxMemoryMb`), no snapshots
+(they belong to the universe that took them), and the default zoom order. The old universe
+is unchanged. The conversion runs on the tree, each distinct node once, so a world converts
+in the time and memory its tree takes, however far its cells spread; the vectors pin the
+result, not the way.
+
+Refused, with nothing made: a rule here or there that is not a History, Super or (for the
+two-state side) two-state Life-like rule, since only a Life-like world's cells have a
+meaning under the other rule; a two-state universe whose background is alive at its
+generation (a rule with B0, [hashlife.md](hashlife.md#rules-with-b0)), since the cells it
+holds are those that differ from a live plane and a multi-state universe's background is 0;
+and a two-state rule whose background would be alive at the generation, for the same
+reason.
+
 ## View and render
 
 Views and every function on them — `pan`, `zoom_at`, `cell_at`, `center_cell`,
@@ -261,9 +294,9 @@ that goes with it (`default_zoom_order`), which the host sets. The zoom order ch
   also takes that rule where the file's name matches its canonical name, ignoring ASCII
   case. A file that names no rule takes the rule the reader is given (default
   `WireWorld`); `read_snapshot` gives it the universe's rule. A state at or above the
-  rule's S is an error. An RLE file may carry its rule: a [rule file appended after the
-  pattern](ruletable.md#files) is taken when the header names it and the reader's rule
-  object doesn't, before the name is looked up.
+  rule's S is an error. An RLE or Macrocell file may carry its rule: a [rule file appended
+  after the pattern](ruletable.md#files) is taken when the header or `#R` names it and the
+  reader's rule object doesn't, before the name is looked up.
 - **Into a universe that exists**: `read_snapshot(source)` reads any file that loading by
   content reads into the universe's own store, as
   [formats.md](formats.md#reading-into-a-universe-that-exists) says: a snapshot of its
@@ -290,7 +323,7 @@ without building a universe, as the `PatternExtent` of
   and the root's box is placed as reading places the root. RLE's comes from its runs at
   its `#CXRLE Pos`, and MCell's from its cell data at (0, 0).
 - `rule`: the canonical name of the rule the file names, found as reading finds it (the
-  reader's rule where the name is its canonical name, an RLE file's appended rule file,
+  reader's rule where the name is its canonical name, a rule file appended to the file,
   else "Names" above); or none when the file names none.
 - `generation` and `metadata`, as loading gives them.
 - `two_state`: whether the cells are written in a two-state format: false for an RLE file
@@ -326,6 +359,7 @@ and `state_lines`.
 | `snapshots` | `rule`, then `ops`: every `edit` op, and `snapshot`, `release`, `restore` (`expect`: the state), `read` (`input`, `name`, `frames`; `expect`: `format`, `rule`, `metadata`, `step`) and `measure` (`names`; `expect`: `universe_nodes`, `added`, `nodes`) as in [hashlife.md](hashlife.md#vector-encoding) | the final state; an op with `error: true` must raise and change nothing |
 | `timeline` | `input` (a pattern), `generations` (a frame at each, from the input's own), `metadata` | `timeline`: the file [macrocell.md](macrocell.md#timelines) writes; reading it back gives each frame's state (`frames`) again |
 | `names` | `cases`, a list of texts, each an `input` | for each, the rule's `canonical` and `states`; or `error: true` and the `reason` (Names, "Reasons") |
+| `convert` | `input` (a file, loaded by content: by the two-state reader when `from` is `two-state`, by the multi-state reader when it is `multistate`), `from`, and `rule` (the new universe's) | the new universe's state, pinned as its own engine pins one (a two-state universe's canonical Macrocell text is [hashlife.md](hashlife.md#vector-encoding)'s); or `error: true` |
 | `measure` | `input` (a file, loaded by content), and `rule` (the reader's rule) when given | `extent`: `format`, `width`, `height`, `x`, `y` (decimal strings), `rule` (or null), `generation`, `metadata` and `two_state` (Measuring); and `rule_named`, what loading the file with the same rule gives, its universe's bounding box the extent's; or `error: true`, both measuring and loading refusing it |
 
 Runners are strict: an unknown key, kind, op, or `spec_version` fails the case.

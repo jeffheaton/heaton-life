@@ -49,6 +49,7 @@ from heaton_life.init.patterns import turn_center, turned_rect
 
 if TYPE_CHECKING:
     from heaton_life.ca.hashlife.files import PatternSnapshot
+    from heaton_life.ca.hashlife.universe import HashLife
 
 StateRenderMode = Literal["state", "density"]
 STATE_RENDER_MODES: tuple[StateRenderMode, ...] = ("state", "density")
@@ -768,6 +769,29 @@ class MultiStateHashLife:
         from heaton_life.ca.hashlife.multistate.files import read_multistate_snapshot
 
         return read_multistate_snapshot(self, source)
+
+    def to_two_state(self, rule: str, *, max_memory_mb: int | None = None) -> HashLife:
+        """This world, under a History or Super rule, as a new two-state universe of
+        ``rule`` (spec/hashlife-multistate.md "Converting between the engines"): its on
+        cells, the odd states, live, its generation the same, converted node by node, never
+        a grid. The budget is this universe's unless another is given; this universe is
+        unchanged. Raises ValueError for any other rule here or there, or for a rule whose
+        background would be alive at this generation (B0)."""
+        from heaton_life.ca.hashlife.multistate.convert import to_two_state
+
+        return to_two_state(self, rule, max_memory_mb)
+
+    def to_multistate(
+        self, rule: str | StateRule, *, max_memory_mb: int | None = None
+    ) -> MultiStateHashLife:
+        """This world, under a History or Super rule, as a new universe of another History
+        or Super rule (spec/hashlife-multistate.md "Converting between the engines"): each
+        state the rule has kept and every other state turned into its parity, as
+        ``convert_cells`` turns a grid's, its generation the same; a Super world under a
+        History rule keeps states 0-6. This universe is unchanged."""
+        from heaton_life.ca.hashlife.multistate.convert import to_multistate
+
+        return to_multistate(self, rule, max_memory_mb)
 
     def to_macrocell(self, metadata: PatternMetadata | None = None) -> str:
         """The canonical Macrocell text: the whole state, any size, in one string."""

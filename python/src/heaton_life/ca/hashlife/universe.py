@@ -46,6 +46,8 @@ from heaton_life.init.seeding import soup
 
 if TYPE_CHECKING:
     from heaton_life.ca.hashlife.files import PatternSnapshot
+    from heaton_life.ca.hashlife.multistate.universe import MultiStateHashLife
+    from heaton_life.ca.state_rules import StateRule
 
 EDIT_LIMIT = 1_000_000_000
 """Editing reaches cells with |x| ≤ EDIT_LIMIT and |y| ≤ EDIT_LIMIT."""
@@ -776,6 +778,18 @@ class HashLife:
         from heaton_life.ca.hashlife.rle import write_rle
 
         return write_rle(self, metadata)
+
+    def to_multistate(
+        self, rule: str | StateRule, *, max_memory_mb: int | None = None
+    ) -> MultiStateHashLife:
+        """This world as a new universe of a History or Super rule (spec/hashlife-multistate.md
+        "Converting between the engines"): its live cells state 1, its generation the same,
+        converted node by node, never a grid. The budget is this universe's unless another
+        is given; this universe is unchanged. Raises ValueError for any other rule, or for a
+        background that is alive at this generation (a rule with B0)."""
+        from heaton_life.ca.hashlife.multistate.convert import to_multistate_from_two_state
+
+        return to_multistate_from_two_state(self, rule, max_memory_mb)
 
     def to_macrocell(self, metadata: PatternMetadata | None = None) -> str:
         """The canonical Macrocell text: the whole state, any size, in one string, with

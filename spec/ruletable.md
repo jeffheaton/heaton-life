@@ -71,16 +71,28 @@ Advance Selection and Advance Outside, whose blank is 0 and which can be cancele
 - **RLE** ([patterns.md](patterns.md)): a header whose rule is a rule table's name
   (`rule = Langtons-Loops`) is extended RLE, its states the letters (`A` is 1, and so on).
   The encoder writes the name as the rule gives it.
-- **A rule appended to an RLE file.** Text after an RLE pattern's `!` that begins, at the
-  start of a line, with `@RULE` is a rule file appended to the pattern: the whole rest of
-  the text from that line is read as one. `embedded_rule(text)` (.NET
-  `RuleTables.Embedded`) gives it, or nothing when there is none; an appended text that is
-  no rule file is an error. A reader of the
+- **A rule appended to a pattern file.** A pattern carries a rule outside the starter set
+  as the rule's file, appended after the pattern:
+  - in **RLE**, text after the pattern's `!` that begins, at the start of a line, with
+    `@RULE`;
+  - in **Macrocell**, a line after the header that begins with `@RULE`, which ends the
+    file's Macrocell lines (its node, leaf and `#` lines come before it, a timeline's
+    `#FRAME` lines among them).
+
+  In either, the whole rest of the text from that line is read as one rule file.
+  `embedded_rule(text)` (.NET `RuleTables.Embedded`) gives it, reading a text whose first
+  line that isn't blank starts with `[M2]` as Macrocell and any other as RLE, or nothing
+  when there is none; an appended text that is no rule file is an error. A reader of the
   [multi-state universe](hashlife-multistate.md#pattern-io) takes an appended rule whose
-  name the header names before it looks the name up. `append_rule(rle, rule)` (.NET
-  `RuleTables.Append`) writes the rule's file text after a pattern.
+  name the header or `#R` names before it looks the name up. `append_rule(text, rule)`
+  (.NET `RuleTables.Append`) writes the rule's file text after a pattern file's text, RLE
+  or Macrocell. The canonical writers append nothing: a host appends the rule to a file
+  that should carry it, such as an export of a world whose rule is outside the starter
+  set.
 - **Macrocell**: a rule-table pattern is a multi-state file
-  ([hashlife-multistate.md](hashlife-multistate.md#pattern-io)), its `#R` the rule's name.
+  ([hashlife-multistate.md](hashlife-multistate.md#pattern-io)), its `#R` the rule's name,
+  and a rule outside the starter set travels appended after it, as above
+  ([macrocell.md](macrocell.md#multi-state-files)).
 
 ## On the unbounded plane
 

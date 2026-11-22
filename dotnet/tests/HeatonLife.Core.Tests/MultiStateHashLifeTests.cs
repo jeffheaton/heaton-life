@@ -1105,5 +1105,177 @@ namespace HeatonLife.Tests
             Assert.Equal(named, read.RuleNamed);
             Assert.Equal(!named, read.Universe.Rule == "B3/S23History");
         }
+
+        // -- a Macrocell file carrying its rule (spec/ruletable.md "Files") ------------------------
+
+        private static RuleTable MyByl()
+            => RuleTable.Parse(RuleTables.Starter("Byl-Loop").Text.Replace("@RULE Byl-Loop", "@RULE My-Byl"));
+
+        private static byte[] BylLoop()
+        {
+            var grid = new RuleTableCA("Byl-Loop", 16, 16);
+            return grid.State.ToArray();
+        }
+
+        [Fact]
+        public void AMacrocellFileCarriesItsRuleTable()
+        {
+            RuleTable mine = MyByl();
+            var u = new MultiStateHashLife(mine);
+            u.SetRect(-3, 2, BylLoop(), 16, 16);
+            u.Step(9);
+            string plain = u.ToMacrocell();
+            Assert.DoesNotContain("@RULE", plain); // the canonical text is the cells'
+            string text = RuleTables.Append(plain, mine);
+            MultiStatePatternUniverse found = MultiStateFiles.ReadUniverse(text);
+            Assert.Equal("My-Byl", found.Universe.Rule);
+            Assert.True(found.RuleNamed);
+            Assert.Equal(plain, found.Universe.ToMacrocell());
+            Assert.Equal(9, (int)found.Universe.Generation);
+            RuleTable? carried = RuleTables.Embedded(text);
+            Assert.NotNull(carried);
+            Assert.Equal(("My-Byl", mine.Text), (carried!.Canonical, carried.Text));
+            Assert.Null(RuleTables.Embedded(plain));
+            Assert.Equal("My-Byl", MultiStateFiles.Measure(text).Rule);
+            Assert.Throws<FormatException>(() => MultiStateFiles.ReadUniverse(plain)); // without its rule file
+            Assert.Equal("My-Byl", u.ReadSnapshot(Encoding.UTF8.GetBytes(text)).Rule);
+            // A rule object of the name wins, as for RLE; an appended rule #R doesn't name is skipped.
+            Assert.Same(mine, MultiStateFiles.ReadUniverse(text, mine).Universe.StateRule);
+            var wire = new MultiStateHashLife();
+            wire.SetRect(0, 0, ClockLoop(12), 12, 12);
+            Assert.Equal("WireWorld", MultiStateFiles.ReadUniverse(RuleTables.Append(wire.ToMacrocell(), mine)).Universe.Rule);
+        }
+
+        [Fact]
+        public void AnAppendedTextMustBeARuleFile()
+        {
+            const string broken = "[M2]\n#R My-Byl\n1 0 1 0 0\n@RULE My-Byl\n@TABLE\nn_states:2\nnonsense\n";
+            Assert.Throws<RuleFileException>(() => MultiStateFiles.ReadUniverse(broken));
+            Assert.Throws<RuleFileException>(() => MultiStateFiles.Measure(broken));
+            // Node lines after @RULE belong to the rule file, not the tree.
+            string text = "[M2]\n#R My-Byl\n1 0 1 0 0\n" + MyByl().Text;
+            Assert.Equal(1, (int)MultiStateFiles.ReadUniverse(text).Universe.Population);
+        }
+
+        [Fact]
+        public void ATimelineCarriesItsRuleAfterItsFrameLines()
+        {
+            RuleTable mine = MyByl();
+            var u = new MultiStateHashLife(mine);
+            u.SetRect(0, 0, BylLoop(), 16, 16);
+            var frames = new List<HashLifeSnapshot>();
+            for (int i = 0; i < 3; i++)
+            {
+                frames.Add(u.Snapshot());
+                u.Step(4);
+            }
+            string text = RuleTables.Append(MultiStateMacrocell.WriteTimeline(u, frames), mine);
+            MultiStateTimeline timeline = MultiStateMacrocell.ReadTimeline(text);
+            Assert.Equal("My-Byl", timeline.Universe.Rule);
+            Assert.Equal(3, timeline.Frames.Count);
+        }
+
+        // -- converting between the engines (spec/hashlife-multistate.md) --------------------------
+
+        [Fact]
+        public void ATwoStateWorldConvertsToHistoryAndSuper()
+        {
+            var two = new HashLife("B36/S23", 64);
+            two.SetRect(-30, -20, Noise(50, 60, 3), 60, 50);
+            two.Step(17);
+            string before = two.ToMacrocell();
+            foreach (string rule in new[] { "B36/S23History", "b36/s23super" })
+            {
+                MultiStateHashLife many = two.ToMultiState(rule);
+                Assert.Equal(17, (int)many.Generation);
+                Assert.Equal(two.Population, many.Population);
+                Assert.Equal(64, many.MaxMemoryMb);
+                CellBox b = two.BoundingBox!.Value;
+                Assert.Equal(b, many.BoundingBox!.Value);
+                long x0 = (long)b.X0, y0 = (long)b.Y0, x1 = (long)b.X1, y1 = (long)b.Y1;
+                Assert.Equal(two.GetRect(x0, y0, x1, y1), many.GetRect(x0, y0, x1, y1));
+            }
+            Assert.Equal(before, two.ToMacrocell()); // the old universe is unchanged
+            Assert.Equal(20, two.ToMultiState("B36/S23History", 20).MaxMemoryMb);
+        }
+
+        [Fact]
+        public void OnCellsConvertBackAndRunTheBaseRule()
+        {
+            var two = new HashLife();
+            two.SetRect(-30, -20, Noise(50, 60, 4), 60, 50);
+            MultiStateHashLife history = two.ToMultiState("B3/S23History");
+            two.Step(40);
+            history.Step(40);
+            HashLife back = history.ToTwoState("B3/S23");
+            Assert.Equal(40, (int)back.Generation);
+            Assert.Equal(two.ToMacrocell(), back.ToMacrocell());
+            Assert.True(history.Population > back.Population); // the envelope was dead cells there
+        }
+
+        [Fact]
+        public void SuperConvertsToHistoryByParity()
+        {
+            var sup = new MultiStateHashLife("B3/S23Super");
+            byte[] cells = Enumerable.Range(0, 26).Select(v => (byte)v).ToArray();
+            sup.SetRect(0, 0, cells, 13, 2);
+            MultiStateHashLife history = sup.ToMultiState("B3/S23History");
+            Assert.Equal(cells.Select(c => c < 7 ? c : (byte)(c & 1)).ToArray(), history.GetRect(0, 0, 12, 1));
+            Assert.Equal(sup.ToMacrocell(), sup.ToMultiState("B3/S23Super").ToMacrocell());
+            Assert.Throws<ArgumentException>(() => sup.Rule = "B3/S23History"); // the rule alone can't take them
+        }
+
+        [Fact]
+        public void SmallAndFarWorldsConvert()
+        {
+            var tiny = new MultiStateHashLife("B3/S23History");
+            tiny.SetCell(0, 1, 5); // a level-2 root
+            HashLife two = tiny.ToTwoState("B36/S23");
+            Assert.True(two.GetCell(0, 1));
+            Assert.Equal(1, (int)two.Population);
+            Assert.Equal("B36/S23", two.Rule);
+            var lines = new List<string> { "[M2]", "#R LifeSuper", "#G 99", "1 0 25 3 0" };
+            for (int k = 2; k < 90; k++)
+                lines.Add($"{k} {k - 1} 0 0 0");
+            MultiStateHashLife far = MultiStateMacrocell.Read(string.Join("\n", lines));
+            HashLife converted = far.ToTwoState("B3/S23");
+            Assert.Equal(far.BoundingBox, converted.BoundingBox);
+            Assert.Equal(99, (int)converted.Generation);
+            Assert.Equal(2, (int)converted.Population);
+            Assert.Equal(2, (int)converted.ToMultiState("B3/S23History").Population);
+        }
+
+        [Fact]
+        public void ConversionsThatHaveNoMeaningAreRefused()
+        {
+            Assert.Throws<ArgumentException>(() => new HashLife().ToMultiState("B2/S/C3"));
+            Assert.Throws<ArgumentException>(() => new HashLife().ToMultiState("WireWorld"));
+            Assert.Throws<ArgumentException>(() => new MultiStateHashLife("B2/S/C3").ToTwoState("B3/S23"));
+            Assert.Throws<ArgumentException>(() => new MultiStateHashLife("WireWorld").ToMultiState("LifeHistory"));
+            Assert.Throws<ArgumentException>(() => new MultiStateHashLife("LifeHistory").ToMultiState("B2/S/C3"));
+            Assert.Throws<ArgumentException>(() => new MultiStateHashLife("LifeHistory").ToTwoState("LifeHistory"));
+            Assert.Contains("background", Assert.Throws<ArgumentException>(
+                () => new HashLife("B0123478/S01234678").ToMultiState("LifeHistory")).Message);
+            Assert.Contains("background", Assert.Throws<ArgumentException>(
+                () => new MultiStateHashLife("LifeHistory").ToTwoState("B0/S8")).Message);
+        }
+
+        [Fact]
+        public void AB0WorldConvertsWhereItsBackgroundIsDead()
+        {
+            var two = new HashLife("B0/S"); // B0 without Smax: dead at even generations
+            two.SetRect(0, 0, new byte[] { 1, 1 }, 2, 1);
+            two.Step(2);
+            Assert.False(two.BackgroundAlive);
+            Assert.Equal(two.Population, two.ToMultiState("B3/S23History").Population);
+            two.Step(1);
+            Assert.Throws<ArgumentException>(() => two.ToMultiState("B3/S23History"));
+            var history = new MultiStateHashLife("LifeHistory");
+            history.SetCell(0, 0, 1);
+            history.SetGeneration(4);
+            Assert.Equal(1, (int)history.ToTwoState("B0/S").Population); // dead at generation 4
+            history.SetGeneration(5);
+            Assert.Throws<ArgumentException>(() => history.ToTwoState("B0/S"));
+        }
     }
 }

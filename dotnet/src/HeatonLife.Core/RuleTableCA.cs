@@ -393,17 +393,30 @@ namespace HeatonLife
         }
 
         /// <summary>
-        /// The rule file appended to an RLE pattern (spec/ruletable.md "Files"): the text from the
-        /// first line after the pattern's <c>!</c> that starts with <c>@RULE</c>, read as a rule
-        /// file; null when the text has none. Comment lines (<c>#</c>) and the header come before
-        /// the pattern, so its end is the first <c>!</c> in a line after them. An appended text
-        /// that is no rule file throws <see cref="RuleFileException"/>.
+        /// The rule file appended to an RLE or Macrocell pattern (spec/ruletable.md "Files"): in RLE
+        /// the text from the first line after the pattern's <c>!</c> that starts with <c>@RULE</c>,
+        /// in Macrocell (a text whose first line that isn't blank starts with <c>[M2]</c>) the text
+        /// from the first line after the header that starts with <c>@RULE</c>, read as a rule file;
+        /// null when the text has none. An appended text that is no rule file throws
+        /// <see cref="RuleFileException"/>.
         /// </summary>
         public static RuleTable? Embedded(string text)
         {
             if (text == null)
                 throw new ArgumentNullException(nameof(text));
             string[] lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+            int first = 0;
+            while (first < lines.Length && TextLines.Strip(lines[first]).Length == 0)
+                first++;
+            if (first < lines.Length && TextLines.Strip(lines[first]).StartsWith("[M2]", StringComparison.Ordinal))
+            {
+                for (int later = first + 1; later < lines.Length; later++)
+                {
+                    if (TextLines.Strip(lines[later]).StartsWith("@RULE", StringComparison.Ordinal))
+                        return RuleTable.Parse(string.Join("\n", lines, later, lines.Length - later));
+                }
+                return null;
+            }
             int index = 0;
             while (index < lines.Length
                 && (TextLines.Strip(lines[index]).Length == 0 || TextLines.Strip(lines[index]).StartsWith("#", StringComparison.Ordinal)))
@@ -420,8 +433,8 @@ namespace HeatonLife
             return null;
         }
 
-        /// <summary>An RLE pattern's text with <paramref name="rule"/>'s file appended after it
-        /// (spec/ruletable.md "Files"), so the pattern carries its rule.</summary>
+        /// <summary>A pattern file's text, RLE or Macrocell, with <paramref name="rule"/>'s file
+        /// appended after it (spec/ruletable.md "Files"), so the pattern carries its rule.</summary>
         public static string Append(string rle, RuleTable rule)
         {
             if (rle == null)

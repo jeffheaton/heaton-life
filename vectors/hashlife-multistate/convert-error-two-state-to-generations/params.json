@@ -1,0 +1,10 @@
+{
+  "error": true,
+  "family": "hashlife-multistate",
+  "from": "two-state",
+  "input": "input.rle",
+  "kind": "convert",
+  "rule": "B2/S/C3",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

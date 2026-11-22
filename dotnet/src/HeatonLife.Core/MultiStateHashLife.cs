@@ -588,8 +588,49 @@ namespace HeatonLife
             return expanded;
         }
 
+        /// <summary>Centered level-k node (k ≥ 1) inside a centered node twice its size, in this
+        /// universe's store (a conversion's growing root).</summary>
+        internal int Expand(int node, int k) => ExpandNode(node, k);
+
         /// <summary>Free every node unreachable from the current state and the live snapshots.</summary>
         public void CollectGarbage() => _store.Collect(inFlight: false);
+
+        /// <summary>
+        /// This world, under a History or Super rule, as a new two-state universe of
+        /// <paramref name="rule"/> (spec/hashlife-multistate.md "Converting between the engines"): its
+        /// on cells, the odd states, live, its generation the same, converted node by node, never a
+        /// grid. The budget is this universe's unless <paramref name="maxMemoryMb"/> is given; this
+        /// universe is unchanged. Throws <see cref="ArgumentException"/> for any other rule here or
+        /// there, or for a rule whose background would be alive at this generation (B0).
+        /// </summary>
+        public HashLife ToTwoState(string rule, int? maxMemoryMb = null)
+        {
+            if (rule == null)
+                throw new ArgumentNullException(nameof(rule));
+            return HashLifeConversion.ToTwoState(this, rule, maxMemoryMb);
+        }
+
+        /// <summary>
+        /// This world, under a History or Super rule, as a new universe of another History or Super
+        /// <paramref name="rule"/> (spec/hashlife-multistate.md "Converting between the engines"): each
+        /// state the rule has kept and every other state turned into its parity, as
+        /// <see cref="LifeRule.ConvertCells"/> turns a grid's, its generation the same; a Super world
+        /// under a History rule keeps states 0–6. This universe is unchanged.
+        /// </summary>
+        public MultiStateHashLife ToMultiState(StateRule rule, int? maxMemoryMb = null)
+        {
+            if (rule == null)
+                throw new ArgumentNullException(nameof(rule));
+            return HashLifeConversion.ToMultiState(this, rule, maxMemoryMb);
+        }
+
+        /// <summary><see cref="ToMultiState(StateRule, int?)"/> for a rule given by its name.</summary>
+        public MultiStateHashLife ToMultiState(string rule, int? maxMemoryMb = null)
+        {
+            if (rule == null)
+                throw new ArgumentNullException(nameof(rule));
+            return ToMultiState(StateRules.Compile(rule), maxMemoryMb);
+        }
 
         // -- editing ----------------------------------------------------------------------------
 

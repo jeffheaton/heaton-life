@@ -18,7 +18,7 @@ from PIL import Image
 
 from heaton_life.ca import LifeLike
 from heaton_life.ca.generations import Generations
-from heaton_life.ca.hashlife import LifeView, MultiStateHashLife, Snapshot
+from heaton_life.ca.hashlife import HashLife, LifeView, MultiStateHashLife, Snapshot, read_universe
 from heaton_life.ca.hashlife.multistate import (
     measure_multistate_pattern,
     read_multistate_universe,
@@ -47,6 +47,7 @@ _KEYS = {
     "timeline": _COMMON | {"input", "generations", "metadata", "timeline", "frames"},
     "names": _COMMON | {"cases"},
     "measure": _COMMON | {"input", "rule", "error", "extent", "rule_named"},
+    "convert": _COMMON | {"input", "from", "rule", "error"} | _STATE,
 }
 _EXTENT = {"format", "width", "height", "x", "y", "rule", "generation", "metadata", "two_state"}
 _EDIT_OPS = {
@@ -78,7 +79,7 @@ _SNAPSHOT_OPS = {
 _DIGITS = "0123456789abcdefghijklmnopqrstuvwxyz"
 
 
-def _expect_state(case_dir: Path, u: MultiStateHashLife, entry: dict[str, Any]) -> None:
+def _expect_state(case_dir: Path, u: MultiStateHashLife | HashLife, entry: dict[str, Any]) -> None:
     assert str(u.generation) == entry["generation"]
     assert str(u.population) == entry["population"]
     box = u.bounding_box()
@@ -301,6 +302,33 @@ def test_multistate_vector(case: Path) -> None:
         for frame, entry in zip(back.frames, meta["frames"], strict=True):
             back.universe.restore(frame)
             _expect_state(d, back.universe, entry)
+    elif kind == "convert":
+        # A Life-like world converted between the engines (spec/hashlife-multistate.md
+        # "Converting between the engines"), its state pinned as its new engine pins one.
+        data = (d / meta["input"]).read_bytes()
+        assert meta["from"] in ("two-state", "multistate"), meta["from"]
+        source: HashLife | MultiStateHashLife = (
+            read_universe(data).universe
+            if meta["from"] == "two-state"
+            else read_multistate_universe(data).universe
+        )
+        rule = meta["rule"]
+        two_state, _ = try_compile_rule(rule, presets=False)
+
+        def convert() -> HashLife | MultiStateHashLife:
+            if isinstance(source, HashLife) or two_state is None:
+                return source.to_multistate(rule)
+            return source.to_two_state(rule)
+
+        before = source.to_macrocell()
+        if meta.get("error"):
+            with pytest.raises(ValueError):
+                convert()
+        else:
+            out = convert()
+            assert out.generation == source.generation
+            _expect_state(d, out, meta)
+        assert source.to_macrocell() == before  # the old universe is unchanged
     elif kind == "measure":
         # Measured without a universe, then loaded: the extent is the loaded universe's box
         # (spec/hashlife-multistate.md "Measuring"), and loading says whether the file named

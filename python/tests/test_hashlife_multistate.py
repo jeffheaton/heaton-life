@@ -7,6 +7,7 @@ from __future__ import annotations
 import gzip
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -25,6 +26,7 @@ from heaton_life.ca.hashlife import (
     read_multistate_universe,
 )
 from heaton_life.ca.hashlife.multistate import read_timeline, write_timeline
+from heaton_life.ca.rulefile import RuleTable, parse_rule_file
 from heaton_life.ca.rulestring import compile_rule
 from heaton_life.ca.state_rules import StateRule, check_state_rule, state_rule, try_state_rule
 from heaton_life.ca.wireworld import WIREWORLD_RULE, Wireworld, clock_loop, wireworld_from_text
@@ -853,3 +855,177 @@ def test_the_reader_says_whether_a_file_named_its_rule() -> None:
         read = read_multistate_universe(text, rule="B3/S23History")
         assert read.rule_named is expected, text
         assert (read.universe.rule == "B3/S23History") is not expected
+
+
+# -- a Macrocell file carrying its rule (spec/ruletable.md "Files") -----------------------------
+
+
+def _my_byl() -> RuleTable:
+    from heaton_life.ca.ruletable import starter_rule
+
+    return parse_rule_file(
+        starter_rule("Byl-Loop").text.replace("@RULE Byl-Loop", "@RULE My-Byl", 1)
+    )
+
+
+def test_a_macrocell_file_carries_its_rule_table() -> None:
+    from heaton_life.ca.ruletable import append_rule, embedded_rule, starter_pattern
+
+    mine = _my_byl()
+    u = MultiStateHashLife(mine)
+    u.set_rect(-3, 2, starter_pattern("Byl-Loop"))
+    u.step(9)
+    plain = u.to_macrocell()
+    assert "@RULE" not in plain  # the canonical text is the cells'
+    text = append_rule(plain, mine)
+    found = read_multistate_universe(text)
+    assert (found.universe.rule, found.rule_named) == ("My-Byl", True)
+    assert found.universe.to_macrocell() == plain and found.universe.generation == 9
+    carried = embedded_rule(text)
+    assert carried is not None and (carried.canonical, carried.text) == ("My-Byl", mine.text)
+    assert embedded_rule(plain) is None
+    extent = measure_multistate_pattern(text)
+    assert extent.rule == "My-Byl"
+    box = found.universe.bounding_box()
+    assert box is not None and (extent.x, extent.y) == box[:2]
+    with pytest.raises(ValueError, match="not a state rule"):  # without its rule file
+        read_multistate_universe(plain)
+    same = u.read_snapshot(text)  # into a universe that exists
+    assert same.rule == "My-Byl"
+    # A rule object of the name wins, as for RLE; an appended rule #R doesn't name is skipped.
+    assert read_multistate_universe(text, rule=mine).universe.state_rule is mine
+    wire = MultiStateHashLife()
+    wire.set_rect(0, 0, clock_loop((12, 12)))
+    other = read_multistate_universe(append_rule(wire.to_macrocell(), mine))
+    assert other.universe.rule == "WireWorld"
+
+
+def test_an_appended_text_must_be_a_rule_file() -> None:
+    broken = "[M2]\n#R My-Byl\n1 0 1 0 0\n@RULE My-Byl\n@TABLE\nn_states:2\nnonsense\n"
+    with pytest.raises(ValueError, match="rule file"):
+        read_multistate_universe(broken)
+    with pytest.raises(ValueError, match="rule file"):
+        measure_multistate_pattern(broken)
+    # Node lines after @RULE belong to the rule file, not the tree.
+    mine = _my_byl()
+    text = "[M2]\n#R My-Byl\n1 0 1 0 0\n" + mine.text
+    assert read_multistate_universe(text).universe.population == 1
+
+
+def test_a_timeline_carries_its_rule_after_its_frame_lines() -> None:
+    from heaton_life.ca.ruletable import append_rule, starter_pattern
+
+    mine = _my_byl()
+    u = MultiStateHashLife(mine)
+    u.set_rect(0, 0, starter_pattern("Byl-Loop"))
+    frames = []
+    for _ in range(3):
+        frames.append(u.snapshot())
+        u.step(4)
+    text = append_rule(write_timeline(u, frames), mine)
+    timeline = read_timeline(text)
+    assert timeline.universe.rule == "My-Byl" and len(timeline.frames) == 3
+
+
+# -- converting between the engines (spec/hashlife-multistate.md) ------------------------------
+
+
+def _soup(seed: int, height: int = 50, width: int = 60, states: int = 2) -> NDArray[np.uint8]:
+    rng = np.random.default_rng(seed)
+    cells = (rng.random((height, width)) < 0.35) * rng.integers(1, states, (height, width))
+    return cells.astype(np.uint8)
+
+
+def test_a_two_state_world_converts_to_history_and_super() -> None:
+    two = HashLife("B36/S23", max_memory_mb=64)
+    two.set_rect(-30, -20, _soup(3))
+    two.step(17)
+    before = two.to_macrocell()
+    for rule in ("B36/S23History", "b36/s23super"):
+        many = two.to_multistate(rule)
+        assert (many.generation, many.population, many.max_memory_mb) == (17, two.population, 64)
+        box = two.bounding_box()
+        assert box is not None and many.bounding_box() == box
+        assert np.array_equal(many.get_rect(*box), two.get_rect(*box))
+        assert many.zoom_order == ()
+    assert two.to_macrocell() == before  # the old universe is unchanged
+    assert two.to_multistate("B36/S23History", max_memory_mb=20).max_memory_mb == 20
+
+
+def test_on_cells_convert_back_and_run_the_base_rule() -> None:
+    two = HashLife()
+    two.set_rect(-30, -20, _soup(4))
+    history = two.to_multistate("B3/S23History")
+    two.step(40)
+    history.step(40)
+    back = history.to_two_state("B3/S23")
+    assert back.generation == 40 and back.to_macrocell() == two.to_macrocell()
+    assert history.population > back.population  # the envelope was dead cells there
+
+
+def test_super_converts_to_history_by_parity() -> None:
+    sup = MultiStateHashLife("B3/S23Super")
+    cells = np.arange(26, dtype=np.uint8).reshape(2, 13)
+    sup.set_rect(0, 0, cells)
+    history = sup.to_multistate("B3/S23History")
+    expect = np.where(cells < 7, cells, cells & 1)
+    assert np.array_equal(history.get_rect(0, 0, 12, 1), expect)
+    assert sup.to_multistate("B3/S23Super").to_macrocell() == sup.to_macrocell()
+    with pytest.raises(ValueError, match="holds state"):  # the rule alone can't take them
+        sup.rule = "B3/S23History"
+
+
+def test_small_and_far_worlds_convert() -> None:
+    tiny = MultiStateHashLife("B3/S23History")
+    tiny.set_cell(0, 1, 5)  # a level-2 root
+    two = tiny.to_two_state("B36/S23")
+    assert (two.get_cell(0, 1), two.population, two.rule) == (1, 1, "B36/S23")
+    far = MultiStateHashLife.from_macrocell(
+        "\n".join(
+            ["[M2]", "#R LifeSuper", "#G 99", "1 0 25 3 0"]
+            + [f"{k} {k - 1} 0 0 0" for k in range(2, 90)]
+        )
+    )
+    converted = far.to_two_state("B3/S23")
+    assert converted.bounding_box() == far.bounding_box() and converted.generation == 99
+    assert converted.population == 2
+    assert converted.to_multistate("B3/S23History").population == 2
+
+
+@pytest.mark.parametrize(
+    ("make", "match"),
+    [
+        (lambda: HashLife().to_multistate("B2/S/C3"), "no History or Super rule"),
+        (lambda: HashLife().to_multistate("WireWorld"), "no History or Super rule"),
+        (lambda: MultiStateHashLife("B2/S/C3").to_two_state("B3/S23"), "no History or Super"),
+        (lambda: MultiStateHashLife("WireWorld").to_multistate("LifeHistory"), "no History"),
+        (lambda: MultiStateHashLife("LifeHistory").to_multistate("B2/S/C3"), "no History"),
+        (lambda: MultiStateHashLife("LifeHistory").to_two_state("LifeHistory"), "7 states"),
+        (lambda: HashLife("B0123478/S01234678").to_multistate("LifeHistory"), "background"),
+        (lambda: MultiStateHashLife("LifeHistory").to_two_state("B0/S8"), "background"),
+    ],
+)
+def test_conversions_that_have_no_meaning_are_refused(
+    make: Callable[[], object], match: str
+) -> None:
+    with pytest.raises(ValueError, match=match):
+        make()
+
+
+def test_a_b0_world_converts_where_its_background_is_dead() -> None:
+    two = HashLife("B0/S")  # B0 without Smax: dead at even generations
+    two.set_rect(0, 0, np.array([[1, 1]], np.uint8))
+    two.step(2)
+    assert two.background == 0
+    many = two.to_multistate("B3/S23History")
+    assert many.population == two.population
+    two.step(1)
+    with pytest.raises(ValueError, match="background"):
+        two.to_multistate("B3/S23History")
+    history = MultiStateHashLife("LifeHistory")
+    history.set_cell(0, 0, 1)
+    history.set_generation(4)
+    assert history.to_two_state("B0/S").population == 1  # dead at generation 4
+    history.set_generation(5)
+    with pytest.raises(ValueError, match="background"):
+        history.to_two_state("B0/S")

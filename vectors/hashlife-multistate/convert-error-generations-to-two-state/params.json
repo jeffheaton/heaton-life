@@ -1,0 +1,10 @@
+{
+  "error": true,
+  "family": "hashlife-multistate",
+  "from": "multistate",
+  "input": "input.mc",
+  "kind": "convert",
+  "rule": "B3/S23",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

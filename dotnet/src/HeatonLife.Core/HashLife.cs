@@ -1093,6 +1093,29 @@ namespace HeatonLife
             return new string(chars);
         }
 
+        /// <summary>
+        /// This world as a new universe of a History or Super <paramref name="rule"/>
+        /// (spec/hashlife-multistate.md "Converting between the engines"): its live cells state 1,
+        /// its generation the same, converted node by node, never a grid. The budget is this
+        /// universe's unless <paramref name="maxMemoryMb"/> is given; this universe is unchanged.
+        /// Throws <see cref="ArgumentException"/> for any other rule, or for a background that is
+        /// alive at this generation (a rule with B0).
+        /// </summary>
+        public MultiStateHashLife ToMultiState(StateRule rule, int? maxMemoryMb = null)
+        {
+            if (rule == null)
+                throw new ArgumentNullException(nameof(rule));
+            return HashLifeConversion.ToMultiState(this, rule, maxMemoryMb);
+        }
+
+        /// <summary><see cref="ToMultiState(StateRule, int?)"/> for a rule given by its name.</summary>
+        public MultiStateHashLife ToMultiState(string rule, int? maxMemoryMb = null)
+        {
+            if (rule == null)
+                throw new ArgumentNullException(nameof(rule));
+            return ToMultiState(StateRules.Compile(rule), maxMemoryMb);
+        }
+
         // -- internals for the readers and writers ----------------------------------------------
 
         internal HashLifeStore Store => _store;

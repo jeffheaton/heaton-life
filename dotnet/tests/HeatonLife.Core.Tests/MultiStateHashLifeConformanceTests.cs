@@ -44,6 +44,7 @@ namespace HeatonLife.Tests
                 ["timeline"] = Of(common, new[] { "input", "generations", "metadata", "timeline", "frames" }),
                 ["names"] = Of(common, new[] { "cases" }),
                 ["measure"] = Of(common, new[] { "input", "rule", "error", "extent", "rule_named" }),
+                ["convert"] = Of(common, new[] { "input", "from", "rule", "error" }, state),
             };
         }
 
@@ -297,6 +298,62 @@ namespace HeatonLife.Tests
                         }
                         break;
                     }
+                case "convert":
+                    {
+                        // A Life-like world converted between the engines (spec/hashlife-multistate.md
+                        // "Converting between the engines"), its state pinned as its new engine pins one.
+                        byte[] data = File.ReadAllBytes(Path.Combine(dir, Text(meta, "input")));
+                        string from = Text(meta, "from");
+                        Assert.True(from == "two-state" || from == "multistate", from);
+                        string rule = Text(meta, "rule");
+                        bool toTwoState = RuleString.TryCompile(rule, out _);
+                        bool error = meta.TryGetProperty("error", out JsonElement refused) && refused.GetBoolean();
+                        if (from == "two-state")
+                        {
+                            HashLife source = PatternFiles.ReadUniverse(data).Universe;
+                            string before = source.ToMacrocell();
+                            if (error)
+                            {
+                                Refused(() => source.ToMultiState(rule));
+                            }
+                            else
+                            {
+                                MultiStateHashLife output = source.ToMultiState(rule);
+                                Assert.Equal(source.Generation, output.Generation);
+                                ExpectState(dir, output, meta);
+                            }
+                            Assert.Equal(before, source.ToMacrocell()); // the old universe is unchanged
+                        }
+                        else
+                        {
+                            MultiStateHashLife source = MultiStateFiles.ReadUniverse(data).Universe;
+                            string before = source.ToMacrocell();
+                            if (error)
+                            {
+                                Refused(() =>
+                                {
+                                    if (toTwoState)
+                                        source.ToTwoState(rule);
+                                    else
+                                        source.ToMultiState(rule);
+                                });
+                            }
+                            else if (toTwoState)
+                            {
+                                HashLife output = source.ToTwoState(rule);
+                                Assert.Equal(source.Generation, output.Generation);
+                                ExpectState(dir, output, meta);
+                            }
+                            else
+                            {
+                                MultiStateHashLife output = source.ToMultiState(rule);
+                                Assert.Equal(source.Generation, output.Generation);
+                                ExpectState(dir, output, meta);
+                            }
+                            Assert.Equal(before, source.ToMacrocell());
+                        }
+                        break;
+                    }
                 case "measure":
                     {
                         // Measured without a universe, then loaded: the extent is the loaded
@@ -413,11 +470,19 @@ namespace HeatonLife.Tests
 
         /// <summary>A state pinned by generation, population, bounding box, and canonical text.</summary>
         private static void ExpectState(string dir, MultiStateHashLife u, JsonElement entry)
+            => ExpectState(dir, u.Generation, u.Population, u.BoundingBox, u.ToMacrocell(), entry);
+
+        /// <summary>A two-state universe's state, pinned as its own vectors pin one (a conversion's
+        /// result).</summary>
+        private static void ExpectState(string dir, HashLife u, JsonElement entry)
+            => ExpectState(dir, u.Generation, u.Population, u.BoundingBox, u.ToMacrocell(), entry);
+
+        private static void ExpectState(
+            string dir, BigInteger generation, BigInteger population, CellBox? got, string text, JsonElement entry)
         {
-            Assert.Equal(Text(entry, "generation"), u.Generation.ToString());
-            Assert.Equal(Text(entry, "population"), u.Population.ToString());
+            Assert.Equal(Text(entry, "generation"), generation.ToString());
+            Assert.Equal(Text(entry, "population"), population.ToString());
             JsonElement box = entry.GetProperty("bounding_box");
-            CellBox? got = u.BoundingBox;
             if (box.ValueKind == JsonValueKind.Null)
             {
                 Assert.Null(got);
@@ -430,7 +495,6 @@ namespace HeatonLife.Tests
                     box.EnumerateArray().Select(v => v.GetString()).ToArray(),
                     new[] { b.X0, b.Y0, b.X1, b.Y1 }.Select(v => v.ToString()).ToArray());
             }
-            string text = u.ToMacrocell();
             if (entry.TryGetProperty("state", out JsonElement state))
             {
                 Assert.Equal(File.ReadAllText(Path.Combine(dir, state.GetString()!)), text);

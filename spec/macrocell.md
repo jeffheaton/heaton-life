@@ -189,6 +189,11 @@ square of states, and a node of level k ≥ 2 has four children of level k − 1
   whole file is read, so `#R` may come anywhere after the header.
 - The root is the last node line, placed as "Reading", step 4, says: a level-1 root
   covers the cells x ∈ {−1, 0}, y ∈ {0, 1}.
+- **A rule appended to the file.** A line that starts with `@RULE` ends the file's
+  Macrocell lines: it and the whole rest of the text are a rule file appended to the
+  pattern ([ruletable.md](ruletable.md#files)), as an RLE file carries one. When `#R`
+  names that rule, and the reader isn't given a rule object of that name, the file runs
+  under it, before the name is looked up.
 
 **Writing.** Canonical, as "Writing" above says, with these differences:
 
@@ -197,6 +202,8 @@ square of states, and a node of level k ≥ 2 has four children of level k − 1
 - A leaf is written `1 <nw> <ne> <sw> <se>`, the states in decimal, single spaces; a leaf
   of four 0 cells is the child `0` and never gets a line.
 - The empty universe is the empty leaf, written `1 0 0 0 0`.
+- No rule file is appended: the canonical text is the cells'. A host appends a rule
+  outside the starter set with `append_rule` ([ruletable.md](ruletable.md#files)).
 
 For example, the Wireworld clock `CBA3C$C4.C$6C!` with its top-left cell at (0, 0):
 

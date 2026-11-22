@@ -157,8 +157,8 @@ namespace HeatonLife
         internal static Built Build(MultiStateHashLife universe, string text, StateRule fallback)
         {
             var built = new Built();
-            Scan(text, new StoreSink(universe.Store), built, out string? named, out int top, out _);
-            built.Rule = CheckedRule(named, top, fallback);
+            Scan(text, new StoreSink(universe.Store), built, out string? named, out int top, out _, out string? ruleText);
+            built.Rule = CheckedRule(named, top, fallback, ruleText);
             built.RuleNamed = named != null;
             (built.Root, built.Level) = universe.Place(built.Nodes[built.Nodes.Count - 1], built.Levels[built.Levels.Count - 1]);
             return built;
@@ -177,8 +177,8 @@ namespace HeatonLife
         {
             var sink = new BoxSink();
             var scanned = new Built();
-            Scan(text, sink, scanned, out string? named, out int top, out twoState);
-            StateRule found = CheckedRule(named, top, fallback);
+            Scan(text, sink, scanned, out string? named, out int top, out twoState, out string? ruleText);
+            StateRule found = CheckedRule(named, top, fallback, ruleText);
             rule = named == null ? null : found.Canonical;
             generation = scanned.Generation;
             metadata = scanned.Metadata;
@@ -195,21 +195,37 @@ namespace HeatonLife
 
         /// <summary>The rule a scanned file runs under: the one it names, else
         /// <paramref name="fallback"/>; a state the rule lacks is refused.</summary>
-        private static StateRule CheckedRule(string? named, int top, StateRule fallback)
+        private static StateRule CheckedRule(string? named, int top, StateRule fallback, string? ruleText)
         {
-            StateRule rule = named == null ? fallback : MultiStateFiles.FileRule(named, fallback);
+            StateRule rule = named == null ? fallback : NamedRule(named, fallback, ruleText);
             if (top >= rule.States)
                 throw new FormatException(
                     $"the file holds state {top}, which {rule.Canonical} doesn't have ({rule.States} states)");
             return rule;
         }
 
+        /// <summary>The rule <c>#R</c> names: <paramref name="given"/> when the name is its
+        /// canonical name, else a rule file appended to the pattern under that name
+        /// (spec/ruletable.md "Files"), else the rule of that name; as an RLE header's rule is
+        /// found.</summary>
+        private static StateRule NamedRule(string name, StateRule given, string? ruleText)
+        {
+            if (StateRules.Names(name, given) || ruleText == null)
+                return MultiStateFiles.FileRule(name, given);
+            RuleTable appended = RuleTable.Parse(ruleText);
+            if (StateRules.Names(name, appended))
+                return StateRules.Check(appended);
+            return MultiStateFiles.FileRule(name, given);
+        }
+
         /// <summary>Read a Macrocell file's lines into <paramref name="sink"/>, its node lines,
         /// <c>#G</c>, metadata and timeline lines into <paramref name="built"/>: the rule it names
-        /// (or null), its largest state, and whether every leaf is a two-state line. A malformed
-        /// file throws <see cref="FormatException"/>.</summary>
+        /// (or null), its largest state, whether every leaf is a two-state line, and the text of
+        /// a rule file appended to it (or null). A malformed file throws
+        /// <see cref="FormatException"/>.</summary>
         private static void Scan(
-            string text, INodeSink sink, Built built, out string? named, out int top, out bool twoState)
+            string text, INodeSink sink, Built built, out string? named, out int top, out bool twoState,
+            out string? ruleText)
         {
             List<string> lines = TextLines.Split(text);
             int start = Macrocell.HeaderLine(lines);
@@ -217,12 +233,18 @@ namespace HeatonLife
             named = null;
             top = 0; // the largest state seen
             twoState = true;
+            ruleText = null;
             for (int index = start + 1; index < lines.Count; index++)
             {
                 int number = index + 1;
                 string line = TextLines.Strip(lines[index]);
                 if (line.Length == 0)
                     continue;
+                if (line.StartsWith("@RULE", StringComparison.Ordinal)) // an appended rule file (spec/ruletable.md)
+                {
+                    ruleText = string.Join("\n", lines.GetRange(index, lines.Count - index));
+                    break;
+                }
                 if (line[0] == '#')
                 {
                     if (line.StartsWith("#R", StringComparison.Ordinal))
@@ -295,7 +317,7 @@ namespace HeatonLife
         }
 
         /// <summary>A two-state 8 × 8 leaf (bit 8r + c is row r, column c) as a level-3 node of states.</summary>
-        private static int BitsNode(MultiStateStore store, ulong bits)
+        internal static int BitsNode(MultiStateStore store, ulong bits)
         {
             Span<int> quads = stackalloc int[4];
             Span<int> leaves = stackalloc int[4];

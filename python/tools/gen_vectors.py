@@ -1031,6 +1031,9 @@ def main() -> None:
     # -- Live cells and measuring for the multi-state universe (spec/hashlife-multistate.md) -
     write_live_and_measure_cases()
 
+    # -- Macrocell files carrying their rule; converting between the engines ---------------
+    write_rule_file_and_convert_cases()
+
     print("done")
 
 
@@ -12863,6 +12866,215 @@ def write_live_and_measure_cases() -> None:
         error=True,
     )
     measure_case("error-plaintext", text("!Name: dots\n.O.\n"), "input.cells", error=True)
+
+
+RULE_FILE_AND_CONVERT_SPEC_VERSION = "0.16.0"
+
+
+def write_rule_file_and_convert_cases() -> None:
+    """Macrocell files that carry a rule table outside the starter set (spec/ruletable.md
+    "Files", spec/macrocell.md "Multi-state files"), and Life-like worlds converted between
+    the engines (spec/hashlife-multistate.md "Converting between the engines"), under
+    vectors/hashlife-multistate/."""
+    from heaton_life.ca.hashlife import HashLife, MultiStateHashLife, read_universe
+    from heaton_life.ca.hashlife.multistate import (
+        measure_multistate_pattern,
+        read_multistate_universe,
+    )
+    from heaton_life.ca.rulefile import parse_rule_file
+    from heaton_life.ca.rulestring import try_compile_rule
+    from heaton_life.ca.ruletable import append_rule, starter_pattern, starter_rule
+    from heaton_life.ca.wireworld import clock_loop
+
+    def case(name: str, kind: str) -> tuple[Path, dict[str, Any]]:
+        d = VECTOR_ROOT / "hashlife-multistate" / name
+        d.mkdir(parents=True, exist_ok=True)
+        return d, {
+            "spec_version": RULE_FILE_AND_CONVERT_SPEC_VERSION,
+            "family": "hashlife-multistate",
+            "tier": "bit-exact",
+            "kind": kind,
+        }
+
+    mine = parse_rule_file(
+        starter_rule("Byl-Loop").text.replace("@RULE Byl-Loop", "@RULE My-Byl", 1)
+    )
+    loop = MultiStateHashLife(mine)
+    loop.set_rect(-3, 2, starter_pattern("Byl-Loop"))
+    loop.step(9)
+    carried = append_rule(loop.to_macrocell(), mine)
+
+    # -- a Macrocell file carrying its rule ---------------------------------------------------
+    d, meta = case("macrocell-ruletable-appended", "macrocell")
+    (d / "input.mc").write_text(carried, encoding="utf-8", newline="\n")
+    u = MultiStateHashLife.from_macrocell(carried)
+    assert u.rule == "My-Byl"
+    meta.update({"input": "input.mc", **_hashlife_entry(d, u, "state"), "rle": "canonical.rle"})
+    (d / "canonical.rle").write_text(u.to_rle(), encoding="utf-8", newline="\n")
+    _gap_save(d, meta)
+
+    wire = MultiStateHashLife()
+    wire.set_rect(0, 0, clock_loop((12, 12)))
+    other = append_rule(wire.to_macrocell(), mine)  # #R names WireWorld: the rule is skipped
+    d, meta = case("macrocell-ruletable-appended-not-named", "macrocell")
+    (d / "input.mc").write_text(other, encoding="utf-8", newline="\n")
+    u = MultiStateHashLife.from_macrocell(other)
+    assert u.rule == "WireWorld"
+    meta.update({"input": "input.mc", **_hashlife_entry(d, u, "state"), "rle": "canonical.rle"})
+    (d / "canonical.rle").write_text(u.to_rle(), encoding="utf-8", newline="\n")
+    _gap_save(d, meta)
+
+    broken = "[M2]\n#R My-Byl\n1 0 1 0 0\n@RULE My-Byl\n@TABLE\nn_states:2\nnonsense\n"
+    d, meta = case("macrocell-error-appended-not-a-rule-file", "macrocell")
+    (d / "input.mc").write_text(broken, encoding="utf-8", newline="\n")
+    try:
+        MultiStateHashLife.from_macrocell(broken)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("a broken rule file read")
+    meta.update({"input": "input.mc", "error": True})
+    _gap_save(d, meta)
+
+    d, meta = case("evolve-ruletable-macrocell-appended", "evolve")
+    (d / "input.mc").write_text(carried, encoding="utf-8", newline="\n")
+    u = read_multistate_universe(carried).universe
+    checkpoints = []
+    for gen in [9, 60, 151]:
+        u.step(gen - u.generation)
+        checkpoints.append(_hashlife_entry(d, u, f"state-{gen}"))
+    meta.update({"input": "input.mc", "checkpoints": checkpoints})
+    _gap_save(d, meta)
+
+    d, meta = case("measure-macrocell-appended-rule", "measure")
+    (d / "input.mc").write_text(carried, encoding="utf-8", newline="\n")
+    extent = measure_multistate_pattern(carried)
+    read = read_multistate_universe(carried)
+    box = read.universe.bounding_box()
+    assert box is not None and (extent.x, extent.y) == box[:2] and extent.rule == "My-Byl"
+    meta["input"] = "input.mc"
+    meta["extent"] = {
+        "format": extent.format,
+        "width": decimal_text.digits_of(extent.width),
+        "height": decimal_text.digits_of(extent.height),
+        "x": _signed_text(extent.x),
+        "y": _signed_text(extent.y),
+        "rule": extent.rule,
+        "generation": decimal_text.digits_of(extent.generation),
+        "metadata": {"name": None, "author": None, "comments": []},
+        "two_state": extent.two_state,
+    }
+    meta["rule_named"] = read.rule_named
+    _gap_save(d, meta)
+
+    # -- converting between the engines -------------------------------------------------------
+    def convert_case(
+        name: str, source: str, file: str, kind: str, rule: str, error: bool = False
+    ) -> None:
+        d, meta = case(f"convert-{name}", "convert")
+        (d / file).write_text(source, encoding="utf-8", newline="\n")
+        meta.update({"input": file, "from": kind, "rule": rule})
+        data = source.encode("utf-8")
+        u: HashLife | MultiStateHashLife = (
+            read_universe(data).universe
+            if kind == "two-state"
+            else read_multistate_universe(data).universe
+        )
+        two_state, _ = try_compile_rule(rule, presets=False)
+        try:
+            out: HashLife | MultiStateHashLife = (
+                u.to_multistate(rule)
+                if isinstance(u, HashLife) or two_state is None
+                else u.to_two_state(rule)
+            )
+        except ValueError:
+            assert error, name
+            meta["error"] = True
+            _gap_save(d, meta)
+            return
+        assert not error, name
+        assert out.generation == u.generation, name
+        meta.update(_hashlife_entry(d, out, "state"))
+        _gap_save(d, meta)
+
+    from heaton_life.core.rng import Pcg32
+
+    draws = Pcg32(41).fill_u32(40 * 24)
+    soup = HashLife("B36/S23")
+    soup.set_rect(-20, -12, (draws < np.uint32(1503238554)).astype(np.uint8).reshape(24, 40))
+    soup.step(23)
+    convert_case("two-state-to-history", soup.to_rle(), "input.rle", "two-state", "B36/S23History")
+    far = ["[M2]", "#R B3/S23", "#G 1234", "$$..*$...*$.***$", "4 1 0 0 0"]
+    far += [f"{k} {k - 3} 0 0 0" for k in range(5, 71)]
+    convert_case(
+        "two-state-to-super-far", "\n".join(far) + "\n", "input.mc", "two-state", "LifeSuper"
+    )
+    history = MultiStateHashLife("B3/S23History")
+    history.set_rect(0, 0, np.array([[0, 1, 0], [0, 0, 1], [1, 1, 1]], np.uint8))
+    history.set_rect(12, -4, np.array([[3, 5, 0], [4, 6, 0], [0, 3, 3]], np.uint8))
+    history.step(30)
+    convert_case("history-to-two-state", history.to_macrocell(), "input.mc", "multistate", "B3/S23")
+    convert_case(
+        "history-to-super", history.to_macrocell(), "input.mc", "multistate", "B3/S23Super"
+    )
+    sup = MultiStateHashLife("B3/S23Super")
+    sup.set_rect(-6, 0, np.arange(26, dtype=np.uint8).reshape(2, 13))
+    sup.step(3)
+    convert_case("super-to-history", sup.to_macrocell(), "input.mc", "multistate", "B3/S23History")
+    convert_case(
+        "super-to-two-state-lone-leaf",
+        "[M2]\n#R LifeSuper\n#G 5\n1 0 25 13 2\n",
+        "input.mc",
+        "multistate",
+        "B36/S23",
+    )
+    convert_case(
+        "two-state-b0-even-generation",
+        "#CXRLE Pos=0,0 Gen=2\nx = 3, y = 1, rule = B0/S\n3o!\n",
+        "input.rle",
+        "two-state",
+        "B3/S23History",
+    )
+    convert_case(
+        "error-generations-to-two-state",
+        "[M2]\n#R B2/S/C3\n1 0 1 2 0\n",
+        "input.mc",
+        "multistate",
+        "B3/S23",
+        error=True,
+    )
+    convert_case(
+        "error-two-state-to-generations",
+        "x = 2, y = 1, rule = B3/S23\n2o!\n",
+        "input.rle",
+        "two-state",
+        "B2/S/C3",
+        error=True,
+    )
+    convert_case(
+        "error-history-to-wireworld",
+        "[M2]\n#R LifeHistory\n1 0 1 2 0\n",
+        "input.mc",
+        "multistate",
+        "WireWorld",
+        error=True,
+    )
+    convert_case(
+        "error-background-alive",
+        "#CXRLE Pos=0,0 Gen=3\nx = 3, y = 1, rule = B0/S\n3o!\n",
+        "input.rle",
+        "two-state",
+        "B3/S23History",
+        error=True,
+    )
+    convert_case(
+        "error-target-background-alive",
+        "[M2]\n#R LifeHistory\n#G 3\n1 0 1 2 0\n",
+        "input.mc",
+        "multistate",
+        "B0/S",
+        error=True,
+    )
 
 
 if __name__ == "__main__":
