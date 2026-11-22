@@ -114,13 +114,24 @@ def frame_values(world: object) -> tuple[int, ...]:
     """Each state's frame value f(s), state 0 first (spec/render.md "State palettes"): the
     byte a world's frame gives a cell in that state. For the two-state universe 0 and 255
     (its frames' live cell), for a multi-state universe and a rule table's grid the states
-    themselves."""
-    from heaton_life.ca import Cyclic, Elementary, Generations, HashLife, LifeLike, Wireworld
+    themselves, and for Larger than Life 0 and 255 with two states, the states with more."""
+    from heaton_life.ca import (
+        Cyclic,
+        Elementary,
+        Generations,
+        HashLife,
+        LargerThanLife,
+        LifeLike,
+        Wireworld,
+    )
     from heaton_life.ca.hashlife import MultiStateHashLife
     from heaton_life.ca.ruletable import RuleTableCA
 
     if isinstance(world, LifeLike):
         return tuple(range(world.states)) if world.rule.variant else (0, 255)
+    if isinstance(world, LargerThanLife):
+        count = world.rule.states
+        return (0, 255) if count == 2 else tuple(range(count))
     if isinstance(world, Elementary | HashLife):
         return (0, 255)
     if isinstance(world, Cyclic):
@@ -257,12 +268,21 @@ def _rule_palette(rule: object) -> NDArray[np.uint8]:
 
 def default_palette(world: object) -> NDArray[np.uint8]:
     """A world's default palette (spec/render.md "Default palettes"): History's under a
-    History rule, Super's under a Super rule, Generations' for Generations, a rule table's (its ``@COLORS`` over the
-    multi-state palette) on its grid, the rule's own on a multi-state universe, and
-    otherwise the palette of the colormap its family is shown with (``phosphor`` for
-    two-state Life-like worlds and the two-state universe, ``gray`` for Elementary,
-    ``rainbow`` for Cyclic, ``wireworld`` for Wireworld)."""
-    from heaton_life.ca import Cyclic, Elementary, Generations, HashLife, LifeLike, Wireworld
+    History rule, Super's under a Super rule, Generations' for Generations, a rule table's (its
+    ``@COLORS`` over the multi-state palette) on its grid, the rule's own on a multi-state
+    universe, Generations' of its C for Larger than Life of three states or more (its dying
+    cells are Generations'), and otherwise the palette of the colormap its family is shown with
+    (``phosphor`` for two-state Life-like and Larger than Life worlds and the two-state universe,
+    ``gray`` for Elementary, ``rainbow`` for Cyclic, ``wireworld`` for Wireworld)."""
+    from heaton_life.ca import (
+        Cyclic,
+        Elementary,
+        Generations,
+        HashLife,
+        LargerThanLife,
+        LifeLike,
+        Wireworld,
+    )
     from heaton_life.ca.hashlife import MultiStateHashLife
     from heaton_life.ca.ruletable import RuleTableCA
 
@@ -282,6 +302,9 @@ def default_palette(world: object) -> NDArray[np.uint8]:
         return colormap_palette(world, "wireworld")
     if isinstance(world, Generations):
         return generations_palette(world.states)
+    if isinstance(world, LargerThanLife):
+        count = world.rule.states
+        return colormap_palette(world, "phosphor") if count == 2 else generations_palette(count)
     if isinstance(world, MultiStateHashLife):
         return _rule_palette(world.state_rule)
     if isinstance(world, RuleTableCA):

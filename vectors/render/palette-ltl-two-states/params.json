@@ -1,0 +1,22 @@
+{
+  "family": "render",
+  "frame_values": [
+    0,
+    255
+  ],
+  "kind": "palette",
+  "output": {
+    "file": "palette.png",
+    "shape": [
+      256,
+      3
+    ]
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "world": {
+    "family": "ltl",
+    "rule": "R5,C0,M1,S34..58,B34..45,NM"
+  },
+  "zoom_order": []
+}

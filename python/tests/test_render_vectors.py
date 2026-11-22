@@ -12,7 +12,15 @@ import pytest
 from PIL import Image
 
 from heaton_life.boids import Boids
-from heaton_life.ca import Cyclic, Elementary, Generations, HashLife, LifeLike, Wireworld
+from heaton_life.ca import (
+    Cyclic,
+    Elementary,
+    Generations,
+    HashLife,
+    LargerThanLife,
+    LifeLike,
+    Wireworld,
+)
 from heaton_life.ca.hashlife import MultiStateHashLife
 from heaton_life.ca.rulefile import parse_rule_file
 from heaton_life.ca.ruletable import RuleTableCA, starter_rule
@@ -167,6 +175,9 @@ def _palette_world(description: dict[str, Any]) -> Any:
     if family == "hashlife":
         assert keys == {"rule"}
         return HashLife(description["rule"])
+    if family == "ltl":
+        assert keys == {"rule"}
+        return LargerThanLife(description["rule"], size=(32, 32))
     # A rule table's world names a starter rule, or carries its rule file (spec/ruletable.md).
     assert keys in ({"rule"}, {"rule", "rule_text"}), description
     table = None if "rule_text" not in keys else parse_rule_file(description["rule_text"])

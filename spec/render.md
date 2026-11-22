@@ -143,6 +143,7 @@ indexing rule), or raw RGB (passed through).
 | wireworld | `state * 85` (hits the `wireworld` anchors exactly) | index bytes |
 | generations | 0 for state 0, `(C - state) * 255 / (C - 1)` (integer math) otherwise: alive 255, the dying states fading | index bytes |
 | ruletable | the state itself, 0 to S − 1 ([ruletable.md](ruletable.md)), for a color per state | index bytes |
+| larger than life | `state * 255` with two states; with more, the state itself, 0 to S − 1 ([ltl.md](ltl.md#frames)) | index bytes |
 | mergelife | the RGB state itself | RGB |
 | gray-scott | `clip(V * 2.5, 0, 1)` | float |
 | lenia (all three) | the state itself | float |
@@ -200,6 +201,7 @@ be edited state by state.
 | Wireworld | `wireworld`'s: the classic empty, head, tail and conductor colors |
 | Generations | Generations' of its C |
 | a [rule table](ruletable.md)'s grid | the rule table's |
+| [Larger than Life](ltl.md) | two states: `phosphor`'s; three or more: Generations' of its C, since its dying cells are Generations' dying cells |
 | the two-state universe | `phosphor`'s |
 | a multi-state universe | its rule's on a grid: History's, Super's, Generations' of its C, `wireworld`'s for `WireWorld`, a rule table's; for any other rule, the multi-state palette of its S |
 
@@ -264,11 +266,6 @@ and the playground give that family. The rest are defined here:
   in the file's order. A gradient sets states 1 to S − 1 as `gradient_palette` sets them,
   entry 0 staying as it is; a state color sets its state, state 0 among them. A rule file
   without `@COLORS` keeps the multi-state palette.
-
-**Still to come.** Each of these takes its place in the table when its family lands:
-
-- *Larger than Life*: with two states, `phosphor`'s palette; with C of three or more,
-  Generations' of its C, since its dying cells are Generations' dying cells.
 
 ### Zoomed out
 

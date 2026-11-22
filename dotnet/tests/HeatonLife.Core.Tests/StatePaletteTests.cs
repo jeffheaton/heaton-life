@@ -117,6 +117,47 @@ namespace HeatonLife.Tests
         }
 
         [Fact]
+        public void LargerThanLifeTakesPhosphorOrGenerations()
+        {
+            var two = new LargerThanLife("R5,C0,M1,S34..58,B34..45,NM", 40, 32);
+            two.SeedSoup(0.5, 2);
+            two.Step(2);
+            var many = new LargerThanLife("R2,C5,M0,S3..8,B4..6,NM", 40, 32);
+            many.SeedSoup(0.5, 3);
+            many.Step(6);
+            Assert.Equal(new byte[] { 0, 255 }, StatePalettes.FrameValues(two));
+            Assert.Equal(new byte[] { 0, 1, 2, 3, 4 }, StatePalettes.FrameValues(many));
+            Assert.Equal(StatePalettes.FromColormap(two, Colormaps.Get("phosphor")), StatePalettes.Default(two));
+            Assert.Equal(StatePalettes.ForGenerations(5), StatePalettes.Default(many));
+            Assert.Empty(StatePalettes.DefaultZoomOrder(two));
+            Assert.Empty(StatePalettes.DefaultZoomOrder(many));
+            Assert.Equal(new[] { 0, 1 }, Distinct(two.State));
+            Assert.Equal(new[] { 0, 1, 2, 3, 4 }, Distinct(many.State)); // every state is shown
+            foreach (LargerThanLife world in new[] { two, many })
+            {
+                byte[] states = world.State.ToArray();
+                byte[] frame = world.Frame();
+                foreach (string cmap in new[] { "phosphor", "fire", "rainbow" })
+                {
+                    byte[] lut = Colormaps.Get(cmap);
+                    Assert.Equal(
+                        Colormaps.ApplyIndexed(frame, lut),
+                        Colormaps.ApplyIndexed(states, StatePalettes.FromColormap(world, lut)));
+                }
+            }
+        }
+
+        private static int[] Distinct(ReadOnlySpan<byte> cells)
+        {
+            var seen = new SortedSet<int>();
+            foreach (byte cell in cells)
+                seen.Add(cell);
+            var values = new int[seen.Count];
+            seen.CopyTo(values);
+            return values;
+        }
+
+        [Fact]
         public void HistorysColors()
         {
             byte[] palette = StatePalettes.ForHistory();

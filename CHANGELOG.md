@@ -314,9 +314,10 @@ and an RLE header naming any Life-like rule making the file two-state.
   state of a world, a 256-entry table indexed by state, so the colormap lookup colors a
   world's states (`heaton_life.render`; .NET `StatePalettes`). Each family has a default
   (`default_palette` / `StatePalettes.Default`): History's seven colors for a History
-  rule, a `fire` fade for Generations, a multi-state universe its rule's (any other rule
-  the new multi-state palette), and elsewhere the palette of the colormap the family is
-  shown with, so nothing looks different. `frame_values` and `colormap_palette` /
+  rule, a `fire` fade for Generations and for Larger than Life of three states or more, a
+  multi-state universe its rule's (any other rule the new multi-state palette), and
+  elsewhere the palette of the colormap the family is shown with, so nothing looks
+  different. `frame_values` and `colormap_palette` /
   `FromColormap` turn a colormap into an editable palette that shows the states as the
   colormap shows the frames; `gradient_palette` / `Gradient` is the form a rule file's
   `@COLORS` gradient takes; `shade_colormap` / `Shade` colors frames that count live cells.

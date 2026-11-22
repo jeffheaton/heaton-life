@@ -495,6 +495,9 @@ namespace HeatonLife.Tests
                 case "generations":
                     AssertKeySet(world, caseName, "family", "rule");
                     return new Generations(world.GetProperty("rule").GetString()!, 8, 8);
+                case "ltl":
+                    AssertKeySet(world, caseName, "family", "rule");
+                    return new LargerThanLife(world.GetProperty("rule").GetString()!, 32, 32);
                 case "ruletable":
                     {
                         RuleTable rule = PaletteRuleTable(caseName, world)

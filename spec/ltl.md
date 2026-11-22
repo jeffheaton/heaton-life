@@ -169,7 +169,8 @@ random fill (state 1 for alive), Advance Selection and Advance Outside
 ## Frames
 
 A two-state rule's frame is `state × 255`, as Life's is. With more states it is the state
-itself (0 to S − 1), for a color per state from the host's palette.
+itself (0 to S − 1), for a color per state: by default Generations' palette of its C
+([render.md](render.md#default-palettes)).
 
 ## Vector encoding
 

@@ -1019,6 +1019,9 @@ def main() -> None:
     write_ruletable_cases()
     write_ruletable_palette_cases()
 
+    # -- Larger than Life's default palettes (spec/render.md "Default palettes") ------------
+    write_ltl_palette_cases()
+
     print("done")
 
 
@@ -12126,6 +12129,43 @@ def write_super_cases() -> None:
             },
         )
     assert not np.array_equal(windows["window-super-order"], windows["window-super-lowest-first"])
+
+
+def write_ltl_palette_cases() -> None:
+    """Larger than Life's default palettes (spec/render.md "Default palettes"): phosphor's
+    with two states, Generations' of its C with more, under vectors/render/palette-ltl-*/.
+    Every case is new."""
+    from PIL import Image
+
+    from heaton_life.ca import LargerThanLife
+    from heaton_life.render import default_palette, default_zoom_order, frame_values
+
+    def write(name: str, rule: str) -> None:
+        world = LargerThanLife(rule, size=(32, 32))
+        buf = io.BytesIO()
+        Image.fromarray(default_palette(world).reshape(1, 256, 3), mode="RGB").save(
+            buf, format="PNG"
+        )
+        case_dir = VECTOR_ROOT / "render" / name
+        case_dir.mkdir(parents=True, exist_ok=True)
+        (case_dir / "palette.png").write_bytes(buf.getvalue())
+        meta: dict[str, Any] = {
+            "spec_version": PALETTE_SPEC_VERSION,
+            "family": "render",
+            "tier": "bit-exact",
+            "kind": "palette",
+            "world": {"family": "ltl", "rule": rule},
+            "frame_values": list(frame_values(world)),
+            "zoom_order": list(default_zoom_order(world)),
+            "output": {"file": "palette.png", "shape": [256, 3]},
+        }
+        (case_dir / "params.json").write_text(
+            json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
+        )
+        print(f"wrote {case_dir.relative_to(REPO_ROOT)}")
+
+    write("palette-ltl-two-states", "R5,C0,M1,S34..58,B34..45,NM")  # Bosco's Rule
+    write("palette-ltl-c5", "R2,C5,M0,S3..8,B4..6,NM")
 
 
 if __name__ == "__main__":

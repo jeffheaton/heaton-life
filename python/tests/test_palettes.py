@@ -4,7 +4,15 @@ palette, the named palettes, the shade and the zoom order that goes with a palet
 import numpy as np
 import pytest
 
-from heaton_life.ca import Cyclic, Elementary, Generations, HashLife, LifeLike, Wireworld
+from heaton_life.ca import (
+    Cyclic,
+    Elementary,
+    Generations,
+    HashLife,
+    LargerThanLife,
+    LifeLike,
+    Wireworld,
+)
 from heaton_life.ca.hashlife import MultiStateHashLife
 from heaton_life.rd import GrayScott
 from heaton_life.render import (
@@ -104,6 +112,26 @@ def test_a_universes_palette_is_its_rules_on_a_grid() -> None:
         plane = MultiStateHashLife(rule)
         assert np.array_equal(default_palette(plane), default_palette(grid))
         assert np.array_equal(default_palette(plane), generations_palette(count))
+
+
+def test_larger_than_life_takes_phosphor_or_generations() -> None:
+    two = LargerThanLife("R5,C0,M1,S34..58,B34..45,NM", size=(40, 32), seed=2)
+    two.step(2)
+    many = LargerThanLife("R2,C5,M0,S3..8,B4..6,NM", size=(40, 32), seed=3)
+    many.step(6)
+    assert frame_values(two) == (0, 255)
+    assert frame_values(many) == (0, 1, 2, 3, 4)
+    assert np.array_equal(default_palette(two), colormap_palette(two, "phosphor"))
+    assert np.array_equal(default_palette(many), generations_palette(5))
+    assert default_zoom_order(two) == () and default_zoom_order(many) == ()
+    assert np.unique(two.state).tolist() == [0, 1]
+    assert np.unique(many.state).tolist() == [0, 1, 2, 3, 4]  # every state is shown
+    for world in (two, many):
+        for cmap in ("phosphor", "fire", "rainbow"):
+            assert np.array_equal(
+                apply_colormap(world.state, colormap_palette(world, cmap)),
+                apply_colormap(world.frame(), cmap),
+            )
 
 
 def test_historys_colors() -> None:

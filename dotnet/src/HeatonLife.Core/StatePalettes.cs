@@ -98,6 +98,8 @@ namespace HeatonLife
                     return (byte[])WireworldValues.Clone();
                 case Generations generations:
                     return GenerationsValues(generations.States);
+                case LargerThanLife ltl:
+                    return ltl.Rule.States == 2 ? (byte[])TwoStateValues.Clone() : Identity(ltl.Rule.States);
                 case RuleTableCA table:
                     return Identity(table.States);
                 default:
@@ -138,10 +140,11 @@ namespace HeatonLife
 
         /// <summary>
         /// A world's default palette (spec/render.md "Default palettes"): History's under a
-        /// History rule, Super's under a Super rule, Generations' for Generations, a rule table's (<see cref="ForRuleTable"/>)
-        /// on its grid, and otherwise the palette of the
-        /// colormap the family is shown with: phosphor for a two-state Life-like world, gray
-        /// for Elementary, rainbow for Cyclic, wireworld for Wireworld.
+        /// History rule, Super's under a Super rule, Generations' for Generations and for Larger
+        /// than Life of three states or more, a rule table's (<see cref="ForRuleTable"/>) on its
+        /// grid, and otherwise the palette of the colormap the family is shown with: phosphor for
+        /// a two-state Life-like or Larger than Life world, gray for Elementary, rainbow for
+        /// Cyclic, wireworld for Wireworld.
         /// </summary>
         public static byte[] Default(ISimulation world)
         {
@@ -167,6 +170,11 @@ namespace HeatonLife
                     return FromColormap(wire, Colormaps.Get("wireworld"));
                 case Generations generations:
                     return ForGenerations(generations.States);
+                case LargerThanLife ltl:
+                    // Its dying cells are Generations' dying cells (spec/ltl.md).
+                    return ltl.Rule.States == 2
+                        ? FromColormap(ltl, Colormaps.Get("phosphor"))
+                        : ForGenerations(ltl.Rule.States);
                 case RuleTableCA table:
                     return ForRuleTable(table.Rule);
                 default:
