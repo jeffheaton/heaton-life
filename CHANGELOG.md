@@ -5,14 +5,14 @@ number, and from 1.1.0 on each release ships both from one commit. Every entry a
 both unless it names a port. The spec version (the `spec_version` field of the conformance
 vectors) moves on its own; each release lists the one it implements.
 
-## 1.2.0 (unreleased)
+## 1.2.0 (2026-11-21)
 
 Implements spec version 0.16.0 (1.1.0 implemented 0.13.0). Every conformance vector that
 existed at 1.1.0 is byte-identical; the new behavior comes with new vector cases. The
 public APIs of both packages are backward compatible: nothing was removed or renamed.
-Three behaviors changed (below): canonical RLE's form (its row ends and its rule's
-spelling), RLE decoding now has a size limit, and an RLE header naming any Life-like rule
-makes the file two-state.
+Behaviors that changed are listed under Changed below; the three most likely to matter are
+canonical RLE's form (its row ends and its rule's spelling), RLE decoding's new size limit,
+and an RLE header naming any Life-like rule making the file two-state.
 
 ### Added
 
