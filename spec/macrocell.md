@@ -2,7 +2,8 @@
 
 Conformance tier: **bit-exact** (canonical writing). Vectors:
 [`vectors/hashlife/`](../vectors/hashlife/) (`macrocell-*` and every `evolve-*` state);
-metadata and timelines in [`vectors/formats/`](../vectors/formats/).
+metadata and timelines in [`vectors/formats/`](../vectors/formats/); multi-state files in
+[`vectors/hashlife-multistate/`](../vectors/hashlife-multistate/).
 
 Macrocell (`.mc`, often gzip-compressed as `.mc.gz`) is the Life community's format for
 HashLife patterns. It lists a pattern's distinct [quadtree](hashlife.md#quadtree) nodes,
@@ -13,7 +14,8 @@ or Annelid (169 million cells, 778k lines).
 
 ## Reading
 
-Readers handle two-state files. A file is lines of ASCII text:
+The readers of this section handle two-state files; a universe of more states reads and
+writes [multi-state files](#multi-state-files). A file is lines of ASCII text:
 
 1. **Header.** The first line starts with `[M2]`, usually followed by the writing program
    and version, e.g. `[M2] (example 1.0)`.
@@ -165,6 +167,60 @@ $$$...***$
 #FRAME 1 2
 #FRAME 2 1
 ```
+
+## Multi-state files
+
+A [multi-state HashLife](hashlife-multistate.md) universe is read and written in the same
+format, with leaves of four states. Its nodes are those of
+[hashlife-multistate.md](hashlife-multistate.md#quadtree): a level-1 node is a 2 × 2
+square of states, and a node of level k ≥ 2 has four children of level k − 1.
+
+**Reading.** As "Reading" above, with these differences:
+
+- `#R <rule>` names a state rule ([hashlife-multistate.md](hashlife-multistate.md#state-rules)).
+  Without it the file takes the rule its reader is given (`WireWorld` by default).
+- **Leaf lines** `1 <nw> <ne> <sw> <se>`: a 2 × 2 square, its four values the states of
+  its NW, NE, SW and SE cells, each one or more ASCII digits from 0 to 255.
+- **Internal lines** `<level> <nw> <ne> <sw> <se>` for any level from 2 to 512: each child
+  is the number of an earlier node line of level `level − 1`, or `0` for a square of 0
+  cells.
+- Two-state leaf lines (`.`, `*`, `$`) read too, as level-3 nodes of states 0 and 1.
+- Every state must be below the rule's number of states; the check is made once the
+  whole file is read, so `#R` may come anywhere after the header.
+- The root is the last node line, placed as "Reading", step 4, says: a level-1 root
+  covers the cells x ∈ {−1, 0}, y ∈ {0, 1}.
+
+**Writing.** Canonical, as "Writing" above says, with these differences:
+
+- `#R` gives the universe's rule by its canonical name.
+- The minimal root is the smallest level k ≥ 1 whose square holds every non-zero cell.
+- A leaf is written `1 <nw> <ne> <sw> <se>`, the states in decimal, single spaces; a leaf
+  of four 0 cells is the child `0` and never gets a line.
+- The empty universe is the empty leaf, written `1 0 0 0 0`.
+
+For example, the Wireworld clock `CBA3C$C4.C$6C!` with its top-left cell at (0, 0):
+
+```
+[M2] (heaton-life)
+#R WireWorld
+1 0 0 3 2
+1 0 0 1 3
+2 0 0 1 2
+1 0 0 3 3
+2 0 0 4 0
+3 0 0 3 5
+1 3 0 3 3
+2 7 4 0 0
+1 0 3 3 3
+2 9 0 0 0
+3 8 10 0 0
+4 0 6 0 11
+```
+
+[Timelines](#timelines) are read and written as for two states, from these node lines; an
+empty frame's root is written `1 0 0 0 0` the first time. Python:
+`heaton_life.ca.hashlife.multistate.read_timeline` and `write_timeline`; .NET:
+`MultiStateMacrocell.ReadTimeline` and `WriteTimeline`.
 
 ## Notes
 

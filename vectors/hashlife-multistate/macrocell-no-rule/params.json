@@ -1,0 +1,18 @@
+{
+  "bounding_box": [
+    "-2",
+    "-1",
+    "1",
+    "2"
+  ],
+  "family": "hashlife-multistate",
+  "generation": "0",
+  "input": "input.mc",
+  "kind": "macrocell",
+  "population": "6",
+  "rle": "canonical.rle",
+  "rule": "WireWorld",
+  "spec_version": "0.16.0",
+  "state": "canonical.mc",
+  "tier": "bit-exact"
+}

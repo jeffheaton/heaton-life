@@ -1,0 +1,98 @@
+{
+  "checkpoints": [
+    {
+      "bounding_box": [
+        "-29",
+        "3",
+        "9",
+        "5"
+      ],
+      "cells": "cells-0.png",
+      "generation": "0",
+      "population": "58",
+      "state": "state-0.mc"
+    },
+    {
+      "bounding_box": [
+        "-29",
+        "3",
+        "9",
+        "5"
+      ],
+      "cells": "cells-1.png",
+      "generation": "1",
+      "population": "58",
+      "state": "state-1.mc"
+    },
+    {
+      "bounding_box": [
+        "-29",
+        "3",
+        "9",
+        "5"
+      ],
+      "cells": "cells-2.png",
+      "generation": "2",
+      "population": "58",
+      "state": "state-2.mc"
+    },
+    {
+      "bounding_box": [
+        "-29",
+        "3",
+        "9",
+        "5"
+      ],
+      "cells": "cells-13.png",
+      "generation": "13",
+      "population": "58",
+      "state": "state-13.mc"
+    },
+    {
+      "bounding_box": [
+        "-29",
+        "3",
+        "9",
+        "5"
+      ],
+      "cells": "cells-50.png",
+      "generation": "50",
+      "population": "58",
+      "state": "state-50.mc"
+    },
+    {
+      "bounding_box": [
+        "-29",
+        "3",
+        "9",
+        "5"
+      ],
+      "cells": "cells-200.png",
+      "generation": "200",
+      "population": "58",
+      "state": "state-200.mc"
+    },
+    {
+      "bounding_box": [
+        "-29",
+        "3",
+        "9",
+        "5"
+      ],
+      "cells": "cells-1000.png",
+      "generation": "1000",
+      "population": "58",
+      "state": "state-1000.mc"
+    }
+  ],
+  "family": "hashlife-multistate",
+  "grid": "grid.png",
+  "kind": "grid",
+  "origin": [
+    "-30",
+    "2"
+  ],
+  "rule": "WireWorld",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

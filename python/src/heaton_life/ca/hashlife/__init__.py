@@ -1,4 +1,5 @@
-"""HashLife: Life-like rules on an unbounded plane (spec/hashlife.md).
+"""HashLife: Life-like rules on an unbounded plane (spec/hashlife.md), and rules of many
+states on one (``MultiStateHashLife``, spec/hashlife-multistate.md).
 
 A hash-consed quadtree with memoized futures runs regular patterns of trillions of cells
 and jumps any number of generations. Editing reaches |x|, |y| ≤ 10⁹ (``EDIT_LIMIT``);
@@ -12,6 +13,14 @@ from heaton_life.ca.hashlife.files import (
     read_universe,
 )
 from heaton_life.ca.hashlife.macrocell import MacrocellTimeline, read_timeline, write_timeline
+from heaton_life.ca.hashlife.multistate import (
+    STATE_RENDER_MODES,
+    MultiStateHashLife,
+    MultiStatePatternUniverse,
+    MultiStateTimeline,
+    StateRenderMode,
+    read_multistate_universe,
+)
 from heaton_life.ca.hashlife.render import RENDER_MODES, RenderMode
 from heaton_life.ca.hashlife.universe import (
     DEFAULT_MEMORY_MB,
@@ -48,17 +57,22 @@ __all__ = [
     "MIN_MEMORY_MB",
     "PASTE_MODES",
     "RENDER_MODES",
+    "STATE_RENDER_MODES",
     "HashLife",
     "HashLifeMemoryError",
     "HashLifeParams",
     "LifeView",
     "MacrocellTimeline",
+    "MultiStateHashLife",
+    "MultiStatePatternUniverse",
+    "MultiStateTimeline",
     "PasteMode",
     "PatternSnapshot",
     "PatternUniverse",
     "RenderMode",
     "Snapshot",
     "SnapshotFootprint",
+    "StateRenderMode",
     "StepCanceled",
     "cell_at",
     "center_cell",
@@ -66,6 +80,7 @@ __all__ = [
     "fit",
     "frame_map",
     "pan",
+    "read_multistate_universe",
     "read_snapshot",
     "read_timeline",
     "read_universe",

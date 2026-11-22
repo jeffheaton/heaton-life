@@ -1,0 +1,108 @@
+{
+  "bounding_box": [
+    "0",
+    "0",
+    "3",
+    "2"
+  ],
+  "family": "hashlife-multistate",
+  "generation": "0",
+  "kind": "edit",
+  "ops": [
+    {
+      "cells": [
+        "1101",
+        "0110",
+        "1011"
+      ],
+      "mode": "copy",
+      "op": "set_rect",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "cells": [
+        "11",
+        "01"
+      ],
+      "mode": "xor",
+      "op": "set_rect",
+      "x": 1,
+      "y": 1
+    },
+    {
+      "cells": [
+        "111",
+        "101"
+      ],
+      "mode": "and",
+      "op": "set_rect",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "expect": [
+        "1101",
+        "0000",
+        "1001"
+      ],
+      "op": "get_rect",
+      "x0": 0,
+      "x1": 3,
+      "y0": 0,
+      "y1": 2
+    },
+    {
+      "cells": [
+        "2"
+      ],
+      "error": true,
+      "mode": "xor",
+      "op": "set_rect",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "op": "set_cell",
+      "state": 3,
+      "x": 3,
+      "y": 2
+    },
+    {
+      "cells": [
+        "11",
+        "11"
+      ],
+      "error": true,
+      "mode": "and",
+      "op": "set_rect",
+      "x": 2,
+      "y": 1
+    },
+    {
+      "cells": [
+        "11",
+        "11"
+      ],
+      "mode": "xor",
+      "op": "set_rect",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "cells": [
+        "1"
+      ],
+      "error": true,
+      "mode": "nand",
+      "op": "set_rect",
+      "x": 9,
+      "y": 9
+    }
+  ],
+  "population": "5",
+  "rule": "WireWorld",
+  "spec_version": "0.16.0",
+  "state": "final.mc",
+  "tier": "bit-exact"
+}

@@ -1,0 +1,92 @@
+{
+  "bounding_box": [
+    "-5",
+    "-6",
+    "7",
+    "6"
+  ],
+  "family": "hashlife-multistate",
+  "generation": "40",
+  "kind": "edit",
+  "ops": [
+    {
+      "cells": [
+        "3303030033323",
+        "3033003330033",
+        "2300303033333",
+        "0303033000030",
+        "3313000033003",
+        "3303002313320",
+        "0000303333130",
+        "3103033000130",
+        "3300303030000"
+      ],
+      "mode": "copy",
+      "op": "set_rect",
+      "x": -6,
+      "y": -4
+    },
+    {
+      "clockwise": true,
+      "expect": [
+        -4,
+        -6,
+        4,
+        6
+      ],
+      "op": "rotate_rect",
+      "x0": -6,
+      "x1": 6,
+      "y0": -4,
+      "y1": 4
+    },
+    {
+      "clockwise": false,
+      "expect": [
+        -5,
+        -5,
+        7,
+        3
+      ],
+      "op": "rotate_rect",
+      "x0": -3,
+      "x1": 5,
+      "y0": -7,
+      "y1": 5
+    },
+    {
+      "horizontal": true,
+      "op": "flip_rect",
+      "x0": -5,
+      "x1": 3,
+      "y0": -2,
+      "y1": 2
+    },
+    {
+      "horizontal": false,
+      "op": "flip_rect",
+      "x0": -6,
+      "x1": 6,
+      "y0": -4,
+      "y1": 1
+    },
+    {
+      "clockwise": true,
+      "error": true,
+      "op": "rotate_rect",
+      "x0": 999999990,
+      "x1": 1000000000,
+      "y0": 999999999,
+      "y1": 1000000000
+    },
+    {
+      "n": "40",
+      "op": "step"
+    }
+  ],
+  "population": "62",
+  "rule": "WireWorld",
+  "spec_version": "0.16.0",
+  "state": "final.mc",
+  "tier": "bit-exact"
+}

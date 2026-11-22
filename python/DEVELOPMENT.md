@@ -265,6 +265,27 @@ result, fitted with `tracemalloc`). The process's peak RSS runs 1.6 to 2.8 times
 peak (the interpreter's own 100 MB or so, and memory freed by collections stays with the
 allocator), so leave headroom.
 
+## Multi-state HashLife speed
+
+`MultiStateHashLife` (`../spec/hashlife-multistate.md`) runs the two-state engine's
+algorithm on 2 × 2 leaves of states, its base case (a 4 × 4 square's center one
+generation on) computed from the rule's cell function and memoized per node. Measured on
+this Mac (2026-11-21) on Wireworld soups from PCG32 (about half conductor, one cell in
+twenty a head and one a tail), the same cells in both ports:
+
+| Workload | Python | .NET |
+|---|---|---|
+| 256 × 256 soup: 1, 8, 64 generations | 41, 154, 288 ms (0.7–1.1 M new nodes/s) | 6, 18, 45 ms (4.7–8 M/s) |
+| 1024 × 1024 soup: 1, then 64 generations | 0.70 s, then 8.0 s (0.65–0.9 M/s) | 35 ms, then 0.74 s (7–14 M/s) |
+| the same soup, settled: 2^30 generations | 72 ms | 2 ms |
+| a chaotic 3-state rule, 256 × 256: 256 generations | 0.57 s (0.54 M/s) | 35 ms (8.9 M/s) |
+| a 1280 × 800 frame of the 1024 soup, at 4, 1, ½ and ⅛ px per cell | 1.1, 11, 4.0, 0.3 ms (tiles cached) | 2.9, 10, 11, 0.1 ms |
+
+A node in the Python store takes about 145 bytes (`NODE_BYTES`); in the .NET store, 40.
+Per node the .NET port is 7 to 20 times faster than Python here, against about 50 for the
+two-state engine, whose 8 × 8 bit leaves need no hashing below them; a level-3 shortcut
+straight from the leaves' states is the obvious next step if the app needs more.
+
 ## Playground
 
 ```

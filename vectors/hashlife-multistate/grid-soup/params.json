@@ -1,0 +1,101 @@
+{
+  "checkpoints": [
+    {
+      "bounding_box": [
+        "-24",
+        "5",
+        "23",
+        "44"
+      ],
+      "cells": "cells-0.png",
+      "generation": "0",
+      "population": "1028",
+      "state": "state-0.mc"
+    },
+    {
+      "bounding_box": [
+        "-24",
+        "5",
+        "23",
+        "44"
+      ],
+      "cells": "cells-1.png",
+      "generation": "1",
+      "population": "1028",
+      "state": "state-1.mc"
+    },
+    {
+      "bounding_box": [
+        "-24",
+        "5",
+        "23",
+        "44"
+      ],
+      "cells": "cells-2.png",
+      "generation": "2",
+      "population": "1028",
+      "state": "state-2.mc"
+    },
+    {
+      "bounding_box": [
+        "-24",
+        "5",
+        "23",
+        "44"
+      ],
+      "cells": "cells-5.png",
+      "generation": "5",
+      "population": "1028",
+      "state": "state-5.mc"
+    },
+    {
+      "bounding_box": [
+        "-24",
+        "5",
+        "23",
+        "44"
+      ],
+      "cells": "cells-33.png",
+      "generation": "33",
+      "population": "1028",
+      "state_lines": 339,
+      "state_sha256": "b7858174fa8b224046a77d69c9c37bec128098bc51d6b2597a6ba7ae3811b329"
+    },
+    {
+      "bounding_box": [
+        "-24",
+        "5",
+        "23",
+        "44"
+      ],
+      "cells": "cells-100.png",
+      "generation": "100",
+      "population": "1028",
+      "state_lines": 341,
+      "state_sha256": "d98283dc11e45dfe1e89675795e722933b771327ffbc5dc1342f7fae04d0e5e7"
+    },
+    {
+      "bounding_box": [
+        "-24",
+        "5",
+        "23",
+        "44"
+      ],
+      "cells": "cells-1000.png",
+      "generation": "1000",
+      "population": "1028",
+      "state_lines": 341,
+      "state_sha256": "1a3b25df58c0b13e56a68c4be053263db812fb9b5949124e380b21eaa6ea2cde"
+    }
+  ],
+  "family": "hashlife-multistate",
+  "grid": "grid.png",
+  "kind": "grid",
+  "origin": [
+    "-24",
+    "5"
+  ],
+  "rule": "WireWorld",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

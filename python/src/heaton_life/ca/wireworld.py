@@ -16,6 +16,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from heaton_life.ca._advance import AdvanceRegion
+from heaton_life.ca.state_rules import StateRule
 from heaton_life.core.neighbors import moore_sum
 from heaton_life.core.params import Params
 from heaton_life.core.topology import AXES, BOUNDARIES, Axis, Boundary, Halo, Topology
@@ -24,6 +25,40 @@ from heaton_life.init.patterns import clear
 EMPTY, HEAD, TAIL, CONDUCTOR = 0, 1, 2, 3
 
 _CHARS = {".": EMPTY, "H": HEAD, "T": TAIL, "#": CONDUCTOR}
+
+
+class WireworldRule(StateRule):
+    """Wireworld's cell function (spec/wireworld.md), the rule the multi-state HashLife runs
+    as ``WireWorld`` (spec/hashlife-multistate.md "Names"). The grid family computes the
+    same generation with array operations; the vectors pin that the two agree."""
+
+    canonical = "WireWorld"
+    states = 4
+
+    def next_state(
+        self, nw: int, n: int, ne: int, w: int, c: int, e: int, sw: int, s: int, se: int
+    ) -> int:
+        if c == HEAD:
+            return TAIL
+        if c == TAIL:
+            return CONDUCTOR
+        if c == CONDUCTOR:
+            heads = (
+                (nw == HEAD)
+                + (n == HEAD)
+                + (ne == HEAD)
+                + (w == HEAD)
+                + (e == HEAD)
+                + (sw == HEAD)
+                + (s == HEAD)
+                + (se == HEAD)
+            )
+            return HEAD if heads in (1, 2) else CONDUCTOR
+        return EMPTY
+
+
+WIREWORLD_RULE = WireworldRule()
+"""Wireworld as a state rule."""
 
 
 def wireworld_from_text(text: str) -> NDArray[np.uint8]:

@@ -1,0 +1,68 @@
+{
+  "family": "hashlife-multistate",
+  "frames": [
+    {
+      "file": "frame-0.png",
+      "mode": "state",
+      "order": [],
+      "size": [
+        4,
+        4
+      ],
+      "view": [
+        "-2",
+        "-2",
+        -39
+      ]
+    },
+    {
+      "file": "frame-1.png",
+      "mode": "density",
+      "order": [],
+      "size": [
+        4,
+        4
+      ],
+      "view": [
+        "-2",
+        "-2",
+        -40
+      ]
+    },
+    {
+      "file": "frame-2.png",
+      "mode": "state",
+      "order": [
+        2
+      ],
+      "size": [
+        3,
+        3
+      ],
+      "view": [
+        "-1",
+        "-1",
+        -600
+      ]
+    },
+    {
+      "file": "frame-3.png",
+      "mode": "state",
+      "order": [],
+      "size": [
+        6,
+        6
+      ],
+      "view": [
+        "274877906941",
+        "274877906941",
+        0
+      ]
+    }
+  ],
+  "generation": "2",
+  "input": "input.mc",
+  "kind": "render",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

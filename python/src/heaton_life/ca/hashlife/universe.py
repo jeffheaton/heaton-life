@@ -15,7 +15,7 @@ import operator
 import weakref
 from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Protocol
 
 import numpy as np
 from numpy.typing import NDArray
@@ -96,12 +96,20 @@ class HashLifeParams(Params):
     )
 
 
+class SnapshotOwner(Protocol):
+    """A universe that keeps snapshots alive through its collections: the two-state
+    ``HashLife`` or the ``MultiStateHashLife`` (spec/hashlife-multistate.md "Snapshots")."""
+
+    _snapshots: weakref.WeakSet[Snapshot]
+
+
 class Snapshot:
-    """A universe's cells and generation at one moment (spec/hashlife.md "Snapshots")."""
+    """A universe's cells and generation at one moment (spec/hashlife.md "Snapshots"). Both
+    kinds of universe make them; each refuses the other's."""
 
     __slots__ = ("__weakref__", "_generation", "_level", "_owner", "_released", "_root")
 
-    def __init__(self, owner: HashLife, root: int, level: int, generation: int) -> None:
+    def __init__(self, owner: SnapshotOwner, root: int, level: int, generation: int) -> None:
         self._owner = weakref.ref(owner)
         self._root = root
         self._level = level

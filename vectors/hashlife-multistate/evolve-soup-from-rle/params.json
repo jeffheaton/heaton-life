@@ -1,0 +1,75 @@
+{
+  "checkpoints": [
+    {
+      "bounding_box": [
+        "-20",
+        "17",
+        "19",
+        "46"
+      ],
+      "generation": "1000000",
+      "population": "671",
+      "state": "state-0.mc"
+    },
+    {
+      "bounding_box": [
+        "-20",
+        "17",
+        "19",
+        "46"
+      ],
+      "generation": "1000001",
+      "population": "671",
+      "state": "state-1.mc"
+    },
+    {
+      "bounding_box": [
+        "-20",
+        "17",
+        "19",
+        "46"
+      ],
+      "generation": "1000017",
+      "population": "671",
+      "state": "state-2.mc"
+    },
+    {
+      "bounding_box": [
+        "-20",
+        "17",
+        "19",
+        "46"
+      ],
+      "generation": "1000100",
+      "population": "671",
+      "state": "state-3.mc"
+    },
+    {
+      "bounding_box": [
+        "-20",
+        "17",
+        "19",
+        "46"
+      ],
+      "generation": "1002048",
+      "population": "671",
+      "state": "state-4.mc"
+    },
+    {
+      "bounding_box": [
+        "-20",
+        "17",
+        "19",
+        "46"
+      ],
+      "generation": "1180591620717411303424",
+      "population": "671",
+      "state": "state-5.mc"
+    }
+  ],
+  "family": "hashlife-multistate",
+  "input": "input.rle",
+  "kind": "evolve",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

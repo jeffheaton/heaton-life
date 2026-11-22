@@ -1,0 +1,4 @@
+#CXRLE Pos=-12,345 Gen=99
+#N Clock
+x = 6, y = 3, rule = WireWorld
+CBA3C$C4.C$6C!

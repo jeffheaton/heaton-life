@@ -132,6 +132,7 @@ meets.
 | Evolve: paper objective + GA (`../spec/evolve.md`) | ✅ bit-exact, incl. a replayed end-to-end mini evolution run |
 | Patterns: RLE (both dialects), transforms, extract/stamp (`../spec/patterns.md`) | ✅ bit-exact; reads and writes the Life community's RLE dialects |
 | HashLife: the unbounded universe, Macrocell, sparse `#CXRLE` RLE, views and frames (`../spec/hashlife.md`, `../spec/macrocell.md`) | ✅ bit-exact against `../vectors/hashlife/`; the giant patterns behind `HEATON_LIFE_PATTERNS` |
+| Multi-state HashLife: state rules (Wireworld), the same engine on 2 × 2 state leaves, multi-state Macrocell and RLE, frames under a zoom order (`../spec/hashlife-multistate.md`) | ✅ bit-exact against `../vectors/hashlife-multistate/`, which also replay the grid Wireworld beside it |
 
 The port landed in the order RNG → Life-like → remaining discrete CAs → continuous
 grids → fractals → boids → render → evolve, each stage with its conformance replay

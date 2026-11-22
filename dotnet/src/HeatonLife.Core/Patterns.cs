@@ -635,7 +635,7 @@ namespace HeatonLife
         }
 
         /// <summary>Reads a <c>#CXRLE</c> line's fields; true when it gives a <c>Pos</c>.</summary>
-        private static bool ReadCxrle(string line, ref BigInteger posX, ref BigInteger posY, ref BigInteger generation)
+        internal static bool ReadCxrle(string line, ref BigInteger posX, ref BigInteger posY, ref BigInteger generation)
         {
             bool placed = false;
             string[] fields = SplitSpace(line);
@@ -1241,7 +1241,7 @@ namespace HeatonLife
             return length == 1 ? tag : length.ToString() + tag;
         }
 
-        private static bool TryParseHeader(
+        internal static bool TryParseHeader(
             string line, out BigInteger width, out BigInteger height, out string? rule)
         {
             width = height = BigInteger.Zero;

@@ -65,20 +65,28 @@ namespace HeatonLife
         public static bool operator !=(CellBox a, CellBox b) => !a.Equals(b);
     }
 
-    /// <summary>A universe's cells and generation at one moment (spec/hashlife.md "Snapshots").</summary>
+    /// <summary>A universe's cells and generation at one moment (spec/hashlife.md "Snapshots").
+    /// Both kinds of universe, <see cref="HashLife"/> and <see cref="MultiStateHashLife"/>, make
+    /// them, and each refuses the other's (spec/hashlife-multistate.md "Snapshots").</summary>
     public sealed class HashLifeSnapshot
     {
         private volatile bool _released;
 
-        internal HashLifeSnapshot(HashLife owner, int root, int level, BigInteger generation)
+        internal HashLifeSnapshot(object owner, int root, int level, BigInteger generation, int states = 2)
         {
             Owner = owner;
             RootNode = root;
             Level = level;
             Generation = generation;
+            States = states;
         }
 
-        internal HashLife Owner { get; }
+        /// <summary>The universe that made it, compared by reference.</summary>
+        internal object Owner { get; }
+
+        /// <summary>The most states its cells can need: every state is below it (2 for a
+        /// two-state universe).</summary>
+        internal int States { get; }
 
         internal int RootNode { get; }
 
@@ -2324,7 +2332,7 @@ namespace HeatonLife
         /// One frame coordinate (a block or cell index) as two's-complement bits, read without
         /// forming the number: a long when it fits, else bytes written into a reused buffer.
         /// </summary>
-        private struct Coord
+        internal struct Coord
         {
             internal bool Small;
             internal long Value;      // the coordinate, when Small

@@ -213,6 +213,38 @@ and an RLE header naming any Life-like rule making the file two-state.
   the world as `bounded_grid` (`BoundedGrid`), as `measure_pattern` / `Measure` does; the
   encoders take a `topology` and write the world with its suffix. A side of 0 (the
   notation's unbounded strip or tube) is refused.
+- **Multi-state HashLife** (`heaton_life.ca.hashlife.MultiStateHashLife`, .NET
+  `MultiStateHashLife`; [spec/hashlife-multistate.md](spec/hashlife-multistate.md)): rules
+  whose cells have more than two states, on the unbounded plane, by the two-state engine's
+  algorithm on a quadtree of 2 × 2 state leaves. A rule is a `StateRule`
+  (`heaton_life.ca.state_rules`; .NET `StateRule` and `StateRules`): a number of states (2
+  to 256), a canonical name, and a cell function of the 3 × 3 block. The base case is
+  computed from the cell function and memoized, so any family of the 3 × 3 block plugs in
+  without engine changes. Wireworld runs today, named `WireWorld` (`WireworldRule`);
+  Generations, History and Super, and rule tables plug in as they land. Everything the
+  two-state universe does, this one does with states: steps of any size below 2⁵¹⁰, the
+  memory budget, garbage collection and cancellation; editing in the ±10⁹ box (cells and
+  rectangles of states pasted by copy or or, the two-state xor and and where every cell
+  involved is 0 or 1, clearing, Clear Outside, turns and flips, Advance Selection and
+  Advance Outside, Set Generation, the bounds Shrink Selection uses); snapshots in the
+  shared snapshot type (`measure_snapshots`, `release`, `read_snapshot`), which each kind
+  of universe refuses from the other; `LifeView` navigation; and frames. A frame's pixel
+  is a state zoomed in; zoomed out it is the state of the block that comes first in the
+  universe's zoom order (`zoom_order`, .NET `ZoomOrder`; lowest first by default), or the
+  density of its non-zero cells. Changing the rule keeps the cells and refuses a rule with
+  fewer states than the universe holds. .NET `Step` and `WriteFrame` allocate nothing once
+  warm.
+- **Multi-state files** ([spec/macrocell.md](spec/macrocell.md) "Multi-state files"):
+  Macrocell's `1 <nw> <ne> <sw> <se>` leaves of four states, read and written canonically
+  (two-state leaf lines read too, as states 0 and 1), with timelines
+  (`heaton_life.ca.hashlife.multistate.read_timeline` and `write_timeline`, .NET
+  `MultiStateMacrocell`); RLE of either dialect, placed by `#CXRLE`; and both loaded by
+  content, gzip-compressed or not (`read_multistate_universe`, .NET
+  `MultiStateFiles.ReadUniverse`). A file names its rule; one that names none takes the
+  reader's (`WireWorld` by default).
+- The new `hashlife-multistate/` vectors run Wireworld on the plane beside the grid
+  family's own runs: a pattern evolves cell for cell as on a grid with dead edges,
+  wherever the grid lies.
 
 ### Changed
 

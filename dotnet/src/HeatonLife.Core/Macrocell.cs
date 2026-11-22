@@ -258,7 +258,7 @@ namespace HeatonLife
         }
 
         /// <summary>The index of the <c>[M2]</c> header line, after any blank lines.</summary>
-        private static int HeaderLine(List<string> lines)
+        internal static int HeaderLine(List<string> lines)
         {
             int start = 0;
             while (start < lines.Count && TextLines.Strip(lines[start]).Length == 0)
@@ -371,7 +371,7 @@ namespace HeatonLife
         }
 
         /// <summary>One or more ASCII digits, no sign (spec/macrocell.md "Reading").</summary>
-        private static BigInteger ParseGeneration(string text, int number)
+        internal static BigInteger ParseGeneration(string text, int number)
         {
             if (text.Length == 0)
                 throw new FormatException($"line {number}: #G needs a generation in digits");
@@ -384,7 +384,7 @@ namespace HeatonLife
         }
 
         /// <summary>The five decimal fields of <c>level nw ne sw se</c>.</summary>
-        private static long[] NodeFields(string line, int number)
+        internal static long[] NodeFields(string line, int number)
         {
             var fields = new long[5];
             int count = 0, i = 0;
@@ -425,7 +425,7 @@ namespace HeatonLife
             return values[(int)index - 1];
         }
 
-        private static ulong LeafBits(string line, int number)
+        internal static ulong LeafBits(string line, int number)
         {
             ulong bits = 0;
             int row = 0, column = 0;
@@ -644,7 +644,7 @@ namespace HeatonLife
             return (step, frames);
         }
 
-        private static BigInteger Number(string text, int number, string what)
+        internal static BigInteger Number(string text, int number, string what)
         {
             for (int i = 0; i < text.Length; i++)
             {
@@ -658,7 +658,7 @@ namespace HeatonLife
 
         /// <summary>Digits or <c>b^e</c>, at least 1 and below 2^4096; a power is measured
         /// before it is computed.</summary>
-        private static BigInteger Step(string text, int number)
+        internal static BigInteger Step(string text, int number)
         {
             BigInteger step;
             int caret = text.IndexOf('^');

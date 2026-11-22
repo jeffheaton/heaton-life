@@ -1,0 +1,173 @@
+{
+  "bounding_box": [
+    "-6",
+    "-6",
+    "30",
+    "30"
+  ],
+  "family": "hashlife-multistate",
+  "generation": "1010",
+  "kind": "snapshots",
+  "ops": [
+    {
+      "cells": [
+        "0000000000000000",
+        "0000000000000000",
+        "0032133333333300",
+        "0030000000000300",
+        "0030000000000300",
+        "0030000000000300",
+        "0030000000000300",
+        "0030000000000300",
+        "0030000000000300",
+        "0030000000000300",
+        "0030000000000300",
+        "0030000000000300",
+        "0030000000000300",
+        "0033333333333300",
+        "0000000000000000",
+        "0000000000000000"
+      ],
+      "mode": "copy",
+      "op": "set_rect",
+      "x": -8,
+      "y": -8
+    },
+    {
+      "name": "gen-0",
+      "op": "snapshot"
+    },
+    {
+      "n": "10",
+      "op": "step"
+    },
+    {
+      "name": "gen-10",
+      "op": "snapshot"
+    },
+    {
+      "n": "10",
+      "op": "step"
+    },
+    {
+      "name": "gen-20",
+      "op": "snapshot"
+    },
+    {
+      "expect": {
+        "added": [],
+        "nodes": 0,
+        "universe_nodes": 20
+      },
+      "names": [],
+      "op": "measure"
+    },
+    {
+      "expect": {
+        "added": [
+          0,
+          7,
+          5
+        ],
+        "nodes": 12,
+        "universe_nodes": 20
+      },
+      "names": [
+        "gen-20",
+        "gen-10",
+        "gen-0"
+      ],
+      "op": "measure"
+    },
+    {
+      "expect": {
+        "added": [
+          8,
+          4,
+          0,
+          0
+        ],
+        "nodes": 12,
+        "universe_nodes": 20
+      },
+      "names": [
+        "gen-0",
+        "gen-10",
+        "gen-20",
+        "gen-10"
+      ],
+      "op": "measure"
+    },
+    {
+      "name": "gen-0",
+      "op": "release"
+    },
+    {
+      "expect": {
+        "added": [
+          0,
+          7,
+          0
+        ],
+        "nodes": 7,
+        "universe_nodes": 20
+      },
+      "names": [
+        "gen-20",
+        "gen-10",
+        "gen-0"
+      ],
+      "op": "measure"
+    },
+    {
+      "error": true,
+      "name": "gen-0",
+      "op": "restore"
+    },
+    {
+      "expect": {
+        "bounding_box": [
+          "-6",
+          "-6",
+          "5",
+          "5"
+        ],
+        "generation": "10",
+        "population": "44",
+        "state": "restore-12.mc"
+      },
+      "name": "gen-10",
+      "op": "restore"
+    },
+    {
+      "op": "set_cell",
+      "state": 2,
+      "x": 30,
+      "y": 30
+    },
+    {
+      "expect": {
+        "added": [
+          8,
+          1
+        ],
+        "nodes": 9,
+        "universe_nodes": 31
+      },
+      "names": [
+        "gen-20",
+        "gen-10"
+      ],
+      "op": "measure"
+    },
+    {
+      "n": "1000",
+      "op": "step"
+    }
+  ],
+  "population": "45",
+  "rule": "WireWorld",
+  "spec_version": "0.16.0",
+  "state": "final.mc",
+  "tier": "bit-exact"
+}

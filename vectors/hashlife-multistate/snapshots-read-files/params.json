@@ -1,0 +1,254 @@
+{
+  "bounding_box": [
+    "0",
+    "0",
+    "5",
+    "2"
+  ],
+  "family": "hashlife-multistate",
+  "generation": "0",
+  "kind": "snapshots",
+  "ops": [
+    {
+      "cells": [
+        "321333",
+        "300003",
+        "333333"
+      ],
+      "mode": "copy",
+      "op": "set_rect",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "name": "start",
+      "op": "snapshot"
+    },
+    {
+      "n": "100",
+      "op": "step"
+    },
+    {
+      "expect": {
+        "format": "rle",
+        "metadata": {
+          "author": null,
+          "comments": [],
+          "name": "Clock"
+        },
+        "rule": "WireWorld",
+        "step": null
+      },
+      "frames": [],
+      "input": "clock.rle",
+      "name": "clock-file",
+      "op": "read"
+    },
+    {
+      "expect": {
+        "added": [
+          4,
+          0
+        ],
+        "nodes": 4,
+        "universe_nodes": 12
+      },
+      "names": [
+        "start",
+        "clock-file"
+      ],
+      "op": "measure"
+    },
+    {
+      "expect": {
+        "format": "macrocell",
+        "metadata": {
+          "author": null,
+          "comments": [
+            "One passes; one doesn't."
+          ],
+          "name": "Two clocks and a diode"
+        },
+        "rule": "WireWorld",
+        "step": null
+      },
+      "frames": [],
+      "input": "circuit.mc",
+      "name": "circuit-file",
+      "op": "read"
+    },
+    {
+      "expect": {
+        "format": "macrocell",
+        "metadata": {
+          "author": null,
+          "comments": [],
+          "name": "Three frames"
+        },
+        "rule": "WireWorld",
+        "step": "3"
+      },
+      "frames": [
+        "frame-0",
+        "frame-1",
+        "frame-2"
+      ],
+      "input": "timeline.mc.gz",
+      "name": "timeline-file",
+      "op": "read"
+    },
+    {
+      "expect": {
+        "format": "rle",
+        "metadata": {
+          "author": null,
+          "comments": [],
+          "name": null
+        },
+        "rule": "WireWorld",
+        "step": null
+      },
+      "frames": [],
+      "input": "no-rule.rle",
+      "name": "plain-file",
+      "op": "read"
+    },
+    {
+      "expect": {
+        "added": [
+          14,
+          0,
+          10,
+          6
+        ],
+        "nodes": 30,
+        "universe_nodes": 12
+      },
+      "names": [
+        "timeline-file",
+        "frame-2",
+        "frame-1",
+        "frame-0"
+      ],
+      "op": "measure"
+    },
+    {
+      "error": true,
+      "input": "two-states.cells",
+      "op": "read"
+    },
+    {
+      "error": true,
+      "input": "unknown-rule.mc",
+      "op": "read"
+    },
+    {
+      "error": true,
+      "input": "too-many-states.rle",
+      "op": "read"
+    },
+    {
+      "expect": {
+        "bounding_box": [
+          "-21",
+          "-1",
+          "17",
+          "1"
+        ],
+        "generation": "0",
+        "population": "58",
+        "state": "restore-12.mc"
+      },
+      "name": "circuit-file",
+      "op": "restore"
+    },
+    {
+      "expect": {
+        "bounding_box": [
+          "10",
+          "10",
+          "16",
+          "12"
+        ],
+        "generation": "3",
+        "population": "16",
+        "state": "restore-13.mc"
+      },
+      "name": "frame-1",
+      "op": "restore"
+    },
+    {
+      "expect": {
+        "bounding_box": [
+          "0",
+          "0",
+          "3",
+          "0"
+        ],
+        "generation": "0",
+        "population": "2",
+        "state": "restore-14.mc"
+      },
+      "name": "plain-file",
+      "op": "restore"
+    },
+    {
+      "expect": {
+        "bounding_box": [
+          "0",
+          "0",
+          "5",
+          "2"
+        ],
+        "generation": "0",
+        "population": "14",
+        "state": "restore-15.mc"
+      },
+      "name": "clock-file",
+      "op": "restore"
+    },
+    {
+      "expect": {
+        "added": [
+          0,
+          0,
+          45,
+          12,
+          7,
+          10
+        ],
+        "nodes": 74,
+        "universe_nodes": 12
+      },
+      "names": [
+        "start",
+        "clock-file",
+        "circuit-file",
+        "frame-0",
+        "frame-1",
+        "frame-2"
+      ],
+      "op": "measure"
+    },
+    {
+      "expect": {
+        "bounding_box": [
+          "0",
+          "0",
+          "5",
+          "2"
+        ],
+        "generation": "0",
+        "population": "14",
+        "state": "restore-17.mc"
+      },
+      "name": "start",
+      "op": "restore"
+    }
+  ],
+  "population": "14",
+  "rule": "WireWorld",
+  "spec_version": "0.16.0",
+  "state": "final.mc",
+  "tier": "bit-exact"
+}

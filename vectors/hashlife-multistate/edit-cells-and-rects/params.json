@@ -1,0 +1,165 @@
+{
+  "bounding_box": [
+    "-3",
+    "-9",
+    "5",
+    "4"
+  ],
+  "family": "hashlife-multistate",
+  "generation": "123456789012345678901234567890",
+  "kind": "edit",
+  "ops": [
+    {
+      "op": "set_cell",
+      "state": 3,
+      "x": 5,
+      "y": -9
+    },
+    {
+      "op": "set_cell",
+      "state": 1,
+      "x": -1000000,
+      "y": 777777
+    },
+    {
+      "error": true,
+      "op": "set_cell",
+      "state": 4,
+      "x": 0,
+      "y": 0
+    },
+    {
+      "error": true,
+      "op": "set_cell",
+      "state": 1,
+      "x": 1000000001,
+      "y": 0
+    },
+    {
+      "cells": [
+        "321333",
+        "300003",
+        "333333"
+      ],
+      "mode": "copy",
+      "op": "set_rect",
+      "x": -3,
+      "y": 2
+    },
+    {
+      "cells": [
+        "0000",
+        "1102",
+        "0030"
+      ],
+      "mode": "or",
+      "op": "set_rect",
+      "x": 0,
+      "y": 2
+    },
+    {
+      "cells": [
+        "14"
+      ],
+      "error": true,
+      "mode": "copy",
+      "op": "set_rect",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "expect": [
+        "000000000",
+        "032133300",
+        "030011320",
+        "033333300",
+        "000000000"
+      ],
+      "op": "get_rect",
+      "x0": -4,
+      "x1": 4,
+      "y0": 1,
+      "y1": 5
+    },
+    {
+      "op": "clear_rect",
+      "x0": -2,
+      "x1": 0,
+      "y0": 3,
+      "y1": 3
+    },
+    {
+      "expect": [
+        "000000000",
+        "032133300",
+        "030001320",
+        "033333300",
+        "000000000"
+      ],
+      "op": "get_rect",
+      "x0": -4,
+      "x1": 4,
+      "y0": 1,
+      "y1": 5
+    },
+    {
+      "expect": [
+        "-3",
+        "2",
+        "2",
+        "3"
+      ],
+      "op": "bounding_box_in",
+      "x0": "-3",
+      "x1": "2",
+      "y0": "2",
+      "y1": "3"
+    },
+    {
+      "expect": null,
+      "op": "bounding_box_in",
+      "x0": "-2",
+      "x1": "0",
+      "y0": "3",
+      "y1": "3"
+    },
+    {
+      "expect": [
+        "5",
+        "-9",
+        "5",
+        "-9"
+      ],
+      "op": "bounding_box_in",
+      "x0": "-10",
+      "x1": "10",
+      "y0": "-100",
+      "y1": "0"
+    },
+    {
+      "op": "clear_outside",
+      "x0": -1000000,
+      "x1": 5,
+      "y0": -9,
+      "y1": 4
+    },
+    {
+      "n": "123456789012345678901234567890",
+      "op": "set_generation"
+    },
+    {
+      "op": "set_rule",
+      "rule": " wireWorld "
+    },
+    {
+      "error": true,
+      "op": "set_rule",
+      "rule": "B3/S23"
+    }
+  ],
+  "population": "17",
+  "rule": "WireWorld",
+  "spec_version": "0.16.0",
+  "state": "final.mc",
+  "tier": "bit-exact"
+}

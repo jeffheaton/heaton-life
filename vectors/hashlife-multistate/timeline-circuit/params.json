@@ -1,0 +1,79 @@
+{
+  "family": "hashlife-multistate",
+  "frames": [
+    {
+      "bounding_box": [
+        "-21",
+        "-1",
+        "17",
+        "1"
+      ],
+      "generation": "0",
+      "population": "58",
+      "state": "frame-0.mc"
+    },
+    {
+      "bounding_box": [
+        "-21",
+        "-1",
+        "17",
+        "1"
+      ],
+      "generation": "4",
+      "population": "58",
+      "state": "frame-1.mc"
+    },
+    {
+      "bounding_box": [
+        "-21",
+        "-1",
+        "17",
+        "1"
+      ],
+      "generation": "8",
+      "population": "58",
+      "state": "frame-2.mc"
+    },
+    {
+      "bounding_box": [
+        "-21",
+        "-1",
+        "17",
+        "1"
+      ],
+      "generation": "12",
+      "population": "58",
+      "state": "frame-3.mc"
+    },
+    {
+      "bounding_box": [
+        "-21",
+        "-1",
+        "17",
+        "1"
+      ],
+      "generation": "16",
+      "population": "58",
+      "state": "frame-4.mc"
+    }
+  ],
+  "generations": [
+    "0",
+    "4",
+    "8",
+    "12",
+    "16"
+  ],
+  "input": "input.rle",
+  "kind": "timeline",
+  "metadata": {
+    "author": "nobody",
+    "comments": [
+      "Five frames, four apart."
+    ],
+    "name": "Circuit"
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact",
+  "timeline": "timeline.mc"
+}

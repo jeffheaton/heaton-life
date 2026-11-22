@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import io
 import json
 import struct
 import sys
@@ -17,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from numpy.typing import NDArray
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -994,6 +996,9 @@ def main() -> None:
     # -- Grid topologies: where a point past an edge lands, the halo, the bounded-grid
     #    suffix, grid runs on every topology, bounded RLE files (spec/topology.md)
     write_topology_cases()
+
+    # -- Multi-state HashLife: Wireworld on the unbounded plane (spec/hashlife-multistate.md)
+    write_multistate_cases()
 
     print("done")
 
@@ -8274,6 +8279,614 @@ def write_topology_cases() -> None:
     refused_by_the_universe("error-bounded-torus", glider_torus)
     refused_by_the_universe(
         "error-bounded-plane", "#CXRLE Pos=0,0\nx = 3, y = 3, rule = B3/S23:P100,100\nbo$2bo$3o!\n"
+    )
+
+
+MULTISTATE_SPEC_VERSION = "0.16.0"
+
+
+def _wire_soup(width: int, height: int, seed: int) -> NDArray[np.uint8]:
+    """A Wireworld soup from PCG32 stream 0: about half conductor, one cell in twenty a head
+    and one a tail (test input; the run itself has no randomness)."""
+    from heaton_life.core.rng import Pcg32
+
+    draws = Pcg32(seed).fill_u32(width * height) % np.uint32(20)
+    cells = np.where(draws < 9, 3, 0).astype(np.uint8)
+    cells[draws == 18] = 1
+    cells[draws == 19] = 2
+    return cells.reshape(height, width)
+
+
+def write_multistate_cases() -> None:
+    """Multi-state HashLife (spec/hashlife-multistate.md, spec/macrocell.md "Multi-state
+    files"), under vectors/hashlife-multistate/: Wireworld grids run on the plane beside the
+    grid family's own run, evolution from Macrocell and RLE files, both files read and
+    written, edits with states, frames under a zoom order, snapshot scripts, and timelines."""
+    import gzip
+
+    from PIL import Image
+
+    from heaton_life.ca.hashlife import LifeView, MultiStateHashLife, Snapshot
+    from heaton_life.ca.hashlife.multistate import read_timeline, write_timeline
+    from heaton_life.init import PatternMetadata
+
+    root = VECTOR_ROOT / "hashlife-multistate"
+    codec = CODECS["wireworld"]  # states × 85, as the wireworld vectors store them
+    full = {"spec_version": MULTISTATE_SPEC_VERSION, "family": "hashlife-multistate"}
+    full["tier"] = "bit-exact"
+
+    def case(name: str, kind: str) -> tuple[Path, dict[str, Any]]:
+        d = root / name
+        d.mkdir(parents=True, exist_ok=True)
+        return d, {**full, "kind": kind}
+
+    def png(frame: NDArray[np.uint8]) -> bytes:
+        buf = io.BytesIO()
+        Image.fromarray(np.ascontiguousarray(frame), mode="L").save(buf, format="PNG")
+        return buf.getvalue()
+
+    def digits(rows: NDArray[np.uint8]) -> list[str]:
+        return ["".join("0123456789abcdefghijklmnopqrstuvwxyz"[v] for v in row) for row in rows]
+
+    def cells(rows: list[str]) -> NDArray[np.uint8]:
+        return np.array([[int(c, 36) for c in row] for row in rows], np.uint8)
+
+    def notes(m: PatternMetadata) -> dict[str, Any]:
+        return {"name": m.name, "author": m.author, "comments": list(m.comments)}
+
+    # -- grid: the grid family and the plane, side by side ----------------------------------
+    def grid_case(
+        name: str, grid: NDArray[np.uint8], origin: tuple[int, int], gens: list[int]
+    ) -> None:
+        d, meta = case(f"grid-{name}", "grid")
+        (d / "grid.png").write_bytes(codec.encode(grid))
+        height, width = grid.shape
+        x, y = origin
+        u = MultiStateHashLife("WireWorld")
+        u.set_rect(x, y, grid)
+        w = Wireworld(size=(width, height), init=grid)
+        checkpoints = []
+        for gen in gens:
+            u.step(gen - u.generation)
+            w.step(gen - w.generation)
+            assert np.array_equal(u.get_rect(x, y, x + width - 1, y + height - 1), w.state)
+            assert u.population == int(np.count_nonzero(w.state))
+            entry = _hashlife_entry(d, u, f"state-{gen}")
+            (d / f"cells-{gen}.png").write_bytes(codec.encode(w.state))
+            entry["cells"] = f"cells-{gen}.png"
+            checkpoints.append(entry)
+        meta.update(
+            {
+                "rule": "WireWorld",
+                "grid": "grid.png",
+                "origin": [_signed_text(x), _signed_text(y)],
+                "checkpoints": checkpoints,
+            }
+        )
+        _gap_save(d, meta)
+
+    from heaton_life.ca.wireworld import clock_loop
+
+    grid_case("clock", clock_loop((16, 16)), (-8, -8), [0, 1, 7, 40, 41, 100])
+    junction = wireworld_from_text("TH########.\n..........#\nTH########.\n")
+    grid_case("junction", place(junction, (16, 8), at=(1, 2)), (1000, -77), [0, 1, 5, 20, 64])
+    circuit = np.zeros((5, 44), np.uint8)
+    clock = wireworld_from_text("#TH###\n#....#\n######")
+    diode = wireworld_from_text("...##...\n####.###\n...##...")
+    circuit[1:4, 1:7] = clock
+    circuit[2, 7:14] = 3
+    circuit[1:4, 14:22] = diode
+    circuit[2, 22:34] = 3
+    circuit[1:4, 34:40] = clock  # its electrons reach the diode from the side it blocks
+    grid_case("clocks-and-diode", circuit, (-30, 2), [0, 1, 2, 13, 50, 200, 1000])
+    grid_case("soup", _wire_soup(48, 40, 21), (-24, 5), [0, 1, 2, 5, 33, 100, 1000])
+    grid_case("soup-far", _wire_soup(33, 31, 8), (999_999_967, -1_000_000_000), [0, 3, 64, 333])
+
+    # -- evolve: Macrocell and RLE files, steps of any size ---------------------------------
+    def evolve_case(name: str, file_name: str, data: bytes, gens: list[int]) -> None:
+        d, meta = case(f"evolve-{name}", "evolve")
+        (d / file_name).write_bytes(data)
+        from heaton_life.ca.hashlife.multistate import read_multistate_universe
+
+        u = read_multistate_universe(data).universe
+        checkpoints = []
+        for gen in gens:
+            u.step(gen - u.generation)
+            checkpoints.append(_hashlife_entry(d, u, f"state-{len(checkpoints)}"))
+        meta.update({"input": file_name, "checkpoints": checkpoints})
+        _gap_save(d, meta)
+
+    # A clock at the corner of a level-100 tree, far past 64-bit coordinates.
+    far_clock = MultiStateHashLife()
+    far_clock.set_rect(0, 1, clock_loop((16, 16)))
+    clock_text = far_clock.to_macrocell().splitlines()
+    tree = [line for line in clock_text if line[0].isdigit()]
+    top = int(tree[-1].split()[0])
+    chain = [*tree] + [f"{k} 0 0 0 {len(tree) + k - top - 1}" for k in range(top + 1, 101)]
+    evolve_case(
+        "clock-far-away",
+        "input.mc",
+        ("[M2] (example 1.0)\n#R wireworld\n#G 5\n" + "\n".join(chain) + "\n").encode(),
+        [5, 6, 45, 2**64, 2**100 + 3],
+    )
+    soup_universe = MultiStateHashLife()
+    soup_universe.set_rect(-20, 17, _wire_soup(40, 30, 33))
+    soup_universe.set_generation(1_000_000)
+    evolve_case(
+        "soup-from-rle",
+        "input.rle",
+        soup_universe.to_rle().encode(),
+        [1_000_000, 1_000_001, 1_000_017, 1_000_100, 1_002_048, 2**70],
+    )
+
+    # -- macrocell and rle: reading, canonical writing, and refusals ----------------------------
+    def file_case(
+        kind: str, name: str, text: str, error: bool = False, rule: str | None = None
+    ) -> None:
+        d, meta = case(f"{kind}-{name}", kind)
+        ext = "mc" if kind == "macrocell" else "rle"
+        (d / f"input.{ext}").write_text(text, encoding="utf-8", newline="\n")
+        meta["input"] = f"input.{ext}"
+        if rule is not None:
+            meta["rule"] = rule
+        reader = (
+            MultiStateHashLife.from_macrocell
+            if kind == "macrocell"
+            else MultiStateHashLife.from_rle
+        )
+        try:
+            u = reader(text, rule=rule)
+        except ValueError:
+            assert error, name
+            meta["error"] = True
+            _gap_save(d, meta)
+            return
+        assert not error, name
+        meta.update(_hashlife_entry(d, u, "canonical"))
+        try:
+            rle = u.to_rle()
+        except ValueError:
+            meta["rle_error"] = True
+        else:
+            (d / "canonical.rle").write_text(rle, encoding="utf-8", newline="\n")
+            meta["rle"] = "canonical.rle"
+        _gap_save(d, meta)
+
+    # Out of order, a non-minimal root, metadata, and every Wireworld state.
+    file_case(
+        "macrocell",
+        "states-and-a-non-minimal-root",
+        "[M2] (example 1.0)\n#R WireWorld\n#G 12\n#N Bits\n#C Every state, twice.\n"
+        "1 3 2 1 0\n1 0 0 3 3\n2 1 0 2 2\n3 3 0 0 0\n4 0 0 0 4\n5 5 0 0 0\n",
+    )
+    file_case("macrocell", "level-one-root", "[M2]\n#R WireWorld\n1 3 0 2 1\n")
+    file_case(
+        "macrocell",
+        "two-state-leaves",
+        "[M2]\n#R WireWorld\n.*$*.*$\n$$..**$\n4 1 0 2 0\n",
+    )
+    file_case("macrocell", "no-rule", "[M2]\n1 0 1 2 3\n2 0 1 1 0\n", rule="WireWorld")
+    file_case("macrocell", "empty", "[M2]\n#R WireWorld\n2 0 0 0 0\n")
+    deep = ["1 3 3 3 3"] + [f"{k} 0 0 0 {k - 1}" for k in range(2, 41)]
+    file_case("macrocell", "far-beyond-the-box", "[M2]\n#R WireWorld\n" + "\n".join(deep) + "\n")
+    file_case("macrocell", "error-state-past-the-rule", "[M2]\n#R WireWorld\n1 0 4 0 0\n", True)
+    file_case("macrocell", "error-state-256", "[M2]\n#R WireWorld\n1 0 256 0 0\n", True)
+    file_case("macrocell", "error-unknown-rule", "[M2]\n#R Brain\n1 0 1 0 0\n", True)
+    file_case("macrocell", "error-life-rule", "[M2]\n#R B3/S23\n1 0 1 0 0\n", True)
+    file_case("macrocell", "error-wrong-level", "[M2]\n1 1 1 1 1\n3 1 0 0 0\n", True)
+    file_case("macrocell", "error-forward-reference", "[M2]\n2 2 0 0 0\n1 1 1 1 1\n", True)
+    file_case("macrocell", "error-level-zero", "[M2]\n0 1 1 1 1\n", True)
+    file_case(
+        "macrocell",
+        "error-past-the-deepest-tree",
+        "[M2]\n1 3 0 0 0\n" + "".join(f"{k} {k - 1} 0 0 0\n" for k in range(2, 514)),
+        True,
+    )
+    file_case(
+        "rle",
+        "cxrle-position-and-generation",
+        "#CXRLE Pos=-12,345 Gen=99\n#N Clock\nx = 6, y = 3, rule = WireWorld\nCBA3C$C4.C$6C!\n",
+    )
+    file_case("rle", "two-state-dialect", "x = 5, y = 2\nobo$3bo!\n")
+    file_case("rle", "empty", "#CXRLE Gen=7\nx = 0, y = 0, rule = wireworld\n!\n")
+    file_case("rle", "error-state-past-the-rule", "x = 1, y = 1, rule = WireWorld\nD!\n", True)
+    file_case("rle", "error-life-rule", "x = 2, y = 1, rule = B3/S23\nAC!\n", True)
+    file_case(
+        "rle",
+        "error-outside-the-box",
+        "#CXRLE Pos=999999999,0\nx = 2, y = 1, rule = WireWorld\n.2C!\n",
+        True,
+    )
+
+    # -- edit: cells, rectangles and the rectangle tools, with states -------------------------
+    def apply(u: MultiStateHashLife, op: dict[str, Any]) -> None:
+        kind = op["op"]
+        box = tuple(op[k] for k in ("x0", "y0", "x1", "y1") if k in op)
+        if kind == "set_cell":
+            u.set_cell(op["x"], op["y"], op["state"])
+        elif kind == "set_rect":
+            u.set_rect(op["x"], op["y"], cells(op["cells"]), op["mode"])
+        elif kind == "clear_rect":
+            u.clear_rect(*box)
+        elif kind == "clear_outside":
+            u.clear_outside(*box)
+        elif kind == "rotate_rect":
+            op["expect"] = list(u.rotate_rect(*box, clockwise=op["clockwise"]))
+        elif kind == "flip_rect":
+            u.flip_rect(*box, horizontal=op["horizontal"])
+        elif kind == "advance_selection":
+            u.advance_selection(*box, int(op["n"]))
+        elif kind == "advance_outside":
+            u.advance_outside(*box, int(op["n"]))
+        elif kind == "set_generation":
+            u.set_generation(int(op["n"]))
+        elif kind == "step":
+            u.step(int(op["n"]))
+        elif kind == "clear":
+            u.clear()
+        elif kind == "set_rule":
+            u.rule = op["rule"]
+        elif kind == "get_rect":
+            op["expect"] = digits(u.get_rect(*box))
+        elif kind == "bounding_box_in":
+            found = u.bounding_box_in(*(int(v) for v in box))
+            op["expect"] = None if found is None else [_signed_text(v) for v in found]
+        else:
+            raise AssertionError(kind)
+
+    def edit_case(name: str, ops: list[dict[str, Any]]) -> None:
+        d, meta = case(f"edit-{name}", "edit")
+        u = MultiStateHashLife("WireWorld")
+        for op in ops:
+            before = (u.to_macrocell(), u.generation, u.rule)
+            try:
+                apply(u, op)
+            except ValueError:
+                assert op.get("error"), op
+                assert (u.to_macrocell(), u.generation, u.rule) == before, op
+            else:
+                assert not op.get("error"), op
+        meta.update({"rule": "WireWorld", "ops": ops})
+        meta.update(_hashlife_entry(d, u, "final"))
+        _gap_save(d, meta)
+
+    clock_rows = digits(wireworld_from_text("#TH###\n#....#\n######"))
+    edit_case(
+        "cells-and-rects",
+        [
+            {"op": "set_cell", "x": 5, "y": -9, "state": 3},
+            {"op": "set_cell", "x": -1_000_000, "y": 777_777, "state": 1},
+            {"op": "set_cell", "x": 0, "y": 0, "state": 4, "error": True},
+            {"op": "set_cell", "x": 1_000_000_001, "y": 0, "state": 1, "error": True},
+            {"op": "set_rect", "x": -3, "y": 2, "mode": "copy", "cells": clock_rows},
+            {"op": "set_rect", "x": 0, "y": 2, "mode": "or", "cells": ["0000", "1102", "0030"]},
+            {"op": "set_rect", "x": 0, "y": 0, "mode": "copy", "cells": ["14"], "error": True},
+            {"op": "get_rect", "x0": -4, "y0": 1, "x1": 4, "y1": 5},
+            {"op": "clear_rect", "x0": -2, "y0": 3, "x1": 0, "y1": 3},
+            {"op": "get_rect", "x0": -4, "y0": 1, "x1": 4, "y1": 5},
+            {"op": "bounding_box_in", "x0": "-3", "y0": "2", "x1": "2", "y1": "3"},
+            {"op": "bounding_box_in", "x0": "-2", "y0": "3", "x1": "0", "y1": "3"},
+            {"op": "bounding_box_in", "x0": "-10", "y0": "-100", "x1": "10", "y1": "0"},
+            {"op": "clear_outside", "x0": -1_000_000, "y0": -9, "x1": 5, "y1": 4},
+            {"op": "set_generation", "n": "123456789012345678901234567890"},
+            {"op": "set_rule", "rule": " wireWorld "},
+            {"op": "set_rule", "rule": "B3/S23", "error": True},
+        ],
+    )
+    edit_case(
+        "paste-xor-and",
+        [
+            {"op": "set_rect", "x": 0, "y": 0, "mode": "copy", "cells": ["1101", "0110", "1011"]},
+            {"op": "set_rect", "x": 1, "y": 1, "mode": "xor", "cells": ["11", "01"]},
+            {"op": "set_rect", "x": 0, "y": 0, "mode": "and", "cells": ["111", "101"]},
+            {"op": "get_rect", "x0": 0, "y0": 0, "x1": 3, "y1": 2},
+            {"op": "set_rect", "x": 0, "y": 0, "mode": "xor", "cells": ["2"], "error": True},
+            {"op": "set_cell", "x": 3, "y": 2, "state": 3},
+            {"op": "set_rect", "x": 2, "y": 1, "mode": "and", "cells": ["11", "11"], "error": True},
+            {"op": "set_rect", "x": 0, "y": 0, "mode": "xor", "cells": ["11", "11"]},
+            {"op": "set_rect", "x": 9, "y": 9, "mode": "nand", "cells": ["1"], "error": True},
+        ],
+    )
+    soup_rows = digits(_wire_soup(13, 9, 4))
+    edit_case(
+        "rotate-and-flip",
+        [
+            {"op": "set_rect", "x": -6, "y": -4, "mode": "copy", "cells": soup_rows},
+            {"op": "rotate_rect", "x0": -6, "y0": -4, "x1": 6, "y1": 4, "clockwise": True},
+            {"op": "rotate_rect", "x0": -3, "y0": -7, "x1": 5, "y1": 5, "clockwise": False},
+            {"op": "flip_rect", "x0": -5, "y0": -2, "x1": 3, "y1": 2, "horizontal": True},
+            {"op": "flip_rect", "x0": -6, "y0": -4, "x1": 6, "y1": 1, "horizontal": False},
+            {
+                "op": "rotate_rect",  # its turn would stand 11 cells tall past the box's edge
+                "x0": 999_999_990,
+                "y0": 999_999_999,
+                "x1": 1_000_000_000,
+                "y1": 1_000_000_000,
+                "clockwise": True,
+                "error": True,
+            },
+            {"op": "step", "n": "40"},
+        ],
+    )
+    circuit_rows = digits(circuit)
+    edit_case(
+        "advance",
+        [
+            {"op": "set_rect", "x": -22, "y": -2, "mode": "copy", "cells": circuit_rows},
+            {"op": "advance_selection", "x0": -21, "y0": -1, "x1": -8, "y1": 1, "n": "17"},
+            {"op": "advance_outside", "x0": -21, "y0": -1, "x1": -8, "y1": 1, "n": "9"},
+            {"op": "advance_selection", "x0": 10, "y0": -2, "x1": 21, "y1": 2, "n": "1000"},
+            {"op": "advance_outside", "x0": 0, "y0": 0, "x1": 0, "y1": 0, "n": "0"},
+            {
+                "op": "advance_selection",
+                "x0": 5,
+                "y0": 5,
+                "x1": 4,
+                "y1": 5,
+                "n": "1",
+                "error": True,
+            },
+            {"op": "step", "n": "3"},
+        ],
+    )
+
+    # -- render: states zoomed in and out, the zoom order, density ------------------------------
+    def render_case(
+        name: str, file_name: str, data: bytes, generation: int, frames: list[dict[str, Any]]
+    ) -> None:
+        d, meta = case(f"render-{name}", "render")
+        (d / file_name).write_bytes(data)
+        from heaton_life.ca.hashlife.multistate import read_multistate_universe
+
+        u = read_multistate_universe(data).universe
+        u.step(generation - u.generation)
+        for i, frame in enumerate(frames):
+            u.zoom_order = frame["order"]
+            got = u.render(
+                LifeView(int(frame["view"][0]), int(frame["view"][1]), frame["view"][2]),
+                tuple(frame["size"]),
+                frame["mode"],
+            )
+            (d / f"frame-{i}.png").write_bytes(png(got))
+            frame["file"] = f"frame-{i}.png"
+        meta.update({"input": file_name, "generation": str(generation), "frames": frames})
+        _gap_save(d, meta)
+
+    circuit_universe = MultiStateHashLife()
+    circuit_universe.set_rect(-22, -2, circuit)
+    render_case(
+        "circuit-scales",
+        "input.rle",
+        circuit_universe.to_rle().encode(),
+        13,
+        [
+            {"view": ["-100", "-12", 2], "size": [190, 30], "mode": "state", "order": []},
+            {"view": ["-24", "-4", 0], "size": [48, 8], "mode": "state", "order": []},
+            {"view": ["-12", "-2", -1], "size": [24, 4], "mode": "state", "order": []},
+            {"view": ["-12", "-2", -1], "size": [24, 4], "mode": "state", "order": [3]},
+            {"view": ["-6", "-1", -2], "size": [12, 2], "mode": "state", "order": [2, 1]},
+            {"view": ["-6", "-1", -2], "size": [12, 2], "mode": "density", "order": []},
+            {"view": ["-3", "-1", -3], "size": [6, 2], "mode": "density", "order": []},
+        ],
+    )
+    render_case(
+        "far-out",
+        "input.mc",
+        ("[M2]\n#R WireWorld\n" + "\n".join(deep) + "\n").encode(),
+        2,
+        [
+            {"view": ["-2", "-2", -39], "size": [4, 4], "mode": "state", "order": []},
+            {"view": ["-2", "-2", -40], "size": [4, 4], "mode": "density", "order": []},
+            {"view": ["-1", "-1", -600], "size": [3, 3], "mode": "state", "order": [2]},
+            {
+                "view": [str(2**38 - 3), str(2**38 - 3), 0],
+                "size": [6, 6],
+                "mode": "state",
+                "order": [],
+            },
+        ],
+    )
+
+    # -- snapshots: what they hold, releasing, restoring, files read into the universe ----------
+    def text_of(u: MultiStateHashLife, snapshot: Snapshot) -> str:
+        saved = u.snapshot()
+        u.restore(snapshot)
+        text = u.to_macrocell()
+        u.restore(saved)
+        saved.release()
+        return text
+
+    content_ids: dict[Any, int] = {}
+
+    def node_ids(text: str) -> set[int]:
+        """The nodes a canonical Macrocell text writes, as ids by level and content shared
+        across texts; the empty universe's lone `1 0 0 0 0` is no node."""
+        local: list[int] = []
+        for line in text.splitlines()[1:]:
+            if line.startswith("#"):
+                continue
+            level, *rest = (int(field) for field in line.split())
+            key: Any = (
+                (1, tuple(rest))
+                if level == 1
+                else (level, tuple(0 if k == 0 else local[k - 1] for k in rest))
+            )
+            local.append(content_ids.setdefault(key, len(content_ids) + 1))
+        ids = set(local)
+        ids.discard(content_ids.get((1, (0, 0, 0, 0)), -1))
+        return ids
+
+    def script(name: str, ops: list[dict[str, Any]], files: dict[str, bytes]) -> None:
+        d, meta = case(f"snapshots-{name}", "snapshots")
+        for file_name, data in files.items():
+            (d / file_name).write_bytes(data)
+        u = MultiStateHashLife("WireWorld")
+        named: dict[str, Snapshot] = {}
+        for index, op in enumerate(ops):
+            kind = op["op"]
+            before = (u.to_macrocell(), u.generation, u.rule)
+            try:
+                if kind == "snapshot":
+                    named[op["name"]] = u.snapshot()
+                elif kind == "release":
+                    named[op["name"]].release()
+                elif kind == "restore":
+                    u.restore(named[op["name"]])
+                    op["expect"] = _hashlife_entry(d, u, f"restore-{index}")
+                elif kind == "read":
+                    found = u.read_snapshot((d / op["input"]).read_bytes())
+                    assert (u.to_macrocell(), u.generation, u.rule) == before, op
+                    named[op["name"]] = found.snapshot
+                    named.update(zip(op["frames"], found.frames, strict=True))
+                    op["expect"] = {
+                        "format": found.format,
+                        "rule": found.rule,
+                        "metadata": notes(found.metadata),
+                        "step": None if found.step is None else str(found.step),
+                    }
+                elif kind == "measure":
+                    listed = [named[n] for n in op["names"]]
+                    footprint = u.measure_snapshots(listed)
+                    seen = node_ids(u.to_macrocell())
+                    assert footprint.universe_nodes == len(seen), op
+                    for snapshot, count in zip(listed, footprint.added, strict=True):
+                        ids = set() if snapshot.released else node_ids(text_of(u, snapshot))
+                        assert count == len(ids - seen), op
+                        seen |= ids
+                    op["expect"] = {
+                        "universe_nodes": footprint.universe_nodes,
+                        "added": list(footprint.added),
+                        "nodes": footprint.nodes,
+                    }
+                else:
+                    apply(u, op)
+            except ValueError:
+                assert op.get("error"), op
+                assert (u.to_macrocell(), u.generation, u.rule) == before, op
+            else:
+                assert not op.get("error"), op
+        meta.update({"rule": "WireWorld", "ops": ops})
+        meta.update(_hashlife_entry(d, u, "final"))
+        _gap_save(d, meta)
+
+    script(
+        "clock-history",
+        [
+            {
+                "op": "set_rect",
+                "x": -8,
+                "y": -8,
+                "mode": "copy",
+                "cells": digits(clock_loop((16, 16))),
+            },
+            {"op": "snapshot", "name": "gen-0"},
+            {"op": "step", "n": "10"},
+            {"op": "snapshot", "name": "gen-10"},
+            {"op": "step", "n": "10"},
+            {"op": "snapshot", "name": "gen-20"},
+            {"op": "measure", "names": []},
+            {"op": "measure", "names": ["gen-20", "gen-10", "gen-0"]},
+            {"op": "measure", "names": ["gen-0", "gen-10", "gen-20", "gen-10"]},
+            {"op": "release", "name": "gen-0"},
+            {"op": "measure", "names": ["gen-20", "gen-10", "gen-0"]},
+            {"op": "restore", "name": "gen-0", "error": True},
+            {"op": "restore", "name": "gen-10"},
+            {"op": "set_cell", "x": 30, "y": 30, "state": 2},
+            {"op": "measure", "names": ["gen-20", "gen-10"]},
+            {"op": "step", "n": "1000"},
+        ],
+        {},
+    )
+    recorded = MultiStateHashLife()
+    recorded.set_rect(10, 10, wireworld_from_text("TH#####\n#.....#\n#######"))
+    frames = []
+    for gen in (0, 3, 6):
+        recorded.step(gen - recorded.generation)
+        frames.append(recorded.snapshot())
+    timeline = write_timeline(recorded, frames, metadata=PatternMetadata("Three frames"))
+    script(
+        "read-files",
+        [
+            {"op": "set_rect", "x": 0, "y": 0, "mode": "copy", "cells": clock_rows},
+            {"op": "snapshot", "name": "start"},
+            {"op": "step", "n": "100"},
+            {"op": "read", "input": "clock.rle", "name": "clock-file", "frames": []},
+            {"op": "measure", "names": ["start", "clock-file"]},
+            {"op": "read", "input": "circuit.mc", "name": "circuit-file", "frames": []},
+            {
+                "op": "read",
+                "input": "timeline.mc.gz",
+                "name": "timeline-file",
+                "frames": ["frame-0", "frame-1", "frame-2"],
+            },
+            {"op": "read", "input": "no-rule.rle", "name": "plain-file", "frames": []},
+            {"op": "measure", "names": ["timeline-file", "frame-2", "frame-1", "frame-0"]},
+            {"op": "read", "input": "two-states.cells", "error": True},
+            {"op": "read", "input": "unknown-rule.mc", "error": True},
+            {"op": "read", "input": "too-many-states.rle", "error": True},
+            {"op": "restore", "name": "circuit-file"},
+            {"op": "restore", "name": "frame-1"},
+            {"op": "restore", "name": "plain-file"},
+            {"op": "restore", "name": "clock-file"},
+            {
+                "op": "measure",
+                "names": ["start", "clock-file", "circuit-file", "frame-0", "frame-1", "frame-2"],
+            },
+            {"op": "restore", "name": "start"},
+        ],
+        {
+            "clock.rle": b"#N Clock\nx = 6, y = 3, rule = WireWorld\nCBA3C$C4.C$6C!\n",
+            "circuit.mc": circuit_universe.to_macrocell(
+                PatternMetadata("Two clocks and a diode", None, ("One passes; one doesn't.",))
+            ).encode(),
+            "timeline.mc.gz": gzip.compress(timeline.encode(), mtime=0),
+            "no-rule.rle": b"x = 3, y = 1\no2bo!\n",
+            "two-states.cells": b"!Name: Blinker\nOOO\n",
+            "unknown-rule.mc": b"[M2]\n#R Brain\n1 0 1 0 0\n",
+            "too-many-states.rle": b"x = 2, y = 1, rule = WireWorld\nAD!\n",
+        },
+    )
+
+    # -- timeline: written from frames, read back -----------------------------------------------
+    def timeline_case(name: str, data: bytes, gens: list[int], metadata: PatternMetadata) -> None:
+        d, meta = case(f"timeline-{name}", "timeline")
+        (d / "input.rle").write_bytes(data)
+        from heaton_life.ca.hashlife.multistate import read_multistate_universe
+
+        u = read_multistate_universe(data).universe
+        frames = []
+        for gen in gens:
+            u.step(gen - u.generation)
+            frames.append(u.snapshot())
+        text = write_timeline(u, frames, metadata=metadata)
+        (d / "timeline.mc").write_text(text, encoding="utf-8", newline="\n")
+        back = read_timeline(text)
+        states = []
+        for i, frame in enumerate(back.frames):
+            back.universe.restore(frame)
+            states.append(_hashlife_entry(d, back.universe, f"frame-{i}"))
+        meta.update(
+            {
+                "input": "input.rle",
+                "generations": [str(g) for g in gens],
+                "metadata": notes(metadata),
+                "timeline": "timeline.mc",
+                "frames": states,
+            }
+        )
+        _gap_save(d, meta)
+
+    timeline_case(
+        "circuit",
+        circuit_universe.to_rle().encode(),
+        [0, 4, 8, 12, 16],
+        PatternMetadata("Circuit", "nobody", ("Five frames, four apart.",)),
+    )
+    timeline_case(
+        "one-frame",
+        b"#CXRLE Pos=5,5 Gen=9\nx = 3, y = 1, rule = WireWorld\nCBA!\n",
+        [9],
+        PatternMetadata(),
     )
 
 
