@@ -1,8 +1,0 @@
-{
-  "error": true,
-  "family": "formats",
-  "input": "input.lif",
-  "kind": "universe",
-  "spec_version": "0.16.0",
-  "tier": "bit-exact"
-}

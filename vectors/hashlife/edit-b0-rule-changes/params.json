@@ -1,0 +1,66 @@
+{
+  "background": 0,
+  "bounding_box": null,
+  "family": "hashlife",
+  "generation": "114",
+  "kind": "edit",
+  "ops": [
+    {
+      "cells": [
+        ".**",
+        "**.",
+        ".*."
+      ],
+      "mode": "copy",
+      "op": "set_rect",
+      "x": -1,
+      "y": -1
+    },
+    {
+      "n": "5",
+      "op": "step"
+    },
+    {
+      "op": "set_rule",
+      "rule": "B0123478/S01234678"
+    },
+    {
+      "n": "6",
+      "op": "step"
+    },
+    {
+      "op": "set_rule",
+      "rule": "b02a / s12-a"
+    },
+    {
+      "n": "2",
+      "op": "step"
+    },
+    {
+      "op": "set_rule",
+      "rule": "B3/S23"
+    },
+    {
+      "n": "100",
+      "op": "step"
+    },
+    {
+      "error": true,
+      "op": "set_rule",
+      "rule": "B9/S23"
+    },
+    {
+      "op": "set_rule",
+      "rule": "B0/S"
+    },
+    {
+      "n": "1",
+      "op": "step"
+    }
+  ],
+  "population": "0",
+  "rule": "B3/S23",
+  "spec_version": "0.16.0",
+  "state": "final.mc",
+  "tier": "bit-exact"
+}

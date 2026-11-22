@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import dataclasses
 import functools
+import operator
 from typing import Literal, TypeAlias
 
 RULE_PRESETS = {
@@ -132,6 +133,23 @@ class LifeRule:
     def has_b0(self) -> bool:
         """True when a dead cell with no live neighbors is born (``table[0] == 1``)."""
         return self.table[0] == 1
+
+    @property
+    def has_smax(self) -> bool:
+        """True when a live cell whose neighbors are all alive survives (``table[511] ==
+        1``): S8 in a Moore rule, S6 in a hexagonal one, S4 in a von Neumann one."""
+        return self.table[TABLE_SIZE - 1] == 1
+
+    def background(self, generation: int) -> int:
+        """The unbounded universe's background at ``generation`` ≥ 0 (spec/rules.md "B0 and
+        the background"): 0 for a rule without B0, 1 for B0 with Smax, and the generation's
+        parity for B0 without Smax. The universe holds the cells that differ from it."""
+        generation = operator.index(generation)
+        if generation < 0:
+            raise ValueError(f"a generation is never negative, got {generation}")
+        if not self.has_b0:
+            return 0
+        return 1 if self.has_smax else generation & 1
 
 
 def compile_rule(rule: str, *, presets: bool = True) -> LifeRule:

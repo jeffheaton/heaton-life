@@ -14,10 +14,9 @@ engine (torus or dead edges); this page is its unbounded counterpart.
   many are alive. x grows to the right and y grows downward, as in RLE.
 - **Generation.** A non-negative integer.
 - **Rule.** A Life-like rule in canonical form ([rules.md](rules.md)): any notation, any
-  of its three neighborhoods. A rule with B0 (`table[0] = 1`) is rejected: births with no
-  live neighbors would light the infinite background. (A B0 rule whose table also keeps
-  a cell alive among eight live neighbors, `table[511] = 1`, can be run as its complement
-  rule; that is a possible later extension.)
+  of its three neighborhoods, B0 included. A rule with B0 lights the infinite background,
+  so its universe holds the cells that differ from the background ("Rules with B0",
+  below); for every other rule those are simply the live cells.
 - Coordinates, generations, and populations are unbounded integers wherever the API takes
   or returns them. Ports use big integers at their public edges and whatever they like
   inside.
@@ -91,6 +90,74 @@ grow past level 512 to hold the pattern (one that has spread to about ±2^509) r
 error at that sub-step's boundary: as with cancellation, the universe holds the last
 completed sub-step.
 
+### Rules with B0
+
+A rule with B0 gives birth to every dead cell whose block is empty, so one generation
+lights the whole plane. The universe runs such rules too, without ever holding infinitely
+many cells, by the published emulation: it holds only the cells that differ from the
+**background**, the state every cell far from the pattern shares. The rule and the
+generation say what the background is ([rules.md](rules.md#b0-and-the-background)):
+background(g) is 0 at every generation for a rule without B0, 1 at every generation for
+a rule with B0 and Smax (`table[511] = 1`), and g mod 2 for a rule with B0 but without
+Smax.
+
+**The universe's cells.** At generation g, cell (x, y) of the plane is the universe's
+cell (x, y) XOR background(g). Every operation on this page — the population and the
+boxes, `get_cell` and `get_rect`, editing, snapshots, frames, and Macrocell and RLE
+text — reads and writes the universe's cells, as for any rule, and `background` says what
+they stand for. Where the background is alive, a live cell of the universe is a dead cell
+of the plane: `population` counts the plane's dead cells (its live ones are infinitely
+many), `bounding_box` bounds them, and `set_cell(x, y, 1)` kills the plane's cell (x, y).
+
+**Evolution.** A generation from generation g, with b = background(g), applies to the
+universe's cells the **phase table**
+
+- P₀[i] = table[0] XOR table[i] when b = 0,
+- P₁[i] = table[511] XOR table[511 − i] when b = 1,
+
+where 511 − i is index i with all nine cells flipped. The cells it gives are the plane's
+next generation XOR the next background, and P_b[0] = 0, so the universe stays finite and
+the machinery above runs P_b as it runs any rule's table. A rule without B0 always runs
+P₀, its own table. A rule with B0 and Smax always runs P₁ = 1 − table[511 − i], its
+black/white reversal, a rule without B0: `B0123478/S01234678` runs as `B3/S23`. A rule
+with B0 but without Smax runs P₀ at even generations and P₁ at odd ones.
+
+**Steps.** When the phases alternate (B0 without Smax), a node's result over 2^j ≥ 2
+generations depends on the parity of the generation it starts at, so the reference
+algorithm starts every sub-step of two or more generations at an even generation, and
+its results stay functions of the node alone. From an odd generation it first takes one
+generation alone; then, for each set bit j ≥ 1 of the generations that remain, a sub-step
+of 2^j; then, when one generation remains, that one. A leaf's two generations apply P₀
+and then P₁, and a single generation the phase table of its own parity; fixed-step
+results for j = 0 are cached for each parity. A sub-step split for memory ("Memory",
+below) splits into halves that keep this alignment, single generations included. Every
+other rule decomposes n as above. Any decomposition that gives the same cells conforms.
+
+**Editing, the generation, the rule.** Editing writes the universe's cells: to give
+cell (x, y) of the plane the state s, set the universe's cell to s XOR `background`.
+`set_generation` changes none of the universe's cells, so when the phases alternate a
+move to the other parity swaps live and dead across the whole plane. A new rule keeps the
+universe's cells, and the plane they stand for follows the new rule's background. A
+snapshot holds the universe's cells and generation; once restored, they are read with the
+background that the rule in force gives that generation.
+
+`advance_selection` and `advance_outside` ("Advancing part of the universe", below) work
+on the universe's cells as well: the selection, or its outside, evolves from the
+universe's generation g as `step` evolves it, and its cells after n generations are put
+back as they are, at generation g, even when background(g + n) differs from
+background(g).
+
+**Files.** A file of a rule with B0 holds the universe's cells at the file's generation,
+written as they are and read back as they are, so such files round-trip as every file
+does. In a file of a rule with B0 and Smax, and in a file of a rule with B0 but without
+Smax at an odd generation, the cells are the plane's dead cells. A grid reads a file's
+cells as written ([formats.md](formats.md#reading-into-a-grid)).
+
+**Frames** show the universe's cells ("View and render", below). Where the background is
+alive, a frame shows the plane in negative: a lit pixel is a dead cell of the plane or,
+zoomed out, a block that holds one. A viewer that shows the plane as it is swaps its two
+colors when `background` is 1, which is exact at `mag ≥ 0`.
+
 ### Cancellation
 
 `cancel()`, called from another thread, stops a running `step` at the boundary of a
@@ -101,6 +168,8 @@ A cancel that arrives while no step is running is forgotten (the next `step` cle
 ## Observables
 
 - `generation` and `population` (the number of live cells).
+- `background`: background(generation), 0 or 1 ("Rules with B0"), what the plane is
+  outside the universe's cells; always 0 for a rule without B0.
 - `bounding_box()`: (x0, y0, x1, y1), the inclusive extremes of the live cells, or none
   for an empty universe.
 - `population_in(x0, y0, x1, y1)`: the live cells in an inclusive rectangle.
@@ -274,8 +343,9 @@ P = (x + i, y + j), which shows
 - at `mag ≥ 0`, the cell (⌊Px / 2^mag⌋, ⌊Py / 2^mag⌋ + 1);
 - at `mag < 0`, the block of cells whose top-left is (Px · 2^s, Py · 2^s + 1).
 
-A **frame** of size (width, height) is a height × width array of bytes, row-major. Its
-pixel values are:
+A **frame** of size (width, height) is a height × width array of bytes, row-major,
+showing the universe's cells (for a rule with B0, "Rules with B0" says what they stand
+for). Its pixel values are:
 
 - At `mag ≥ 0`: 255 for a live cell, 0 for a dead one, repeated over the cell's square.
 - At `mag < 0`, mode `any`: 255 if the block holds a live cell, else 0.
@@ -351,6 +421,8 @@ integers), so ports move views identically and an app keeps no copy of the math:
   content reads into the universe's own store, as a snapshot of its cells and generation,
   with its format, rule, metadata and a timeline's frames. The universe and its earlier
   snapshots stay as they were ([formats.md](formats.md#reading-into-a-universe-that-exists)).
+- Every format reads and writes a rule with B0 like any other, its cells the universe's
+  cells at the file's generation ("Rules with B0").
 
 ## Vector encoding
 
@@ -358,7 +430,9 @@ Each case under `vectors/hashlife/` has a `params.json` with `family: "hashlife"
 `tier: "bit-exact"`, `spec_version`, and a `kind`. A state is pinned by
 `generation`, `population`, and `bounding_box` (decimal strings, any size; the box is
 `null` when empty) plus its canonical Macrocell text: the file named by `state`, or, past
-4 KiB, its `state_sha256` and `state_lines` (the count of `\n`).
+4 KiB, its `state_sha256` and `state_lines` (the count of `\n`). From spec 0.16.0 a state
+of a rule with B0 also carries `background` (0 or 1), and the `edit` and `snapshots` ops
+include `set_rule` (`rule`: the universe's new rule, which keeps its cells).
 
 | kind | inputs | expected |
 |---|---|---|
@@ -377,6 +451,14 @@ Runners are strict: an unknown key, kind, or `spec_version` fails the case.
 - Against the dense engine: a soup run here and on a [lifelike](lifelike.md) grid with
   `dead` boundary agree cell for cell for as long as the pattern stays clear of the grid's
   edge, for any rule without B0.
+- Rules with B0, against a torus: a soup of a rule with B0 but without Smax, run here and
+  on a [lifelike](lifelike.md) torus, agree at generation g with the torus's cells equal to
+  the universe's XOR (g mod 2), for as long as what grows from the soup hasn't met itself
+  around the torus. A rule with B0 and Smax agrees the same way from a torus that starts
+  as the universe's cells flipped, live and dead swapped, and every torus cell XOR 1 is
+  the universe's.
+- A rule with B0 and Smax and its black/white reversal give the same universe's cells at
+  every generation.
 - The R-pentomino has population 116 from generation 1103 on (six gliders escape); acorn
   has 633 from generation 5206.
 - A glider (`bo$2bo$3o!`) moves one cell right and one down every 4 generations, so after

@@ -1,0 +1,93 @@
+{
+  "checkpoints": [
+    {
+      "background": 0,
+      "bounding_box": [
+        "-16",
+        "-16",
+        "15",
+        "15"
+      ],
+      "generation": "0",
+      "population": "350",
+      "state": "state-0.mc"
+    },
+    {
+      "background": 1,
+      "bounding_box": [
+        "-17",
+        "-17",
+        "16",
+        "16"
+      ],
+      "generation": "1",
+      "population": "862",
+      "state": "state-1.mc"
+    },
+    {
+      "background": 0,
+      "bounding_box": [
+        "-16",
+        "-16",
+        "15",
+        "15"
+      ],
+      "generation": "2",
+      "population": "371",
+      "state": "state-2.mc"
+    },
+    {
+      "background": 1,
+      "bounding_box": [
+        "-17",
+        "-17",
+        "16",
+        "16"
+      ],
+      "generation": "3",
+      "population": "814",
+      "state": "state-3.mc"
+    },
+    {
+      "background": 0,
+      "bounding_box": [
+        "-16",
+        "-14",
+        "15",
+        "15"
+      ],
+      "generation": "100",
+      "population": "306",
+      "state": "state-4.mc"
+    },
+    {
+      "background": 1,
+      "bounding_box": [
+        "-17",
+        "-15",
+        "16",
+        "16"
+      ],
+      "generation": "1001",
+      "population": "537",
+      "state": "state-5.mc"
+    },
+    {
+      "background": 1,
+      "bounding_box": [
+        "-17",
+        "-15",
+        "16",
+        "16"
+      ],
+      "generation": "1099511627777",
+      "population": "543",
+      "state": "state-6.mc"
+    }
+  ],
+  "family": "hashlife",
+  "input": "input.rle",
+  "kind": "evolve",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

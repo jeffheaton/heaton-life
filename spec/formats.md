@@ -231,6 +231,11 @@ none), the generation, and the metadata.
 | `life-1.05`, `life-1.06` | the live cells' bounding box | the box's top-left | from `#N` or `#R`, or none | 0 |
 | `png`, `bmp` | the image | (0, 0) | none | 0 |
 
+A grid takes a file's cells as written, whatever its rule. Under a rule with B0 they are
+what the file holds, the cells that differ from the unbounded universe's background at
+the file's generation ([hashlife.md](hashlife.md#rules-with-b0)), and a grid runs them
+as its own cells.
+
 With `trim`, a grid that is not already a bounding box is cut to its live cells' box, and
 (x, y) moves with it. A pattern without a live cell is an error for the bounding-box
 formats always and for every format with `trim`; an untrimmed grid with no cells at all
@@ -305,9 +310,11 @@ universe.
 - **Editing box.** Every live cell must lie in the [editing box](hashlife.md#editing),
   |x|, |y| ≤ 10⁹, or the file is refused — except Macrocell, which carries anything.
 - **Rule.** The format's rule, or `B3/S23` without one, in any notation of
-  [rules.md](rules.md). A rule the universe can't run (not a Life-like rule, or one with
-  B0) is an error, and so is a [preset name](rules.md#preset-names) such as `life`: a
-  file names its rule, never a preset.
+  [rules.md](rules.md), B0 included: the cells of a file of a rule with B0 are the
+  universe's cells at its generation ([hashlife.md](hashlife.md#rules-with-b0)). A rule
+  that is not a Life-like rule is an error, and so is a
+  [preset name](rules.md#preset-names) such as `life`: a file names its rule, never a
+  preset.
 - **Generation.** RLE's `Gen`, Macrocell's `#G`, otherwise 0.
 
 An empty pattern gives an empty universe.

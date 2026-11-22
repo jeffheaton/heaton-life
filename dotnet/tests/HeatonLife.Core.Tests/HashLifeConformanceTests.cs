@@ -28,7 +28,7 @@ namespace HeatonLife.Tests
         private static Dictionary<string, HashSet<string>> BuildKeys()
         {
             string[] common = { "spec_version", "family", "tier", "kind" };
-            string[] state = { "generation", "population", "bounding_box" };
+            string[] state = { "generation", "population", "bounding_box", "background" }; // background: B0 rules
             string[] stored = { "state", "state_sha256", "state_lines" };
             HashSet<string> Of(params string[][] groups) => new HashSet<string>(groups.SelectMany(g => g));
             return new Dictionary<string, HashSet<string>>
@@ -201,11 +201,14 @@ namespace HeatonLife.Tests
             }
         }
 
-        /// <summary>A state pinned by generation, population, bounding box, and canonical text.</summary>
+        /// <summary>A state pinned by generation, population, bounding box, and canonical text; a
+        /// state of a rule with B0 by its background too (spec 0.16.0).</summary>
         internal static void ExpectState(string dir, HashLife u, JsonElement entry)
         {
             Assert.Equal(entry.GetProperty("generation").GetString(), u.Generation.ToString());
             Assert.Equal(entry.GetProperty("population").GetString(), u.Population.ToString());
+            if (entry.TryGetProperty("background", out JsonElement background))
+                Assert.Equal(background.GetInt32() == 1, u.BackgroundAlive);
             JsonElement box = entry.GetProperty("bounding_box");
             CellBox? got = u.BoundingBox;
             if (box.ValueKind == JsonValueKind.Null)
@@ -306,6 +309,9 @@ namespace HeatonLife.Tests
                     break;
                 case "set_generation":
                     u.SetGeneration(BigInteger.Parse(op.GetProperty("n").GetString()!));
+                    break;
+                case "set_rule": // spec 0.16.0: the universe's new rule keeps its cells
+                    u.Rule = op.GetProperty("rule").GetString()!;
                     break;
                 case "bounding_box_in":
                     {

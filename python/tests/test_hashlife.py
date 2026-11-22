@@ -316,10 +316,10 @@ def test_coordinates_must_be_integers() -> None:
 
 
 def test_rules_and_budgets_are_validated() -> None:
-    with pytest.raises(ValueError, match="B0"):
-        HashLife("B03/S23")
-    with pytest.raises(ValueError, match="B0"):
-        HashLife("MAPg" + "A" * 85)  # a MAP string with entry 0 set is B0 too
+    assert HashLife("b03 / s32").rule == "B03/S23"  # B0 runs (spec/hashlife.md "Rules with B0")
+    assert HashLife("MAPg" + "A" * 85).background == 0  # B0 without Smax, at generation 0
+    with pytest.raises(ValueError, match="invalid rule"):
+        HashLife("B9/S23")
     with pytest.raises(ValueError, match="at least 10"):
         HashLife(max_memory_mb=9)
     u = HashLife.from_params(HashLifeParams(rule="b36 / s32", max_memory_mb=64))

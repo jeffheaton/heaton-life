@@ -1,8 +1,8 @@
 """HashLife conformance: replay vectors/hashlife/ — evolution checkpoints, Macrocell and
 RLE reading and canonical writing, edit sequences, and snapshot scripts (what snapshots
-hold, releasing them, files read into a universe that exists). Every state is compared
-through its canonical Macrocell text (spec/macrocell.md), bit-exact. The .NET suite replays
-the same files."""
+hold, releasing them, files read into a universe that exists), rules with B0 among them.
+Every state is compared through its canonical Macrocell text (spec/macrocell.md),
+bit-exact. The .NET suite replays the same files."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ VECTOR_ROOT = Path(__file__).resolve().parents[2] / "vectors" / "hashlife"
 CASES = sorted(VECTOR_ROOT.glob("*/params.json"))
 SPEC_VERSIONS = {"0.14.0", "0.15.0", "0.16.0"}
 _COMMON = {"spec_version", "family", "tier", "kind"}
-_STATE = {"generation", "population", "bounding_box"}
+_STATE = {"generation", "population", "bounding_box", "background"}  # background: B0 rules
 _KEYS = {
     "evolve": _COMMON | {"input", "checkpoints"},
     "macrocell": _COMMON
@@ -59,6 +59,8 @@ _SNAPSHOT_OPS = {
 def _expect_state(case_dir: Path, u: HashLife, entry: dict[str, Any]) -> None:
     assert str(u.generation) == entry["generation"]
     assert str(u.population) == entry["population"]
+    if "background" in entry:  # a state of a rule with B0 (spec 0.16.0)
+        assert u.background == entry["background"]
     box = u.bounding_box()
     assert (None if box is None else [str(v) for v in box]) == entry["bounding_box"]
     text = u.to_macrocell()
@@ -96,6 +98,8 @@ def _apply(u: HashLife, op: dict[str, Any]) -> None:
         advance(op["x0"], op["y0"], op["x1"], op["y1"], int(op["n"]))
     elif kind == "set_generation":
         u.set_generation(int(op["n"]))
+    elif kind == "set_rule":  # spec 0.16.0: the universe's new rule keeps its cells
+        u.rule = op["rule"]
     elif kind == "bounding_box_in":
         box = u.bounding_box_in(*(int(op[k]) for k in ("x0", "y0", "x1", "y1")))
         assert (None if box is None else [str(v) for v in box]) == op["expect"], op

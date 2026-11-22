@@ -43,11 +43,18 @@ class Abort(Exception):
         self.canceled = canceled
 
 
+Tables = tuple[Sequence[int], Sequence[int]]
+"""The base cases a universe steps by: one for the generations that start at even
+generations, one for those that start at odd ones. They are one table twice, except for a
+rule with B0 but without Smax, whose phases alternate (spec/hashlife.md "Rules with B0")."""
+
+
 class NodeStore:
     """Nodes, results, populations, and the collector for one universe."""
 
     __slots__ = (
         "_tick",
+        "alternates",
         "budget",
         "cancel_requested",
         "collections",
@@ -57,24 +64,28 @@ class NodeStore:
         "guard",
         "leaf1",
         "leaf2",
+        "parity",
         "pops",
         "res",
         "slow",
-        "slow_j",
+        "slow_key",
         "t",
         "table",
     )
 
-    def __init__(self, t: Sequence[int], budget: int) -> None:
+    def __init__(self, t: Tables, budget: int) -> None:
         self.t = t
+        self.alternates = t[0] is not t[1]
+        self.parity = 0  # the parity of the generation a single generation starts at
         self.budget = budget
         self.data: list[Any] = []  # int bitmap | (nw, ne, sw, se) | None (free slot)
         self.table: dict[Any, int] = {}
         self.free: list[int] = []
-        self.res: dict[int, int] = {}  # full-speed results
-        self.slow: dict[int, int] = {}  # fixed-step results for slow_j
-        self.slow_j = -1
-        self.leaf1: dict[int, int] = {}  # leaf bitmap -> center 4x4 one generation on
+        self.res: dict[int, int] = {}  # full-speed results (from an even generation)
+        self.slow: dict[int, int] = {}  # fixed-step results for slow_key
+        self.slow_key = (-1, 0)  # (j, parity) of the fixed-step results held
+        # Leaf bitmap -> center 4x4 one generation on, from an even and an odd generation.
+        self.leaf1: tuple[dict[int, int], dict[int, int]] = ({}, {})
         self.leaf2: dict[int, int] = {}  # leaf bitmap -> center 4x4 two generations on
         self.pops: dict[int, int] = {}
         self.guard = False  # True while a step may be abandoned
@@ -128,32 +139,40 @@ class NodeStore:
 
     # -- results ------------------------------------------------------------------------
 
-    def use_rule(self, t: Sequence[int]) -> None:
+    def use_rule(self, t: Tables) -> None:
         """Switch rules: cells survive, every cached result goes."""
         self.t = t
+        self.alternates = t[0] is not t[1]
         self.res = {}
         self.slow = {}
-        self.leaf1 = {}
+        self.slow_key = (-1, 0)
+        self.leaf1 = ({}, {})
         self.leaf2 = {}
 
-    def use_step(self, j: int) -> None:
-        """Fixed-step results hold for one j at a time."""
-        if j != self.slow_j:
+    def use_step(self, j: int, parity: int) -> None:
+        """Fixed-step results hold for one j at a time — and, for a single generation of a
+        rule whose phases alternate, for one parity of the generation it starts at. A step
+        of two or more generations starts at an even generation (spec/hashlife.md "Rules
+        with B0"), so its results never depend on the parity."""
+        parity = parity & 1 if self.alternates and j == 0 else 0
+        self.parity = parity
+        if (j, parity) != self.slow_key:
             self.slow = {}
-            self.slow_j = j
+            self.slow_key = (j, parity)
 
     def one(self, b: int) -> int:
-        r = self.leaf1.get(b)
+        cache = self.leaf1[self.parity]
+        r = cache.get(b)
         if r is None:
-            r = advance1(b, self.t)
-            self.leaf1[b] = r
+            r = advance1(b, self.t[self.parity])
+            cache[b] = r
             self._tick += 1
         return r
 
     def two(self, b: int) -> int:
         r = self.leaf2.get(b)
         if r is None:
-            r = advance2(b, self.t)
+            r = advance2(b, self.t[0], self.t[1])
             self.leaf2[b] = r
             self._tick += 1
         return r
@@ -296,7 +315,7 @@ class NodeStore:
         return (
             len(self.table) * NODE_BYTES
             + (len(self.res) + len(self.slow) + len(self.pops)) * ENTRY_BYTES
-            + (len(self.leaf1) + len(self.leaf2)) * LEAF_ENTRY_BYTES
+            + (len(self.leaf1[0]) + len(self.leaf1[1]) + len(self.leaf2)) * LEAF_ENTRY_BYTES
         )
 
     def collect(self, roots: Iterable[tuple[int, int]]) -> None:
@@ -331,6 +350,6 @@ class NodeStore:
         self.res = {n: r for n, r in self.res.items() if marked[n] and marked[r]}
         self.pops = {n: p for n, p in self.pops.items() if marked[n]}
         self.slow = {}
-        self.leaf1 = {}
+        self.leaf1 = ({}, {})
         self.leaf2 = {}
         self.collections += 1

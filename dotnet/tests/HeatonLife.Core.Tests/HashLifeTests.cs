@@ -322,9 +322,8 @@ namespace HeatonLife.Tests
         [Fact]
         public void RulesBudgetsAndStepsAreValidated()
         {
-            Assert.Contains("B0", Assert.Throws<ArgumentException>(() => new HashLife("B03/S23")).Message);
-            // A MAP string with entry 0 set is B0 too.
-            Assert.Contains("B0", Assert.Throws<ArgumentException>(() => new HashLife("MAPg" + new string('A', 85))).Message);
+            Assert.Equal("B03/S23", new HashLife("b03 / s32").Rule); // B0 runs (spec/hashlife.md "Rules with B0")
+            Assert.False(new HashLife("MAPg" + new string('A', 85)).BackgroundAlive); // B0 without Smax, generation 0
             Assert.Throws<ArgumentException>(() => new HashLife("not a rule"));
             Assert.Throws<ArgumentOutOfRangeException>(() => new HashLife(maxMemoryMb: 9));
             var u = new HashLife("b36 / s32", 64);
@@ -333,7 +332,7 @@ namespace HeatonLife.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => u.Step(-1));
             Assert.Throws<ArgumentOutOfRangeException>(() => u.MaxMemoryMb = 9);
             Assert.Equal(64, u.MaxMemoryMb);
-            Assert.Throws<ArgumentException>(() => u.Rule = "B0/S8");
+            Assert.Throws<ArgumentException>(() => u.Rule = "B9/S8");
             Assert.Equal("B36/S23", u.Rule);
         }
 

@@ -10,8 +10,8 @@ cell itself and its eight neighbors, the 3 × 3 block centered on it. Every such
 one table of 512 entries, one for each way the block can be filled. The notations below
 are ways of writing that table down; each compiles to it. The
 [Life-like](lifelike.md) grid and the [HashLife](hashlife.md) universe both run the
-table, so every rule on this page runs on a bounded grid and, unless it has B0, on the
-unbounded plane.
+table, so every rule on this page runs on a bounded grid and on the unbounded plane (a
+rule with B0 as [B0 and the background](#b0-and-the-background) says).
 
 ## The transition table
 
@@ -29,7 +29,39 @@ cell's own state. The rule's **table** maps each index to the next state, 0 or 1
 generation replaces every cell by `table[index]` at once. MAP strings use the same
 numbering (below).
 
-A rule has **B0** when `table[0] = 1`: a dead cell with no live neighbors is born.
+A rule has **B0** when `table[0] = 1`: a dead cell with no live neighbors is born. It
+has **Smax** when `table[511] = 1`: a live cell whose neighbors are all alive survives
+(`S8` in a Moore rule, `S6` in a hexagonal one, `S4` in a von Neumann one).
+
+## B0 and the background
+
+On an unbounded plane, every cell far from the pattern shares one state, the
+**background**, and the rule moves it as it moves any cell of a uniform plane: a dead
+background becomes `table[0]` and a live one `table[511]`. Without B0 the background
+stays dead. With B0 it lights at once; with Smax as well it then stays alive, and without
+Smax it goes out again and flips every generation.
+
+The [unbounded universe](hashlife.md#rules-with-b0) never holds infinitely many cells: it
+holds the cells that differ from the background, which at generation g is
+
+| rule | background(g) |
+|---|---|
+| without B0 | 0 at every generation |
+| B0 and Smax | 1 at every generation |
+| B0 without Smax | g mod 2: 0 at even generations, 1 at odd ones |
+
+A rule with B0 and Smax keeps a live background at every generation, the first included,
+so it runs as one rule throughout: its **black/white reversal**, the rule with live and
+dead swapped in the block and in the result, `reversal[i] = 1 − table[511 − i]`
+(511 − i is index i with all nine cells flipped). The reversal of a rule with B0 and
+Smax has neither: that of `B0123478/S01234678` is `B3/S23`, so the first runs Life's
+patterns. A plane whose background is dead is never what such a universe holds, at
+generation 0 or later; a grid ([lifelike.md](lifelike.md)) runs the rule on its own cells
+as written.
+
+**API.** Python: `LifeRule.has_smax` and `LifeRule.background(generation)`, 0 or 1, for
+any generation ≥ 0; .NET: `LifeRule.HasSmax` and `LifeRule.BackgroundAlive(generation)`,
+true where the background is 1.
 
 ## Neighborhoods
 

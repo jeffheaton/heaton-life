@@ -1,0 +1,137 @@
+{
+  "background": 1,
+  "bounding_box": [
+    "-20",
+    "-14",
+    "17",
+    "13"
+  ],
+  "family": "hashlife",
+  "generation": "11",
+  "kind": "edit",
+  "ops": [
+    {
+      "cells": [
+        ".*.",
+        "..*",
+        "***"
+      ],
+      "mode": "copy",
+      "op": "set_rect",
+      "x": -1,
+      "y": -1
+    },
+    {
+      "density": 0.4,
+      "op": "fill_random",
+      "seed": 61,
+      "x0": -20,
+      "x1": 19,
+      "y0": -12,
+      "y1": 11
+    },
+    {
+      "n": "3",
+      "op": "step"
+    },
+    {
+      "alive": true,
+      "op": "set_cell",
+      "x": 30,
+      "y": 30
+    },
+    {
+      "cells": [
+        "**..",
+        ".**.",
+        "..**"
+      ],
+      "mode": "xor",
+      "op": "set_rect",
+      "x": 25,
+      "y": -5
+    },
+    {
+      "n": "1000000000000000000001",
+      "op": "step"
+    },
+    {
+      "expect": [
+        "-10",
+        "-10",
+        "10",
+        "10"
+      ],
+      "op": "bounding_box_in",
+      "x0": "-10",
+      "x1": "10",
+      "y0": "-10",
+      "y1": "10"
+    },
+    {
+      "n": "4",
+      "op": "set_generation"
+    },
+    {
+      "op": "clear_rect",
+      "x0": -3,
+      "x1": 3,
+      "y0": -3,
+      "y1": 3
+    },
+    {
+      "n": "5",
+      "op": "advance_selection",
+      "x0": -15,
+      "x1": 14,
+      "y0": -15,
+      "y1": 14
+    },
+    {
+      "n": "2",
+      "op": "advance_outside",
+      "x0": -15,
+      "x1": 14,
+      "y0": -15,
+      "y1": 14
+    },
+    {
+      "clockwise": true,
+      "expect": [
+        -6,
+        -8,
+        7,
+        9
+      ],
+      "op": "rotate_rect",
+      "x0": -8,
+      "x1": 9,
+      "y0": -6,
+      "y1": 7
+    },
+    {
+      "horizontal": true,
+      "op": "flip_rect",
+      "x0": -5,
+      "x1": 6,
+      "y0": -5,
+      "y1": 4
+    },
+    {
+      "op": "clear_outside",
+      "x0": -40,
+      "x1": 40,
+      "y0": -40,
+      "y1": 40
+    },
+    {
+      "n": "7",
+      "op": "step"
+    }
+  ],
+  "population": "686",
+  "rule": "B02a/S12-a",
+  "spec_version": "0.16.0",
+  "state": "final.mc",
+  "tier": "bit-exact"
+}

@@ -124,20 +124,24 @@ def test_rules_with_spaces_read_from_life_and_macrocell_files() -> None:
 
 
 @pytest.mark.parametrize("rule", B0_RULES)
-def test_a_b0_rule_reads_into_a_grid_but_not_a_universe(rule: str) -> None:
+def test_a_b0_rule_reads_into_a_grid_and_a_universe(rule: str) -> None:
+    """spec/hashlife.md "Rules with B0": every reader takes a rule with B0, its cells the
+    universe's cells; a grid takes them as written."""
+    canonical = compile_rule(rule).canonical
     rle = f"x = 3, y = 3, rule = {rule}\n{GLIDER_RLE_UPPERCASE}\n"
     found = read_pattern(rle)
     assert found.rule == rule  # still a Life-like rule, so the file is two-state
     assert np.array_equal(found.cells, GLIDER)
-    with pytest.raises(ValueError, match="B0"):
-        read_universe(rle)
+    universe = read_universe(rle).universe
+    assert universe.rule == canonical
+    assert np.array_equal(universe.get_rect(0, 0, 2, 2), GLIDER)
     life = f"#Life 1.05\n#R {rule}\n#P 0 0\n.*.\n..*\n***\n"
-    with pytest.raises(ValueError, match="B0"):
-        read_universe(life)
+    assert read_universe(life).universe.to_macrocell() == universe.to_macrocell()
     u = HashLife("B3/S2-i34q")
-    with pytest.raises(ValueError, match="B0"):
-        u.rule = rule
-    assert u.rule == "B3/S2-i34q"
+    u.set_rect(0, 0, GLIDER)
+    u.rule = rule
+    assert u.rule == canonical
+    assert np.array_equal(u.get_rect(0, 0, 2, 2), GLIDER)  # a new rule keeps the cells
 
 
 @pytest.mark.parametrize("preset", ["life", "highlife", "Life"])

@@ -60,7 +60,7 @@ Elementary takes its space-time diagram too ([elementary.md](elementary.md#state
 - [floatexp.md](floatexp.md) — a float64 mantissa with an unbounded exponent: T2's numbers, every operation correctly rounded (bit-exact tier)
 - [rules.md](rules.md) — Life-like rules: one 512-entry table over the 3×3 neighborhood, compiled from `B…/S…` (outer-totalistic, isotropic letters, hexagonal `H`, von Neumann `V`) or `MAP` strings; grammar, canonical form, bit order, and why a text is no rule (bit-exact tier)
 - [lifelike.md](lifelike.md) — Life-like CA (bit-exact tier)
-- [hashlife.md](hashlife.md) — HashLife: Life-like rules on an unbounded plane — any generation count, editing within ±10⁹ (paste modes, rectangle transforms at any size, advancing a selection or its outside), a memory budget that never changes results, snapshots (what they hold, releasing them) (bit-exact tier)
+- [hashlife.md](hashlife.md) — HashLife: Life-like rules on an unbounded plane, B0 rules among them (the cells that differ from the background) — any generation count, editing within ±10⁹ (paste modes, rectangle transforms at any size, advancing a selection or its outside), a memory budget that never changes results, snapshots (what they hold, releasing them) (bit-exact tier)
 - [elementary.md](elementary.md) — Wolfram elementary CA (bit-exact tier)
 - [cyclic.md](cyclic.md) — cyclic CA (bit-exact tier)
 - [wireworld.md](wireworld.md) — Wireworld (bit-exact tier)

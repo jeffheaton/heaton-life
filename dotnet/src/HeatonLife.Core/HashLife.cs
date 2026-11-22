@@ -148,6 +148,8 @@ namespace HeatonLife
     /// memory and a step can be any number of generations. Coordinates, generations, and
     /// populations are <see cref="BigInteger"/>s at this edge; x grows right and y grows down, and
     /// cells sit where Macrocell files put them (cell (x, y) is tree position (x, y − 1)).
+    /// Every Life-like rule runs, B0 included: its universe holds the cells that differ from the
+    /// background (<see cref="BackgroundAlive"/>; spec/hashlife.md "Rules with B0").
     ///
     /// Editing reaches |x|, |y| ≤ <see cref="EditLimit"/>; queries and rendering
     /// reach everywhere. <see cref="Step"/> allocates nothing on the managed heap once warm, and
@@ -179,6 +181,7 @@ namespace HeatonLife
 
         private readonly HashLifeStore _store;
         private string _rule;
+        private LifeRule _lifeRule;
         private int _maxMemoryMb;
         private ulong _genLow;
         private BigInteger _genHigh; // multiples of 2^64
@@ -219,14 +222,16 @@ namespace HeatonLife
         public HashLife(string rule = "B3/S23", int maxMemoryMb = DefaultMaxMemoryMb)
         {
             _rule = CheckedRule(rule);
-            _store = new HashLifeStore(HashLifeLeaves.RuleTable(_rule), MaxNodesFor(maxMemoryMb));
+            _lifeRule = RuleString.Compile(_rule);
+            _store = new HashLifeStore(HashLifeLeaves.RuleTables(_rule), MaxNodesFor(maxMemoryMb));
             _maxMemoryMb = maxMemoryMb;
         }
 
         // -- configuration ----------------------------------------------------------------------
 
-        /// <summary>The canonical rule (spec/rules.md): any Life-like rule without B0. Setting it keeps
-        /// the cells and drops cached results.</summary>
+        /// <summary>The canonical rule (spec/rules.md): any Life-like rule, B0 included (spec/hashlife.md
+        /// "Rules with B0"). Setting it keeps the cells and drops cached results; under a rule with
+        /// B0 the cells then stand for the plane the new rule's background says.</summary>
         public string Rule
         {
             get => _rule;
@@ -236,7 +241,8 @@ namespace HeatonLife
                 if (canonical != _rule)
                 {
                     _rule = canonical;
-                    _store.UseRule(HashLifeLeaves.RuleTable(canonical));
+                    _lifeRule = RuleString.Compile(canonical);
+                    _store.UseRule(HashLifeLeaves.RuleTables(canonical));
                 }
             }
         }
@@ -262,17 +268,13 @@ namespace HeatonLife
         public int Collections => _store.Collections;
 
         /// <summary>The canonical form of a rule a universe can run: any Life-like rule
-        /// (spec/rules.md) without B0; anything else throws <see cref="ArgumentException"/>.</summary>
+        /// (spec/rules.md), B0 included (spec/hashlife.md "Rules with B0"); anything else throws
+        /// <see cref="ArgumentException"/>.</summary>
         internal static string CheckedRule(string rule)
         {
             if (rule == null)
                 throw new ArgumentNullException(nameof(rule));
-            LifeRule compiled = RuleString.Compile(rule);
-            if (compiled.HasB0)
-                throw new ArgumentException(
-                    $"HashLife cannot run B0 rules ({compiled.Canonical}): births with no live neighbors "
-                    + "would fill the infinite background (spec/hashlife.md)", nameof(rule));
-            return compiled.Canonical;
+            return RuleString.Compile(rule).Canonical;
         }
 
         private static int MaxNodesFor(int maxMemoryMb)
@@ -296,7 +298,16 @@ namespace HeatonLife
             }
         }
 
-        /// <summary>The number of live cells.</summary>
+        /// <summary>
+        /// True where the plane outside the universe's cells is alive at the current generation
+        /// (spec/hashlife.md "Rules with B0"): never for a rule without B0, always for B0 with
+        /// Smax, at odd generations for B0 without Smax. The plane's cell (x, y) is
+        /// <c>GetCell(x, y) ^ BackgroundAlive</c>. The Python reference's <c>background</c>.
+        /// </summary>
+        public bool BackgroundAlive => _lifeRule.HasB0 && (_lifeRule.HasSmax || (_genLow & 1) != 0);
+
+        /// <summary>The number of the universe's live cells: under a rule with B0, the cells that
+        /// differ from the background, the plane's dead cells where it is alive.</summary>
         public BigInteger Population
         {
             get
@@ -448,9 +459,25 @@ namespace HeatonLife
             _store.Cancel = cancellationToken;
             try
             {
+                // When a rule with B0 alternates its phases (spec/hashlife.md "Rules with B0"),
+                // every sub-step of two or more generations starts at an even generation: one
+                // generation first from an odd generation, then the set bits j ≥ 1 of what
+                // remains, then the last single generation, if one remains.
+                bool alternates = _store.Alternates;
+                bool last = false;
                 if (n.CompareTo(ulong.MaxValue) <= 0)
                 {
                     ulong bits = (ulong)n;
+                    if (alternates)
+                    {
+                        if ((_genLow & 1) != 0)
+                        {
+                            Advance(0, cancellationToken);
+                            bits--;
+                        }
+                        last = (bits & 1) != 0;
+                        bits &= ~1UL;
+                    }
                     for (int j = 0; bits != 0; j++, bits >>= 1)
                     {
                         if ((bits & 1) != 0)
@@ -463,12 +490,27 @@ namespace HeatonLife
                     if (_stepBits.Length < count)
                         _stepBits = new byte[count];
                     n.TryWriteBytes(_stepBits, out int written, isUnsigned: true);
+                    if (alternates)
+                    {
+                        if ((_genLow & 1) != 0)
+                        {
+                            Advance(0, cancellationToken);
+                            // n − 1 in place, borrowing upward (n ≥ 2^64, so it never reaches 0).
+                            for (int i = 0; i < written && _stepBits[i]-- == 0; i++)
+                            {
+                            }
+                        }
+                        last = (_stepBits[0] & 1) != 0;
+                        _stepBits[0] &= 0xFE;
+                    }
                     for (int j = 0; j < written * 8; j++)
                     {
                         if (((_stepBits[j >> 3] >> (j & 7)) & 1) != 0)
                             Advance(j, cancellationToken);
                     }
                 }
+                if (last)
+                    Advance(0, cancellationToken);
             }
             finally
             {
@@ -542,6 +584,8 @@ namespace HeatonLife
                             + $"tree (spec/hashlife.md \"Depth\"); the universe is at generation {Generation}");
                     Expand();
                 }
+                // A single generation of alternating phases runs the table of its own parity.
+                s.Parity = s.Alternates && j == 0 ? (int)(_genLow & 1) : 0;
                 root = s.Stepped(s.Root, s.Level, j);
             }
             finally
@@ -571,7 +615,8 @@ namespace HeatonLife
         }
 
         /// <summary>Set the generation counter to any integer ≥ 0; no cell changes
-        /// (spec/hashlife.md "Editing").</summary>
+        /// (spec/hashlife.md "Editing"). When a rule with B0 alternates its phases, the other
+        /// parity swaps live and dead across the plane the cells stand for ("Rules with B0").</summary>
         public void SetGeneration(BigInteger generation)
         {
             if (generation.Sign < 0)
@@ -810,6 +855,8 @@ namespace HeatonLife
         /// every cell outside it dead at the start — and clip the result to it; the outside and
         /// the generation are untouched (spec/hashlife.md "Advancing part of the universe"). It
         /// throws what <see cref="Step"/> throws, and then leaves the universe exactly as it was.
+        /// Under a rule with B0 the cells evolved and put back are the universe's, as
+        /// <see cref="Step"/> gives them ("Rules with B0").
         /// </summary>
         public void AdvanceSelection(
             long x0, long y0, long x1, long y1, BigInteger n, CancellationToken cancellationToken = default)

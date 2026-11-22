@@ -1,0 +1,24 @@
+{
+  "bounding_box": [
+    "0",
+    "0",
+    "1",
+    "0"
+  ],
+  "family": "formats",
+  "format": "life-1.05",
+  "generation": "0",
+  "input": "input.lif",
+  "kind": "universe",
+  "metadata": {
+    "author": null,
+    "comments": [],
+    "name": null
+  },
+  "population": "2",
+  "rle": "with-metadata.rle",
+  "spec_version": "0.16.0",
+  "state": "state.mc",
+  "tier": "bit-exact",
+  "with_metadata": "with-metadata.mc"
+}

@@ -162,7 +162,7 @@ namespace HeatonLife.Tests
             var before = StateOf(u);
             string[] bad =
             {
-                "#Life 1.05\n#R 23/03\n#P 0 0\n**\n", // B0
+                "#Life 1.05\n#R 23/3/4\n#P 0 0\n**\n", // not a Life-like rule
                 "#Life 1.06\n1000000001 0\n",         // outside the editing box
                 "x = 2, y = 1, rule = WireWorld\nAC!\n", // extended
                 "[M2]\n#FRAMES 2 0 1\n*$\n#FRAME 0 1\n", // a frame missing

@@ -154,20 +154,27 @@ namespace HeatonLife.Tests
             Assert.Contains("extended", Assert.Throws<FormatException>(() => PatternFiles.ReadUniverse(rle)).Message);
         }
 
+        /// <summary>spec/hashlife.md "Rules with B0": every reader takes a rule with B0, its cells
+        /// the universe's cells; a grid takes them as written.</summary>
         [Theory]
         [MemberData(nameof(B0Rules))]
-        public void AB0RuleReadsIntoAGridButNotAUniverse(string rule)
+        public void AB0RuleReadsIntoAGridAndAUniverse(string rule)
         {
+            string canonical = RuleString.Compile(rule).Canonical;
             string rle = $"x = 3, y = 3, rule = {rule}\n{GliderRleUppercase}\n";
             PatternFile found = PatternFiles.Read(rle);
             Assert.Equal(rule, found.Rule); // still a Life-like rule, so the file is two-state
             Assert.Equal(Glider, found.Cells);
-            Assert.Contains("B0", Assert.ThrowsAny<ArgumentException>(() => PatternFiles.ReadUniverse(rle)).Message);
+            HashLife universe = PatternFiles.ReadUniverse(rle).Universe;
+            Assert.Equal(canonical, universe.Rule);
+            Assert.Equal(Glider, universe.GetRect(0, 0, 2, 2));
             string life = $"#Life 1.05\n#R {rule}\n#P 0 0\n.*.\n..*\n***\n";
-            Assert.Contains("B0", Assert.ThrowsAny<ArgumentException>(() => PatternFiles.ReadUniverse(life)).Message);
+            Assert.Equal(universe.ToMacrocell(), PatternFiles.ReadUniverse(life).Universe.ToMacrocell());
             var u = new HashLife("B3/S2-i34q");
-            Assert.Contains("B0", Assert.ThrowsAny<ArgumentException>(() => u.Rule = rule).Message);
-            Assert.Equal("B3/S2-i34q", u.Rule);
+            u.SetRect(0, 0, Glider, 3, 3);
+            u.Rule = rule;
+            Assert.Equal(canonical, u.Rule);
+            Assert.Equal(Glider, u.GetRect(0, 0, 2, 2)); // a new rule keeps the cells
         }
 
         [Theory]

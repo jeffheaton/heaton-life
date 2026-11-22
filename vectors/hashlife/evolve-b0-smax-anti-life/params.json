@@ -1,0 +1,94 @@
+{
+  "checkpoints": [
+    {
+      "background": 1,
+      "bounding_box": [
+        "-16",
+        "-16",
+        "15",
+        "15"
+      ],
+      "generation": "0",
+      "population": "328",
+      "state": "state-0.mc"
+    },
+    {
+      "background": 1,
+      "bounding_box": [
+        "-17",
+        "-17",
+        "16",
+        "16"
+      ],
+      "generation": "1",
+      "population": "372",
+      "state": "state-1.mc"
+    },
+    {
+      "background": 1,
+      "bounding_box": [
+        "-18",
+        "-17",
+        "16",
+        "16"
+      ],
+      "generation": "2",
+      "population": "337",
+      "state": "state-2.mc"
+    },
+    {
+      "background": 1,
+      "bounding_box": [
+        "-18",
+        "-18",
+        "17",
+        "17"
+      ],
+      "generation": "3",
+      "population": "345",
+      "state": "state-3.mc"
+    },
+    {
+      "background": 1,
+      "bounding_box": [
+        "-25",
+        "-15",
+        "36",
+        "15"
+      ],
+      "generation": "100",
+      "population": "214",
+      "state": "state-4.mc"
+    },
+    {
+      "background": 1,
+      "bounding_box": [
+        "-134",
+        "-213",
+        "90",
+        "170"
+      ],
+      "generation": "1001",
+      "population": "208",
+      "state": "state-5.mc"
+    },
+    {
+      "background": 1,
+      "bounding_box": [
+        "-274877906828",
+        "-274877906907",
+        "274877906784",
+        "274877906864"
+      ],
+      "generation": "1099511627777",
+      "population": "262",
+      "state_lines": 362,
+      "state_sha256": "643c51689261876b87d8657caaa5b80d3c68bf823622cb8737f2197c5d5c964d"
+    }
+  ],
+  "family": "hashlife",
+  "input": "input.rle",
+  "kind": "evolve",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

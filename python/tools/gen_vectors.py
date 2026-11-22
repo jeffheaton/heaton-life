@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from heaton_life.boids import BoidsParams
 from heaton_life.ca import LifeLike, Wireworld, wireworld_from_text
+from heaton_life.ca.rulestring import compile_rule
 from heaton_life.conformance import CODECS, TIERS, build_sim
 from heaton_life.core import decimal_text
 from heaton_life.core.bignum import reference_orbit, reference_orbit_x, working_bits
@@ -451,7 +452,6 @@ def write_rule_cases() -> None:
 
     macrocell("isotropic-rule", "[M2] (example 1.0)\n#R b2cekin/s12\n.*$*.*$.**$\n")
     macrocell("map-rule", f"[M2] (example 1.0)\n#R map{map_hex[3:-1]}B==\n**$**$\n")
-    macrocell("error-b0-map-rule", "[M2] (example 1.0)\n#R MAPg" + "A" * 85 + "\n**$\n")
 
     def rle(name: str, text: str) -> None:
         d = root / f"rle-{name}"
@@ -982,6 +982,9 @@ def main() -> None:
     #    a timeline's frames from the reader by content (spec/hashlife.md, spec/formats.md)
     write_snapshot_cases()
     write_universe_timeline_cases()
+
+    # -- Rules with B0 on the unbounded plane (spec/hashlife.md "Rules with B0") ----------
+    write_b0_cases()
 
     print("done")
 
@@ -4561,7 +4564,6 @@ def write_hashlife_cases() -> None:
     macrocell("error-no-header", "x = 3, y = 3, rule = B3/S23\nbo$2bo$3o!\n")
     macrocell("error-forward-reference", "[M2]\n4 0 0 0 2\n**$\n")
     macrocell("error-wrong-level", "[M2]\n**$\n5 0 0 0 1\n")
-    macrocell("error-b0-rule", "[M2]\n#R B03/S23\n**$\n")
     macrocell("error-state-2", "[M2]\n1 0 2 0 0\n")
     macrocell("error-wide-row", "[M2]\n*********$\n")
     macrocell("error-no-nodes", "[M2] (example 1.0)\n#R B3/S23\n")
@@ -6280,7 +6282,7 @@ def write_formats_cases() -> None:
         "bmp",
     )
     universe("error-life106-outside", b"#Life 1.06\n1000000001 0\n", "lif", error=True)
-    universe("error-b0-rule", b"#Life 1.05\n#R 23/03\n#P 0 0\n**\n", "lif", error=True)
+    universe("life105-b0-rule", b"#Life 1.05\n#R 23/03\n#P 0 0\n**\n", "lif")
     universe("error-rule-text", b"#Life 1.05\n#R WireWorld\n*\n", "lif", error=True)
     universe(
         "error-extended-rle",
@@ -6470,6 +6472,12 @@ def write_formats_cases() -> None:
         "x = 2, y = 1, rule = B3/S23\n2o!\n",
         [0, 36],
         PatternMetadata(None, "nobody"),
+    )
+    timeline_write(  # B0 without Smax: the frames' cells alternate in what they stand for
+        "b0-alternating",
+        "#CXRLE Pos=-2,-2\nx = 5, y = 5, rule = B0124/S01H\nbo2bo$2obo$bobo$3b2o$o3bo!\n",
+        [1, 4, 7, 10],
+        PatternMetadata("Both parities", None, ("Odd frames hold the plane's dead cells.",)),
     )
 
 
@@ -6683,7 +6691,7 @@ def write_measure_cases() -> None:
     measure("error-life105-position", b"#Life 1.05\n#P 1\n*\n", "lif", error=True)
     measure("error-life106-line", b"#Life 1.06\n1 2 3\n", "lif", error=True)
     measure("error-macrocell-forward", b"[M2] (example 1.0)\n4 0 0 0 2\n$\n", "mc", error=True)
-    measure("error-macrocell-b0", b"[M2] (example 1.0)\n#R B0/S8\n$\n", "mc", error=True)
+    measure("macrocell-b0", b"[M2] (example 1.0)\n#R B0/S8\n#G 3\n$.**$**$.*$\n", "mc")
     measure("error-macrocell-no-nodes", b"[M2] (example 1.0)\n#N nothing\n", "mc", error=True)
     truncated = _png_file(noisy, 8, 2)
     measure("error-png-truncated", truncated[: len(truncated) // 2], "png", error=True)
@@ -6924,6 +6932,8 @@ def _hashlife_entry(d: Path, u: Any, label: str) -> dict[str, Any]:
     else:
         entry["state_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
         entry["state_lines"] = text.count("\n")
+    if compile_rule(u.rule).has_b0:  # from spec 0.16.0 (spec/hashlife.md "Rules with B0")
+        entry["background"] = u.background
     return entry
 
 
@@ -6986,6 +6996,8 @@ def write_snapshot_cases() -> None:
             u.clear()
         elif kind == "set_generation":
             u.set_generation(int(op["n"]))
+        elif kind == "set_rule":
+            u.rule = op["rule"]
         else:
             raise AssertionError(kind)
 
@@ -7174,7 +7186,7 @@ def write_snapshot_cases() -> None:
             {"op": "read", "input": "blinker.cells", "name": "blinker-file", "frames": []},
             {"op": "read", "input": "far.lif", "name": "far-file", "frames": []},
             {"op": "read", "input": "picture.png", "name": "picture-file", "frames": []},
-            {"op": "read", "input": "b0.lif", "error": True},
+            {"op": "read", "input": "b0.lif", "name": "b0-file", "frames": []},
             {"op": "read", "input": "extended.rle", "error": True},
             {"op": "read", "input": "broken-timeline.mc", "error": True},
             {
@@ -7210,6 +7222,47 @@ def write_snapshot_cases() -> None:
             "b0.lif": b"#Life 1.05\n#R 23/03\n#P 0 0\n**\n",
             "extended.rle": b"x = 2, y = 1, rule = WireWorld\nAC!\n",
             "broken-timeline.mc": b"[M2]\n#FRAMES 3 0 1\n*$\n#FRAME 0 1\n#FRAME 2 1\n",
+        },
+    )
+
+    # A rule with B0 whose phases alternate (spec/hashlife.md "Rules with B0"): snapshots at
+    # both parities hold the universe's cells; under a new rule a snapshot stands for the
+    # plane the new rule's background says. B01245/S0125 runs as Day & Night (both of its
+    # phases are that self-complementary rule), so changing to it keeps the cells' future.
+    script(
+        "b0-history",
+        "B01245/S0125",
+        [
+            {
+                "op": "fill_random",
+                "x0": -12,
+                "y0": -12,
+                "x1": 11,
+                "y1": 11,
+                "density": 0.5,
+                "seed": 62,
+            },
+            {"op": "snapshot", "name": "gen-0"},
+            {"op": "step", "n": "1"},
+            {"op": "snapshot", "name": "gen-1"},
+            {"op": "set_cell", "x": 20, "y": 20, "alive": True},
+            {"op": "step", "n": "100"},
+            {"op": "snapshot", "name": "gen-101"},
+            {"op": "measure", "names": ["gen-101", "gen-1", "gen-0"]},
+            {"op": "set_rule", "rule": "B3678/S34678"},
+            {"op": "restore", "name": "gen-1"},
+            {"op": "step", "n": "100"},
+            {"op": "set_rule", "rule": "B01245/S0125"},
+            {"op": "restore", "name": "gen-101"},
+            {"op": "read", "input": "anti.rle", "name": "anti-file", "frames": []},
+            {"op": "set_rule", "rule": "B0123478/S01234678"},
+            {"op": "restore", "name": "anti-file"},
+            {"op": "set_rule", "rule": "B9/S23", "error": True},
+            {"op": "step", "n": "5"},
+            {"op": "measure", "names": ["anti-file", "gen-101"]},
+        ],
+        {
+            "anti.rle": b"#CXRLE Pos=-1,-1 Gen=6\nx = 3, y = 3, rule = B0123478/S01234678\nbo$2bo$3o!\n"
         },
     )
 
@@ -7326,6 +7379,330 @@ def write_universe_timeline_cases() -> None:
         error=True,
     )
     universe("error-timeline-step-zero", b"[M2]\n#FRAMES 1 0 0\n*$\n#FRAME 0 1\n", "mc", error=True)
+
+
+# -- rules with B0 on the unbounded plane (spec 0.16.0) ----------------------------------------
+
+B0_SPEC_VERSION = "0.16.0"
+_B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+
+def _map_rule(entries: list[int]) -> str:
+    """A MAP rule from its own neighborhood's entries (spec/rules.md "MAP strings")."""
+    bits = "".join(map(str, entries)).ljust(-(-len(entries) // 6) * 6, "0")
+    return "MAP" + "".join(_B64[int(bits[i : i + 6], 2)] for i in range(0, len(bits), 6))
+
+
+def write_b0_cases() -> None:
+    """Rules with B0 on the unbounded plane (spec/hashlife.md "Rules with B0", spec/rules.md
+    "B0 and the background"), under vectors/hashlife/*-b0-*: soups of rules with B0 and Smax,
+    which run as their black/white reversals, and without Smax, whose phases alternate, in
+    every notation and neighborhood, stepped from even and odd generations past 2^64; files
+    of such rules read; edits and rule changes at both parities; and frames. Every state
+    carries its background. Each reversal's run is checked here against the reversal's own
+    run, and B01245/S0125's against Day & Night's (both of its phases are that rule)."""
+    import io
+
+    from PIL import Image
+
+    from heaton_life.ca.hashlife import HashLife, LifeView
+
+    root = VECTOR_ROOT / "hashlife"
+
+    def case(name: str) -> Path:
+        d = root / name
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def save(d: Path, meta: dict[str, Any]) -> None:
+        full = {"spec_version": B0_SPEC_VERSION, "family": "hashlife", "tier": "bit-exact"}
+        full.update(meta)
+        _gap_save(d, full)
+
+    def nodes(u: HashLife) -> list[str]:
+        return [line for line in u.to_macrocell().splitlines() if line[0] not in "[#"]
+
+    def reversal(rule: str) -> list[int]:
+        table = compile_rule(rule).table
+        return [1 - table[511 - i] for i in range(512)]
+
+    def soup_rle(rule: str, seed: int, size: int = 32, density: float = 0.35) -> str:
+        u = HashLife(rule)
+        half = size // 2
+        u.fill_random(-half, -half, half - 1, half - 1, density=density, seed=seed)
+        return u.to_rle()
+
+    # -- evolve: soups, each checkpoint with its background ------------------------------
+    def evolve(
+        name: str, input_name: str, text: str, generations: list[int], twin: str | None = None
+    ) -> None:
+        """``twin``: a rule without B0 whose universe, from the same cells, must hold the
+        same cells at every checkpoint (the reversal, or Day & Night)."""
+        d = case(f"evolve-b0-{name}")
+        (d / input_name).write_text(text, encoding="utf-8", newline="\n")
+        u = HashLife.from_file(d / input_name)
+        assert compile_rule(u.rule).has_b0, name
+        other = None
+        if twin is not None:
+            other = HashLife.from_file(d / input_name)
+            other.rule = twin
+        checkpoints = []
+        for i, generation in enumerate(generations):
+            u.step(generation - u.generation)
+            if other is not None:
+                other.step(generation - other.generation)
+                assert nodes(u) == nodes(other), (name, generation)
+            checkpoints.append(_hashlife_entry(d, u, f"state-{i}"))
+        save(d, {"kind": "evolve", "input": input_name, "checkpoints": checkpoints})
+
+    tlife_reversal = "B01234-w6i78/S01234678"
+    assert compile_rule(tlife_reversal).table == bytes(reversal("B3/S2-i34q"))
+    aniso = list(compile_rule("B3/S23").table)
+    aniso[128 | 64] = 1  # vectors/hashlife/evolve-map-moore's rule: Life plus one 2a birth
+    map_aniso, map_aniso_reversal = _map_rule(aniso), _map_rule(reversal(_map_rule(aniso)))
+    hex_cells = (256, 128, 32, 16, 8, 2, 1)  # spec/rules.md: the hexagonal MAP's cells
+    strobe_hex = compile_rule("B0124/S01H").table
+    map_strobe_hex = _map_rule(
+        [
+            strobe_hex[sum(w for b, w in enumerate(hex_cells) if i >> (6 - b) & 1)]
+            for i in range(128)
+        ]
+    )
+    assert compile_rule(map_strobe_hex).table == strobe_hex
+
+    evolve(
+        "smax-anti-life",
+        "input.rle",
+        soup_rle("B0123478/S01234678", 41),
+        [0, 1, 2, 3, 100, 1001, 2**40 + 1],
+        "B3/S23",
+    )
+    evolve(
+        "smax-isotropic",
+        "input.rle",
+        soup_rle(tlife_reversal, 42),
+        [0, 1, 2, 101, 1000, 2**40 + 1],
+        "B3/S2-i34q",
+    )
+    evolve(
+        "smax-hexagonal",
+        "input.rle",
+        soup_rle("B01456/S012356H", 43),
+        [0, 1, 2, 101, 2**64 + 1],
+        "B2/S34H",
+    )
+    evolve(
+        "smax-vonneumann",
+        "input.rle",
+        soup_rle("B02/S0134V", 44),
+        [0, 1, 2, 101, 2**64 + 1],
+        "B2/S013V",
+    )
+    evolve(
+        "smax-map",
+        "input.rle",
+        soup_rle(map_aniso_reversal, 45),
+        [0, 1, 2, 101, 500],
+        map_aniso,
+    )
+    evolve(
+        "strobe-day-and-night",
+        "input.rle",
+        soup_rle("B01245/S0125", 46, density=0.5),
+        [0, 1, 2, 3, 100, 1001],
+        "B3678/S34678",
+    )
+    evolve("strobe-chaotic", "input.rle", soup_rle("B03/S23", 47, 16), [0, 1, 2, 3, 64, 129])
+    evolve(
+        "strobe-isotropic",
+        "input.rle",
+        soup_rle("B02a/S12-a", 48),
+        [0, 1, 2, 3, 100, 1001, 2**40 + 1],
+    )
+    evolve("strobe-hexagonal", "input.rle", soup_rle("B0/S2H", 49), [0, 1, 2, 3, 100, 2**64 + 1])
+    evolve(
+        "strobe-vonneumann", "input.rle", soup_rle("B012/S01V", 50), [0, 1, 2, 3, 100, 2**64 + 1]
+    )
+    evolve(
+        "strobe-map-hexagonal",
+        "input.rle",
+        soup_rle(map_strobe_hex, 51),
+        [0, 1, 2, 3, 101, 2**40],
+    )
+    odd = HashLife.from_rle(soup_rle("B02a/S12-a", 53))
+    odd.step(7)
+    odd_text = odd.to_macrocell().replace(
+        "[M2] (heaton-life)\n", "[M2] (example 1.0)\n#C A soup at generation 7.\n"
+    )
+    evolve("strobe-from-odd-generation", "input.mc", odd_text, [7, 8, 10, 1001, 2**40 + 2])
+
+    # -- macrocell and rle: files of rules with B0, at both parities ---------------------
+    def read_case(kind: str, name: str, text: str) -> None:
+        d = case(f"{kind}-{name}")
+        input_name = "input.mc" if kind == "macrocell" else "input.rle"
+        (d / input_name).write_text(text, encoding="utf-8", newline="\n")
+        u = HashLife.from_macrocell(text) if kind == "macrocell" else HashLife.from_rle(text)
+        assert compile_rule(u.rule).has_b0, name
+        meta: dict[str, Any] = {"kind": kind, "input": input_name}
+        meta.update(_hashlife_entry(d, u, "canonical"))
+        (d / "canonical.rle").write_text(u.to_rle(), encoding="utf-8", newline="\n")
+        meta["rle"] = "canonical.rle"
+        save(d, meta)
+
+    read_case("macrocell", "b0-rule", "[M2]\n#R B03/S23\n**$\n")
+    read_case("macrocell", "b0-map-rule", "[M2] (example 1.0)\n#R MAPg" + "A" * 85 + "\n**$\n")
+    read_case(
+        "macrocell",
+        "b0-odd-generation",
+        "[M2] (example 1.0)\n#R b0124/s01h\n#G 12345678901234567890123456789\n"
+        ".**$**$.*$\n4 0 0 1 0\n",
+    )
+    read_case(
+        "macrocell",
+        "b0-smax-rule",
+        "[M2] (example 1.0)\n#R B0123478/S01234678\n#G 4\n$$$.....*$......*$....***$\n",
+    )
+    read_case(
+        "rle",
+        "b0-odd-generation",
+        "#CXRLE Pos=-3,4 Gen=9\nx = 3, y = 3, rule = B0124/S01H\nbo$2bo$3o!\n",
+    )
+    read_case("rle", "b0-smax-rule", "x = 3, y = 3, rule = B0123478/S01234678\nbo$2bo$3o!\n")
+
+    # -- edit: editing writes the universe's cells; a new rule keeps them ----------------
+    def apply(u: HashLife, op: dict[str, Any]) -> None:
+        kind = op["op"]
+        rect = tuple(op[k] for k in ("x0", "y0", "x1", "y1") if k in op)
+        if kind == "set_cell":
+            u.set_cell(op["x"], op["y"], op["alive"])
+        elif kind == "set_rect":
+            cells = np.array([[c == "*" for c in row] for row in op["cells"]], np.uint8)
+            u.set_rect(op["x"], op["y"], cells, op["mode"])
+        elif kind == "clear_rect":
+            u.clear_rect(*rect)
+        elif kind == "fill_random":
+            u.fill_random(*rect, op["density"], op["seed"])
+        elif kind == "step":
+            u.step(int(op["n"]))
+        elif kind == "clear_outside":
+            u.clear_outside(*rect)
+        elif kind == "rotate_rect":
+            op["expect"] = list(u.rotate_rect(*rect, clockwise=op["clockwise"]))
+        elif kind == "flip_rect":
+            u.flip_rect(*rect, horizontal=op["horizontal"])
+        elif kind == "advance_selection":
+            u.advance_selection(*rect, int(op["n"]))
+        elif kind == "advance_outside":
+            u.advance_outside(*rect, int(op["n"]))
+        elif kind == "set_generation":
+            u.set_generation(int(op["n"]))
+        elif kind == "set_rule":
+            u.rule = op["rule"]
+        elif kind == "bounding_box_in":
+            box = u.bounding_box_in(*(int(v) for v in rect))
+            op["expect"] = None if box is None else [_signed_text(v) for v in box]
+        else:
+            raise AssertionError(kind)
+
+    def edit(name: str, rule: str, ops: list[dict[str, Any]]) -> None:
+        d = case(f"edit-{name}")
+        u = HashLife(rule)
+        for op in ops:
+            before = (u.to_macrocell(), u.generation)
+            try:
+                apply(u, op)
+            except ValueError:
+                assert op.get("error"), op
+                assert (u.to_macrocell(), u.generation) == before, op
+            else:
+                assert not op.get("error"), op
+        meta: dict[str, Any] = {"kind": "edit", "rule": rule, "ops": ops}
+        meta.update(_hashlife_entry(d, u, "final"))
+        save(d, meta)
+
+    edit(
+        "b0-alternating-phases",
+        "B02a/S12-a",
+        [
+            {"op": "set_rect", "x": -1, "y": -1, "mode": "copy", "cells": [".*.", "..*", "***"]},
+            {
+                "op": "fill_random",
+                "x0": -20,
+                "y0": -12,
+                "x1": 19,
+                "y1": 11,
+                "density": 0.4,
+                "seed": 61,
+            },
+            {"op": "step", "n": "3"},
+            {"op": "set_cell", "x": 30, "y": 30, "alive": True},
+            {"op": "set_rect", "x": 25, "y": -5, "mode": "xor", "cells": ["**..", ".**.", "..**"]},
+            {"op": "step", "n": str(10**21 + 1)},
+            {"op": "bounding_box_in", "x0": "-10", "y0": "-10", "x1": "10", "y1": "10"},
+            {"op": "set_generation", "n": "4"},
+            {"op": "clear_rect", "x0": -3, "y0": -3, "x1": 3, "y1": 3},
+            {"op": "advance_selection", "x0": -15, "y0": -15, "x1": 14, "y1": 14, "n": "5"},
+            {"op": "advance_outside", "x0": -15, "y0": -15, "x1": 14, "y1": 14, "n": "2"},
+            {"op": "rotate_rect", "x0": -8, "y0": -6, "x1": 9, "y1": 7, "clockwise": True},
+            {"op": "flip_rect", "x0": -5, "y0": -5, "x1": 6, "y1": 4, "horizontal": True},
+            {"op": "clear_outside", "x0": -40, "y0": -40, "x1": 40, "y1": 40},
+            {"op": "step", "n": "7"},
+        ],
+    )
+    edit(
+        "b0-rule-changes",
+        "B3/S23",
+        [
+            {"op": "set_rect", "x": -1, "y": -1, "mode": "copy", "cells": [".**", "**.", ".*."]},
+            {"op": "step", "n": "5"},
+            {"op": "set_rule", "rule": "B0123478/S01234678"},
+            {"op": "step", "n": "6"},
+            {"op": "set_rule", "rule": "b02a / s12-a"},
+            {"op": "step", "n": "2"},
+            {"op": "set_rule", "rule": "B3/S23"},
+            {"op": "step", "n": "100"},
+            {"op": "set_rule", "rule": "B9/S23", "error": True},
+            {"op": "set_rule", "rule": "B0/S"},
+            {"op": "step", "n": "1"},
+        ],
+    )
+
+    # -- render: frames show the universe's cells, the background alive or not -----------
+    def render_case(
+        name: str, text: str, generation: int, frames: list[tuple[LifeView, tuple[int, int], str]]
+    ) -> None:
+        d = case(f"render-{name}")
+        (d / "input.rle").write_text(text, encoding="utf-8", newline="\n")
+        u = HashLife.from_file(d / "input.rle")
+        u.step(generation - u.generation)
+        entries = []
+        for i, (view, size, mode) in enumerate(frames):
+            frame = u.render(view, size, mode)  # type: ignore[arg-type]
+            buf = io.BytesIO()
+            Image.fromarray(frame, mode="L").save(buf, format="PNG")
+            (d / f"frame-{i}.png").write_bytes(buf.getvalue())
+            entries.append(
+                {
+                    "view": [str(view.x), str(view.y), view.mag],
+                    "size": list(size),
+                    "mode": mode,
+                    "file": f"frame-{i}.png",
+                }
+            )
+        meta = {"kind": "render", "input": "input.rle", "generation": str(generation)}
+        save(d, {**meta, "frames": entries})
+
+    render_case(
+        "b0-odd-generation",
+        soup_rle("B0/S2H", 52),
+        101,
+        [
+            (LifeView(-40, -41, 0), (81, 81), "any"),
+            (LifeView(-20, -21, -1), (41, 41), "density"),
+            (LifeView(-10, -11, -2), (21, 21), "any"),
+            (LifeView(-90, -91, 1), (180, 180), "any"),
+        ],
+    )
 
 
 if __name__ == "__main__":

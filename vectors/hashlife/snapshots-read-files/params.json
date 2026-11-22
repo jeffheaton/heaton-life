@@ -165,8 +165,19 @@
       "op": "read"
     },
     {
-      "error": true,
+      "expect": {
+        "format": "life-1.05",
+        "metadata": {
+          "author": null,
+          "comments": [],
+          "name": null
+        },
+        "rule": "B03/S23",
+        "step": null
+      },
+      "frames": [],
       "input": "b0.lif",
+      "name": "b0-file",
       "op": "read"
     },
     {

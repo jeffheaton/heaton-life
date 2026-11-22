@@ -12,7 +12,8 @@ namespace HeatonLife
     /// top-left, y down). Smaller squares keep the same 8-wide row stride ("spread" form): a 4×4
     /// square occupies bits <c>y * 8 + x</c> for x, y &lt; 4, so four of them compose into a leaf
     /// with three shifts. The rule enters only through the 65,536-entry base case, a 4×4 square to
-    /// its center 2×2 one generation later, built from the rule's 512-entry table (spec/rules.md).
+    /// its center 2×2 one generation later, built from a 512-entry table (spec/rules.md): the
+    /// rule's own, or for a rule with B0 one of its phase tables (spec/hashlife.md "Rules with B0").
     /// The Python reference's ca/hashlife/leaves.py.
     /// </summary>
     internal static class HashLifeLeaves
@@ -22,22 +23,58 @@ namespace HeatonLife
         internal const ulong Square4 = 0x0F0F0F0FUL;         // a 4×4 square in spread form
         private const ulong RepeatRows = 0x0101010101010101UL;
 
-        private static readonly Dictionary<string, ushort[]> Tables = new Dictionary<string, ushort[]>();
+        private static readonly Dictionary<string, (ushort[] Even, ushort[] Odd)> Tables =
+            new Dictionary<string, (ushort[] Even, ushort[] Odd)>();
 
-        /// <summary>The base case for a canonical rule: a 4×4 square indexed compactly (bit
-        /// <c>y * 4 + x</c>) to its center 2×2 one generation later, in spread form (bits 0, 1, 8,
-        /// 9). Built once per rule and shared.</summary>
-        internal static ushort[] RuleTable(string canonicalRule)
+        /// <summary>
+        /// The base cases a universe of a canonical rule steps by, for the generations that start
+        /// at an even generation and at an odd one (spec/hashlife.md "Rules with B0"): the rule's
+        /// own table twice without B0; its black/white reversal (phase table P₁) twice with B0 and
+        /// Smax; and P₀ then P₁, alternating, with B0 but without Smax. Each base case maps a 4×4
+        /// square indexed compactly (bit <c>y * 4 + x</c>) to its center 2×2 one generation later,
+        /// in spread form (bits 0, 1, 8, 9). The pair holds one array twice unless the phases
+        /// alternate. Built once per rule and shared.
+        /// </summary>
+        internal static (ushort[] Even, ushort[] Odd) RuleTables(string canonicalRule)
         {
             lock (Tables)
             {
-                if (Tables.TryGetValue(canonicalRule, out ushort[]? table))
-                    return table;
-                table = BaseCase(RuleString.Compile(canonicalRule).Table);
+                if (Tables.TryGetValue(canonicalRule, out (ushort[] Even, ushort[] Odd) tables))
+                    return tables;
+                LifeRule rule = RuleString.Compile(canonicalRule);
+                if (!rule.HasB0)
+                {
+                    ushort[] own = BaseCase(rule.Table);
+                    tables = (own, own);
+                }
+                else
+                {
+                    PhaseTables(rule.Table, out byte[] p0, out byte[] p1);
+                    ushort[] odd = BaseCase(p1);
+                    tables = rule.HasSmax ? (odd, odd) : (BaseCase(p0), odd);
+                }
                 if (Tables.Count >= 16)
                     Tables.Clear();
-                Tables[canonicalRule] = table;
-                return table;
+                Tables[canonicalRule] = tables;
+                return tables;
+            }
+        }
+
+        /// <summary>A rule's two phase tables (spec/hashlife.md "Rules with B0"): P₀, the step from
+        /// a dead background, <c>table[0] ^ table[i]</c>, and P₁, the step from a live one,
+        /// <c>table[511] ^ table[511 − i]</c> (511 − i flips all nine cells of the block). Each maps
+        /// the cells that differ from the background to the cells that differ from the next one,
+        /// so neither has B0.</summary>
+        internal static void PhaseTables(ReadOnlySpan<byte> table, out byte[] p0, out byte[] p1)
+        {
+            int size = LifeRule.TableSize;
+            p0 = new byte[size];
+            p1 = new byte[size];
+            byte first = table[0], last = table[size - 1];
+            for (int i = 0; i < size; i++)
+            {
+                p0[i] = (byte)(first ^ table[i]);
+                p1[i] = (byte)(last ^ table[size - 1 - i]);
             }
         }
 
@@ -77,10 +114,12 @@ namespace HeatonLife
                 | (ulong)t[Window(b >> 25)] << 16
                 | (ulong)t[Window(b >> 27)] << 18;
 
-        /// <summary>A leaf's center 4×4 two generations on (spread form). Nine windows at even
-        /// offsets give the 6×6 at cells 1..6 after one generation (each window's 2×2 lands at
-        /// its own offset + 9); four windows of that give the center.</summary>
-        internal static ulong Two(ulong b, ushort[] t)
+        /// <summary>A leaf's center 4×4 two generations on (spread form): the first generation by
+        /// base case <paramref name="t"/>, the second by <paramref name="t2"/> (the same array,
+        /// except where a rule with B0 alternates its phases; spec/hashlife.md "Rules with B0").
+        /// Nine windows at even offsets give the 6×6 at cells 1..6 after one generation (each
+        /// window's 2×2 lands at its own offset + 9); four windows of that give the center.</summary>
+        internal static ulong Two(ulong b, ushort[] t, ushort[] t2)
         {
             ulong g = (ulong)t[Window(b)] << 9
                 | (ulong)t[Window(b >> 2)] << 11
@@ -91,18 +130,21 @@ namespace HeatonLife
                 | (ulong)t[Window(b >> 32)] << 41
                 | (ulong)t[Window(b >> 34)] << 43
                 | (ulong)t[Window(b >> 36)] << 45;
-            return t[Window(g >> 9)]
-                | (ulong)t[Window(g >> 11)] << 2
-                | (ulong)t[Window(g >> 25)] << 16
-                | (ulong)t[Window(g >> 27)] << 18;
+            return t2[Window(g >> 9)]
+                | (ulong)t2[Window(g >> 11)] << 2
+                | (ulong)t2[Window(g >> 25)] << 16
+                | (ulong)t2[Window(g >> 27)] << 18;
         }
 
         /// <summary>
         /// A level-4 node's center 8×8, 2^j generations on (j is 0 or 1), from its four leaves:
         /// the nine overlapping squares' centers with no time advance, then one or two
-        /// generations of the four overlaps (spec/hashlife.md "Fixed step", at its base).
+        /// generations of the four overlaps (spec/hashlife.md "Fixed step", at its base): one
+        /// generation by <paramref name="one"/>, two by <paramref name="t"/> then
+        /// <paramref name="t2"/>.
         /// </summary>
-        internal static ulong StepCenter(ulong na, ulong nb, ulong nc, ulong nd, int j, ushort[] t)
+        internal static ulong StepCenter(
+            ulong na, ulong nb, ulong nc, ulong nd, int j, ushort[] one, ushort[] t, ushort[] t2)
         {
             ulong n01 = Beside(na, nb);
             ulong n21 = Beside(nc, nd);
@@ -117,8 +159,8 @@ namespace HeatonLife
             ulong q10 = Compose(c10, c11, c20, c21);
             ulong q11 = Compose(c11, c12, c21, c22);
             return j == 1
-                ? Compose(Two(q00, t), Two(q01, t), Two(q10, t), Two(q11, t))
-                : Compose(One(q00, t), One(q01, t), One(q10, t), One(q11, t));
+                ? Compose(Two(q00, t, t2), Two(q01, t, t2), Two(q10, t, t2), Two(q11, t, t2))
+                : Compose(One(q00, one), One(q01, one), One(q10, one), One(q11, one));
         }
 
         /// <summary>A leaf's center 4×4 with no time advance (spread form).</summary>
@@ -269,7 +311,9 @@ namespace HeatonLife
     /// <item>A node is an 8-int record at <c>id * 8</c> in <see cref="Nodes"/>: four children (a
     /// leaf keeps its bitmap's halves, its two-generation center, and <see cref="LeafTag"/>
     /// there), a population, the full-speed result, the fixed-step result, and an info word
-    /// (level, the j the fixed-step result belongs to, and the collector's mark bit).</item>
+    /// (level, the j the fixed-step result belongs to — and, for a single generation of a rule
+    /// with B0 whose phases alternate, the parity it starts at — and the collector's mark
+    /// bit).</item>
     /// <item>Hash-consing is open addressing with linear probing over a table of ids at most
     /// half full. Freed records chain into a free list; the table is rebuilt by every
     /// collection, so it never holds tombstones.</item>
@@ -288,7 +332,8 @@ namespace HeatonLife
         private const int Pop = 4;  // population if it fits an int, -1 unknown, -2 in _longPop; a free record: the next free id
         private const int Res = 5;  // the full-speed result, -1 none
         private const int Slow = 6; // the fixed-step result for the j in Info's tag, -1 none
-        private const int Info = 7; // level (bits 0-15), fixed-step tag j + 1 (bits 16-30), mark (bit 31)
+        private const int Info = 7; // level (bits 0-15), fixed-step tag (bits 16-30), mark (bit 31)
+        private const int OddTag = 1 << 10; // in the tag: a single generation from an odd generation
         internal const int LeafTag = -1;
         private const int FreeTag = -2;
         private const int LevelMask = 0xFFFF;
@@ -327,8 +372,19 @@ namespace HeatonLife
         private readonly Dictionary<int, BigInteger> _bigPop = new Dictionary<int, BigInteger>();
         private readonly Dictionary<int, byte> _bigDensity = new Dictionary<int, byte>();
 
-        /// <summary>The rule's base case (see <see cref="HashLifeLeaves.RuleTable"/>).</summary>
-        internal ushort[] Rule;
+        /// <summary>The base cases of the generations that start at an even and at an odd
+        /// generation (see <see cref="HashLifeLeaves.RuleTables"/>): one array twice unless a rule
+        /// with B0 alternates its phases.</summary>
+        internal ushort[] RuleEven, RuleOdd;
+
+        /// <summary>True when <see cref="RuleEven"/> and <see cref="RuleOdd"/> differ: every step
+        /// of two or more generations then starts at an even generation (spec/hashlife.md "Rules
+        /// with B0"), and a single generation runs the table of its own parity.</summary>
+        internal bool Alternates;
+
+        /// <summary>The parity of the generation the next single generation starts at, 0 or 1;
+        /// always 0 unless the phases alternate. Set before each sub-step.</summary>
+        internal int Parity;
 
         /// <summary>Live nodes a step may hold before it collects (the memory budget).</summary>
         internal int MaxNodes;
@@ -357,9 +413,11 @@ namespace HeatonLife
         internal int InFlightCollections;
         internal int Aborts;
 
-        internal HashLifeStore(ushort[] rule, int maxNodes)
+        internal HashLifeStore((ushort[] Even, ushort[] Odd) rule, int maxNodes)
         {
-            Rule = rule;
+            RuleEven = rule.Even;
+            RuleOdd = rule.Odd;
+            Alternates = !ReferenceEquals(rule.Even, rule.Odd);
             MaxNodes = maxNodes;
             _capacity = InitialCapacity;
             Nodes = new int[_capacity * Stride];
@@ -621,9 +679,12 @@ namespace HeatonLife
         // -- results ----------------------------------------------------------------------------
 
         /// <summary>Switch rules: cells survive, every cached result goes.</summary>
-        internal void UseRule(ushort[] rule)
+        internal void UseRule((ushort[] Even, ushort[] Odd) rule)
         {
-            Rule = rule;
+            RuleEven = rule.Even;
+            RuleOdd = rule.Odd;
+            Alternates = !ReferenceEquals(rule.Even, rule.Odd);
+            Parity = 0;
             int[] nodes = Nodes;
             for (int n = 0; n < _used; n++)
             {
@@ -683,7 +744,7 @@ namespace HeatonLife
             int r = Nodes[o + Sw];
             if (r < 0)
             {
-                r = (int)HashLifeLeaves.Two(Bits(leaf), Rule);
+                r = (int)HashLifeLeaves.Two(Bits(leaf), RuleEven, RuleOdd);
                 Nodes[o + Sw] = r;
             }
             return (ulong)r;
@@ -712,15 +773,16 @@ namespace HeatonLife
                 ulong n10 = HashLifeLeaves.Above(na, nc);
                 ulong n12 = HashLifeLeaves.Above(nb, nd);
                 ulong n11 = HashLifeLeaves.Above(n01, n21);
-                ushort[] t = Rule;
-                ulong r00 = LeafTwo(a), r01 = HashLifeLeaves.Two(n01, t), r02 = LeafTwo(b);
-                ulong r10 = HashLifeLeaves.Two(n10, t), r11 = HashLifeLeaves.Two(n11, t), r12 = HashLifeLeaves.Two(n12, t);
-                ulong r20 = LeafTwo(c), r21 = HashLifeLeaves.Two(n21, t), r22 = LeafTwo(d);
+                ushort[] t = RuleEven, t2 = RuleOdd;
+                ulong r00 = LeafTwo(a), r01 = HashLifeLeaves.Two(n01, t, t2), r02 = LeafTwo(b);
+                ulong r10 = HashLifeLeaves.Two(n10, t, t2), r11 = HashLifeLeaves.Two(n11, t, t2);
+                ulong r12 = HashLifeLeaves.Two(n12, t, t2);
+                ulong r20 = LeafTwo(c), r21 = HashLifeLeaves.Two(n21, t, t2), r22 = LeafTwo(d);
                 r = Leaf(HashLifeLeaves.Compose(
-                    HashLifeLeaves.Two(HashLifeLeaves.Compose(r00, r01, r10, r11), t),
-                    HashLifeLeaves.Two(HashLifeLeaves.Compose(r01, r02, r11, r12), t),
-                    HashLifeLeaves.Two(HashLifeLeaves.Compose(r10, r11, r20, r21), t),
-                    HashLifeLeaves.Two(HashLifeLeaves.Compose(r11, r12, r21, r22), t)));
+                    HashLifeLeaves.Two(HashLifeLeaves.Compose(r00, r01, r10, r11), t, t2),
+                    HashLifeLeaves.Two(HashLifeLeaves.Compose(r01, r02, r11, r12), t, t2),
+                    HashLifeLeaves.Two(HashLifeLeaves.Compose(r10, r11, r20, r21), t, t2),
+                    HashLifeLeaves.Two(HashLifeLeaves.Compose(r11, r12, r21, r22), t, t2)));
                 Nodes[o + Res] = r;
                 return Push(r);
             }
@@ -760,19 +822,24 @@ namespace HeatonLife
         {
             int o = n * Stride;
             int[] nodes = Nodes;
-            int tag = (j + 1) << TagShift;
+            // A single generation of alternating phases is cached per parity (spec/hashlife.md
+            // "Rules with B0"); longer steps start at even generations only.
+            bool odd = j == 0 && Parity != 0;
+            int tag = ((j + 1) | (odd ? OddTag : 0)) << TagShift;
             if ((nodes[o + Info] & TagMask) == tag)
             {
                 int cached = nodes[o + Slow];
                 if (cached >= 0)
                     return Push(cached);
             }
+            ushort[] one = odd ? RuleOdd : RuleEven;
             int r;
             if (k == 4)
             {
                 // j is 0 or 1 and the children are leaves.
                 r = Leaf(HashLifeLeaves.StepCenter(
-                    Bits(nodes[o]), Bits(nodes[o + Ne]), Bits(nodes[o + Sw]), Bits(nodes[o + Se]), j, Rule));
+                    Bits(nodes[o]), Bits(nodes[o + Ne]), Bits(nodes[o + Sw]), Bits(nodes[o + Se]), j,
+                    one, RuleEven, RuleOdd));
             }
             else if (k == 5 && j <= 1)
             {
@@ -790,11 +857,11 @@ namespace HeatonLife
                 ulong s11 = HashLifeLeaves.Inner(a4, b3, c2, d1), s12 = HashLifeLeaves.Inner(b3, b4, d1, d2);
                 ulong s20 = HashLifeLeaves.Inner(c1, c2, c3, c4), s21 = HashLifeLeaves.Inner(c2, d1, c4, d3);
                 ulong s22 = HashLifeLeaves.Inner(d1, d2, d3, d4);
-                ushort[] t = Rule;
-                int r00 = Push(Leaf(HashLifeLeaves.StepCenter(s00, s01, s10, s11, j, t)));
-                int r01 = Push(Leaf(HashLifeLeaves.StepCenter(s01, s02, s11, s12, j, t)));
-                int r10 = Push(Leaf(HashLifeLeaves.StepCenter(s10, s11, s20, s21, j, t)));
-                int r11 = Push(Leaf(HashLifeLeaves.StepCenter(s11, s12, s21, s22, j, t)));
+                ushort[] t = RuleEven, t2 = RuleOdd;
+                int r00 = Push(Leaf(HashLifeLeaves.StepCenter(s00, s01, s10, s11, j, one, t, t2)));
+                int r01 = Push(Leaf(HashLifeLeaves.StepCenter(s01, s02, s11, s12, j, one, t, t2)));
+                int r10 = Push(Leaf(HashLifeLeaves.StepCenter(s10, s11, s20, s21, j, one, t, t2)));
+                int r11 = Push(Leaf(HashLifeLeaves.StepCenter(s11, s12, s21, s22, j, one, t, t2)));
                 r = Join(r00, r01, r10, r11);
                 _sp = sp;
             }

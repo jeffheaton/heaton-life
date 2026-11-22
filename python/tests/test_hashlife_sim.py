@@ -197,7 +197,8 @@ def test_validate_names_the_field_at_fault() -> None:
     assert validate(good.replace(x="1.5")) is not None
     assert validate(good.replace(y="١٢")) is not None  # non-ASCII digits
     assert validate(good.replace(x="-123456789012345678901234567890")) is None
-    assert validate(good.replace(rule="B03/S23"))[0] == "rule"  # type: ignore[index]
+    assert validate(good.replace(rule="B03/S23")) is None  # B0 runs (spec/hashlife.md)
+    assert validate(good.replace(rule="B9/S23"))[0] == "rule"  # type: ignore[index]
     assert validate(good.replace(rule="garbage"))[0] == "rule"  # type: ignore[index]
     assert validate(good.replace(pattern="no such pattern"))[0] == "pattern"  # type: ignore[index]
 

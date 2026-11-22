@@ -18,9 +18,11 @@ Readers handle two-state files. A file is lines of ASCII text:
 1. **Header.** The first line starts with `[M2]`, usually followed by the writing program
    and version, e.g. `[M2] (example 1.0)`.
 2. **`#` lines**, anywhere after the header:
-   - `#R <rule>` — the rule: any Life-like rule ([rules.md](rules.md)); B0 rules
-     are rejected ([hashlife.md](hashlife.md#state)), and so are preset names such as
-     `life` ([rules.md](rules.md#preset-names)). Without `#R` the rule is `B3/S23`.
+   - `#R <rule>` — the rule: any Life-like rule ([rules.md](rules.md)), B0 included,
+     but no preset name such as `life` ([rules.md](rules.md#preset-names)). Without
+     `#R` the rule is `B3/S23`. Under a rule with B0 the file's cells are the universe's
+     cells at its generation, those that differ from the background
+     ([hashlife.md](hashlife.md#rules-with-b0)).
    - `#G <n>` — the generation: one or more ASCII digits `0`–`9`, any size, no sign (a
      sign or any other character is an error); 0 without it.
    - `#FRAMES …` and `#FRAME …` — a [timeline](#timelines); a reader that wants one

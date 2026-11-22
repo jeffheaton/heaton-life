@@ -394,7 +394,7 @@ namespace HeatonLife.Tests
         [Fact]
         public void HashLifeRejectsWhatThePythonReferenceRejects()
         {
-            Assert.Throws<ArgumentException>(() => new HashLife("B03/S23"));
+            Assert.Throws<ArgumentException>(() => new HashLife("B9/S23")); // B0 runs (spec/hashlife.md)
             Assert.Throws<ArgumentOutOfRangeException>(() => new HashLife(maxMemoryMb: 9));
             Assert.Throws<ArgumentOutOfRangeException>(() => new LifeView(0, 0, LifeView.MaxMag + 1));
             var u = new HashLife();

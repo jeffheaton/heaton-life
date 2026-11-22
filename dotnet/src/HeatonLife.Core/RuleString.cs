@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
 using System.Text;
 
 namespace HeatonLife
@@ -51,6 +52,27 @@ namespace HeatonLife
 
         /// <summary>True when a dead cell with no live neighbors is born (<c>Table[0] == 1</c>).</summary>
         public bool HasB0 => _table[0] != 0;
+
+        /// <summary>True when a live cell whose neighbors are all alive survives
+        /// (<c>Table[511] == 1</c>): S8 in a Moore rule, S6 in a hexagonal one, S4 in a von Neumann
+        /// one (spec/rules.md "The transition table").</summary>
+        public bool HasSmax => _table[TableSize - 1] != 0;
+
+        /// <summary>
+        /// True where the unbounded universe's background is alive at <paramref name="generation"/>
+        /// ≥ 0 (spec/rules.md "B0 and the background"): never for a rule without B0, at every
+        /// generation for B0 with Smax, and at odd generations for B0 without Smax. The universe
+        /// holds the cells that differ from the background. The Python reference's
+        /// <c>LifeRule.background</c>, which gives 0 or 1.
+        /// </summary>
+        public bool BackgroundAlive(BigInteger generation)
+        {
+            if (generation.Sign < 0)
+                throw new ArgumentOutOfRangeException(nameof(generation), generation, "a generation is never negative");
+            if (!HasB0)
+                return false;
+            return HasSmax || !generation.IsEven;
+        }
 
         /// <inheritdoc />
         public override string ToString() => Canonical;

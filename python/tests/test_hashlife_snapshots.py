@@ -119,7 +119,7 @@ def test_a_refused_file_leaves_the_universe_and_its_snapshots() -> None:
     u.step(9)
     before = (u.to_macrocell(), u.generation, u.rule)
     for bad in (
-        b"#Life 1.05\n#R 23/03\n#P 0 0\n**\n",  # B0
+        b"#Life 1.05\n#R 23/3/4\n#P 0 0\n**\n",  # not a Life-like rule
         b"#Life 1.06\n1000000001 0\n",  # outside the editing box
         b"x = 2, y = 1, rule = WireWorld\nAC!\n",  # extended
         b"[M2]\n#FRAMES 2 0 1\n*$\n#FRAME 0 1\n",  # a frame missing

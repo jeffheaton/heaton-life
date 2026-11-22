@@ -17,8 +17,8 @@ and an RLE header naming any Life-like rule making the file two-state.
 ### Added
 
 - **HashLife: Life on an unbounded plane** (`heaton_life.ca.hashlife.HashLife`, .NET
-  `HashLife`; [spec/hashlife.md](spec/hashlife.md)). Any Life-like rule without B0 runs on
-  a hash-consed quadtree whose nodes memoize their own future, so regular patterns of
+  `HashLife`; [spec/hashlife.md](spec/hashlife.md)). Any Life-like rule, B0 included (below),
+  runs on a hash-consed quadtree whose nodes memoize their own future, so regular patterns of
   trillions of cells fit in memory and one step can jump any number of generations below
   2⁵¹⁰. Generations, populations, and coordinates are big integers. Editing (cells,
   rectangles pasted by copy, or, or xor, clearing, PCG32 random fill) reaches
@@ -124,10 +124,10 @@ and an RLE header naming any Life-like rule making the file two-state.
   compiled from outer-totalistic `B…/S…` rules, isotropic non-totalistic rules in Hensel
   notation (`B3/S2-i34q`, `B2-a/S12`), `MAP` strings (any table), and hexagonal (`H`) and
   von Neumann (`V`) rules. Life-like grids and HashLife both run the table, so every rule
-  runs on a grid and, without B0, on the unbounded plane. Each rule has one canonical
+  runs on a grid and on the unbounded plane. Each rule has one canonical
   spelling: letters in alphabetical order, the shorter of the plain and `-` forms, a full
   letter set as the bare digit, and MAP strings without padding and with their unused bits
-  zero. B0 rules still run as written on grids and are still refused by HashLife. Preset
+  zero. B0 rules still run as written on grids. Preset
   names such as `life` are for rules people type (the Python reference's `HashLife("life")`
   still works): a file names its rule, so a Macrocell `#R life`, or a Life 1.05 or 1.06
   `#R life` read into HashLife, is refused in both ports, as an RLE header's preset already
@@ -181,6 +181,19 @@ and an RLE header naming any Life-like rule making the file two-state.
   .NET's `SetState` always made it. With `keep_start` the start stays and nothing is
   copied for it, so a host that shows a timeline frame or puts back an undo point leaves
   Reset where it was. .NET allocates nothing doing it.
+- **Rules with B0 on the unbounded plane** ([spec/hashlife.md](spec/hashlife.md) "Rules
+  with B0", [spec/rules.md](spec/rules.md) "B0 and the background"). A rule with B0 lights
+  the whole plane, so its universe holds the cells that differ from the **background**,
+  which the rule and the generation fix: alive at every generation for B0 with Smax (S8 in
+  a Moore rule, S6 hexagonal, S4 von Neumann), which then runs as its black/white reversal
+  (`B0123478/S01234678` runs as Life), and alive at odd generations only for B0 without
+  Smax, which alternates two phase tables with every step of two or more generations
+  starting at an even generation. Every notation and neighborhood works, and steps of any
+  size, editing, snapshots, frames, and the Macrocell, RLE and timeline readers and writers
+  all work on those cells, so files round-trip. New: `HashLife.background` (0 or 1; .NET
+  `BackgroundAlive`), `LifeRule.has_smax` and `LifeRule.background(generation)` (.NET
+  `HasSmax`, `BackgroundAlive(generation)`). A frame shows the universe's cells; where the
+  background is alive it shows the plane in negative, and a viewer may swap its colors.
 
 ### Changed
 

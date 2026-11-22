@@ -3,7 +3,8 @@
 Cells live in a hash-consed quadtree whose root is centered on the origin. Cell (x, y)
 sits at tree position (x, y − 1) — the placement Macrocell files use, so they land on the
 same cells here as in other readers — and every coordinate, generation, and population is
-a Python int.
+a Python int. Under a rule with B0 the cells are those that differ from the background
+(spec/hashlife.md "Rules with B0").
 """
 
 from __future__ import annotations
@@ -28,13 +29,14 @@ from heaton_life.ca.hashlife.leaves import (
     leaf_cells,
     mirror_columns,
     mirror_rows,
+    phase_tables,
     rect_mask,
     turn_ccw,
     turn_cw,
 )
 from heaton_life.ca.hashlife.render import TILE_CACHE_LIMIT, RenderMode
 from heaton_life.ca.hashlife.render import render as render_frame
-from heaton_life.ca.hashlife.store import NODE_BYTES, Abort, NodeStore
+from heaton_life.ca.hashlife.store import NODE_BYTES, Abort, NodeStore, Tables
 from heaton_life.ca.hashlife.view import LifeView
 from heaton_life.ca.rulestring import compile_rule
 from heaton_life.core.params import Params
@@ -145,22 +147,30 @@ class SnapshotFootprint:
 
 
 @functools.lru_cache(maxsize=16)
-def _table(rule: str) -> tuple[int, ...]:
-    return base_case(compile_rule(rule).table)
+def _tables(rule: str) -> Tables:
+    """The base cases a universe of the canonical ``rule`` steps by, for the generations
+    that start at an even generation and at an odd one (spec/hashlife.md "Rules with B0"):
+    the rule's own table without B0; its black/white reversal (phase table P₁) at every
+    generation with B0 and Smax; and P₀ then P₁, alternating, with B0 but without Smax.
+    The pair holds one table twice unless the phases alternate."""
+    compiled = compile_rule(rule)
+    if not compiled.has_b0:
+        own = base_case(compiled.table)
+        return own, own
+    p0, p1 = phase_tables(compiled.table)
+    odd = base_case(p1)
+    if compiled.has_smax:
+        return odd, odd
+    return base_case(p0), odd
 
 
 def _hashlife_rule(rule: str, *, presets: bool = True) -> str:
-    """The canonical form of a rule the universe can run: any Life-like rule without B0.
-    ``presets`` lets a preset name (``life``) stand for its rule, as where a person types
-    one; a rule read from a file passes ``presets=False``, since a file names its rule, never
-    a preset (spec/formats.md "Reading into the unbounded universe")."""
-    compiled = compile_rule(rule, presets=presets)
-    if compiled.has_b0:
-        raise ValueError(
-            f"HashLife cannot run B0 rules ({compiled.canonical}): births with no live "
-            "neighbors would fill the infinite background (spec/hashlife.md)"
-        )
-    return compiled.canonical
+    """The canonical form of a rule the universe can run: any Life-like rule, B0 included
+    (spec/hashlife.md "Rules with B0"). ``presets`` lets a preset name (``life``) stand
+    for its rule, as where a person types one; a rule read from a file passes
+    ``presets=False``, since a file names its rule, never a preset (spec/formats.md
+    "Reading into the unbounded universe")."""
+    return compile_rule(rule, presets=presets).canonical
 
 
 def _budget(max_memory_mb: int) -> int:
@@ -224,12 +234,14 @@ def _check_count(n: int) -> None:
 
 
 class HashLife:
-    """An unbounded Life-like universe. See spec/hashlife.md for the full contract."""
+    """An unbounded Life-like universe. See spec/hashlife.md for the full contract. Every
+    Life-like rule runs, B0 included: its universe holds the cells that differ from the
+    background (``background``; spec/hashlife.md "Rules with B0")."""
 
     def __init__(self, rule: str = "B3/S23", *, max_memory_mb: int = DEFAULT_MEMORY_MB) -> None:
         self._rule = _hashlife_rule(rule)
         self._max_memory_mb = operator.index(max_memory_mb)
-        self._store = NodeStore(_table(self._rule), _budget(max_memory_mb))
+        self._store = NodeStore(_tables(self._rule), _budget(max_memory_mb))
         self._level = _MIN_LEVEL
         self._root = self._store.empty(_MIN_LEVEL)
         self._generation = 0
@@ -259,11 +271,13 @@ class HashLife:
 
     @rule.setter
     def rule(self, rule: str) -> None:
-        """Change rules in place: the cells stay, cached results go."""
+        """Change rules in place: the cells stay, cached results go. Under a rule with B0
+        the cells stand for the plane the new rule's background says (spec/hashlife.md
+        "Rules with B0")."""
         canonical = _hashlife_rule(rule)
         if canonical != self._rule:
             self._rule = canonical
-            self._store.use_rule(_table(canonical))
+            self._store.use_rule(_tables(canonical))
 
     @property
     def max_memory_mb(self) -> int:
@@ -296,7 +310,16 @@ class HashLife:
 
     @property
     def population(self) -> int:
+        """The universe's live cells: under a rule with B0, the cells that differ from the
+        background, the plane's dead cells where the background is alive."""
         return self._store.population(self._root, self._level)
+
+    @property
+    def background(self) -> int:
+        """The background at the current generation, 0 or 1 (spec/hashlife.md "Rules with
+        B0"): what the plane is outside the universe's cells, always 0 for a rule without
+        B0. The plane's cell (x, y) is ``get_cell(x, y) ^ background``."""
+        return compile_rule(self._rule).background(self._generation)
 
     def bounding_box(self) -> tuple[int, int, int, int] | None:
         """(x0, y0, x1, y1): the inclusive extremes of the live cells, or None if empty."""
@@ -384,12 +407,33 @@ class HashLife:
         n = operator.index(n)
         _check_count(n)
         self._store.cancel_requested = False
+        for j in self._sub_steps(n):
+            self._advance(j)
+
+    def _sub_steps(self, n: int) -> list[int]:
+        """The sub-steps of ``step(n)`` as exponents j, in order (spec/hashlife.md
+        "Sub-steps"): each set bit of n. When a rule with B0 alternates its phases, every
+        sub-step of two or more generations starts at an even generation instead ("Rules
+        with B0"): one generation first from an odd generation, then each set bit j ≥ 1 of
+        what remains, then the last single generation, if one remains."""
+        steps: list[int] = []
+        if self._store.alternates:
+            if n and self._generation & 1:
+                steps.append(0)
+                n -= 1
+            last = n & 1
+            n -= last
+        else:
+            last = 0
         j = 0
         while n:
             if n & 1:
-                self._advance(j)
+                steps.append(j)
             n >>= 1
             j += 1
+        if last:
+            steps.append(0)
+        return steps
 
     def cancel(self) -> None:
         """Ask a running ``step`` (on another thread) to stop at a sub-step boundary."""
@@ -436,7 +480,7 @@ class HashLife:
                     f"generation {self._generation}"
                 )
             self._expand()
-        store.use_step(j)
+        store.use_step(j, self._generation & 1)
         store.guard = True
         try:
             root = store.stepped(self._root, self._level, j)
@@ -557,7 +601,8 @@ class HashLife:
         """Evolve the inclusive rectangle ``n`` generations as an isolated plane (cells
         outside it dead at the start) and clip the result to it; the outside and the
         generation are untouched. Raises what ``step`` raises, leaving the universe as it
-        was (spec/hashlife.md "Advancing part of the universe")."""
+        was (spec/hashlife.md "Advancing part of the universe"). Under a rule with B0 the
+        cells evolved and put back are the universe's, as ``step`` gives them."""
         self._advance_region(x0, y0, x1, y1, n, outside=False)
 
     def advance_outside(self, x0: int, y0: int, x1: int, y1: int, n: int) -> None:
@@ -567,7 +612,9 @@ class HashLife:
         self._advance_region(x0, y0, x1, y1, n, outside=True)
 
     def set_generation(self, generation: int) -> None:
-        """Set the generation counter to any integer ≥ 0; no cell changes."""
+        """Set the generation counter to any integer ≥ 0; no cell changes. When a rule with
+        B0 alternates its phases, the other parity swaps live and dead across the plane the
+        cells stand for (spec/hashlife.md "Rules with B0")."""
         generation = operator.index(generation)
         if generation < 0:
             raise ValueError(f"a generation is never negative, got {generation}")

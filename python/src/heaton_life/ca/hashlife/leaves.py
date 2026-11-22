@@ -4,8 +4,9 @@ A leaf is an 8×8 bitmap in one Python int: cell (x, y) of the leaf is bit ``y *
 (row-major, origin top-left, y down). Smaller squares keep the same 8-wide row stride
 ("spread" form): a 4×4 square occupies bits ``y * 8 + x`` for x, y < 4, so four of them
 compose into a leaf with three shifts. The rule enters only through the 65,536-entry base
-case, a 4×4 square to its center 2×2 one generation later, built from the rule's
-512-entry table (spec/rules.md).
+case, a 4×4 square to its center 2×2 one generation later, built from a 512-entry table
+(spec/rules.md): the rule's own, or for a rule with B0 one of its phase tables
+(spec/hashlife.md "Rules with B0").
 """
 
 from __future__ import annotations
@@ -39,6 +40,18 @@ def base_case(table: bytes) -> tuple[int, ...]:
     return tuple(out.tolist())
 
 
+def phase_tables(table: bytes) -> tuple[bytes, bytes]:
+    """A rule's two phase tables (spec/hashlife.md "Rules with B0"): P₀, the step from a
+    dead background, ``table[0] ^ table[i]``, and P₁, the step from a live one,
+    ``table[511] ^ table[511 − i]`` (511 − i flips all nine cells of the block). Each maps
+    the cells that differ from the background to the cells that differ from the next one,
+    so neither has B0."""
+    first, last = table[0], table[511]
+    p0 = bytes(first ^ table[i] for i in range(512))
+    p1 = bytes(last ^ table[511 - i] for i in range(512))
+    return p0, p1
+
+
 def _window(b: int) -> int:
     """The 4×4 square at bit 0 of a spread bitmap, as a compact 16-bit table index."""
     return (b & 0xF) | ((b >> 4) & 0xF0) | ((b >> 8) & 0xF00) | ((b >> 12) & 0xF000)
@@ -54,8 +67,10 @@ def advance1(b: int, t: Sequence[int]) -> int:
     )
 
 
-def advance2(b: int, t: Sequence[int]) -> int:
-    """A leaf's center 4×4 two generations on (spread form).
+def advance2(b: int, t: Sequence[int], t2: Sequence[int]) -> int:
+    """A leaf's center 4×4 two generations on (spread form): the first generation by base
+    case ``t``, the second by ``t2`` (the same table, except where a rule with B0 alternates
+    its phases; spec/hashlife.md "Rules with B0").
 
     Nine windows at even offsets give the 6×6 at cells 1..6 after one generation (each
     window's 2×2 lands at its own offset + 9); four windows of that give the center.
@@ -72,10 +87,10 @@ def advance2(b: int, t: Sequence[int]) -> int:
         | t[_window(b >> 36)] << 45
     )
     return (
-        t[_window(g >> 9)]
-        | t[_window(g >> 11)] << 2
-        | t[_window(g >> 25)] << 16
-        | t[_window(g >> 27)] << 18
+        t2[_window(g >> 9)]
+        | t2[_window(g >> 11)] << 2
+        | t2[_window(g >> 25)] << 16
+        | t2[_window(g >> 27)] << 18
     )
 
 

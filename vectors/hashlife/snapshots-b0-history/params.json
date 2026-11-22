@@ -1,0 +1,174 @@
+{
+  "background": 1,
+  "bounding_box": [
+    "0",
+    "1",
+    "2",
+    "3"
+  ],
+  "family": "hashlife",
+  "generation": "11",
+  "kind": "snapshots",
+  "ops": [
+    {
+      "density": 0.5,
+      "op": "fill_random",
+      "seed": 62,
+      "x0": -12,
+      "x1": 11,
+      "y0": -12,
+      "y1": 11
+    },
+    {
+      "name": "gen-0",
+      "op": "snapshot"
+    },
+    {
+      "n": "1",
+      "op": "step"
+    },
+    {
+      "name": "gen-1",
+      "op": "snapshot"
+    },
+    {
+      "alive": true,
+      "op": "set_cell",
+      "x": 20,
+      "y": 20
+    },
+    {
+      "n": "100",
+      "op": "step"
+    },
+    {
+      "name": "gen-101",
+      "op": "snapshot"
+    },
+    {
+      "expect": {
+        "added": [
+          0,
+          21,
+          21
+        ],
+        "nodes": 42,
+        "universe_nodes": 17
+      },
+      "names": [
+        "gen-101",
+        "gen-1",
+        "gen-0"
+      ],
+      "op": "measure"
+    },
+    {
+      "op": "set_rule",
+      "rule": "B3678/S34678"
+    },
+    {
+      "expect": {
+        "bounding_box": [
+          "-13",
+          "-13",
+          "12",
+          "11"
+        ],
+        "generation": "1",
+        "population": "302",
+        "state": "restore-9.mc"
+      },
+      "name": "gen-1",
+      "op": "restore"
+    },
+    {
+      "n": "100",
+      "op": "step"
+    },
+    {
+      "op": "set_rule",
+      "rule": "B01245/S0125"
+    },
+    {
+      "expect": {
+        "background": 1,
+        "bounding_box": [
+          "-12",
+          "-12",
+          "13",
+          "10"
+        ],
+        "generation": "101",
+        "population": "312",
+        "state": "restore-12.mc"
+      },
+      "name": "gen-101",
+      "op": "restore"
+    },
+    {
+      "expect": {
+        "format": "rle",
+        "metadata": {
+          "author": null,
+          "comments": [],
+          "name": null
+        },
+        "rule": "B0123478/S01234678",
+        "step": null
+      },
+      "frames": [],
+      "input": "anti.rle",
+      "name": "anti-file",
+      "op": "read"
+    },
+    {
+      "op": "set_rule",
+      "rule": "B0123478/S01234678"
+    },
+    {
+      "expect": {
+        "background": 1,
+        "bounding_box": [
+          "-1",
+          "-1",
+          "1",
+          "1"
+        ],
+        "generation": "6",
+        "population": "5",
+        "state": "restore-15.mc"
+      },
+      "name": "anti-file",
+      "op": "restore"
+    },
+    {
+      "error": true,
+      "op": "set_rule",
+      "rule": "B9/S23"
+    },
+    {
+      "n": "5",
+      "op": "step"
+    },
+    {
+      "expect": {
+        "added": [
+          1,
+          17
+        ],
+        "nodes": 18,
+        "universe_nodes": 1
+      },
+      "names": [
+        "anti-file",
+        "gen-101"
+      ],
+      "op": "measure"
+    }
+  ],
+  "population": "5",
+  "rule": "B01245/S0125",
+  "spec_version": "0.16.0",
+  "state": "final.mc",
+  "tier": "bit-exact"
+}
