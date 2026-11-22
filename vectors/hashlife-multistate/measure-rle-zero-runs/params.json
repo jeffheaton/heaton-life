@@ -1,0 +1,23 @@
+{
+  "extent": {
+    "format": "rle",
+    "generation": "0",
+    "height": "1",
+    "metadata": {
+      "author": null,
+      "comments": [],
+      "name": null
+    },
+    "rule": "WireWorld",
+    "two_state": false,
+    "width": "1",
+    "x": "2",
+    "y": "0"
+  },
+  "family": "hashlife-multistate",
+  "input": "input.rle",
+  "kind": "measure",
+  "rule_named": true,
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

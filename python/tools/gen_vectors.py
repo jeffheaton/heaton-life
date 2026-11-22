@@ -1028,6 +1028,9 @@ def main() -> None:
     # -- State-rule names and their reasons (spec/hashlife-multistate.md "Names") ----------
     write_state_rule_name_cases()
 
+    # -- Live cells and measuring for the multi-state universe (spec/hashlife-multistate.md) -
+    write_live_and_measure_cases()
+
     print("done")
 
 
@@ -12601,6 +12604,265 @@ def write_state_rule_name_cases() -> None:
         "cases": cases,
     }
     _gap_save(d, meta)
+
+
+LIVE_AND_MEASURE_SPEC_VERSION = "0.16.0"
+
+
+def write_live_and_measure_cases() -> None:
+    """The multi-state universe's live cells and its measure (spec/hashlife-multistate.md
+    "Observables", "Measuring"), under vectors/hashlife-multistate/: edit scripts that ask
+    ``live_population`` and ``live_population_in`` under History, Super, Generations and
+    Wireworld rules, and ``measure-*`` files measured, then loaded for ``rule_named`` and
+    their box."""
+    import gzip
+
+    from heaton_life.ca.hashlife import MultiStateHashLife
+    from heaton_life.ca.hashlife.multistate import (
+        measure_multistate_pattern,
+        read_multistate_universe,
+    )
+    from heaton_life.ca.rulefile import parse_rule_file
+    from heaton_life.ca.ruletable import append_rule, starter_rule
+    from heaton_life.ca.wireworld import clock_loop
+    from heaton_life.init import rle_encode
+
+    def case(name: str, kind: str) -> tuple[Path, dict[str, Any]]:
+        d = VECTOR_ROOT / "hashlife-multistate" / name
+        d.mkdir(parents=True, exist_ok=True)
+        return d, {
+            "spec_version": LIVE_AND_MEASURE_SPEC_VERSION,
+            "family": "hashlife-multistate",
+            "tier": "bit-exact",
+            "kind": kind,
+        }
+
+    def digits36(rows: list[str]) -> NDArray[np.uint8]:
+        return np.array([[int(c, 36) for c in r] for r in rows], np.uint8)
+
+    def apply(u: MultiStateHashLife, op: dict[str, Any]) -> None:
+        kind = op["op"]
+        box = tuple(op[k] for k in ("x0", "y0", "x1", "y1") if k in op)
+        if kind == "set_cell":
+            u.set_cell(op["x"], op["y"], op["state"])
+        elif kind == "set_rect":
+            u.set_rect(op["x"], op["y"], digits36(op["cells"]), op["mode"])
+        elif kind == "step":
+            u.step(int(op["n"]))
+        elif kind == "set_rule":
+            u.rule = op["rule"]
+        elif kind == "live_population":
+            op["expect"] = decimal_text.digits_of(u.live_population)
+        elif kind == "live_population_in":
+            cells = u.get_rect(*box)
+            odd = u.rule.endswith(("History", "Super"))
+            count = u.live_population_in(*box)
+            assert count == int(np.count_nonzero(cells & 1 if odd else cells)), op
+            op["expect"] = decimal_text.digits_of(count)
+        else:
+            raise AssertionError(kind)
+
+    def edit_case(name: str, rule: str, ops: list[dict[str, Any]]) -> None:
+        d, meta = case(f"edit-live-population-{name}", "edit")
+        u = MultiStateHashLife(rule)
+        for op in ops:
+            apply(u, op)
+        meta.update({"rule": rule, "ops": ops})
+        meta.update(_hashlife_entry(d, u, "final"))
+        _gap_save(d, meta)
+
+    glider = ["010", "001", "111"]
+    edit_case(
+        "history",
+        "B3/S23History",
+        [
+            {"op": "set_rect", "x": 0, "y": 0, "mode": "copy", "cells": glider},
+            {"op": "set_rect", "x": 20, "y": -6, "mode": "copy", "cells": ["35", "46", "53"]},
+            {"op": "live_population"},
+            {"op": "step", "n": "40"},
+            {"op": "live_population"},
+            {"op": "live_population_in", "x0": 0, "y0": 0, "x1": 9, "y1": 9},
+            {"op": "live_population_in", "x0": 8, "y0": 8, "x1": 14, "y1": 14},
+            {"op": "live_population_in", "x0": 19, "y0": -7, "x1": 30, "y1": -3},
+            {"op": "set_rule", "rule": "B3/S23Super"},
+            {"op": "live_population"},
+            {"op": "set_rule", "rule": "B3/S23/C7"},
+            {"op": "live_population"},
+            {"op": "live_population_in", "x0": 0, "y0": 0, "x1": 9, "y1": 9},
+        ],
+    )
+    edit_case(
+        "super",
+        "B3/S23Super",
+        [
+            {"op": "set_rect", "x": -4, "y": -4, "mode": "copy", "cells": ["0d0", "00f", "hjl"]},
+            {"op": "set_rect", "x": 6, "y": 0, "mode": "copy", "cells": ["79b", "8ac", "egi"]},
+            {"op": "set_rect", "x": -9, "y": 5, "mode": "copy", "cells": ["k", "m", "o", "p"]},
+            {"op": "live_population"},
+            {"op": "live_population_in", "x0": 6, "y0": 0, "x1": 8, "y1": 2},
+            {"op": "step", "n": "12"},
+            {"op": "live_population"},
+            {"op": "live_population_in", "x0": -9, "y0": -9, "x1": 2, "y1": 9},
+            {"op": "live_population_in", "x0": 3, "y0": -9, "x1": 20, "y1": 9},
+        ],
+    )
+    edit_case(
+        "generations",
+        "B2/S345/C4",
+        [
+            {"op": "set_rect", "x": -2, "y": -2, "mode": "copy", "cells": ["1203", "0111", "3210"]},
+            {"op": "step", "n": "6"},
+            {"op": "live_population"},
+            {"op": "live_population_in", "x0": -3, "y0": -3, "x1": 1, "y1": 1},
+        ],
+    )
+    wire = clock_loop((12, 12))
+    edit_case(
+        "wireworld",
+        "WireWorld",
+        [
+            {
+                "op": "set_rect",
+                "x": 0,
+                "y": 0,
+                "mode": "copy",
+                "cells": ["".join(str(v) for v in row) for row in wire],
+            },
+            {"op": "step", "n": "3"},
+            {"op": "live_population"},
+            {"op": "live_population_in", "x0": 0, "y0": 0, "x1": 5, "y1": 5},
+        ],
+    )
+
+    def measure_case(
+        name: str, data: bytes, file: str, rule: str | None = None, error: bool = False
+    ) -> None:
+        d, meta = case(f"measure-{name}", "measure")
+        (d / file).write_bytes(data)
+        meta["input"] = file
+        if rule is not None:
+            meta["rule"] = rule
+        if error:
+            for function in (measure_multistate_pattern, read_multistate_universe):
+                try:
+                    function(data, rule=rule)  # type: ignore[operator]
+                except ValueError:
+                    continue
+                raise AssertionError(f"{name}: {function.__name__} took it")
+            meta["error"] = True
+            _gap_save(d, meta)
+            return
+        extent = measure_multistate_pattern(data, rule=rule)
+        read = read_multistate_universe(data, rule=rule)
+        box = read.universe.bounding_box()
+        if box is None:
+            assert (extent.width, extent.height, extent.x, extent.y) == (0, 0, 0, 0), name
+        else:
+            x0, y0, x1, y1 = box
+            assert (extent.x, extent.y) == (x0, y0), name
+            assert (extent.width, extent.height) == (x1 - x0 + 1, y1 - y0 + 1), name
+        assert extent.rule == (read.universe.rule if read.rule_named else None), name
+        meta["extent"] = {
+            "format": extent.format,
+            "width": decimal_text.digits_of(extent.width),
+            "height": decimal_text.digits_of(extent.height),
+            "x": _signed_text(extent.x),
+            "y": _signed_text(extent.y),
+            "rule": extent.rule,
+            "generation": decimal_text.digits_of(extent.generation),
+            "metadata": {
+                "name": extent.metadata.name,
+                "author": extent.metadata.author,
+                "comments": list(extent.metadata.comments),
+            },
+            "two_state": extent.two_state,
+        }
+        meta["rule_named"] = read.rule_named
+        _gap_save(d, meta)
+
+    def text(value: str) -> bytes:
+        return value.encode("utf-8")
+
+    measure_case(
+        "macrocell-super",
+        text(
+            "[M2] (example 1.0)\n#R LifeSuper\n#G 7\n#N Labels\n#O Someone\n#C Every kind\n"
+            "1 13 25 24 0\n1 9 10 6 1\n2 1 0 2 1\n3 0 3 0 0\n"
+        ),
+        "input.mc",
+    )
+    measure_case("macrocell-lone-leaf", text("[M2]\n#R wireworld\n#G 3\n1 0 3 0 2\n"), "input.mc")
+    measure_case("macrocell-empty", text("[M2]\n#R B2/S345/C4\n1 0 0 0 0\n2 1 1 1 1\n"), "input.mc")
+    measure_case(
+        "macrocell-two-state-leaves-no-rule",
+        text("[M2]\n$$..*$...*$.***$\n4 0 0 1 0\n5 2 0 0 2\n"),
+        "input.mc",
+    )
+    measure_case(
+        "macrocell-no-rule-reader-rule",
+        text("[M2]\n1 0 5 0 3\n2 0 1 0 0\n"),
+        "input.mc",
+        rule="B3/S23History",
+    )
+    far = ["[M2]", "#R WireWorld", "1 0 3 0 0"] + [f"{k} {k - 1} 0 0 0" for k in range(2, 81)]
+    measure_case("macrocell-far", text("\n".join(far) + "\n"), "input.mc")
+    wire_universe = MultiStateHashLife()
+    wire_universe.set_rect(-1000, 77, clock_loop((16, 16)))
+    wire_universe.step(5)
+    measure_case(
+        "macrocell-gzip", gzip.compress(text(wire_universe.to_macrocell()), mtime=0), "input.mc.gz"
+    )
+    measure_case(
+        "rle-generations",
+        text("#CXRLE Pos=-4,7 Gen=12\n#N Rings\nx = 9, y = 4, rule = B2/S345/C4\n3.CBA$$.2C$9.!"),
+        "input.rle",
+    )
+    measure_case(
+        "rle-no-rule-reader-rule",
+        text("x = 4, y = 3\n$2bE$3bA!"),
+        "input.rle",
+        rule="B3/S23History",
+    )
+    measure_case("rle-zero-runs", text("x = 5, y = 1, rule = WireWorld\n0C2.A0B!"), "input.rle")
+    byl = starter_rule("Byl-Loop")
+    mine = parse_rule_file(byl.text.replace("@RULE Byl-Loop", "@RULE My-Byl", 1))
+    from heaton_life.ca.ruletable import starter_pattern
+
+    loop = starter_pattern("Byl-Loop")
+    measure_case(
+        "rle-appended-rule", text(append_rule(rle_encode(loop, "My-Byl"), mine)), "input.rle"
+    )
+    measure_case(
+        "mcell-generations",
+        text("#MCell 4.20\n#GAME Generations\n#RULE 345/2/4\n#D Sparks\n#L 3.A$.BC$$2.A\n"),
+        "input.mcl",
+    )
+    measure_case(
+        "error-unknown-rule", text("[M2]\n#R Nothing\n1 0 1 0 0\n"), "input.mc", error=True
+    )
+    measure_case("error-life-rule", text("[M2]\n#R B3/S23\n1 0 1 0 0\n"), "input.mc", error=True)
+    measure_case(
+        "error-no-rule-state-past-wireworld", text("[M2]\n1 0 5 0 0\n"), "input.mc", error=True
+    )
+    measure_case(
+        "error-state-past-the-rule",
+        text("x = 2, y = 1, rule = WireWorld\nAD!"),
+        "input.rle",
+        error=True,
+    )
+    measure_case(
+        "error-bounded",
+        text("x = 3, y = 1, rule = WireWorld:T30,20\nCBA!"),
+        "input.rle",
+        error=True,
+    )
+    measure_case(
+        "error-mcell-board",
+        text("#MCell 4.20\n#GAME Generations\n#RULE 345/2/4\n#BOARD 20x20\n#L A\n"),
+        "input.mcl",
+        error=True,
+    )
+    measure_case("error-plaintext", text("!Name: dots\n.O.\n"), "input.cells", error=True)
 
 
 if __name__ == "__main__":

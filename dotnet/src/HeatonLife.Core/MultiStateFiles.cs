@@ -41,18 +41,111 @@ namespace HeatonLife
             return (universe, built);
         }
 
-        /// <summary>A Macrocell file's tree built in a universe's store, which it hasn't become.</summary>
+        /// <summary>A Macrocell file's tree built in a universe's store, which it hasn't become
+        /// (or, measured, its node lines as a measure's ids).</summary>
         internal sealed class Built
         {
             public int Root;
             public int Level;
             public BigInteger Generation;
             public StateRule Rule = WireworldRule.Instance;
+            public bool RuleNamed;
             public PatternMetadata Metadata = PatternMetadata.Empty;
             public readonly List<int> Nodes = new List<int>();
             public readonly List<int> Levels = new List<int>();
             public readonly List<(int Number, string Line)> FramesLines = new List<(int, string)>();
             public readonly List<(int Number, string Line)> FrameLines = new List<(int, string)>();
+        }
+
+        /// <summary>Where a file's node lines go, as ids: a universe's store, or the boxes a measure
+        /// keeps.</summary>
+        private interface INodeSink
+        {
+            /// <summary>A two-state 8 × 8 leaf (bit 8r + c is row r, column c), a level-3 node.</summary>
+            int Bits(ulong bits);
+
+            /// <summary>A level-1 leaf: its four states, NW in the low byte, then NE, SW and SE.</summary>
+            int Leaf(int states);
+
+            int Empty(int level);
+
+            int Join(int nw, int ne, int sw, int se, int level);
+        }
+
+        /// <summary>A file's nodes in a universe's store.</summary>
+        private sealed class StoreSink : INodeSink
+        {
+            private readonly MultiStateStore _store;
+
+            public StoreSink(MultiStateStore store)
+            {
+                _store = store;
+            }
+
+            public int Bits(ulong bits) => BitsNode(_store, bits);
+
+            public int Leaf(int states) => _store.Leaf(states);
+
+            public int Empty(int level) => _store.Empty(level);
+
+            public int Join(int nw, int ne, int sw, int se, int level) => _store.Join(nw, ne, sw, se);
+        }
+
+        /// <summary>A file's nodes as their non-zero cells' boxes, each relative to its node's
+        /// top-left corner; id 0 is every empty node. No universe is built
+        /// (spec/hashlife-multistate.md "Measuring").</summary>
+        private sealed class BoxSink : INodeSink
+        {
+            public readonly List<CellBox?> Boxes = new List<CellBox?> { null };
+
+            private int Add(CellBox? box)
+            {
+                Boxes.Add(box);
+                return Boxes.Count - 1;
+            }
+
+            public int Bits(ulong bits) => Add(Macrocell.BitsBox(bits));
+
+            public int Leaf(int states)
+            {
+                int x0 = 2, y0 = 2, x1 = -1, y1 = -1;
+                for (int i = 0; i < 4; i++)
+                {
+                    if (((states >> (8 * i)) & 0xFF) == 0)
+                        continue;
+                    int x = i & 1, y = i >> 1;
+                    x0 = Math.Min(x0, x);
+                    y0 = Math.Min(y0, y);
+                    x1 = Math.Max(x1, x);
+                    y1 = Math.Max(y1, y);
+                }
+                return Add(x1 < 0 ? (CellBox?)null : new CellBox(x0, y0, x1, y1));
+            }
+
+            public int Empty(int level) => 0;
+
+            public int Join(int nw, int ne, int sw, int se, int level)
+            {
+                BigInteger half = BigInteger.One << (level - 1);
+                CellBox? box = Widen(null, Boxes[nw], BigInteger.Zero, BigInteger.Zero);
+                box = Widen(box, Boxes[ne], half, BigInteger.Zero);
+                box = Widen(box, Boxes[sw], BigInteger.Zero, half);
+                box = Widen(box, Boxes[se], half, half);
+                return Add(box);
+            }
+
+            private static CellBox? Widen(CellBox? box, CellBox? part, BigInteger dx, BigInteger dy)
+            {
+                if (part == null)
+                    return box;
+                CellBox p = part.Value;
+                BigInteger x0 = p.X0 + dx, y0 = p.Y0 + dy, x1 = p.X1 + dx, y1 = p.Y1 + dy;
+                if (box == null)
+                    return new CellBox(x0, y0, x1, y1);
+                CellBox b = box.Value;
+                return new CellBox(
+                    BigInteger.Min(b.X0, x0), BigInteger.Min(b.Y0, y0), BigInteger.Max(b.X1, x1), BigInteger.Max(b.Y1, y1));
+            }
         }
 
         /// <summary>
@@ -63,13 +156,67 @@ namespace HeatonLife
         /// </summary>
         internal static Built Build(MultiStateHashLife universe, string text, StateRule fallback)
         {
+            var built = new Built();
+            Scan(text, new StoreSink(universe.Store), built, out string? named, out int top, out _);
+            built.Rule = CheckedRule(named, top, fallback);
+            built.RuleNamed = named != null;
+            (built.Root, built.Level) = universe.Place(built.Nodes[built.Nodes.Count - 1], built.Levels[built.Levels.Count - 1]);
+            return built;
+        }
+
+        /// <summary>
+        /// A Macrocell file measured from its tree without a universe (spec/hashlife-multistate.md
+        /// "Measuring"): its non-zero cells' box in the universe's coordinates (null without any),
+        /// the canonical name of the rule it names (null when it names none), <c>#G</c>, the
+        /// metadata, and whether every leaf is a two-state line. What <see cref="Build"/> checks is
+        /// checked; there is no memory budget to run out of.
+        /// </summary>
+        internal static CellBox? Measure(
+            string text, StateRule fallback, out string? rule, out BigInteger generation, out PatternMetadata metadata,
+            out bool twoState)
+        {
+            var sink = new BoxSink();
+            var scanned = new Built();
+            Scan(text, sink, scanned, out string? named, out int top, out twoState);
+            StateRule found = CheckedRule(named, top, fallback);
+            rule = named == null ? null : found.Canonical;
+            generation = scanned.Generation;
+            metadata = scanned.Metadata;
+            int level = scanned.Levels[scanned.Levels.Count - 1];
+            CellBox? box = sink.Boxes[scanned.Nodes[scanned.Nodes.Count - 1]];
+            if (box == null)
+                return null;
+            // A level-k root covers x in [-2^(k-1), 2^(k-1) - 1] and y in [-2^(k-1) + 1, 2^(k-1)]
+            // (a lone leaf, the center of a level-2 root, covers x in {-1, 0} and y in {0, 1}).
+            BigInteger left = -(BigInteger.One << (level - 1)), upper = left + 1;
+            CellBox b = box.Value;
+            return new CellBox(left + b.X0, upper + b.Y0, left + b.X1, upper + b.Y1);
+        }
+
+        /// <summary>The rule a scanned file runs under: the one it names, else
+        /// <paramref name="fallback"/>; a state the rule lacks is refused.</summary>
+        private static StateRule CheckedRule(string? named, int top, StateRule fallback)
+        {
+            StateRule rule = named == null ? fallback : MultiStateFiles.FileRule(named, fallback);
+            if (top >= rule.States)
+                throw new FormatException(
+                    $"the file holds state {top}, which {rule.Canonical} doesn't have ({rule.States} states)");
+            return rule;
+        }
+
+        /// <summary>Read a Macrocell file's lines into <paramref name="sink"/>, its node lines,
+        /// <c>#G</c>, metadata and timeline lines into <paramref name="built"/>: the rule it names
+        /// (or null), its largest state, and whether every leaf is a two-state line. A malformed
+        /// file throws <see cref="FormatException"/>.</summary>
+        private static void Scan(
+            string text, INodeSink sink, Built built, out string? named, out int top, out bool twoState)
+        {
             List<string> lines = TextLines.Split(text);
             int start = Macrocell.HeaderLine(lines);
-            MultiStateStore store = universe.Store;
-            var built = new Built();
             var notes = new MetadataReader();
-            string? named = null;
-            int top = 0; // the largest state seen
+            named = null;
+            top = 0; // the largest state seen
+            twoState = true;
             for (int index = start + 1; index < lines.Count; index++)
             {
                 int number = index + 1;
@@ -95,7 +242,7 @@ namespace HeatonLife
                     ulong bits = Macrocell.LeafBits(line, number);
                     if (bits != 0)
                         top = Math.Max(top, 1);
-                    built.Nodes.Add(BitsNode(store, bits));
+                    built.Nodes.Add(sink.Bits(bits));
                     built.Levels.Add(3);
                     continue;
                 }
@@ -117,33 +264,28 @@ namespace HeatonLife
                         top = Math.Max(top, (int)state);
                         states |= (int)state << (8 * i);
                     }
-                    built.Nodes.Add(store.Leaf(states));
+                    twoState = false;
+                    built.Nodes.Add(sink.Leaf(states));
                     built.Levels.Add(1);
                 }
                 else
                 {
                     int k = (int)level;
-                    int nw = Child(built, store, fields[1], k - 1, number), ne = Child(built, store, fields[2], k - 1, number);
-                    int sw = Child(built, store, fields[3], k - 1, number), se = Child(built, store, fields[4], k - 1, number);
-                    built.Nodes.Add(store.Join(nw, ne, sw, se));
+                    int nw = Child(built, sink, fields[1], k - 1, number), ne = Child(built, sink, fields[2], k - 1, number);
+                    int sw = Child(built, sink, fields[3], k - 1, number), se = Child(built, sink, fields[4], k - 1, number);
+                    built.Nodes.Add(sink.Join(nw, ne, sw, se, k));
                     built.Levels.Add(k);
                 }
             }
             if (built.Nodes.Count == 0)
                 throw new FormatException("Macrocell file has no nodes");
-            built.Rule = named == null ? fallback : MultiStateFiles.FileRule(named, fallback);
-            if (top >= built.Rule.States)
-                throw new FormatException(
-                    $"the file holds state {top}, which {built.Rule.Canonical} doesn't have ({built.Rule.States} states)");
-            (built.Root, built.Level) = universe.Place(built.Nodes[built.Nodes.Count - 1], built.Levels[built.Levels.Count - 1]);
             built.Metadata = notes.Result();
-            return built;
         }
 
-        private static int Child(Built built, MultiStateStore store, long index, int level, int number)
+        private static int Child(Built built, INodeSink sink, long index, int level, int number)
         {
             if (index == 0)
-                return store.Empty(level);
+                return sink.Empty(level);
             if (index > built.Nodes.Count)
                 throw new FormatException($"line {number}: node {index} is not defined yet");
             int found = built.Levels[(int)index - 1];
@@ -434,13 +576,14 @@ namespace HeatonLife
     {
         internal MultiStatePatternUniverse(
             PatternFormat format, MultiStateHashLife universe, PatternMetadata metadata,
-            IReadOnlyList<HashLifeSnapshot> frames, BigInteger? step)
+            IReadOnlyList<HashLifeSnapshot> frames, BigInteger? step, bool ruleNamed)
         {
             Format = format;
             Universe = universe;
             Metadata = metadata;
             Frames = frames;
             Step = step;
+            RuleNamed = ruleNamed;
         }
 
         public PatternFormat Format { get; }
@@ -455,14 +598,21 @@ namespace HeatonLife
 
         /// <summary>A timeline's step, or null for a file that is no timeline.</summary>
         public BigInteger? Step { get; }
+
+        /// <summary>Whether the file named its rule (Macrocell's <c>#R</c>, RLE's header, an MCell
+        /// file's rule); false when it named none and the universe took the reader's
+        /// (spec/hashlife-multistate.md "Pattern I/O").</summary>
+        public bool RuleNamed { get; }
     }
 
     /// <summary>
     /// Pattern files into the unbounded multi-state universe (spec/hashlife-multistate.md
-    /// "Pattern I/O"): Macrocell and RLE, gzip-compressed or not, recognized by content; the other
-    /// formats hold two states and are refused. RLE reads either dialect and writes the canonical
-    /// encoding behind a <c>#CXRLE</c> line. The Python reference's
-    /// heaton_life.ca.hashlife.multistate.files and .rle.
+    /// "Pattern I/O"): Macrocell, RLE and MCell, gzip-compressed or not, recognized by content,
+    /// read (<see cref="ReadUniverse(byte[], StateRule, int)"/>, <see cref="ReadSnapshot(MultiStateHashLife, byte[])"/>)
+    /// or measured without a universe (<see cref="Measure(byte[], StateRule)"/>); the other formats
+    /// hold two states and are refused. RLE reads either dialect and writes the canonical encoding
+    /// behind a <c>#CXRLE</c> line. The Python reference's heaton_life.ca.hashlife.multistate.files
+    /// and .rle.
     /// </summary>
     public static class MultiStateFiles
     {
@@ -532,7 +682,78 @@ namespace HeatonLife
             var frames = new List<HashLifeSnapshot>(read.Frames.Count);
             foreach (var (root, level, generation) in read.Frames)
                 frames.Add(universe.SnapshotAt(root, level, generation, read.Rule.States));
-            return new MultiStatePatternUniverse(read.Format, universe, read.Metadata, frames, read.Step);
+            return new MultiStatePatternUniverse(read.Format, universe, read.Metadata, frames, read.Step, read.RuleNamed);
+        }
+
+        /// <summary>
+        /// What <see cref="ReadUniverse(byte[], StateRule, int)"/> with the same <paramref name="rule"/>
+        /// would give, except the cells, found without building a universe
+        /// (spec/hashlife-multistate.md "Measuring"): the format; the non-zero cells' bounding box
+        /// where the universe would hold them (0 × 0 at (0, 0) without any); the canonical name of
+        /// the rule the file names, or null when it names none; the generation; the metadata; and
+        /// whether the cells are written in a two-state format. What reading refuses before it
+        /// builds a node throws, <see cref="FormatException"/> or <see cref="ArgumentException"/>
+        /// as reading throws it, so a file that measures also reads, within the memory budget,
+        /// under the same rule.
+        /// </summary>
+        public static PatternExtent Measure(byte[] data, StateRule? rule = null)
+        {
+            if (data == null)
+                throw new ArgumentNullException(nameof(data));
+            return Measure(PatternFiles.Detect(data), () => Text(data), rule);
+        }
+
+        /// <summary>A Macrocell, RLE or MCell file's text measured, as <see cref="Measure(byte[], StateRule)"/>.</summary>
+        public static PatternExtent Measure(string text, StateRule? rule = null)
+        {
+            if (text == null)
+                throw new ArgumentNullException(nameof(text));
+            return Measure(PatternFiles.Detect(text), () => text, rule);
+        }
+
+        private static PatternExtent Measure(PatternFormat format, Func<string> text, StateRule? rule)
+        {
+            StateRule fallback = Fallback(rule);
+            CellBox? box;
+            string? named;
+            BigInteger generation;
+            PatternMetadata metadata;
+            bool twoState;
+            if (format == PatternFormat.Macrocell)
+            {
+                box = MultiStateMacrocell.Measure(text(), fallback, out named, out generation, out metadata, out twoState);
+            }
+            else if (format == PatternFormat.Rle)
+            {
+                string body = text();
+                RleScan scan = ScanRle(body, fallback, null);
+                box = scan.Box;
+                named = scan.Named ? scan.Rule.Canonical : null;
+                generation = scan.Generation;
+                metadata = Patterns.RleMetadata(body);
+                twoState = !scan.Extended;
+            }
+            else if (format == PatternFormat.MCell)
+            {
+                MCellHeader header = MCell.ReadHeader(text());
+                if (header.Board != null)
+                    throw new FormatException(MCell.BoardRefusal(header.Board));
+                named = FileRule(header.Rule, fallback).Canonical;
+                box = MCell.Runs(header, (x, y, length, state) =>
+                    HashLife.CheckBox(MCell.Capped(x), MCell.Capped(y), MCell.Capped(x + length - 1), MCell.Capped(y))).Live;
+                generation = BigInteger.Zero;
+                metadata = header.Metadata;
+                twoState = header.TwoState;
+            }
+            else
+            {
+                throw TwoStateFormat(format);
+            }
+            if (box == null)
+                return new PatternExtent(format, BigInteger.Zero, BigInteger.Zero, BigInteger.Zero, BigInteger.Zero, named, generation, metadata, twoState);
+            CellBox b = box.Value;
+            return new PatternExtent(
+                format, b.X1 - b.X0 + 1, b.Y1 - b.Y0 + 1, b.X0, b.Y0, named, generation, metadata, twoState);
         }
 
         /// <summary>A Macrocell or RLE file's bytes read into <paramref name="universe"/>'s own store
@@ -578,6 +799,7 @@ namespace HeatonLife
             public int Level;
             public BigInteger Generation;
             public StateRule Rule = WireworldRule.Instance;
+            public bool RuleNamed;
             public PatternMetadata Metadata = PatternMetadata.Empty;
             public BigInteger? Step;
             public List<(int Root, int Level, BigInteger Generation)> Frames = new List<(int, int, BigInteger)>();
@@ -588,7 +810,7 @@ namespace HeatonLife
             if (format == PatternFormat.Rle)
             {
                 string body = text();
-                var (root, level, generation, rule) = BuildRle(universe, body, fallback);
+                var (root, level, generation, rule, named) = BuildRle(universe, body, fallback);
                 return new Read
                 {
                     Format = format,
@@ -596,6 +818,7 @@ namespace HeatonLife
                     Level = level,
                     Generation = generation,
                     Rule = rule,
+                    RuleNamed = named,
                     Metadata = Patterns.RleMetadata(body),
                 };
             }
@@ -610,6 +833,7 @@ namespace HeatonLife
                     Level = built.Level,
                     Generation = built.Generation,
                     Rule = built.Rule,
+                    RuleNamed = built.RuleNamed,
                     Metadata = built.Metadata,
                 };
                 if (timeline != null)
@@ -621,9 +845,11 @@ namespace HeatonLife
             }
             if (format == PatternFormat.MCell)
                 return ReadMCell(universe, text(), fallback);
-            throw new FormatException(
-                $"a multi-state universe reads Macrocell, RLE and MCell files; {PatternFiles.FormatName(format)} holds two states");
+            throw TwoStateFormat(format);
         }
+
+        private static FormatException TwoStateFormat(PatternFormat format) => new FormatException(
+            $"a multi-state universe reads Macrocell, RLE and MCell files; {PatternFiles.FormatName(format)} holds two states");
 
         /// <summary>
         /// An MCell file of the Generations family (spec/formats.md "MCell"): its cell data's
@@ -657,6 +883,7 @@ namespace HeatonLife
                 Level = level,
                 Generation = BigInteger.Zero,
                 Rule = rule,
+                RuleNamed = true,
                 Metadata = header.Metadata,
             };
         }
@@ -669,7 +896,7 @@ namespace HeatonLife
                 throw new ArgumentNullException(nameof(text));
             StateRule fallback = Fallback(rule);
             var universe = new MultiStateHashLife(fallback, maxMemoryMb);
-            var (root, level, generation, found) = BuildRle(universe, text, fallback);
+            var (root, level, generation, found, _) = BuildRle(universe, text, fallback);
             universe.StateRule = found;
             universe.Adopt(root, level, generation);
             return universe;
@@ -677,11 +904,44 @@ namespace HeatonLife
 
         /// <summary>
         /// RLE read into <paramref name="universe"/>'s store without changing the universe, streamed
-        /// run by run into leaves: the pattern's tree, its generation and its rule. A state the rule
-        /// lacks, or a non-zero cell outside the editing box, is refused.
+        /// run by run into leaves: the pattern's tree, its generation, its rule, and whether the header
+        /// named it. A state the rule lacks, or a non-zero cell outside the editing box, is refused.
         /// </summary>
-        internal static (int Root, int Level, BigInteger Generation, StateRule Rule) BuildRle(
+        internal static (int Root, int Level, BigInteger Generation, StateRule Rule, bool Named) BuildRle(
             MultiStateHashLife universe, string text, StateRule fallback)
+        {
+            var blocks = new Dictionary<long, int>();
+            RleScan scan = ScanRle(text, fallback, (x, y, count, state) => AddRun(blocks, x, y - 1, count, state));
+            long x0 = scan.X0, y0 = scan.Y0, width = scan.Width, height = scan.Height;
+            var (root, level) = universe.Build(() =>
+            {
+                if (blocks.Count > 0)
+                    universe.PasteBlocks(blocks, x0, y0 - 1, x0 + width - 1, y0 + height - 2, HashLifePasteMode.Or);
+            });
+            return (root, level, scan.Generation, scan.Rule, scan.Named);
+        }
+
+        /// <summary>RLE text read as the universe reads it, without a cell kept: its rule (and
+        /// whether the header named it), generation, <c>#CXRLE Pos</c>, the runs' extent from there,
+        /// the non-zero cells' box in the file's coordinates (null without any), and whether the
+        /// file is in the extended dialect.</summary>
+        private sealed class RleScan
+        {
+            public StateRule Rule = WireworldRule.Instance;
+            public bool Named;
+            public BigInteger Generation;
+            public long X0, Y0, Width, Height;
+            public CellBox? Box;
+            public bool Extended;
+        }
+
+        /// <summary>
+        /// Read RLE text as the universe reads it, handing each run of a non-zero state to
+        /// <paramref name="emit"/> as (x, y, length, state) in the file's coordinates: a bounded grid's
+        /// file, a rule no name gives, a cell outside the editing box and a state the rule lacks are
+        /// refused (spec/hashlife-multistate.md "Pattern I/O").
+        /// </summary>
+        private static RleScan ScanRle(string text, StateRule fallback, Action<long, long, long, int>? emit)
         {
             var lines = new List<string>();
             foreach (string raw in TextLines.Split(text))
@@ -719,8 +979,8 @@ namespace HeatonLife
             const long limit = HashLife.EditLimit;
             bool placed = BigInteger.Abs(posX) <= limit && BigInteger.Abs(posY) <= limit;
             long x0 = placed ? (long)posX : 0, y0 = placed ? (long)posY : 0;
-            var blocks = new Dictionary<long, int>();
             long width = 0, height = 0, x = 0, y = 0;
+            long left = long.MaxValue, right = -1, upper = long.MaxValue, lower = -1; // the non-zero cells
             int top = 0;
             char prefix = '\0'; // a two-letter tag's first letter, waiting for its second
             long pending = 1;   // and the count before it
@@ -797,7 +1057,11 @@ namespace HeatonLife
                                 null, $"#CXRLE Pos={posX},{posY} lies outside the editing box |x|, |y| <= 1,000,000,000");
                         if (x0 + x + count - 1 > limit || y0 + y > limit)
                             HashLife.CheckBox(x0, y0, x0 + x + count - 1, y0 + y);
-                        AddRun(blocks, x0 + x, y0 + y - 1, count, state);
+                        left = Math.Min(left, x);
+                        right = Math.Max(right, x + count - 1);
+                        upper = Math.Min(upper, y);
+                        lower = Math.Max(lower, y);
+                        emit?.Invoke(x0 + x, y0 + y, count, state);
                     }
                 }
                 x = Math.Min(x + count, RunCap);
@@ -807,14 +1071,21 @@ namespace HeatonLife
             if (top >= rule.States)
                 throw new FormatException(
                     $"the file holds state {top}, which {rule.Canonical} doesn't have ({rule.States} states)");
-            if (blocks.Count > 0)
+            bool found = right >= 0;
+            if (found)
                 HashLife.CheckBox(x0, y0, x0 + width - 1, y0 + height - 1);
-            var (root, level) = universe.Build(() =>
+            return new RleScan
             {
-                if (blocks.Count > 0)
-                    universe.PasteBlocks(blocks, x0, y0 - 1, x0 + width - 1, y0 + height - 2, HashLifePasteMode.Or);
-            });
-            return (root, level, generation, rule);
+                Rule = rule,
+                Named = named != null,
+                Generation = generation,
+                X0 = x0,
+                Y0 = y0,
+                Width = width,
+                Height = height,
+                Box = found ? new CellBox(x0 + left, y0 + upper, x0 + right, y0 + lower) : (CellBox?)null,
+                Extended = extended,
+            };
         }
 
         /// <summary>Set <paramref name="length"/> cells from tree position (tx, ty) rightward to

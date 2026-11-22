@@ -291,6 +291,34 @@ class MultiStateHashLife:
         origin = -(1 << (self._level - 1))
         return self._count(self._root, self._level, origin, origin, (x0, y0 - 1, x1, y1 - 1))
 
+    @property
+    def live_population(self) -> int:
+        """The live cells (spec/hashlife-multistate.md "Observables"): under a History or
+        Super rule the on cells, the odd states; under any other rule the non-zero cells,
+        ``population``."""
+        if not self._odd_live():
+            return self.population
+        return self._store.odd_population(self._root, self._level)
+
+    def live_population_in(self, x0: int, y0: int, x1: int, y1: int) -> int:
+        """Live cells in the inclusive rectangle, as ``live_population`` counts them; any
+        coordinates."""
+        x0, y0, x1, y1 = _ints(x0, y0, x1, y1)
+        if x1 < x0 or y1 < y0:
+            return 0
+        origin = -(1 << (self._level - 1))
+        rect = (x0, y0 - 1, x1, y1 - 1)
+        return self._count(self._root, self._level, origin, origin, rect, self._odd_live())
+
+    def _odd_live(self) -> bool:
+        """Whether the rule's live states are its odd ones (History and Super), not every
+        non-zero one."""
+        # Imported here: the families import heaton_life.ca, which imports this module.
+        from heaton_life.ca.history import is_history
+        from heaton_life.ca.super_rules import is_super
+
+        return is_history(self._rule) or is_super(self._rule)
+
     def bounding_box_in(
         self, x0: int, y0: int, x1: int, y1: int
     ) -> tuple[int, int, int, int] | None:
@@ -1149,25 +1177,30 @@ class MultiStateHashLife:
             self._paste(d, k1, nx + half, ny + half, rect, blocks, tiers, mode),
         )
 
-    def _count(self, n: int, k: int, nx: int, ny: int, rect: tuple[int, int, int, int]) -> int:
+    def _count(
+        self, n: int, k: int, nx: int, ny: int, rect: tuple[int, int, int, int], odd: bool = False
+    ) -> int:
+        """The non-zero cells of level-k node n (or with ``odd`` its odd ones) inside
+        ``rect``, the node's top-left at tree position (nx, ny)."""
         size = 1 << k
         store = self._store
         if n == store.empty(k) or _disjoint(nx, ny, size, rect):
             return 0
         if _covers(nx, ny, size, rect):
-            return store.population(n, k)
+            return store.odd_population(n, k) if odd else store.population(n, k)
         if k == 1:
             cells = unpack(store.data[n])
             inside = _leaf_inside(nx, ny, rect)
-            return sum(1 for i in range(4) if inside[i] and cells[i])
+            mask = 1 if odd else 0xFF
+            return sum(1 for i in range(4) if inside[i] and cells[i] & mask)
         half = size >> 1
         a, b, c, d = store.data[n]
         k1 = k - 1
         return (
-            self._count(a, k1, nx, ny, rect)
-            + self._count(b, k1, nx + half, ny, rect)
-            + self._count(c, k1, nx, ny + half, rect)
-            + self._count(d, k1, nx + half, ny + half, rect)
+            self._count(a, k1, nx, ny, rect, odd)
+            + self._count(b, k1, nx + half, ny, rect, odd)
+            + self._count(c, k1, nx, ny + half, rect, odd)
+            + self._count(d, k1, nx + half, ny + half, rect, odd)
         )
 
     def _max_state(self, n: int, k: int, memo: dict[int, int]) -> int:

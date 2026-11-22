@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Numerics;
@@ -42,6 +43,7 @@ namespace HeatonLife.Tests
                 ["snapshots"] = Of(common, new[] { "rule", "ops" }, state),
                 ["timeline"] = Of(common, new[] { "input", "generations", "metadata", "timeline", "frames" }),
                 ["names"] = Of(common, new[] { "cases" }),
+                ["measure"] = Of(common, new[] { "input", "rule", "error", "extent", "rule_named" }),
             };
         }
 
@@ -67,6 +69,13 @@ namespace HeatonLife.Tests
             ["fill_random"] = new HashSet<string> { "x0", "y0", "x1", "y1", "density", "seed" },
             ["get_rect"] = new HashSet<string> { "x0", "y0", "x1", "y1", "expect" },
             ["bounding_box_in"] = new HashSet<string> { "x0", "y0", "x1", "y1", "expect" },
+            ["live_population"] = new HashSet<string> { "expect" },
+            ["live_population_in"] = new HashSet<string> { "x0", "y0", "x1", "y1", "expect" },
+        };
+
+        private static readonly string[] ExtentKeys =
+        {
+            "format", "width", "height", "x", "y", "rule", "generation", "metadata", "two_state",
         };
 
         private static readonly Dictionary<string, HashSet<string>> SnapshotOps = new Dictionary<string, HashSet<string>>
@@ -288,6 +297,47 @@ namespace HeatonLife.Tests
                         }
                         break;
                     }
+                case "measure":
+                    {
+                        // Measured without a universe, then loaded: the extent is the loaded
+                        // universe's box (spec/hashlife-multistate.md "Measuring"), and loading says
+                        // whether the file named its rule.
+                        byte[] data = File.ReadAllBytes(Path.Combine(dir, Text(meta, "input")));
+                        StateRule? rule = meta.TryGetProperty("rule", out JsonElement named) ? StateRules.Compile(named.GetString()!) : null;
+                        if (meta.TryGetProperty("error", out JsonElement error) && error.GetBoolean())
+                        {
+                            Refused(() => MultiStateFiles.Measure(data, rule));
+                            Refused(() => MultiStateFiles.ReadUniverse(data, rule));
+                            break;
+                        }
+                        JsonElement want = meta.GetProperty("extent");
+                        Assert.True(new HashSet<string>(want.EnumerateObject().Select(p => p.Name)).SetEquals(ExtentKeys));
+                        PatternExtent extent = MultiStateFiles.Measure(data, rule);
+                        Assert.Equal(Text(want, "format"), PatternFiles.FormatName(extent.Format));
+                        Assert.Equal(BigInteger.Parse(Text(want, "width"), CultureInfo.InvariantCulture), extent.Width);
+                        Assert.Equal(BigInteger.Parse(Text(want, "height"), CultureInfo.InvariantCulture), extent.Height);
+                        Assert.Equal(BigInteger.Parse(Text(want, "x"), CultureInfo.InvariantCulture), extent.X);
+                        Assert.Equal(BigInteger.Parse(Text(want, "y"), CultureInfo.InvariantCulture), extent.Y);
+                        JsonElement wantRule = want.GetProperty("rule");
+                        Assert.Equal(wantRule.ValueKind == JsonValueKind.Null ? null : wantRule.GetString(), extent.Rule);
+                        Assert.Equal(BigInteger.Parse(Text(want, "generation"), CultureInfo.InvariantCulture), extent.Generation);
+                        Assert.Equal(Metadata(want.GetProperty("metadata")), extent.Metadata);
+                        Assert.Equal(want.GetProperty("two_state").GetBoolean(), extent.TwoState);
+                        Assert.Null(extent.BoundedGrid);
+                        MultiStatePatternUniverse read = MultiStateFiles.ReadUniverse(data, rule);
+                        Assert.Equal(meta.GetProperty("rule_named").GetBoolean(), read.RuleNamed);
+                        CellBox? box = read.Universe.BoundingBox;
+                        if (box == null)
+                        {
+                            Assert.True(extent.Width.IsZero && extent.Height.IsZero);
+                        }
+                        else
+                        {
+                            CellBox b = box.Value;
+                            Assert.Equal((b.X0, b.Y0, b.X1 - b.X0 + 1, b.Y1 - b.Y0 + 1), (extent.X, extent.Y, extent.Width, extent.Height));
+                        }
+                        break;
+                    }
                 case "names":
                     {
                         // Each text names a rule the universe runs, or gives its reason
@@ -325,6 +375,14 @@ namespace HeatonLife.Tests
         private static string Text(JsonElement element, string key) => element.GetProperty(key).GetString()!;
 
         private static long Long(JsonElement op, string key) => op.GetProperty(key).GetInt64();
+
+        /// <summary>A file the readers refuse, as they refuse one: a format, a rule, a state or a
+        /// place they can't take.</summary>
+        private static void Refused(Action read)
+        {
+            Exception? error = Record.Exception(read);
+            Assert.True(error is FormatException || error is ArgumentException, $"refused with {error?.GetType().Name ?? "nothing"}");
+        }
 
         private static PatternMetadata Metadata(JsonElement notes)
         {
@@ -470,6 +528,15 @@ namespace HeatonLife.Tests
                         Assert.Equal(op.GetProperty("expect").EnumerateArray().Select(r => r.GetString()).ToArray(), rows.ToArray());
                         break;
                     }
+                case "live_population": // spec/hashlife-multistate.md "Observables"
+                    Assert.Equal(Text(op, "expect"), u.LivePopulation.ToString(CultureInfo.InvariantCulture));
+                    break;
+                case "live_population_in":
+                    Assert.Equal(
+                        Text(op, "expect"),
+                        u.LivePopulationIn(Long(op, "x0"), Long(op, "y0"), Long(op, "x1"), Long(op, "y1"))
+                            .ToString(CultureInfo.InvariantCulture));
+                    break;
                 default: // bounding_box_in
                     {
                         CellBox? found = u.BoundingBoxIn(

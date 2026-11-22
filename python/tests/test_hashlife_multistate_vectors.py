@@ -20,6 +20,7 @@ from heaton_life.ca import LifeLike
 from heaton_life.ca.generations import Generations
 from heaton_life.ca.hashlife import LifeView, MultiStateHashLife, Snapshot
 from heaton_life.ca.hashlife.multistate import (
+    measure_multistate_pattern,
     read_multistate_universe,
     read_timeline,
     write_timeline,
@@ -45,7 +46,9 @@ _KEYS = {
     "snapshots": _COMMON | {"rule", "ops"} | _STATE,
     "timeline": _COMMON | {"input", "generations", "metadata", "timeline", "frames"},
     "names": _COMMON | {"cases"},
+    "measure": _COMMON | {"input", "rule", "error", "extent", "rule_named"},
 }
+_EXTENT = {"format", "width", "height", "x", "y", "rule", "generation", "metadata", "two_state"}
 _EDIT_OPS = {
     "set_cell": {"x", "y", "state"},
     "set_rect": {"x", "y", "mode", "cells"},
@@ -60,6 +63,8 @@ _EDIT_OPS = {
     "clear": set(),
     "set_rule": {"rule"},
     "fill_random": {"x0", "y0", "x1", "y1", "density", "seed"},
+    "live_population": {"expect"},
+    "live_population_in": {"x0", "y0", "x1", "y1", "expect"},
     "get_rect": {"x0", "y0", "x1", "y1", "expect"},
     "bounding_box_in": {"x0", "y0", "x1", "y1", "expect"},
 }
@@ -138,6 +143,10 @@ def _apply(u: MultiStateHashLife, op: dict[str, Any]) -> None:
     elif kind == "get_rect":
         rows = ["".join(_DIGITS[v] for v in row) for row in u.get_rect(*box)]
         assert rows == op["expect"], op
+    elif kind == "live_population":  # spec/hashlife-multistate.md "Observables"
+        assert str(u.live_population) == op["expect"], op
+    elif kind == "live_population_in":
+        assert str(u.live_population_in(*(int(v) for v in box))) == op["expect"], op
     else:  # bounding_box_in
         found = u.bounding_box_in(*(int(v) for v in box))
         assert (None if found is None else [str(v) for v in found]) == op["expect"], op
@@ -292,6 +301,45 @@ def test_multistate_vector(case: Path) -> None:
         for frame, entry in zip(back.frames, meta["frames"], strict=True):
             back.universe.restore(frame)
             _expect_state(d, back.universe, entry)
+    elif kind == "measure":
+        # Measured without a universe, then loaded: the extent is the loaded universe's box
+        # (spec/hashlife-multistate.md "Measuring"), and loading says whether the file named
+        # its rule.
+        data = (d / meta["input"]).read_bytes()
+        rule = meta.get("rule")
+        if meta.get("error"):
+            with pytest.raises(ValueError):
+                measure_multistate_pattern(data, rule=rule)
+            with pytest.raises(ValueError):
+                read_multistate_universe(data, rule=rule)
+            return
+        want = meta["extent"]
+        assert set(want) == _EXTENT, want
+        extent = measure_multistate_pattern(data, rule=rule)
+        assert extent.format == want["format"]
+        assert (extent.width, extent.height) == (int(want["width"]), int(want["height"]))
+        assert (extent.x, extent.y) == (int(want["x"]), int(want["y"]))
+        assert extent.rule == want["rule"]
+        assert extent.generation == int(want["generation"])
+        notes = want["metadata"]
+        assert extent.metadata == PatternMetadata(
+            notes["name"], notes["author"], tuple(notes["comments"])
+        )
+        assert extent.two_state is want["two_state"]
+        assert extent.bounded_grid is None
+        read = read_multistate_universe(data, rule=rule)
+        assert read.rule_named is meta["rule_named"]
+        box = read.universe.bounding_box()
+        if box is None:
+            assert extent.width == extent.height == 0
+        else:
+            x0, y0, x1, y1 = box
+            assert (x0, y0, x1 - x0 + 1, y1 - y0 + 1) == (
+                extent.x,
+                extent.y,
+                extent.width,
+                extent.height,
+            )
     elif kind == "names":
         # Each text names a rule the universe runs, or gives its reason (spec/hashlife-multistate.md
         # "Names"); the error's message is the reason and the page that says why.

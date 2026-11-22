@@ -21,6 +21,7 @@ from heaton_life.ca.hashlife import (
     LifeView,
     MultiStateHashLife,
     StepCanceled,
+    measure_multistate_pattern,
     read_multistate_universe,
 )
 from heaton_life.ca.hashlife.multistate import read_timeline, write_timeline
@@ -696,3 +697,159 @@ def test_timelines_round_trip() -> None:
     assert len(found.frames) == 4 and found.step == 3
     with pytest.raises(ValueError, match="evenly spaced"):
         write_timeline(u, [frames[0], frames[1], frames[3]])
+
+
+# -- live cells (spec/hashlife-multistate.md "Observables") ------------------------------------
+
+
+def _live_by_hand(u: MultiStateHashLife, rect: tuple[int, int, int, int], odd: bool) -> int:
+    cells = u.get_rect(*rect)
+    return int(np.count_nonzero(cells & 1 if odd else cells))
+
+
+@pytest.mark.parametrize("rule", ["B3/S23History", "B36/S23Super", "B2/S345/C4", "WireWorld"])
+def test_live_cells_are_the_on_cells_under_history_and_super(rule: str) -> None:
+    """Under History and Super the live cells are the odd states, an envelope and the marks
+    that are off left out; under every other rule they are the non-zero cells."""
+    odd = rule.endswith(("History", "Super"))
+    u = MultiStateHashLife(rule)
+    states = 26 if rule.endswith("Super") else 7 if odd else u.states
+    rng = np.random.default_rng(5)
+    soup = (rng.random((40, 50)) < 0.4) * rng.integers(1, states, (40, 50))
+    u.set_rect(-20, -9, soup.astype(np.uint8))
+    for n in (0, 1, 7, 30):
+        u.step(n)
+        box = u.bounding_box()
+        assert box is not None
+        x0, y0, x1, y1 = box
+        whole = (x0 - 3, y0 - 3, x1 + 3, y1 + 3)
+        assert u.live_population == _live_by_hand(u, whole, odd)
+        assert u.live_population_in(*whole) == u.live_population
+        for rect in ((x0, y0, x0 + 9, y0 + 7), (-5, -5, 4, 6), (x1 - 3, y0, x1 + 40, y1 - 2)):
+            assert u.live_population_in(*rect) == _live_by_hand(u, rect, odd), (n, rect)
+        if odd:
+            assert u.live_population < u.population  # the envelope is off
+        else:
+            assert (u.live_population, u.live_population_in(*whole)) == (
+                u.population,
+                u.population_in(*whole),
+            )
+    assert u.live_population_in(10**30, 10**30, 10**30 + 5, 10**30 + 5) == 0
+    assert u.live_population_in(5, 5, 4, 4) == 0  # an empty rectangle
+
+
+def test_live_cells_follow_the_rule_and_survive_collection() -> None:
+    u = MultiStateHashLife("B3/S23History", max_memory_mb=10)
+    u.set_rect(0, 0, np.array([[0, 1, 0], [0, 0, 1], [1, 1, 1]], np.uint8))  # a glider
+    u.step(64)
+    assert (u.live_population, u.population > 5) == (5, True)  # its trail is the envelope
+    u.rule = "B3/S23Super"  # states 0-6 mean the same
+    assert u.live_population == 5
+    u.rule = "B3/S23/C7"  # a Generations rule of seven states: every non-zero cell lives
+    assert u.live_population == u.population
+    u.rule = "B3/S23History"
+    u._store.collect([(u._root, u._level)])
+    assert u.live_population == 5
+    u.set_cell(1000, 1000, 4)  # marked off
+    u.set_cell(1001, 1000, 3)  # marked on
+    assert u.live_population == 6 and u.live_population_in(1000, 1000, 1001, 1000) == 1
+    u.clear()
+    assert (u.live_population, u.live_population_in(-9, -9, 9, 9)) == (0, 0)
+
+
+# -- measuring and naming the rule (spec/hashlife-multistate.md "Pattern I/O") ----------------
+
+
+def _measure_agrees_with_reading(source: bytes | str, rule: str | None = None) -> None:
+    extent = measure_multistate_pattern(source, rule=rule)
+    read = read_multistate_universe(source, rule=rule)
+    u = read.universe
+    assert extent.format == read.format
+    box = u.bounding_box()
+    if box is None:
+        assert (extent.width, extent.height, extent.x, extent.y) == (0, 0, 0, 0)
+    else:
+        x0, y0, x1, y1 = box
+        assert (extent.x, extent.y, extent.width, extent.height) == (
+            x0,
+            y0,
+            x1 - x0 + 1,
+            y1 - y0 + 1,
+        )
+    assert extent.rule == (u.rule if read.rule_named else None)
+    assert (extent.generation, extent.metadata) == (u.generation, read.metadata)
+    assert extent.bounded_grid is None
+
+
+def test_measuring_gives_what_reading_gives() -> None:
+    files: list[str | bytes] = [
+        "[M2]\n#R WireWorld\n#G 12\n#N Name\n1 0 3 0 0\n",  # a lone leaf: tree (0, -1)
+        "[M2]\n1 0 0 1 0\n",  # names no rule
+        "[M2]\n#R LifeSuper\n1 0 25 0 0\n1 7 0 0 13\n2 1 0 0 2\n3 0 0 0 3\n",
+        "[M2]\n#R B3/S23History\n1 0 0 0 0\n2 0 0 0 0\n",  # every cell 0
+        "[M2]\n#R B2/S345/C4\n$$...*$\n4 0 1 0 1\n",  # a two-state leaf
+        "#CXRLE Pos=-4,7 Gen=12\nx = 9, y = 3, rule = WireWorld\n3.CBA$$.2C!",
+        "x = 2, y = 2\n$bo!",  # names no rule
+        "x = 3, y = 1, rule = B2/S345/C4\n0C2.A!",
+        "#MCell 4.20\n#GAME Generations\n#RULE 345/2/4\n#L 3.A$.BC\n",
+    ]
+    two = HashLife()
+    two.set_rect(-3, -2, _noise(19, 23, 5))
+    files.append(two.to_macrocell().replace("#R B3/S23\n", ""))
+    wire = MultiStateHashLife()
+    wire.set_rect(-1000, 77, clock_loop((16, 16)))
+    wire.step(5)
+    files += [wire.to_macrocell(), gzip.compress(wire.to_rle().encode(), mtime=0)]
+    for source in files:
+        _measure_agrees_with_reading(source)
+    _measure_agrees_with_reading("x = 1, y = 1\nE!", rule="B3/S23History")  # its states, 0-6
+
+
+def test_the_measure_says_how_the_file_writes_its_cells() -> None:
+    assert not measure_multistate_pattern("[M2]\n#R WireWorld\n1 0 3 0 0\n").two_state
+    assert measure_multistate_pattern("[M2]\n#R WireWorld\n$$...*$\n").two_state
+    assert measure_multistate_pattern("x = 2, y = 1, rule = WireWorld\n2o!").two_state is False
+    assert measure_multistate_pattern("x = 2, y = 1\n2o!").two_state
+    mcell = "#MCell 4.20\n#GAME Generations\n#RULE 345/2/4\n#L A\n"
+    assert not measure_multistate_pattern(mcell).two_state
+    empty = measure_multistate_pattern("[M2]\n1 0 0 0 0\n")
+    assert (empty.width, empty.height, empty.x, empty.y, empty.rule) == (0, 0, 0, 0, None)
+
+
+@pytest.mark.parametrize(
+    ("source", "match"),
+    [
+        ("!Name: x\n.O.\n", "two states"),  # plaintext
+        ("[M2]\n#R Nothing\n1 0 1 0 0\n", "not a state rule"),
+        ("[M2]\n#R B3/S23\n1 0 1 0 0\n", "not a state rule"),
+        ("[M2]\n#R WireWorld\n1 0 4 0 0\n", "doesn't have"),
+        ("[M2]\n1 0 5 0 0\n", "doesn't have"),  # no rule: the reader's, WireWorld
+        ("[M2]\n#R B03/S23History\n1 0 1 0 0\n", "has B0"),
+        ("[M2]\n2 1 0 0 0\n", "not defined yet"),
+        ("x = 3, y = 1, rule = WireWorld:T30,20\nCBA!", "bounded grid"),
+        (f"#CXRLE Pos={EDIT_LIMIT},0\nx = 2, y = 1\n2C!", "editing box"),
+        ("x = 1, y = 1, rule = WireWorld\n999999999999C!", "editing box"),
+        ("x = 1, y = 1, rule = R2,C0,M1,S2..3,B3..3\no!", "Larger than Life"),
+        ("#MCell 4.20\n#GAME Generations\n#RULE 345/2/4\n#BOARD 20x20\n#L A\n", "board"),
+        ("#MCell 4.20\n#GAME Life\n#RULE 23/3\n#L A\n", "not a state rule"),
+    ],
+)
+def test_measuring_refuses_what_reading_refuses(source: str, match: str) -> None:
+    with pytest.raises(ValueError, match=match):
+        measure_multistate_pattern(source)
+    with pytest.raises(ValueError):
+        read_multistate_universe(source)
+
+
+def test_the_reader_says_whether_a_file_named_its_rule() -> None:
+    named = {
+        "[M2]\n#R WireWorld\n1 0 3 0 0\n": True,
+        "[M2]\n1 0 1 0 0\n": False,
+        "x = 1, y = 1, rule = WireWorld\nC!": True,
+        "x = 1, y = 1\no!": False,
+        "#MCell 4.20\n#GAME Generations\n#RULE 345/2/4\n#L A\n": True,
+    }
+    for text, expected in named.items():
+        read = read_multistate_universe(text, rule="B3/S23History")
+        assert read.rule_named is expected, text
+        assert (read.universe.rule == "B3/S23History") is not expected

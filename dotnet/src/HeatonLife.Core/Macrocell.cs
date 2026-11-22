@@ -155,7 +155,7 @@ namespace HeatonLife
         }
 
         /// <summary>The live cells' box in a leaf-layout bitmap (bit 8r + c is row r, column c), or null.</summary>
-        private static CellBox? BitsBox(ulong bits)
+        internal static CellBox? BitsBox(ulong bits)
         {
             if (bits == 0)
                 return null;

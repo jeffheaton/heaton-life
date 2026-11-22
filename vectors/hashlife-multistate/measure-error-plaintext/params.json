@@ -1,0 +1,8 @@
+{
+  "error": true,
+  "family": "hashlife-multistate",
+  "input": "input.cells",
+  "kind": "measure",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

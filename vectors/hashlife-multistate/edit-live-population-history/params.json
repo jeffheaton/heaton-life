@@ -1,0 +1,100 @@
+{
+  "bounding_box": [
+    "0",
+    "-6",
+    "21",
+    "12"
+  ],
+  "family": "hashlife-multistate",
+  "generation": "40",
+  "kind": "edit",
+  "ops": [
+    {
+      "cells": [
+        "010",
+        "001",
+        "111"
+      ],
+      "mode": "copy",
+      "op": "set_rect",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "cells": [
+        "35",
+        "46",
+        "53"
+      ],
+      "mode": "copy",
+      "op": "set_rect",
+      "x": 20,
+      "y": -6
+    },
+    {
+      "expect": "9",
+      "op": "live_population"
+    },
+    {
+      "n": "40",
+      "op": "step"
+    },
+    {
+      "expect": "5",
+      "op": "live_population"
+    },
+    {
+      "expect": "0",
+      "op": "live_population_in",
+      "x0": 0,
+      "x1": 9,
+      "y0": 0,
+      "y1": 9
+    },
+    {
+      "expect": "5",
+      "op": "live_population_in",
+      "x0": 8,
+      "x1": 14,
+      "y0": 8,
+      "y1": 14
+    },
+    {
+      "expect": "0",
+      "op": "live_population_in",
+      "x0": 19,
+      "x1": 30,
+      "y0": -7,
+      "y1": -3
+    },
+    {
+      "op": "set_rule",
+      "rule": "B3/S23Super"
+    },
+    {
+      "expect": "5",
+      "op": "live_population"
+    },
+    {
+      "op": "set_rule",
+      "rule": "B3/S23/C7"
+    },
+    {
+      "expect": "53",
+      "op": "live_population"
+    },
+    {
+      "expect": "35",
+      "op": "live_population_in",
+      "x0": 0,
+      "x1": 9,
+      "y0": 0,
+      "y1": 9
+    }
+  ],
+  "population": "53",
+  "rule": "B3/S23History",
+  "spec_version": "0.16.0",
+  "state": "final.mc",
+  "tier": "bit-exact"
+}

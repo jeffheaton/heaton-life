@@ -428,6 +428,30 @@ and an RLE header naming any Life-like rule making the file two-state.
   `hashlife-multistate/names`.
 - .NET: `History.Names` and `Super.Names`, each state's name, as Python's `NAMES` and the
   tables of spec/history.md and spec/super.md give them.
+- **The multi-state universe's live cells** (`live_population` and `live_population_in`,
+  .NET `LivePopulation` and `LivePopulationIn`;
+  [spec/hashlife-multistate.md](spec/hashlife-multistate.md) "Observables"): under a
+  History or Super rule the on cells, the odd states, so the envelope, the marks that are
+  off, boundary cells and labels aren't counted; under every other rule the non-zero
+  cells, which `population` counts. A History plane's population includes its envelope, so
+  a host asking whether a pattern has died asks for its live cells.
+- **Measuring a file for the multi-state universe** (`measure_multistate_pattern`, .NET
+  `MultiStateFiles.Measure`; spec/hashlife-multistate.md "Measuring"): what loading it
+  would give, except the cells, found without building a universe, as a `PatternExtent`:
+  the non-zero cells' bounding box where the universe would hold them, the canonical name of
+  the rule the file names (or none), the generation, the metadata, and whether the cells
+  are written in a two-state format. It refuses what loading refuses, so a file that
+  measures also loads. A Macrocell file of more than two states, which `measure_pattern`
+  refuses, measures here.
+- **Whether a file named its rule**: `read_multistate_universe` gives `rule_named` (.NET
+  `MultiStatePatternUniverse.RuleNamed`), false when the file named none and the universe
+  took the reader's rule.
+- .NET: `StateCodec` saves and loads rule-table worlds (`RuleTableCA`), the grid verbatim as
+  for every byte family, so a world saved through its own `State` before loads through the
+  codec. The rule isn't in the bytes: the host keeps it, or its rule file.
+- New vectors: `hashlife-multistate/edit-live-population-*` (the edit ops
+  `live_population` and `live_population_in`) and `hashlife-multistate/measure-*` (kind
+  `measure`).
 
 ### Changed
 

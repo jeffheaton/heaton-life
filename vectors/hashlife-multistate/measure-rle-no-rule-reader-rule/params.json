@@ -1,0 +1,24 @@
+{
+  "extent": {
+    "format": "rle",
+    "generation": "0",
+    "height": "2",
+    "metadata": {
+      "author": null,
+      "comments": [],
+      "name": null
+    },
+    "rule": null,
+    "two_state": false,
+    "width": "2",
+    "x": "2",
+    "y": "1"
+  },
+  "family": "hashlife-multistate",
+  "input": "input.rle",
+  "kind": "measure",
+  "rule": "B3/S23History",
+  "rule_named": false,
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

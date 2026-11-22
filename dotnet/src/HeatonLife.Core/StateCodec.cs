@@ -22,6 +22,10 @@ namespace HeatonLife
     /// once, in 1.1.0 — 2026-08-22, after the 1.0.0 packages shipped: an elementary
     /// save carries the space-time diagram after the tape. Tape-only saves, which is
     /// what 1.0.0 writes, still load; 1.0.0 cannot read the extended ones.)
+    ///
+    /// A rule-table world (<see cref="RuleTableCA"/>, 1.2.0) saves its grid verbatim, as every
+    /// byte family does, and not its rule: the host keeps the rule (its name, or the rule file
+    /// for a rule outside the starter set) and makes the world of that rule to load into.
     /// </summary>
     public static class StateCodec
     {
@@ -40,6 +44,7 @@ namespace HeatonLife
                 case LeniaBase lenia: return DoubleBytes(lenia.State);
                 case Boids boids: return DoubleBytes(boids.State);
                 case LargerThanLife ltl: return ltl.State.ToArray();
+                case RuleTableCA table: return table.State.ToArray();
                 default:
                     throw new ArgumentException(
                         $"no state serializer for {sim.GetType().Name}", nameof(sim));
@@ -79,6 +84,7 @@ namespace HeatonLife
                 case LeniaBase lenia: lenia.SetState(Doubles(bytes), generation, keepStart); break;
                 case Boids boids: boids.SetState(Doubles(bytes), generation, keepStart); break;
                 case LargerThanLife ltl: ltl.SetState(bytes, generation, keepStart); break;
+                case RuleTableCA table: table.SetState(bytes, generation, keepStart); break;
                 default:
                     throw new ArgumentException(
                         $"no state restorer for {sim.GetType().Name}", nameof(sim));

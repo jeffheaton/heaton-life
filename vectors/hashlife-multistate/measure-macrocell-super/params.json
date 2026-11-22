@@ -1,0 +1,25 @@
+{
+  "extent": {
+    "format": "macrocell",
+    "generation": "7",
+    "height": "4",
+    "metadata": {
+      "author": "Someone",
+      "comments": [
+        "Every kind"
+      ],
+      "name": "Labels"
+    },
+    "rule": "B3/S23Super",
+    "two_state": false,
+    "width": "4",
+    "x": "0",
+    "y": "-3"
+  },
+  "family": "hashlife-multistate",
+  "input": "input.mc",
+  "kind": "measure",
+  "rule_named": true,
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

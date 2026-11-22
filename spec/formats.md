@@ -482,6 +482,10 @@ and Life 1.06, no live cell) measures 0 × 0 at (0, 0). There is no decode limit
 nothing the size of the pattern is made, and every number is an exact integer of any
 size.
 
+A Macrocell file of more than two states is refused here, as reading it into a grid
+refuses it: it is the multi-state universe's, and
+[its measure](hashlife-multistate.md#measuring) gives its extent.
+
 ## Reading into the unbounded universe
 
 `read_universe(source, max_memory_mb)` (.NET `PatternFiles.ReadUniverse`) detects the

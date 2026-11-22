@@ -70,6 +70,10 @@ namespace HeatonLife
         private readonly Dictionary<int, long> _longPop = new Dictionary<int, long>();
         private readonly Dictionary<int, BigInteger> _bigPop = new Dictionary<int, BigInteger>();
         private readonly Dictionary<int, byte> _bigDensity = new Dictionary<int, byte>();
+        // Odd cells of nodes of level 4 and up, asked for only under History and Super rules
+        // (spec/hashlife-multistate.md "Observables"); levels 1 to 3 are counted when asked.
+        private readonly Dictionary<int, long> _oddPop = new Dictionary<int, long>();
+        private readonly Dictionary<int, BigInteger> _bigOddPop = new Dictionary<int, BigInteger>();
 
         /// <summary>The rule whose cell function the base case runs.</summary>
         internal StateRule Rule;
@@ -590,6 +594,48 @@ namespace HeatonLife
             return sum;
         }
 
+        /// <summary>A leaf's odd states: a History or Super rule's on cells.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static int LeafOdd(int states)
+            => (states & 1) + ((states >> 8) & 1) + ((states >> 16) & 1) + ((states >> 24) & 1);
+
+        /// <summary>The cells of level-k node n whose state is odd, k ≤ 31 (it fits a long).</summary>
+        internal long OddLong(int n, int k)
+        {
+            if (k == 1)
+                return LeafOdd(Nodes[n * Stride]);
+            if (n == Empty(k))
+                return 0;
+            if (k >= 4 && _oddPop.TryGetValue(n, out long known))
+                return known;
+            int o = n * Stride;
+            int[] nodes = Nodes;
+            int k1 = k - 1;
+            long sum = OddLong(nodes[o], k1) + OddLong(nodes[o + Ne], k1)
+                + OddLong(nodes[o + Sw], k1) + OddLong(nodes[o + Se], k1);
+            if (k >= 4)
+                _oddPop[n] = sum;
+            return sum;
+        }
+
+        /// <summary>The cells of level-k node n whose state is odd, any k.</summary>
+        internal BigInteger OddBig(int n, int k)
+        {
+            if (k <= 31)
+                return OddLong(n, k);
+            if (n == Empty(k))
+                return BigInteger.Zero;
+            if (_bigOddPop.TryGetValue(n, out BigInteger cached))
+                return cached;
+            int o = n * Stride;
+            int[] nodes = Nodes;
+            int k1 = k - 1;
+            BigInteger sum = OddBig(nodes[o], k1) + OddBig(nodes[o + Ne], k1)
+                + OddBig(nodes[o + Sw], k1) + OddBig(nodes[o + Se], k1);
+            _bigOddPop[n] = sum;
+            return sum;
+        }
+
         /// <summary>⌈255 · population / 4^s⌉ for a level-s node, s ≥ 1, exactly.</summary>
         internal byte Density(int n, int s)
         {
@@ -743,6 +789,8 @@ namespace HeatonLife
             _longPop.Clear();
             _bigPop.Clear();
             _bigDensity.Clear();
+            _oddPop.Clear();
+            _bigOddPop.Clear();
             Collections++;
         }
 

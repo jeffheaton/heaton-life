@@ -1,0 +1,23 @@
+{
+  "extent": {
+    "format": "macrocell",
+    "generation": "0",
+    "height": "19",
+    "metadata": {
+      "author": null,
+      "comments": [],
+      "name": null
+    },
+    "rule": null,
+    "two_state": true,
+    "width": "19",
+    "x": "-15",
+    "y": "-5"
+  },
+  "family": "hashlife-multistate",
+  "input": "input.mc",
+  "kind": "measure",
+  "rule_named": false,
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

@@ -11,6 +11,9 @@ Macrocell can carry: cells outside the editing box. A bounded grid's file is ref
 
 from __future__ import annotations
 
+import dataclasses
+from collections.abc import Callable
+
 from heaton_life.ca.hashlife.multistate.macrocell import fallback_rule, file_rule
 from heaton_life.ca.hashlife.multistate.store import unpack
 from heaton_life.ca.hashlife.multistate.universe import MultiStateHashLife
@@ -33,7 +36,7 @@ def read_rle(
     none (default WireWorld)."""
     fallback = fallback_rule(rule)
     universe = MultiStateHashLife(fallback, max_memory_mb=max_memory_mb)
-    root, level, generation, found = build_rle(universe, text, fallback)
+    root, level, generation, found, _ = build_rle(universe, text, fallback)
     universe.state_rule = found
     universe._adopt(root, level, generation)
     return universe
@@ -54,12 +57,31 @@ def _header_rule(name: str, given: StateRule, text: str) -> StateRule:
     return file_rule(name, given)
 
 
-def build_rle(
-    universe: MultiStateHashLife, text: str, fallback: StateRule
-) -> tuple[int, int, int, StateRule]:
-    """Read RLE text into ``universe``'s store without changing the universe: the pattern's
-    tree as (root, level), its generation, and its rule (``fallback`` when the header names
-    none)."""
+@dataclasses.dataclass(frozen=True)
+class RleScan:
+    """RLE text read as the multi-state universe reads it, without a cell kept: its rule
+    (``named`` when the header names it), generation, ``#CXRLE Pos``, the runs' extent
+    from there (``width`` × ``height``), the non-zero cells' box in the file's coordinates
+    (None without any), and whether the file is in the extended dialect."""
+
+    rule: StateRule
+    named: bool
+    generation: int
+    x0: int
+    y0: int
+    width: int
+    height: int
+    box: tuple[int, int, int, int] | None
+    extended: bool
+
+
+def scan_rle(
+    text: str, fallback: StateRule, put: Callable[[int, int, int, int], None] | None = None
+) -> RleScan:
+    """Read RLE text as the universe reads it, handing each run of a non-zero state to
+    ``put`` as (x, y, length, state) in the file's coordinates: a bounded grid's file, a
+    rule no name gives, a cell outside the editing box, and a state the rule lacks are
+    refused (spec/hashlife-multistate.md "Pattern I/O")."""
     info, runs = rle_runs(text)
     if info.bounded_grid is not None:  # spec/patterns.md "RLE in the unbounded universe"
         raise ValueError(
@@ -68,8 +90,9 @@ def build_rle(
         )
     rule = fallback if info.rule is None else _header_rule(info.rule, fallback, text)
     x0, y0 = info.position or (0, 0)
-    blocks: dict[tuple[int, int], int] = {}
     width = height = top = 0
+    left = right = upper = lower = 0
+    found = False
     for x, y, length, state in runs:
         width = max(width, x + length)
         height = max(height, y + 1)
@@ -77,22 +100,49 @@ def build_rle(
         # A cell outside the box dooms the file: refuse it now rather than spell out a run
         # that may be astronomically long.
         check_box(x0 + x, y0 + y, x0 + x + length - 1, y0 + y)
-        add_run(blocks, x0 + x, y0 + y - 1, length, state)  # tree row: one above the cell's y
+        if length == 0:  # a count of 0 holds no cell
+            continue
+        if not found:
+            left, right, upper, lower, found = x, x + length - 1, y, y, True
+        else:
+            left, right = min(left, x), max(right, x + length - 1)
+            upper, lower = min(upper, y), max(lower, y)
+        if put is not None:
+            put(x0 + x, y0 + y, length, state)
     if top >= rule.states:
         raise ValueError(
             f"the file holds state {top}, which {rule.canonical} doesn't have "
             f"({rule.states} states)"
         )
-    rect = (x0, y0 - 1, x0 + width - 1, y0 + height - 2)
-    if blocks:
+    if found:
         check_box(x0, y0, x0 + width - 1, y0 + height - 1)
+    box = (x0 + left, y0 + upper, x0 + right, y0 + lower) if found else None
+    return RleScan(
+        rule, info.rule is not None, info.generation, x0, y0, width, height, box, info.extended
+    )
+
+
+def build_rle(
+    universe: MultiStateHashLife, text: str, fallback: StateRule
+) -> tuple[int, int, int, StateRule, bool]:
+    """Read RLE text into ``universe``'s store without changing the universe: the pattern's
+    tree as (root, level), its generation, its rule (``fallback`` when the header names
+    none), and whether the header named it."""
+    blocks: dict[tuple[int, int], int] = {}
+
+    def put(x: int, y: int, length: int, state: int) -> None:
+        add_run(blocks, x, y - 1, length, state)  # tree row: one above the cell's y
+
+    scan = scan_rle(text, fallback, put)
+    x0, y0 = scan.x0, scan.y0
+    rect = (x0, y0 - 1, x0 + scan.width - 1, y0 + scan.height - 2)
 
     def paste() -> None:
         if blocks:
             universe._paste_blocks(blocks, rect, "or")
 
     root, level = universe._build(paste)
-    return root, level, info.generation, rule
+    return root, level, scan.generation, scan.rule, scan.named
 
 
 def add_run(blocks: dict[tuple[int, int], int], cx: int, ty: int, length: int, state: int) -> None:

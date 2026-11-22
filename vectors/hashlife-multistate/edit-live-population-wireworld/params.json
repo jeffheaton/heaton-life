@@ -1,0 +1,54 @@
+{
+  "bounding_box": [
+    "2",
+    "2",
+    "9",
+    "9"
+  ],
+  "family": "hashlife-multistate",
+  "generation": "3",
+  "kind": "edit",
+  "ops": [
+    {
+      "cells": [
+        "000000000000",
+        "000000000000",
+        "003213333300",
+        "003000000300",
+        "003000000300",
+        "003000000300",
+        "003000000300",
+        "003000000300",
+        "003000000300",
+        "003333333300",
+        "000000000000",
+        "000000000000"
+      ],
+      "mode": "copy",
+      "op": "set_rect",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "n": "3",
+      "op": "step"
+    },
+    {
+      "expect": "28",
+      "op": "live_population"
+    },
+    {
+      "expect": "7",
+      "op": "live_population_in",
+      "x0": 0,
+      "x1": 5,
+      "y0": 0,
+      "y1": 5
+    }
+  ],
+  "population": "28",
+  "rule": "WireWorld",
+  "spec_version": "0.16.0",
+  "state": "final.mc",
+  "tier": "bit-exact"
+}

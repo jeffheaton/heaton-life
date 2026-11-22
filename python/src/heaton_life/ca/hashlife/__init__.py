@@ -19,6 +19,7 @@ from heaton_life.ca.hashlife.multistate import (
     MultiStatePatternUniverse,
     MultiStateTimeline,
     StateRenderMode,
+    measure_multistate_pattern,
     read_multistate_universe,
 )
 from heaton_life.ca.hashlife.render import RENDER_MODES, RenderMode
@@ -79,6 +80,7 @@ __all__ = [
     "centered",
     "fit",
     "frame_map",
+    "measure_multistate_pattern",
     "pan",
     "read_multistate_universe",
     "read_snapshot",

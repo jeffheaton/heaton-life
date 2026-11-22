@@ -1,0 +1,23 @@
+{
+  "extent": {
+    "format": "macrocell",
+    "generation": "5",
+    "height": "12",
+    "metadata": {
+      "author": null,
+      "comments": [],
+      "name": null
+    },
+    "rule": "WireWorld",
+    "two_state": false,
+    "width": "12",
+    "x": "-998",
+    "y": "79"
+  },
+  "family": "hashlife-multistate",
+  "input": "input.mc.gz",
+  "kind": "measure",
+  "rule_named": true,
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

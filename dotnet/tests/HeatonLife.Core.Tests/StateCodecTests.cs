@@ -26,6 +26,7 @@ namespace HeatonLife.Tests
             new FlowLenia(32, 32, radius: 8),
             new Boids(8, 64, 64),
             new LargerThanLife(LtlRule.Bosco, 16, 16),
+            new RuleTableCA("Langtons-Loops", 24, 24),
         };
 
         [Fact]
@@ -101,6 +102,42 @@ namespace HeatonLife.Tests
 
             var merge = new MergeLife(MergeLife.DefaultRule, 16, 16);
             Assert.Equal(16 * 16 * 3, StateCodec.Save(merge).Length); // RGB
+        }
+
+        /// <summary>
+        /// A rule-table world saves its grid verbatim, the bytes its own State gives, so a save a
+        /// host wrote through State before the codec knew the family loads through the codec, and
+        /// the codec's save loads through SetState. The rule is not in the bytes.
+        /// </summary>
+        [Fact]
+        public void RuleTableWorldsSaveTheirGridVerbatim()
+        {
+            var loops = new RuleTableCA("Langtons-Loops", 32, 24);
+            loops.Step(7);
+            byte[] saved = StateCodec.Save(loops);
+            Assert.Equal(loops.State.ToArray(), saved);
+            Assert.Equal(32 * 24, saved.Length);
+
+            var other = new RuleTableCA("Langtons-Loops", 32, 24);
+            StateCodec.Load(other, saved, 7);
+            Assert.Equal(saved, other.State.ToArray());
+            Assert.Equal(7, other.Generation);
+            other.Reset(); // the loaded grid is the start
+            Assert.Equal(saved, other.State.ToArray());
+
+            var kept = new RuleTableCA("Langtons-Loops", 32, 24);
+            byte[] start = kept.State.ToArray();
+            StateCodec.Load(kept, saved, 7, keepStart: true);
+            Assert.Equal(saved, kept.State.ToArray());
+            kept.Reset(); // the start stayed
+            Assert.Equal(start, kept.State.ToArray());
+
+            // A grid of states the rule lacks, or of the wrong size, changes nothing.
+            var byl = new RuleTableCA("Byl-Loop", 32, 24); // 6 states
+            byte[] before = byl.State.ToArray();
+            Assert.Throws<ArgumentException>(() => StateCodec.Load(byl, saved, 0)); // loops hold 7
+            Assert.Throws<ArgumentException>(() => StateCodec.Load(byl, new byte[10], 0));
+            Assert.Equal(before, byl.State.ToArray());
         }
 
         /// <summary>

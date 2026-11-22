@@ -924,5 +924,186 @@ namespace HeatonLife.Tests
             Assert.Equal(3, (int)found.Step!.Value);
             Assert.Throws<ArgumentException>(() => MultiStateMacrocell.WriteTimeline(u, new[] { frames[0], frames[1], frames[3] }));
         }
+
+        // -- live cells (spec/hashlife-multistate.md "Observables") ---------------------------------
+
+        private static long LiveByHand(MultiStateHashLife u, long x0, long y0, long x1, long y1, bool odd)
+            => u.GetRect(x0, y0, x1, y1).LongCount(c => odd ? (c & 1) != 0 : c != 0);
+
+        [Theory]
+        [InlineData("B3/S23History")]
+        [InlineData("B36/S23Super")]
+        [InlineData("B2/S345/C4")]
+        [InlineData("WireWorld")]
+        public void LiveCellsAreTheOnCellsUnderHistoryAndSuper(string rule)
+        {
+            // Under History and Super the live cells are the odd states, an envelope and the marks
+            // that are off left out; under every other rule they are the non-zero cells.
+            bool odd = rule.EndsWith("History", StringComparison.Ordinal) || rule.EndsWith("Super", StringComparison.Ordinal);
+            var u = new MultiStateHashLife(rule);
+            byte[] soup = Noise(40, 50, 5, u.States);
+            u.SetRect(-20, -9, soup, 50, 40);
+            foreach (int n in new[] { 0, 1, 7, 30 })
+            {
+                u.Step(n);
+                CellBox b = u.BoundingBox!.Value;
+                long x0 = (long)b.X0 - 3, y0 = (long)b.Y0 - 3, x1 = (long)b.X1 + 3, y1 = (long)b.Y1 + 3;
+                Assert.Equal(LiveByHand(u, x0, y0, x1, y1, odd), (long)u.LivePopulation);
+                Assert.Equal(u.LivePopulation, u.LivePopulationIn(x0, y0, x1, y1));
+                foreach (var (a, c, d, e) in new[] { (x0 + 3, y0 + 3, x0 + 12, y0 + 10), (-5L, -5L, 4L, 6L), (x1 - 6, y0 + 3, x1 + 37, y1 - 5) })
+                    Assert.Equal(LiveByHand(u, a, c, d, e, odd), (long)u.LivePopulationIn(a, c, d, e));
+                if (odd)
+                {
+                    Assert.True(u.LivePopulation < u.Population); // the envelope is off
+                }
+                else
+                {
+                    Assert.Equal(u.Population, u.LivePopulation);
+                    Assert.Equal(u.PopulationIn(x0, y0, x1, y1), u.LivePopulationIn(x0, y0, x1, y1));
+                }
+            }
+            BigInteger far = BigInteger.Pow(10, 30);
+            Assert.Equal(BigInteger.Zero, u.LivePopulationIn(far, far, far + 5, far + 5));
+            Assert.Equal(BigInteger.Zero, u.LivePopulationIn(5, 5, 4, 4)); // an empty rectangle
+        }
+
+        [Fact]
+        public void LiveCellsFollowTheRuleAndSurviveCollection()
+        {
+            var u = new MultiStateHashLife("B3/S23History", 10);
+            u.SetRect(0, 0, new byte[] { 0, 1, 0, 0, 0, 1, 1, 1, 1 }, 3, 3); // a glider
+            u.Step(64);
+            Assert.Equal(5, (int)u.LivePopulation); // its trail is the envelope
+            Assert.True(u.Population > 5);
+            u.Rule = "B3/S23Super"; // states 0-6 mean the same
+            Assert.Equal(5, (int)u.LivePopulation);
+            u.Rule = "B3/S23/C7"; // a Generations rule of seven states: every non-zero cell lives
+            Assert.Equal(u.Population, u.LivePopulation);
+            u.Rule = "B3/S23History";
+            u.CollectGarbage();
+            Assert.Equal(5, (int)u.LivePopulation);
+            u.SetCell(1000, 1000, 4); // marked off
+            u.SetCell(1001, 1000, 3); // marked on
+            Assert.Equal(6, (int)u.LivePopulation);
+            Assert.Equal(1, (int)u.LivePopulationIn(1000, 1000, 1001, 1000));
+            u.Clear();
+            Assert.Equal(BigInteger.Zero, u.LivePopulation);
+            Assert.Equal(BigInteger.Zero, u.LivePopulationIn(-9, -9, 9, 9));
+        }
+
+        // -- measuring and naming the rule (spec/hashlife-multistate.md "Pattern I/O") ---------------
+
+        private static void MeasureAgreesWithReading(byte[] data, StateRule? rule = null)
+        {
+            PatternExtent extent = MultiStateFiles.Measure(data, rule);
+            MultiStatePatternUniverse read = MultiStateFiles.ReadUniverse(data, rule);
+            MultiStateHashLife u = read.Universe;
+            Assert.Equal(read.Format, extent.Format);
+            CellBox? box = u.BoundingBox;
+            if (box == null)
+            {
+                Assert.Equal((BigInteger.Zero, BigInteger.Zero, BigInteger.Zero, BigInteger.Zero), (extent.Width, extent.Height, extent.X, extent.Y));
+            }
+            else
+            {
+                CellBox b = box.Value;
+                Assert.Equal((b.X0, b.Y0, b.X1 - b.X0 + 1, b.Y1 - b.Y0 + 1), (extent.X, extent.Y, extent.Width, extent.Height));
+            }
+            Assert.Equal(read.RuleNamed ? u.Rule : null, extent.Rule);
+            Assert.Equal(u.Generation, extent.Generation);
+            Assert.Equal(read.Metadata, extent.Metadata);
+            Assert.Null(extent.BoundedGrid);
+            if (data.All(c => c < 128)) // a text file measures the same handed over as text
+                Assert.Equal(extent.Width, MultiStateFiles.Measure(Encoding.ASCII.GetString(data), rule).Width);
+        }
+
+        [Fact]
+        public void MeasuringGivesWhatReadingGives()
+        {
+            var files = new List<byte[]>();
+            foreach (string text in new[]
+            {
+                "[M2]\n#R WireWorld\n#G 12\n#N Name\n1 0 3 0 0\n", // a lone leaf: tree (0, -1)
+                "[M2]\n1 0 0 1 0\n", // names no rule
+                "[M2]\n#R LifeSuper\n1 0 25 0 0\n1 7 0 0 13\n2 1 0 0 2\n3 0 0 0 3\n",
+                "[M2]\n#R B3/S23History\n1 0 0 0 0\n2 0 0 0 0\n", // every cell 0
+                "[M2]\n#R B2/S345/C4\n$$...*$\n4 0 1 0 1\n", // a two-state leaf
+                "#CXRLE Pos=-4,7 Gen=12\nx = 9, y = 3, rule = WireWorld\n3.CBA$$.2C!",
+                "x = 2, y = 2\n$bo!", // names no rule
+                "x = 3, y = 1, rule = B2/S345/C4\n0C2.A!",
+                "#MCell 4.20\n#GAME Generations\n#RULE 345/2/4\n#L 3.A$.BC\n",
+            })
+            {
+                files.Add(Encoding.UTF8.GetBytes(text));
+            }
+            var two = new HashLife();
+            two.SetRect(-3, -2, Noise(23, 19, 5), 19, 23);
+            files.Add(Encoding.UTF8.GetBytes(two.ToMacrocell().Replace("#R B3/S23\n", "")));
+            var wire = new MultiStateHashLife();
+            wire.SetRect(-1000, 77, ClockLoop(16), 16, 16);
+            wire.Step(5);
+            files.Add(Encoding.UTF8.GetBytes(wire.ToMacrocell()));
+            using (var buffer = new MemoryStream())
+            {
+                using (var gzip = new GZipStream(buffer, CompressionLevel.Optimal, leaveOpen: true))
+                {
+                    byte[] rle = Encoding.UTF8.GetBytes(wire.ToRle());
+                    gzip.Write(rle, 0, rle.Length);
+                }
+                files.Add(buffer.ToArray());
+            }
+            foreach (byte[] data in files)
+                MeasureAgreesWithReading(data);
+            MeasureAgreesWithReading(Encoding.UTF8.GetBytes("x = 1, y = 1\nE!"), StateRules.Compile("B3/S23History"));
+        }
+
+        [Fact]
+        public void TheMeasureSaysHowTheFileWritesItsCells()
+        {
+            Assert.False(MultiStateFiles.Measure("[M2]\n#R WireWorld\n1 0 3 0 0\n").TwoState);
+            Assert.True(MultiStateFiles.Measure("[M2]\n#R WireWorld\n$$...*$\n").TwoState);
+            Assert.False(MultiStateFiles.Measure("x = 2, y = 1, rule = WireWorld\n2o!").TwoState);
+            Assert.True(MultiStateFiles.Measure("x = 2, y = 1\n2o!").TwoState);
+            Assert.False(MultiStateFiles.Measure("#MCell 4.20\n#GAME Generations\n#RULE 345/2/4\n#L A\n").TwoState);
+            PatternExtent empty = MultiStateFiles.Measure("[M2]\n1 0 0 0 0\n");
+            Assert.True(empty.Width.IsZero && empty.Height.IsZero && empty.X.IsZero && empty.Y.IsZero);
+            Assert.Null(empty.Rule);
+        }
+
+        [Theory]
+        [InlineData("!Name: x\n.O.\n")] // plaintext
+        [InlineData("[M2]\n#R Nothing\n1 0 1 0 0\n")]
+        [InlineData("[M2]\n#R B3/S23\n1 0 1 0 0\n")]
+        [InlineData("[M2]\n#R WireWorld\n1 0 4 0 0\n")]
+        [InlineData("[M2]\n1 0 5 0 0\n")] // no rule: the reader's, WireWorld
+        [InlineData("[M2]\n#R B03/S23History\n1 0 1 0 0\n")]
+        [InlineData("[M2]\n2 1 0 0 0\n")]
+        [InlineData("x = 3, y = 1, rule = WireWorld:T30,20\nCBA!")]
+        [InlineData("#CXRLE Pos=1000000000,0\nx = 2, y = 1\n2C!")]
+        [InlineData("x = 1, y = 1, rule = WireWorld\n999999999999C!")]
+        [InlineData("x = 1, y = 1, rule = R2,C0,M1,S2..3,B3..3\no!")]
+        [InlineData("#MCell 4.20\n#GAME Generations\n#RULE 345/2/4\n#BOARD 20x20\n#L A\n")]
+        [InlineData("#MCell 4.20\n#GAME Life\n#RULE 23/3\n#L A\n")]
+        public void MeasuringRefusesWhatReadingRefuses(string text)
+        {
+            foreach (Action read in new Action[] { () => MultiStateFiles.Measure(text), () => MultiStateFiles.ReadUniverse(text) })
+            {
+                Exception? error = Record.Exception(read);
+                Assert.True(error is FormatException || error is ArgumentException, $"{text}: {error?.GetType().Name ?? "read"}");
+            }
+        }
+
+        [Theory]
+        [InlineData("[M2]\n#R WireWorld\n1 0 3 0 0\n", true)]
+        [InlineData("[M2]\n1 0 1 0 0\n", false)]
+        [InlineData("x = 1, y = 1, rule = WireWorld\nC!", true)]
+        [InlineData("x = 1, y = 1\no!", false)]
+        [InlineData("#MCell 4.20\n#GAME Generations\n#RULE 345/2/4\n#L A\n", true)]
+        public void TheReaderSaysWhetherAFileNamedItsRule(string text, bool named)
+        {
+            MultiStatePatternUniverse read = MultiStateFiles.ReadUniverse(text, StateRules.Compile("B3/S23History"));
+            Assert.Equal(named, read.RuleNamed);
+            Assert.Equal(!named, read.Universe.Rule == "B3/S23History");
+        }
     }
 }

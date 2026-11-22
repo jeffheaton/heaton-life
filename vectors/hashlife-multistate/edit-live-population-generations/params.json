@@ -1,0 +1,40 @@
+{
+  "bounding_box": null,
+  "family": "hashlife-multistate",
+  "generation": "6",
+  "kind": "edit",
+  "ops": [
+    {
+      "cells": [
+        "1203",
+        "0111",
+        "3210"
+      ],
+      "mode": "copy",
+      "op": "set_rect",
+      "x": -2,
+      "y": -2
+    },
+    {
+      "n": "6",
+      "op": "step"
+    },
+    {
+      "expect": "0",
+      "op": "live_population"
+    },
+    {
+      "expect": "0",
+      "op": "live_population_in",
+      "x0": -3,
+      "x1": 1,
+      "y0": -3,
+      "y1": 1
+    }
+  ],
+  "population": "0",
+  "rule": "B2/S345/C4",
+  "spec_version": "0.16.0",
+  "state": "final.mc",
+  "tier": "bit-exact"
+}

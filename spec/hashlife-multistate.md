@@ -146,9 +146,18 @@ fit. The budget changes speed, never results.
 
 ## Observables
 
-- `generation`, `population` (non-zero cells), `bounding_box()`, `population_in`, and
-  `bounding_box_in` as [hashlife.md](hashlife.md#observables) defines them, a live cell
-  being a non-zero one.
+- `generation`, `population`, `bounding_box()`, `population_in`, and `bounding_box_in` as
+  [hashlife.md](hashlife.md#observables) defines them, counting and bounding the non-zero
+  cells.
+- `live_population` and `live_population_in(x0, y0, x1, y1)` (.NET `LivePopulation` and
+  `LivePopulationIn`) count the **live** cells, of the whole plane and of an inclusive
+  rectangle (any coordinates): the cells whose state the rule calls live. Under a
+  [History](history.md) or [Super](super.md) rule those are the on cells, the odd states,
+  so an envelope, a mark that is off, a boundary cell or a label isn't one; under every
+  other rule (a Generations rule, Wireworld, a rule table, a rule given as an object) every
+  non-zero state is live, and the two counts are `population` and `population_in`. So the
+  plane counts as alive what a grid of its rule's family shows alive: a Life-like grid's
+  on cells, and every other grid's non-zero cells, a dying cell and a wire among them.
 - `get_cell(x, y)` gives the cell's state; `get_rect(x0, y0, x1, y1)` the states of an
   inclusive rectangle, a (y1 − y0 + 1) × (x1 − x0 + 1) array, row-major.
 - The canonical Macrocell text ([macrocell.md](macrocell.md#multi-state-files)) pins the
@@ -260,6 +269,42 @@ that goes with it (`default_zoom_order`), which the host sets. The zoom order ch
   [formats.md](formats.md#reading-into-a-universe-that-exists) says: a snapshot of its
   cells and generation, its format, rule, metadata, and a timeline's frames; the
   universe's state, rule and earlier snapshots stay as they were.
+- **Whether a file named its rule.** Loading by content (`read_multistate_universe`, .NET
+  `MultiStateFiles.ReadUniverse`) also gives `rule_named` (.NET `RuleNamed`): true when the
+  file names its rule (Macrocell's `#R`, RLE's header, an MCell file's rule line), false
+  when it names none and the universe took the reader's rule.
+
+### Measuring
+
+`measure_multistate_pattern(source, rule)` (.NET `MultiStateFiles.Measure(source, rule)`)
+gives what loading by content with the same `rule` would give, except the cells, found
+without building a universe, as the `PatternExtent` of
+[formats.md](formats.md#measuring):
+
+- `format`: `macrocell`, `rle` or `mcell`.
+- `width`, `height`, `x` and `y`: the bounding box of the file's non-zero cells where the
+  universe would hold them, its `bounding_box()` once read; 0 × 0 at (0, 0) for a file
+  without a non-zero cell. Macrocell's comes from its tree, as formats.md measures a
+  two-state Macrocell file: each node line's non-zero cells have a box, a leaf's from its
+  states (a two-state leaf's from its rows) and every other node's from its children's,
+  and the root's box is placed as reading places the root. RLE's comes from its runs at
+  its `#CXRLE Pos`, and MCell's from its cell data at (0, 0).
+- `rule`: the canonical name of the rule the file names, found as reading finds it (the
+  reader's rule where the name is its canonical name, an RLE file's appended rule file,
+  else "Names" above); or none when the file names none.
+- `generation` and `metadata`, as loading gives them.
+- `two_state`: whether the cells are written in a two-state format: false for an RLE file
+  in the extended dialect, whatever states it uses, for an MCell file of the Generations
+  family, and for a Macrocell file with a `1 <nw> <ne> <sw> <se>` leaf; true otherwise.
+- `bounded_grid`: none, since a file with a bounded grid is refused.
+
+Measuring refuses what loading refuses before it builds a node: every format but these
+three; a malformed file; an RLE file whose rule carries a bounded-grid suffix and an MCell
+file with a board; a non-zero RLE or MCell cell outside the editing box; a rule that names
+no state rule; and a state at or above the rule's S, the named rule's or, for a file that
+names none, the reader's rule (default `WireWorld`). So a file that measures also loads,
+within the universe's memory budget, under the same rule. A timeline's frame lines are
+checked when it is read, as formats.md's measure leaves them.
 
 ## Vector encoding
 
@@ -276,11 +321,12 @@ and `state_lines`.
 | `grid` | `rule`, `grid` (an 8-bit grayscale PNG of the states as the rule's grid family stores them: × 85 for `WireWorld`, as the [wireworld](wireworld.md#vector-encoding) vectors do; the state itself for a [History](history.md#vector-encoding) or [Super](super.md#vector-encoding) rule, a [Generations](generations.md#vector-encoding) rule and a [rule table](ruletable.md#vector-encoding) of the starter set), `origin` (`[x, y]`, the cell the grid's top-left lands on) | `checkpoints`: each a state, and `cells` (a PNG like `grid`): the rule's grid family (Wireworld, Life-like under the History or Super rule, Generations under the case's rule, or the rule-table family) run from `grid` with dead edges to that generation, which the universe's rectangle under the grid must equal, every non-zero cell of the universe lying in it |
 | `macrocell` | `input.mc`, and `rule` (the reader's rule) when given | the state, and `rle` (the RLE file) or `rle_error: true`; or `error: true` |
 | `rle` | `input.rle`, and `rule` when given | the state and `rle`; or `error: true` |
-| `edit` | `rule`, then `ops` in order on an empty universe: `set_cell` (`x`, `y`, `state`), `set_rect` (`x`, `y`, `mode`, `cells` as rows of state digits, `0`–`9` then `a`–`z` for 10–35), `clear_rect`, `clear_outside`, `rotate_rect` (with `expect`), `flip_rect`, `advance_selection`, `advance_outside` (`n`), `set_generation` (`n`), `step` (`n`), `clear`, `set_rule` (`rule`), `fill_random` (`x0`…`y1`, `density`, `seed`; History rules only), and the queries `get_rect` (`x0`…`y1`; `expect`: rows of state digits) and `bounding_box_in` (`expect`) — coordinates as in [hashlife.md](hashlife.md#vector-encoding) | the final state; an op with `error: true` must raise and change nothing |
+| `edit` | `rule`, then `ops` in order on an empty universe: `set_cell` (`x`, `y`, `state`), `set_rect` (`x`, `y`, `mode`, `cells` as rows of state digits, `0`–`9` then `a`–`z` for 10–35), `clear_rect`, `clear_outside`, `rotate_rect` (with `expect`), `flip_rect`, `advance_selection`, `advance_outside` (`n`), `set_generation` (`n`), `step` (`n`), `clear`, `set_rule` (`rule`), `fill_random` (`x0`…`y1`, `density`, `seed`; under a History, Super or Generations rule), and the queries `get_rect` (`x0`…`y1`; `expect`: rows of state digits), `bounding_box_in` (`expect`), `live_population` (`expect`, a decimal string) and `live_population_in` (`x0`…`y1`; `expect`) — coordinates as in [hashlife.md](hashlife.md#vector-encoding) | the final state; an op with `error: true` must raise and change nothing |
 | `render` | `input`, stepped to `generation`; each frame's `view`, `size`, `mode`, and `order` (the zoom order) | each frame's 8-bit grayscale PNG of pixel values (compared by decoded pixels) |
 | `snapshots` | `rule`, then `ops`: every `edit` op, and `snapshot`, `release`, `restore` (`expect`: the state), `read` (`input`, `name`, `frames`; `expect`: `format`, `rule`, `metadata`, `step`) and `measure` (`names`; `expect`: `universe_nodes`, `added`, `nodes`) as in [hashlife.md](hashlife.md#vector-encoding) | the final state; an op with `error: true` must raise and change nothing |
 | `timeline` | `input` (a pattern), `generations` (a frame at each, from the input's own), `metadata` | `timeline`: the file [macrocell.md](macrocell.md#timelines) writes; reading it back gives each frame's state (`frames`) again |
 | `names` | `cases`, a list of texts, each an `input` | for each, the rule's `canonical` and `states`; or `error: true` and the `reason` (Names, "Reasons") |
+| `measure` | `input` (a file, loaded by content), and `rule` (the reader's rule) when given | `extent`: `format`, `width`, `height`, `x`, `y` (decimal strings), `rule` (or null), `generation`, `metadata` and `two_state` (Measuring); and `rule_named`, what loading the file with the same rule gives, its universe's bounding box the extent's; or `error: true`, both measuring and loading refusing it |
 
 Runners are strict: an unknown key, kind, op, or `spec_version` fails the case.
 

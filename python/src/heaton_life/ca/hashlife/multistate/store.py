@@ -48,6 +48,11 @@ def leaf_population(leaf: int) -> int:
     )
 
 
+def leaf_odd(leaf: int) -> int:
+    """The leaf's odd states: a History or Super rule's on cells."""
+    return (leaf & 1) + (leaf >> 8 & 1) + (leaf >> 16 & 1) + (leaf >> 24 & 1)
+
+
 class StateStore:
     """Nodes, results, populations, and the collector for one multi-state universe."""
 
@@ -61,6 +66,7 @@ class StateStore:
         "free",
         "guard",
         "next_state",
+        "odd_pops",
         "pops",
         "res",
         "slow",
@@ -78,6 +84,7 @@ class StateStore:
         self.slow: dict[int, int] = {}  # fixed-step results for slow_j
         self.slow_j = -1
         self.pops: dict[int, int] = {}
+        self.odd_pops: dict[int, int] = {}  # asked for only under History and Super rules
         self.guard = False  # True while a step may be abandoned
         self.cancel_requested = False
         self.collections = 0
@@ -262,10 +269,24 @@ class StateStore:
             self.pops[n] = p
         return p
 
+    def odd_population(self, n: int, k: int) -> int:
+        """The cells of level-k node n whose state is odd (spec/hashlife-multistate.md
+        "Observables": a History or Super rule's live cells)."""
+        if k == 1:
+            return leaf_odd(self.data[n])
+        p = self.odd_pops.get(n)
+        if p is None:
+            a, b, c, d = self.data[n]
+            k1 = k - 1
+            odd = self.odd_population
+            p = odd(a, k1) + odd(b, k1) + odd(c, k1) + odd(d, k1)
+            self.odd_pops[n] = p
+        return p
+
     def memory_used(self) -> int:
         return (
             len(self.table) * NODE_BYTES
-            + (len(self.res) + len(self.slow) + len(self.pops)) * ENTRY_BYTES
+            + (len(self.res) + len(self.slow) + len(self.pops) + len(self.odd_pops)) * ENTRY_BYTES
         )
 
     def collect(self, roots: Iterable[tuple[int, int]]) -> None:
@@ -299,5 +320,6 @@ class StateStore:
         self.free = free
         self.res = {n: r for n, r in self.res.items() if marked[n] and marked[r]}
         self.pops = {n: p for n, p in self.pops.items() if marked[n]}
+        self.odd_pops = {n: p for n, p in self.odd_pops.items() if marked[n]}
         self.slow = {}
         self.collections += 1

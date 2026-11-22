@@ -1,0 +1,23 @@
+{
+  "extent": {
+    "format": "rle",
+    "generation": "12",
+    "height": "3",
+    "metadata": {
+      "author": null,
+      "comments": [],
+      "name": "Rings"
+    },
+    "rule": "B2/S345/C4",
+    "two_state": false,
+    "width": "5",
+    "x": "-3",
+    "y": "7"
+  },
+  "family": "hashlife-multistate",
+  "input": "input.rle",
+  "kind": "measure",
+  "rule_named": true,
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

@@ -66,6 +66,8 @@ namespace HeatonLife
         private int _version;        // bumps whenever the root changes
         private int _popVersion = -1;
         private BigInteger _popCache;
+        private int _oddVersion = -1;
+        private BigInteger _oddCache;
         private int _boxVersion = -1;
         private CellBox? _boxCache;
         private byte[] _stepBits = new byte[16];
@@ -256,8 +258,44 @@ namespace HeatonLife
                 return BigInteger.Zero;
             int k = _store.Level;
             BigInteger origin = -(BigInteger.One << (k - 1));
-            return CountBig(_store.Root, k, origin, origin, x0, y0 - 1, x1, y1 - 1);
+            return CountBig(_store.Root, k, origin, origin, x0, y0 - 1, x1, y1 - 1, odd: false);
         }
+
+        /// <summary>
+        /// The live cells (spec/hashlife-multistate.md "Observables"): under a History or Super rule
+        /// the on cells, the odd states, so an envelope, a mark that is off, a boundary cell or a
+        /// label isn't counted; under any other rule the non-zero cells, <see cref="Population"/>.
+        /// What a grid of the rule's family shows alive.
+        /// </summary>
+        public BigInteger LivePopulation
+        {
+            get
+            {
+                if (!OddLive)
+                    return Population;
+                if (_oddVersion != _version)
+                {
+                    _oddCache = _store.OddBig(_store.Root, _store.Level);
+                    _oddVersion = _version;
+                }
+                return _oddCache;
+            }
+        }
+
+        /// <summary>Live cells in the inclusive rectangle, as <see cref="LivePopulation"/> counts
+        /// them; any coordinates.</summary>
+        public BigInteger LivePopulationIn(BigInteger x0, BigInteger y0, BigInteger x1, BigInteger y1)
+        {
+            if (x1 < x0 || y1 < y0)
+                return BigInteger.Zero;
+            int k = _store.Level;
+            BigInteger origin = -(BigInteger.One << (k - 1));
+            return CountBig(_store.Root, k, origin, origin, x0, y0 - 1, x1, y1 - 1, OddLive);
+        }
+
+        /// <summary>Whether the rule's live states are its odd ones (History and Super), not every
+        /// non-zero one.</summary>
+        private bool OddLive => _rule is HistoryRule || _rule is SuperRule;
 
         /// <summary>The inclusive extremes of the non-zero cells inside the inclusive rectangle, or
         /// null when it holds none; any coordinates.</summary>
@@ -1425,8 +1463,11 @@ namespace HeatonLife
             ExtractIn(s.Kid(n, 3), k - 1, nx + half, ny + half);
         }
 
+        /// <summary>The non-zero cells (with <paramref name="odd"/> the odd ones) of level-k node n,
+        /// its top-left at tree position (nx, ny), in the inclusive tree rectangle.</summary>
         private BigInteger CountBig(
-            int n, int k, BigInteger nx, BigInteger ny, BigInteger x0, BigInteger y0, BigInteger x1, BigInteger y1)
+            int n, int k, BigInteger nx, BigInteger ny, BigInteger x0, BigInteger y0, BigInteger x1, BigInteger y1,
+            bool odd)
         {
             var s = _store;
             if (n == s.Empty(k))
@@ -1435,41 +1476,42 @@ namespace HeatonLife
             if (nx > x1 || nx + size <= x0 || ny > y1 || ny + size <= y0)
                 return BigInteger.Zero;
             if (x0 <= nx && nx + size - 1 <= x1 && y0 <= ny && ny + size - 1 <= y1)
-                return s.PopBig(n, k);
+                return odd ? s.OddBig(n, k) : s.PopBig(n, k);
             if (k <= 31)
             {
                 long rx0 = (long)BigInteger.Max(x0 - nx, BigInteger.Zero);
                 long ry0 = (long)BigInteger.Max(y0 - ny, BigInteger.Zero);
                 long rx1 = (long)BigInteger.Min(x1 - nx, size - 1);
                 long ry1 = (long)BigInteger.Min(y1 - ny, size - 1);
-                return CountLong(n, k, rx0, ry0, rx1, ry1);
+                return CountLong(n, k, rx0, ry0, rx1, ry1, odd);
             }
             BigInteger half = size >> 1;
             int a = s.Kid(n, 0), b = s.Kid(n, 1), c = s.Kid(n, 2), d = s.Kid(n, 3);
-            return CountBig(a, k - 1, nx, ny, x0, y0, x1, y1)
-                + CountBig(b, k - 1, nx + half, ny, x0, y0, x1, y1)
-                + CountBig(c, k - 1, nx, ny + half, x0, y0, x1, y1)
-                + CountBig(d, k - 1, nx + half, ny + half, x0, y0, x1, y1);
+            return CountBig(a, k - 1, nx, ny, x0, y0, x1, y1, odd)
+                + CountBig(b, k - 1, nx + half, ny, x0, y0, x1, y1, odd)
+                + CountBig(c, k - 1, nx, ny + half, x0, y0, x1, y1, odd)
+                + CountBig(d, k - 1, nx + half, ny + half, x0, y0, x1, y1, odd);
         }
 
-        /// <summary>Non-zero cells of level-k node n (k ≤ 31) in the inclusive rectangle relative
-        /// to its origin, which lies inside it.</summary>
-        private long CountLong(int n, int k, long x0, long y0, long x1, long y1)
+        /// <summary>Non-zero (or odd) cells of level-k node n (k ≤ 31) in the inclusive rectangle
+        /// relative to its origin, which lies inside it.</summary>
+        private long CountLong(int n, int k, long x0, long y0, long x1, long y1, bool odd)
         {
             var s = _store;
             if (n == s.Empty(k))
                 return 0;
             long size = 1L << k;
             if (x0 == 0 && y0 == 0 && x1 == size - 1 && y1 == size - 1)
-                return s.PopLong(n, k);
+                return odd ? s.OddLong(n, k) : s.PopLong(n, k);
             if (k == 1)
             {
                 int states = s.States(n);
+                int mask = odd ? 1 : 0xFF;
                 int count = 0;
                 for (int i = 0; i < 4; i++)
                 {
                     long x = i & 1, y = i >> 1;
-                    if (x >= x0 && x <= x1 && y >= y0 && y <= y1 && ((states >> (8 * i)) & 0xFF) != 0)
+                    if (x >= x0 && x <= x1 && y >= y0 && y <= y1 && ((states >> (8 * i)) & mask) != 0)
                         count++;
                 }
                 return count;
@@ -1482,7 +1524,7 @@ namespace HeatonLife
                 long cx0 = Math.Max(x0, qx) - qx, cx1 = Math.Min(x1, qx + half - 1) - qx;
                 long cy0 = Math.Max(y0, qy) - qy, cy1 = Math.Min(y1, qy + half - 1) - qy;
                 if (cx0 <= cx1 && cy0 <= cy1)
-                    total += CountLong(s.Kid(n, q), k - 1, cx0, cy0, cx1, cy1);
+                    total += CountLong(s.Kid(n, q), k - 1, cx0, cy0, cx1, cy1, odd);
             }
             return total;
         }

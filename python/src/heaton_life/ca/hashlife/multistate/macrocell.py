@@ -12,10 +12,12 @@ from __future__ import annotations
 import dataclasses
 import itertools
 from collections.abc import Sequence
+from typing import Protocol
 
 from heaton_life.ca.hashlife.macrocell import (
     HEADER,
     STEP_LIMIT,
+    _bits_box,
     _digits,
     _leaf_bits,
     _lines,
@@ -77,11 +79,15 @@ def _bits_node(store: StateStore, bits: int) -> int:
     return store.join(*quads)
 
 
+Box = tuple[int, int, int, int]
+"""(x0, y0, x1, y1), inclusive."""
+
+
 @dataclasses.dataclass
 class Built:
     """A Macrocell file's tree built in a universe's store, which it hasn't become: the
     root as (node, level ≥ 2), ``#G``, the rule, the metadata, every node line as (node,
-    level), and the timeline lines."""
+    level), the timeline lines, and whether the file named its rule."""
 
     root: int
     level: int
@@ -91,6 +97,7 @@ class Built:
     nodes: list[tuple[int, int]]
     frames_lines: list[tuple[int, str]]
     frame_lines: list[tuple[int, str]]
+    rule_named: bool = True
 
 
 def place(universe: MultiStateHashLife, node: int, level: int) -> tuple[int, int]:
@@ -101,14 +108,98 @@ def place(universe: MultiStateHashLife, node: int, level: int) -> tuple[int, int
     return node, level
 
 
-def build_macrocell(
-    universe: MultiStateHashLife, source: str | bytes, fallback: StateRule
-) -> Built:
-    """Read a Macrocell file into ``universe``'s store without changing the universe: its
-    root, level, generation and rule stay. ``fallback`` is the rule when the file names
-    none. Raises ValueError for a malformed file, or a state the rule lacks."""
+class _Nodes(Protocol):
+    """Where a file's node lines go, as ids: a universe's store, or the boxes a measure
+    keeps."""
+
+    def bits(self, bits: int) -> int:
+        """A two-state 8 × 8 leaf (bit 8r + c is row r, column c), a level-3 node."""
+
+    def leaf(self, nw: int, ne: int, sw: int, se: int) -> int:
+        """A level-1 leaf of four states."""
+
+    def empty(self, level: int) -> int: ...
+
+    def join(self, nw: int, ne: int, sw: int, se: int, level: int) -> int: ...
+
+
+class _StoreNodes:
+    """A file's nodes in a universe's store."""
+
+    def __init__(self, store: StateStore) -> None:
+        self._store = store
+
+    def bits(self, bits: int) -> int:
+        return _bits_node(self._store, bits)
+
+    def leaf(self, nw: int, ne: int, sw: int, se: int) -> int:
+        return self._store.leaf(pack(nw, ne, sw, se))
+
+    def empty(self, level: int) -> int:
+        return self._store.empty(level)
+
+    def join(self, nw: int, ne: int, sw: int, se: int, level: int) -> int:
+        return self._store.join(nw, ne, sw, se)
+
+
+class _BoxNodes:
+    """A file's nodes as their non-zero cells' boxes, each relative to its node's top-left
+    corner; id 0 is every empty node. No universe is built (spec/hashlife-multistate.md
+    "Measuring")."""
+
+    def __init__(self) -> None:
+        self.boxes: list[Box | None] = [None]
+
+    def _add(self, box: Box | None) -> int:
+        self.boxes.append(box)
+        return len(self.boxes) - 1
+
+    def bits(self, bits: int) -> int:
+        return self._add(_bits_box(bits))
+
+    def leaf(self, nw: int, ne: int, sw: int, se: int) -> int:
+        xs = [x for x, state in ((0, nw), (1, ne), (0, sw), (1, se)) if state]
+        ys = [y for y, state in ((0, nw), (0, ne), (1, sw), (1, se)) if state]
+        return self._add((min(xs), min(ys), max(xs), max(ys)) if xs else None)
+
+    def empty(self, level: int) -> int:
+        return 0
+
+    def join(self, nw: int, ne: int, sw: int, se: int, level: int) -> int:
+        half = 1 << (level - 1)
+        box: Box | None = None
+        for child, dx, dy in ((nw, 0, 0), (ne, half, 0), (sw, 0, half), (se, half, half)):
+            part = self.boxes[child]
+            if part is None:
+                continue
+            x0, y0, x1, y1 = part[0] + dx, part[1] + dy, part[2] + dx, part[3] + dy
+            box = (
+                (x0, y0, x1, y1)
+                if box is None
+                else (min(box[0], x0), min(box[1], y0), max(box[2], x1), max(box[3], y1))
+            )
+        return self._add(box)
+
+
+@dataclasses.dataclass
+class _Scanned:
+    """A Macrocell file's lines read into a node sink: the rule it names (or None), ``#G``,
+    the metadata, every node line as (id, level), the timeline lines, the largest state, and
+    whether every leaf is a two-state 8 × 8 line."""
+
+    named: str | None
+    generation: int
+    metadata: PatternMetadata
+    nodes: list[tuple[int, int]]
+    frames_lines: list[tuple[int, str]]
+    frame_lines: list[tuple[int, str]]
+    top: int
+    two_state: bool
+
+
+def _scan(source: str | bytes, sink: _Nodes) -> _Scanned:
+    """Read a Macrocell file's lines into ``sink``. Raises ValueError for a malformed file."""
     lines, start = _lines(source)
-    store = universe._store
     generation = 0
     named: str | None = None
     notes = MetadataReader()
@@ -116,10 +207,11 @@ def build_macrocell(
     frame_lines: list[tuple[int, str]] = []
     nodes: list[tuple[int, int]] = []
     top = 0  # the largest state seen
+    two_state = True
 
     def child(index: int, level: int, number: int) -> int:
         if index == 0:
-            return store.empty(level)
+            return sink.empty(level)
         if not 0 < index <= len(nodes):
             raise ValueError(f"line {number}: node {index} is not defined yet")
         node, found = nodes[index - 1]
@@ -151,7 +243,7 @@ def build_macrocell(
         if line[0] in ".*$":
             bits = _leaf_bits(line, number)
             top = max(top, 1 if bits else 0)
-            nodes.append((_bits_node(store, bits), 3))
+            nodes.append((sink.bits(bits), 3))
             continue
         fields = line.split()
         if len(fields) != 5 or not all(_digits(f) for f in fields):
@@ -165,24 +257,91 @@ def build_macrocell(
         if level == 0:
             raise ValueError(f"line {number}: level must be at least 1")
         if level == 1:
-            states = [int(f) for f in fields[1:]]
-            if max(states) >= MAX_STATES:
+            nw, ne, sw, se = (int(f) for f in fields[1:])
+            if max(nw, ne, sw, se) >= MAX_STATES:
                 raise ValueError(f"line {number}: a state is at most {MAX_STATES - 1}")
-            top = max(top, *states)
-            nodes.append((store.leaf(pack(*states)), 1))
+            top = max(top, nw, ne, sw, se)
+            two_state = False
+            nodes.append((sink.leaf(nw, ne, sw, se), 1))
         else:
-            kids = [child(int(f), level - 1, number) for f in fields[1:]]
-            nodes.append((store.join(*kids), level))
+            nw, ne, sw, se = (child(int(f), level - 1, number) for f in fields[1:])
+            nodes.append((sink.join(nw, ne, sw, se, level), level))
     if not nodes:
         raise ValueError("Macrocell file has no nodes")
-    rule = fallback if named is None else file_rule(named, fallback)
-    if top >= rule.states:
+    return _Scanned(
+        named, generation, notes.result(), nodes, frames_lines, frame_lines, top, two_state
+    )
+
+
+def _checked_rule(scanned: _Scanned, fallback: StateRule) -> StateRule:
+    """The rule a scanned file runs under: the one it names, else ``fallback``; a state
+    the rule lacks is refused."""
+    rule = fallback if scanned.named is None else file_rule(scanned.named, fallback)
+    if scanned.top >= rule.states:
         raise ValueError(
-            f"the file holds state {top}, which {rule.canonical} doesn't have "
+            f"the file holds state {scanned.top}, which {rule.canonical} doesn't have "
             f"({rule.states} states)"
         )
-    root, level = place(universe, *nodes[-1])
-    return Built(root, level, generation, rule, notes.result(), nodes, frames_lines, frame_lines)
+    return rule
+
+
+def build_macrocell(
+    universe: MultiStateHashLife, source: str | bytes, fallback: StateRule
+) -> Built:
+    """Read a Macrocell file into ``universe``'s store without changing the universe: its
+    root, level, generation and rule stay. ``fallback`` is the rule when the file names
+    none. Raises ValueError for a malformed file, or a state the rule lacks."""
+    scanned = _scan(source, _StoreNodes(universe._store))
+    rule = _checked_rule(scanned, fallback)
+    root, level = place(universe, *scanned.nodes[-1])
+    return Built(
+        root,
+        level,
+        scanned.generation,
+        rule,
+        scanned.metadata,
+        scanned.nodes,
+        scanned.frames_lines,
+        scanned.frame_lines,
+        scanned.named is not None,
+    )
+
+
+@dataclasses.dataclass(frozen=True)
+class MacrocellMeasure:
+    """A multi-state Macrocell file measured without a universe (spec/hashlife-multistate.md
+    "Measuring"): its non-zero cells' box in the universe's coordinates (None without any),
+    the canonical name of the rule it names (None when it names none), ``#G``, the metadata,
+    and whether every leaf is a two-state line."""
+
+    box: Box | None
+    rule: str | None
+    generation: int
+    metadata: PatternMetadata
+    two_state: bool
+
+
+def measure_macrocell(source: str | bytes, fallback: StateRule) -> MacrocellMeasure:
+    """Measure a Macrocell file from its tree, without building a universe: what
+    ``build_macrocell`` checks is checked (``fallback`` is the rule a file that names none
+    is read under), but there is no memory budget to run out of."""
+    sink = _BoxNodes()
+    scanned = _scan(source, sink)
+    rule = _checked_rule(scanned, fallback)
+    named = None if scanned.named is None else rule.canonical
+    node, level = scanned.nodes[-1]
+    found = sink.boxes[node]
+    if found is None:
+        return MacrocellMeasure(
+            None, named, scanned.generation, scanned.metadata, scanned.two_state
+        )
+    # A level-k root covers x in [-2^(k-1), 2^(k-1) - 1] and y in [-2^(k-1) + 1, 2^(k-1)]
+    # (a lone leaf, the center of a level-2 root, covers x in {-1, 0} and y in {0, 1}).
+    left = -(1 << (level - 1))
+    top = left + 1
+    x0, y0, x1, y1 = found
+    box = (left + x0, top + y0, left + x1, top + y1)
+    return MacrocellMeasure(box, named, scanned.generation, scanned.metadata, scanned.two_state)
 
 
 def read_macrocell(

@@ -1,10 +1,10 @@
 """Pattern files into the unbounded multi-state universe (spec/hashlife-multistate.md
 "Pattern I/O"): Macrocell, RLE and MCell, gzip-compressed or not, recognized by their
-content.
+content, read or measured.
 
 Every file is built into a store first, the universe's state untouched, so one reading
-serves both a new universe and one that exists. The other formats hold two states and are
-refused.
+serves both a new universe and one that exists. Measuring reads the same lines without a
+store. The other formats hold two states and are refused.
 """
 
 from __future__ import annotations
@@ -16,13 +16,14 @@ from heaton_life.ca.hashlife.multistate.macrocell import (
     build_macrocell,
     fallback_rule,
     file_rule,
+    measure_macrocell,
     timeline_frames,
 )
-from heaton_life.ca.hashlife.multistate.rle import add_run, build_rle
+from heaton_life.ca.hashlife.multistate.rle import add_run, build_rle, scan_rle
 from heaton_life.ca.hashlife.multistate.universe import MultiStateHashLife
 from heaton_life.ca.hashlife.universe import DEFAULT_MEMORY_MB, Snapshot, check_box
 from heaton_life.ca.state_rules import StateRule
-from heaton_life.init.formats import PatternFormat, recognize
+from heaton_life.init.formats import PatternExtent, PatternFormat, recognize
 from heaton_life.init.mcell import board_refusal, mcell_runs, read_mcell_header
 from heaton_life.init.metadata import PatternMetadata
 from heaton_life.init.rle import rle_metadata
@@ -39,6 +40,9 @@ class MultiStatePatternUniverse:
     metadata: PatternMetadata
     frames: tuple[Snapshot, ...] = ()
     step: int | None = None
+    rule_named: bool = True
+    """Whether the file named its rule; False when it named none and the universe took the
+    reader's (spec/hashlife-multistate.md "Pattern I/O")."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -54,6 +58,7 @@ class _Read:
     metadata: PatternMetadata
     step: int | None
     frames: list[tuple[int, int, int]]
+    rule_named: bool
 
 
 def _read_into(
@@ -66,8 +71,9 @@ def _read_into(
     found = recognize(source)
     fmt = found.format
     if fmt == "rle":
-        root, level, generation, rule = build_rle(universe, found.text, fallback)
-        return _Read(fmt, root, level, generation, rule, rle_metadata(found.text), None, [])
+        root, level, generation, rule, named = build_rle(universe, found.text, fallback)
+        metadata = rle_metadata(found.text)
+        return _Read(fmt, root, level, generation, rule, metadata, None, [], named)
     if fmt == "macrocell":
         built = build_macrocell(universe, found.text, fallback)
         timeline = timeline_frames(universe, built)
@@ -81,10 +87,15 @@ def _read_into(
             built.metadata,
             step,
             frames,
+            built.rule_named,
         )
     if fmt == "mcell":
         return _read_mcell(universe, found.text, fallback)
-    raise ValueError(
+    raise _two_state_format(fmt)
+
+
+def _two_state_format(fmt: PatternFormat) -> ValueError:
+    return ValueError(
         f"a multi-state universe reads Macrocell, RLE and MCell files; {fmt} holds two states"
     )
 
@@ -112,7 +123,7 @@ def _read_mcell(universe: MultiStateHashLife, text: str, fallback: StateRule) ->
             universe._paste_blocks(blocks, (x0, y0 - 1, x1, y1 - 1), "or")
 
     root, level = universe._build(paste)
-    return _Read("mcell", root, level, 0, rule, header.metadata, None, [])
+    return _Read("mcell", root, level, 0, rule, header.metadata, None, [], True)
 
 
 def read_multistate_universe(
@@ -131,7 +142,53 @@ def read_multistate_universe(
     universe._adopt(read.root, read.level, read.generation)
     states = read.rule.states
     frames = tuple(universe._snapshot_at(*frame, states) for frame in read.frames)
-    return MultiStatePatternUniverse(read.format, universe, read.metadata, frames, read.step)
+    return MultiStatePatternUniverse(
+        read.format, universe, read.metadata, frames, read.step, read.rule_named
+    )
+
+
+def measure_multistate_pattern(
+    source: bytes | bytearray | memoryview | str, *, rule: str | StateRule | None = None
+) -> PatternExtent:
+    """What ``read_multistate_universe(source, rule=rule)`` would give, except the cells,
+    found without building a universe (spec/hashlife-multistate.md "Measuring"): the
+    format, the non-zero cells' bounding box where the universe would hold them (0 × 0 at
+    (0, 0) without any), the canonical name of the rule the file names (None when it names
+    none), the generation, the metadata, and whether the cells are written in a two-state
+    format. What reading refuses before it builds a node is refused, so a file that
+    measures also reads, within the memory budget, under the same ``rule``."""
+    fallback = fallback_rule(rule)
+    found = recognize(source)
+    fmt = found.format
+    box: tuple[int, int, int, int] | None
+    if fmt == "macrocell":
+        measured = measure_macrocell(found.text, fallback)
+        box, named, generation = measured.box, measured.rule, measured.generation
+        metadata, two_state = measured.metadata, measured.two_state
+    elif fmt == "rle":
+        scan = scan_rle(found.text, fallback)
+        box, generation, metadata = scan.box, scan.generation, rle_metadata(found.text)
+        named = scan.rule.canonical if scan.named else None
+        two_state = not scan.extended
+    elif fmt == "mcell":
+        header = read_mcell_header(found.text)
+        if header.board is not None:
+            raise ValueError(board_refusal(header.board))
+        named = file_rule(header.rule, fallback).canonical
+
+        def check(x: int, y: int, length: int, state: int) -> None:
+            check_box(x, y, x + length - 1, y)
+
+        box = mcell_runs(header, check).live
+        generation, metadata, two_state = 0, header.metadata, header.two_state
+    else:
+        raise _two_state_format(fmt)
+    if box is None:
+        return PatternExtent(fmt, 0, 0, 0, 0, named, generation, metadata, two_state)
+    x0, y0, x1, y1 = box
+    return PatternExtent(
+        fmt, x1 - x0 + 1, y1 - y0 + 1, x0, y0, named, generation, metadata, two_state
+    )
 
 
 def read_multistate_snapshot(

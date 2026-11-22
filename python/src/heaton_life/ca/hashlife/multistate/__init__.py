@@ -2,12 +2,14 @@
 (spec/hashlife-multistate.md).
 
 The two-state engine's algorithm on a quadtree whose leaves are 2 × 2 squares of states,
-its base case computed from the rule's cell function and memoized. Wireworld runs today;
-every family whose rule is a function of the 3 × 3 block plugs in through ``StateRule``.
+its base case computed from the rule's cell function and memoized. Every family whose rule
+is a function of the 3 × 3 block plugs in through ``StateRule``: Wireworld, History, Super,
+Generations and rule tables.
 """
 
 from heaton_life.ca.hashlife.multistate.files import (
     MultiStatePatternUniverse,
+    measure_multistate_pattern,
     read_multistate_snapshot,
     read_multistate_universe,
 )
@@ -28,6 +30,7 @@ __all__ = [
     "MultiStatePatternUniverse",
     "MultiStateTimeline",
     "StateRenderMode",
+    "measure_multistate_pattern",
     "read_multistate_snapshot",
     "read_multistate_universe",
     "read_timeline",
