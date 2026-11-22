@@ -7,10 +7,10 @@ The `hashlife-multistate` family runs rules whose cells have more than two state
 unbounded plane, with the HashLife algorithm of [hashlife.md](hashlife.md): a hash-consed
 quadtree whose nodes memoize their own future. Two-state Life-like rules keep their own
 engine, [hashlife.md](hashlife.md); this page is its counterpart for every rule whose next
-state is a function of the 3 × 3 block of states around a cell. Wireworld is the first
-such rule; Generations, History and Super, and rule tables plug into the same engine as
-their pages add them (Larger than Life's neighborhoods reach past the 3 × 3 block, and it
-stays on bounded grids).
+state is a function of the 3 × 3 block of states around a cell: Wireworld and every
+Generations rule so far, and History and Super and rule tables as their pages add them
+(Larger than Life's neighborhoods reach past the 3 × 3 block, and it stays on bounded
+grids).
 
 Everything this page does not change is as [hashlife.md](hashlife.md) says: tree
 coordinates and depth, the evolution's recursion and sub-steps, cancellation, the memory
@@ -57,6 +57,10 @@ family's. Any other text is an error. The names so far:
 |---|---|---|
 | `WireWorld` | Wireworld ([wireworld.md](wireworld.md)): 0 empty, 1 electron head, 2 electron tail, 3 conductor | 4 |
 | a [History rule](history.md), `B3/S23History` or `LifeHistory`, any rule of [rules.md](rules.md) with the `History` variant | its cell function is history.md's evolution; canonical name and spellings as rules.md gives them (`LifeHistory` is `B3/S23History`). A base rule with B0 is refused: its background would change | 7 |
+| a Generations rule, `B…/S…/C…` or survival/birth/count | Generations ([generations.md](generations.md#rules)): 0 dead, 1 alive, 2 … C − 1 dying; canonical name its canonical form. A rule with B0 is refused: its background would change | C |
+
+A text is first matched against the fixed names, then read as a History rule, then as a
+Generations rule in either of its spellings (`345/2/4` names `B2/S345/C4`).
 
 A port may also take a state rule as an object (Python a `StateRule`, .NET a `StateRule`),
 for a family's own rules; files still name a rule by its canonical name (Pattern I/O,
@@ -192,10 +196,12 @@ and files don't carry it.
 - **RLE** carries patterns inside the editing box, as
   [patterns.md](patterns.md#rle-in-the-unbounded-universe) says for two states, with these
   differences. Reading: either dialect, its cells taken as the decoder gives them, each
-  below S. Writing: the canonical encoding of [patterns.md](patterns.md#rle-text-encoding-life-like-wireworld-cyclic)
-  for the bounding box's states (`b`/`o` when every state is 0 or 1, `.` and `A`–`X`
-  otherwise); a state above 24 can't be written as RLE, which is an error, and so is a
-  pattern outside the editing box: Macrocell carries both.
+  below S; a file whose rule carries a [bounded-grid suffix](topology.md#the-bounded-grid-suffix)
+  is refused, as the two-state universe refuses it. Writing: the canonical encoding of
+  [patterns.md](patterns.md#rle-text-encoding-life-like-wireworld-cyclic) for the bounding
+  box's states (`b`/`o` when every state is 0 or 1, `.` and the extended tags otherwise,
+  every state up to 255 included); a pattern outside the editing box is an error:
+  Macrocell carries it.
 - **Loading by content**: Macrocell and RLE, gzip-compressed or not, recognized as
   [formats.md](formats.md#detection) says. The other formats hold two states and are
   refused.
@@ -223,7 +229,7 @@ and `state_lines`.
 | kind | inputs | expected |
 |---|---|---|
 | `evolve` | `input` (an `.rle` or `.mc` file, loaded by content) | `checkpoints`: states in order; a runner steps by each difference |
-| `grid` | `rule`, `grid` (an 8-bit grayscale PNG of states: × 85 for `WireWorld`, as the [wireworld](wireworld.md#vector-encoding) vectors store them, and the state itself for a [History rule](history.md#vector-encoding)), `origin` (`[x, y]`, the cell the grid's top-left lands on) | `checkpoints`: each a state, and `cells` (a PNG like `grid`): the grid family run from `grid` with dead edges to that generation (Wireworld, or Life-like under the History rule), which the universe's rectangle under the grid must equal, every non-zero cell of the universe lying in it |
+| `grid` | `rule`, `grid` (an 8-bit grayscale PNG of the states as the rule's grid family stores them: × 85 for `WireWorld`, as the [wireworld](wireworld.md#vector-encoding) vectors do; the state itself for a [History rule](history.md#vector-encoding) and for a [Generations](generations.md#vector-encoding) rule), `origin` (`[x, y]`, the cell the grid's top-left lands on) | `checkpoints`: each a state, and `cells` (a PNG like `grid`): the rule's grid family (Wireworld, Life-like under the History rule, or Generations under the case's rule) run from `grid` with dead edges to that generation, which the universe's rectangle under the grid must equal, every non-zero cell of the universe lying in it |
 | `macrocell` | `input.mc`, and `rule` (the reader's rule) when given | the state, and `rle` (the RLE file) or `rle_error: true`; or `error: true` |
 | `rle` | `input.rle`, and `rule` when given | the state and `rle`; or `error: true` |
 | `edit` | `rule`, then `ops` in order on an empty universe: `set_cell` (`x`, `y`, `state`), `set_rect` (`x`, `y`, `mode`, `cells` as rows of state digits, `0`–`9` then `a`–`z` for 10–35), `clear_rect`, `clear_outside`, `rotate_rect` (with `expect`), `flip_rect`, `advance_selection`, `advance_outside` (`n`), `set_generation` (`n`), `step` (`n`), `clear`, `set_rule` (`rule`), `fill_random` (`x0`…`y1`, `density`, `seed`; History rules only), and the queries `get_rect` (`x0`…`y1`; `expect`: rows of state digits) and `bounding_box_in` (`expect`) — coordinates as in [hashlife.md](hashlife.md#vector-encoding) | the final state; an op with `error: true` must raise and change nothing |
@@ -238,7 +244,8 @@ Runners are strict: an unknown key, kind, op, or `spec_version` fails the case.
 - Against the grid: a Wireworld pattern run here and on a [wireworld](wireworld.md) grid
   with dead edges agree cell for cell at every generation, wherever the grid lies on the
   plane. (Wireworld's empty cells stay empty, so its patterns never grow past their
-  conductors and the edge never matters.)
+  conductors and the edge never matters.) A [Generations](generations.md) pattern agrees
+  with its dead-edged grid for as long as it stays inside the grid.
 - Wireworld's clock loop has the period of its perimeter, and a step of any size lands
   where that period says.
 - The same run under budgets of 10 MiB and 500 MiB ends in identical cells.

@@ -769,9 +769,14 @@ namespace HeatonLife.Tests
             Assert.ThrowsAny<Exception>(() => MultiStateHashLife.FromRle("x = 1, y = 1, rule = WireWorld\nD!"));
             Assert.ThrowsAny<Exception>(() => MultiStateHashLife.FromRle("#CXRLE Pos=1000000000,0\nx = 2, y = 1\n2C!"));
             Assert.ThrowsAny<Exception>(() => MultiStateHashLife.FromRle("x = 1, y = 1, rule = WireWorld\n999999999999C!"));
-            var many = new MultiStateHashLife(new Cycle(30));
+            var many = new MultiStateHashLife(new Cycle(256));
             many.SetCell(0, 0, 25);
-            Assert.Contains("Macrocell", Assert.Throws<InvalidOperationException>(() => many.ToRle()).Message);
+            many.SetCell(3, 0, 255);
+            string[] lines = many.ToRle().Split('\n');
+            Assert.Equal("pA2.yO!", lines[lines.Length - 2]); // every state writes (spec/patterns.md)
+            Assert.Contains(
+                "bounded grid",
+                Assert.Throws<FormatException>(() => MultiStateHashLife.FromRle("x = 3, y = 1, rule = WireWorld:T30,20\nCBA!")).Message);
         }
 
         [Fact]

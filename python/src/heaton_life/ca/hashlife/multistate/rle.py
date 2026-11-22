@@ -6,7 +6,7 @@ dense grid; ``#CXRLE Pos=x,y`` places the pattern (top-left at (0, 0) without it
 ``Gen=n`` sets the generation. Either dialect reads, its cells taken as the decoder gives
 them. Writing encodes the bounding box's states with the canonical rules of ``rle_encode``
 — the same tokens, line for line — behind a ``#CXRLE`` line, and refuses what only
-Macrocell can carry: cells outside the editing box, and states above 24.
+Macrocell can carry: cells outside the editing box. A bounded grid's file is refused.
 """
 
 from __future__ import annotations
@@ -18,10 +18,9 @@ from heaton_life.ca.hashlife.universe import DEFAULT_MEMORY_MB, EDIT_LIMIT, chec
 from heaton_life.ca.state_rules import StateRule
 from heaton_life.core.decimal_text import digits_of
 from heaton_life.init.metadata import PatternMetadata, metadata_lines
-from heaton_life.init.rle import rle_runs
+from heaton_life.init.rle import rle_runs, state_tag
 
 _LINE_WIDTH = 70
-_TOP_RLE_STATE = 24  # extended RLE's letters run A–X
 
 
 def read_rle(
@@ -47,6 +46,11 @@ def build_rle(
     tree as (root, level), its generation, and its rule (``fallback`` when the header names
     none)."""
     info, runs = rle_runs(text)
+    if info.bounded_grid is not None:  # spec/patterns.md "RLE in the unbounded universe"
+        raise ValueError(
+            f"the unbounded universe has no bounded grid ('{info.bounded_grid.suffix}' "
+            "in the rule): open the file in a grid world (spec/topology.md)"
+        )
     rule = fallback if info.rule is None else file_rule(info.rule, fallback)
     x0, y0 = info.position or (0, 0)
     blocks: dict[tuple[int, int], int] = {}
@@ -117,11 +121,6 @@ def write_rle(universe: MultiStateHashLife, metadata: PatternMetadata | None = N
                     row[-1][1] += 1
                 else:
                     row.append([x, 1, state])
-    if top > _TOP_RLE_STATE:
-        raise ValueError(
-            f"state {top} can't be written as RLE (its letters stop at {_TOP_RLE_STATE}); "
-            "save as Macrocell"
-        )
     multistate = top > 1
     # Live rows only: the gap between two is one "k$" token (spec/patterns.md), so the
     # text grows with the live rows, not the box's height.
@@ -134,7 +133,7 @@ def write_rle(universe: MultiStateHashLife, metadata: PatternMetadata | None = N
         for start, length, state in rows[y]:
             if start > pos:
                 tokens.append(_run(start - pos, "." if multistate else "b"))
-            tag = chr(ord("A") + state - 1) if multistate else "o"
+            tag = state_tag(state) if multistate else "o"
             tokens.append(_run(length, tag))
             pos = start + length
         prev = y

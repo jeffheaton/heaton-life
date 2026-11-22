@@ -140,6 +140,7 @@ indexing rule), or raw RGB (passed through).
 | elementary | space-time diagram `* 255` | index bytes |
 | cyclic | `state * 255 / max(states - 1, 1)` (integer math) | index bytes |
 | wireworld | `state * 85` (hits the `wireworld` anchors exactly) | index bytes |
+| generations | 0 for state 0, `(C - state) * 255 / (C - 1)` (integer math) otherwise: alive 255, the dying states fading | index bytes |
 | mergelife | the RGB state itself | RGB |
 | gray-scott | `clip(V * 2.5, 0, 1)` | float |
 | lenia (all three) | the state itself | float |

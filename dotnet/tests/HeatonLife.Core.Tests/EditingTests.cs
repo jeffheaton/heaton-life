@@ -298,6 +298,31 @@ namespace HeatonLife.Tests
             }
         }
 
+        private sealed class Gen : IWorld
+        {
+            private readonly Generations _w;
+
+            public Gen(int width, int height, byte[] cells)
+            {
+                _w = new Generations("B2/S345/C4", width, height, new Topology(Boundary.Klein));
+                _w.SetState(cells);
+            }
+
+            public byte[] Cells => _w.State.ToArray();
+
+            public int Generation => _w.Generation;
+
+            public void Step(int n) => _w.Step(n);
+
+            public void Advance(int x0, int y0, int x1, int y1, int n, bool outside)
+            {
+                if (outside)
+                    _w.AdvanceOutside(x0, y0, x1, y1, n);
+                else
+                    _w.AdvanceSelection(x0, y0, x1, y1, n);
+            }
+        }
+
         private static byte[] ClockLoop(int width, int height)
         {
             var cells = new byte[width * height];
@@ -312,7 +337,7 @@ namespace HeatonLife.Tests
 
         public static TheoryData<string> WorldNames() => new TheoryData<string>
         {
-            "life-torus", "life-dead", "life-b0", "wireworld", "cyclic",
+            "life-torus", "life-dead", "life-b0", "wireworld", "cyclic", "generations",
         };
 
         private static (Func<byte[], IWorld> Make, byte[] Cells, int Width, int Height) MakeWorld(string name)
@@ -327,6 +352,12 @@ namespace HeatonLife.Tests
                     return (c => new Life("B0123478/S01234678", 20, 16, Boundary.Torus, c), Noise(16, 20, 7), 20, 16);
                 case "wireworld":
                     return (c => new Wire(20, 20, Boundary.Dead, c), ClockLoop(20, 20), 20, 20);
+                case "generations":
+                    {
+                        byte[] a = Noise(16, 20, 10), b = Noise(16, 20, 11);
+                        byte[] cells = a.Select((v, i) => (byte)(v + 2 * b[i])).ToArray();
+                        return (c => new Gen(20, 16, c), cells, 20, 16);
+                    }
                 default:
                     {
                         byte[] a = Noise(16, 20, 8), b = Noise(16, 20, 9);

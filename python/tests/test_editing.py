@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from heaton_life.ca import Cyclic, LifeLike, Wireworld, clock_loop
+from heaton_life.ca import Cyclic, Generations, LifeLike, Wireworld, clock_loop
 from heaton_life.ca.hashlife import (
     EDIT_LIMIT,
     MAX_LEVEL,
@@ -230,6 +230,11 @@ _WORLDS: list[tuple[str, Callable[[NDArray[np.uint8]], Any], NDArray[np.uint8]]]
         "cyclic",
         lambda g: Cyclic(4, size=(20, 16), init=g),
         (_noise(16, 20, 8) + 2 * _noise(16, 20, 9)).astype(np.uint8),
+    ),
+    (
+        "generations",
+        lambda g: Generations("B2/S345/C4", size=(20, 16), init=g, boundary="klein"),
+        (_noise(16, 20, 10) + 2 * _noise(16, 20, 11)).astype(np.uint8),
     ),
 ]
 

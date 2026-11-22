@@ -1,0 +1,62 @@
+{
+  "checkpoints": [
+    {
+      "bounding_box": [
+        "-972",
+        "-972",
+        "-949",
+        "-949"
+      ],
+      "cells": "cells-0.png",
+      "generation": "0",
+      "population": "317",
+      "state": "state-0.mc"
+    },
+    {
+      "bounding_box": [
+        "-973",
+        "-973",
+        "-948",
+        "-948"
+      ],
+      "cells": "cells-1.png",
+      "generation": "1",
+      "population": "371",
+      "state": "state-1.mc"
+    },
+    {
+      "bounding_box": [
+        "-975",
+        "-975",
+        "-947",
+        "-946"
+      ],
+      "cells": "cells-7.png",
+      "generation": "7",
+      "population": "542",
+      "state": "state-7.mc"
+    },
+    {
+      "bounding_box": [
+        "-975",
+        "-976",
+        "-947",
+        "-946"
+      ],
+      "cells": "cells-27.png",
+      "generation": "27",
+      "population": "550",
+      "state": "state-27.mc"
+    }
+  ],
+  "family": "hashlife-multistate",
+  "grid": "grid.png",
+  "kind": "grid",
+  "origin": [
+    "-1000",
+    "-1000"
+  ],
+  "rule": "B3/S23/C256",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

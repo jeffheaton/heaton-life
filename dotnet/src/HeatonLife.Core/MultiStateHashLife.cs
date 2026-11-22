@@ -903,8 +903,8 @@ namespace HeatonLife
         /// <summary>A Macrocell or RLE file's text read into this universe's store as a snapshot.</summary>
         public PatternSnapshot ReadSnapshot(string text) => MultiStateFiles.ReadSnapshot(this, text);
 
-        /// <summary>RLE of the bounding box behind a <c>#CXRLE</c> line; inside the editing box, and
-        /// states up to 24, only.</summary>
+        /// <summary>RLE of the bounding box behind a <c>#CXRLE</c> line; inside the editing box
+        /// only.</summary>
         public string ToRle() => MultiStateFiles.WriteRle(this, null);
 
         /// <summary>RLE with <paramref name="metadata"/>'s lines after the <c>#CXRLE</c> line.</summary>

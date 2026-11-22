@@ -580,10 +580,12 @@ def test_rle_reads_either_dialect_and_writes_canonically() -> None:
         MultiStateHashLife.from_rle(f"#CXRLE Pos={EDIT_LIMIT},0\nx = 2, y = 1\n2C!")
     with pytest.raises(ValueError, match="editing box"):  # refused before it is spelled out
         MultiStateHashLife.from_rle("x = 1, y = 1, rule = WireWorld\n999999999999C!")
-    many = MultiStateHashLife(Cycle(30))
+    many = MultiStateHashLife(Cycle(256))
     many.set_cell(0, 0, 25)
-    with pytest.raises(ValueError, match="Macrocell"):
-        many.to_rle()
+    many.set_cell(3, 0, 255)
+    assert many.to_rle().splitlines()[-1] == "pA2.yO!"  # every state writes (spec/patterns.md)
+    with pytest.raises(ValueError, match="bounded grid"):
+        MultiStateHashLife.from_rle("x = 3, y = 1, rule = WireWorld:T30,20\nCBA!")
 
 
 def test_loading_by_content_refuses_two_state_formats() -> None:

@@ -1,0 +1,102 @@
+{
+  "cases": [
+    {
+      "error": true,
+      "input": "",
+      "reason": "expected '/C' and the number of states at the end"
+    },
+    {
+      "error": true,
+      "input": "   ",
+      "reason": "expected '/C' and the number of states at the end"
+    },
+    {
+      "error": true,
+      "input": "B3/S23",
+      "reason": "expected '/C' and the number of states at the end"
+    },
+    {
+      "error": true,
+      "input": "B3/S23/",
+      "reason": "expected '/C' and the number of states at the end"
+    },
+    {
+      "error": true,
+      "input": "B3/S23/C",
+      "reason": "expected '/C' and the number of states at the end"
+    },
+    {
+      "error": true,
+      "input": "B3/S23/C1",
+      "reason": "a Generations rule has 2 to 256 states"
+    },
+    {
+      "error": true,
+      "input": "B3/S23/C257",
+      "reason": "a Generations rule has 2 to 256 states"
+    },
+    {
+      "error": true,
+      "input": "B3/S23/C99999999999999999999",
+      "reason": "a Generations rule has 2 to 256 states"
+    },
+    {
+      "error": true,
+      "input": "B9/S/C3",
+      "reason": "expected '/' after the birth counts"
+    },
+    {
+      "error": true,
+      "input": "B2/S7H/C3",
+      "reason": "the hexagonal neighborhood has 6 neighbors"
+    },
+    {
+      "error": true,
+      "input": "B2a/S2V/C3",
+      "reason": "letters are only defined for Moore rules, not von Neumann"
+    },
+    {
+      "error": true,
+      "input": "B2/Sx/C3",
+      "reason": "unexpected 'x' after the survival counts"
+    },
+    {
+      "error": true,
+      "input": "life/C3",
+      "reason": "expected B…/S… or MAP…"
+    },
+    {
+      "error": true,
+      "input": "345/2/1",
+      "reason": "a Generations rule has 2 to 256 states"
+    },
+    {
+      "error": true,
+      "input": "345/2/C4",
+      "reason": "expected B…/S… or MAP…"
+    },
+    {
+      "error": true,
+      "input": "B2/S/C 4",
+      "reason": "expected '/C' and the number of states at the end"
+    },
+    {
+      "error": true,
+      "input": "B2/S/X3",
+      "reason": "expected '/C' and the number of states at the end"
+    },
+    {
+      "error": true,
+      "input": "9/2/3",
+      "reason": "expected '/C' and the number of states at the end"
+    },
+    {
+      "error": true,
+      "input": "B2/S/C4/C5",
+      "reason": "unexpected '/C4' after the survival counts"
+    }
+  ],
+  "family": "generations-rules",
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

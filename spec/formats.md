@@ -238,8 +238,8 @@ none), the generation, and the metadata.
 
 | format | grid | x, y | rule | generation |
 |---|---|---|---|---|
-| `rle` | the RLE decode of [patterns.md](patterns.md#rle-text-encoding-life-like-wireworld-cyclic): the declared size, either dialect, states up to 24; for a [bounded grid](#bounded-grids), its whole world | `#CXRLE Pos`, or (0, 0); for a bounded grid, the world's top-left | the header's, without a [bounded-grid suffix](topology.md#the-bounded-grid-suffix), as written or, [in survival/birth order](#rules-in-survivalbirth-order), as `B…/S…`; or none | `#CXRLE Gen`, or 0 |
-| `macrocell` | the live cells' bounding box | the box's top-left | `#R` in [canonical form](rules.md#canonical-form), or `B3/S23`; a rule of more than two states (a [History rule](history.md) among them) is an error here, since such a file is the [multi-state universe's](hashlife-multistate.md#pattern-io) | `#G`, or 0 |
+| `rle` | the RLE decode of [patterns.md](patterns.md#rle-text-encoding-life-like-wireworld-cyclic): the declared size, either dialect, states up to 255; for a [bounded grid](#bounded-grids), its whole world | `#CXRLE Pos`, or (0, 0); for a bounded grid, the world's top-left | the header's, without a [bounded-grid suffix](topology.md#the-bounded-grid-suffix), as written or, [in survival/birth order](#rules-in-survivalbirth-order), as `B…/S…`; or none | `#CXRLE Gen`, or 0 |
+| `macrocell` | the live cells' bounding box | the box's top-left | `#R` in [canonical form](rules.md#canonical-form), or `B3/S23`; a rule of more than two states (a [History](history.md) or [Generations](generations.md) rule among them) is an error here, since such a file is the [multi-state universe's](hashlife-multistate.md#pattern-io) | `#G`, or 0 |
 | `plaintext` | the rows: the longest row's width × the number of rows | (0, 0) | none | 0 |
 | `life-1.05`, `life-1.06` | the live cells' bounding box | the box's top-left | from `#N` or `#R`, or none | 0 |
 | `png`, `bmp` | the image | (0, 0) | none | 0 |

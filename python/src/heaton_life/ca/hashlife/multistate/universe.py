@@ -745,8 +745,7 @@ class MultiStateHashLife:
         return write_macrocell(self, metadata)
 
     def to_rle(self, metadata: PatternMetadata | None = None) -> str:
-        """RLE of the bounding box behind a ``#CXRLE`` line; inside the editing box, and
-        states up to 24, only."""
+        """RLE of the bounding box behind a ``#CXRLE`` line; inside the editing box only."""
         from heaton_life.ca.hashlife.multistate.rle import write_rle
 
         return write_rle(self, metadata)

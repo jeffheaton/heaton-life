@@ -67,7 +67,7 @@ def _vector_params(family: str, params: dict[str, Any]) -> dict[str, Any]:
         defaults = {f.name: f.default for f in dataclasses.fields(BoidsParams)}
         if all(params[k] == defaults[k] for k in ("dimensions", "depth")):
             return {k: v for k, v in params.items() if k not in ("dimensions", "depth")}
-    if family in ("lifelike", "wireworld"):
+    if family in ("lifelike", "wireworld", "generations"):
         # Grid runs from before topologies (spec/topology.md) carry neither key; the runners
         # read an absent shift as 0 and an absent axis as "x", so each is left out there.
         unset = {"shift": 0, "axis": "x"}
@@ -1002,6 +1002,9 @@ def main() -> None:
 
     # -- History rules: seven states over any Life-like rule (spec/history.md) ----------------
     write_history_cases()
+
+    # -- Generations: grids, rule texts, RLE's two-letter tags, the unbounded plane ----------
+    write_generations_cases()
 
     print("done")
 
@@ -6950,7 +6953,8 @@ def _hashlife_entry(d: Path, u: Any, label: str) -> dict[str, Any]:
         entry["state_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
         entry["state_lines"] = text.count("\n")
     # From spec 0.16.0 a two-state rule with B0 gives its background (spec/hashlife.md
-    # "Rules with B0"); the multi-state universe's rules (WireWorld, History) give none.
+    # "Rules with B0"); the multi-state universe's rules (WireWorld, History, Generations)
+    # give none.
     two_state, _ = try_compile_rule(u.rule)
     if two_state is not None and two_state.has_b0:
         entry["background"] = u.background
@@ -9500,6 +9504,434 @@ def write_history_cases() -> None:
     meta.update({"rule": "B3/S23History", "ops": ops})
     meta.update(_hashlife_entry(d, u, "final"))
     _gap_save(d, meta)
+
+
+GENERATIONS_SPEC_VERSION = "0.16.0"
+
+
+def _states_soup(width: int, height: int, states: int, seed: int) -> NDArray[np.uint8]:
+    """A grid of states 0..states − 1 from PCG32 stream 0 (test input only)."""
+    from heaton_life.core.rng import Pcg32
+
+    draws = Pcg32(seed).fill_u32(width * height) % np.uint32(states)
+    return draws.astype(np.uint8).reshape(height, width)
+
+
+def write_generations_cases() -> None:
+    """Generations (spec/generations.md): grid runs under vectors/generations/, rule texts
+    under vectors/generations-rules/, RLE's two-letter tags and Generations headers under
+    patterns/ and formats/, and Generations rules on the unbounded plane beside their grids
+    under hashlife-multistate/."""
+    from PIL import Image
+
+    from heaton_life.ca import Generations
+    from heaton_life.ca.generations import try_compile_generations_rule
+    from heaton_life.ca.hashlife import MultiStateHashLife, Snapshot
+    from heaton_life.ca.rulestring import _base64, compile_rule
+    from heaton_life.init import PatternMetadata, read_pattern, rle_decode, rle_encode
+
+    version = GENERATIONS_SPEC_VERSION
+    life_map = "MAP" + _base64(list(compile_rule("B3/S23").table), "moore")
+
+    # -- grid runs, on every topology --------------------------------------------------------
+    def run(name: str, sim: Generations, steps: list[int]) -> None:
+        write_case("generations", name, sim, steps, spec_version=version)
+
+    run(
+        "brians-brain-48-torus",
+        Generations("B2/S/C3", size=(48, 48), density=0.3, seed=1),
+        [0, 1, 5, 20, 60],
+    )
+    run(
+        "star-wars-40x32-dead",
+        Generations("345/2/4", size=(40, 32), density=0.4, seed=2, boundary="dead"),
+        [0, 1, 10, 50],
+    )
+    run(
+        "hexagonal-32-klein-x",
+        Generations("B2/S34H/C5", size=(32, 32), density=0.35, seed=3, boundary="klein"),
+        [0, 1, 10, 40],
+    )
+    run(
+        "vonneumann-32x24-cross",
+        Generations("B1/S1V/C4", size=(32, 24), density=0.2, seed=4, boundary="cross"),
+        [0, 1, 10, 40],
+    )
+    run(
+        "isotropic-36-sphere",
+        Generations("B2-a/S12/C3", size=(36, 36), density=0.3, seed=5, boundary="sphere"),
+        [0, 1, 10, 40],
+    )
+    run(
+        "map-life-32x24-torus-shift-y",
+        Generations(f"{life_map}/C4", size=(32, 24), density=0.35, seed=6, shift=3, axis="y"),
+        [0, 1, 10, 40],
+    )
+    run(
+        "b0-24-torus",
+        Generations("B01/S1/C4", size=(24, 24), density=0.2, seed=7),
+        [0, 1, 2, 3, 10],
+    )
+    run("many-states-40-torus", Generations("B3/S23/C256", size=(40, 40), seed=8), [0, 1, 60, 300])
+    run("two-states-32-torus", Generations("B3/S23/C2", size=(32, 32), seed=9), [0, 1, 10, 30])
+    run(
+        "blob-40-dead",
+        Generations("B2/S/C3", size=(40, 40), init="blob", density=0.5, seed=10, boundary="dead"),
+        [0, 1, 10],
+    )
+    run("single-17-torus", Generations("B12/S/C5", size=(17, 17), init="single"), [0, 1, 4, 12])
+    mixed = _states_soup(24, 20, 5, 11)
+    run(
+        "array-dying-24x20-dead",
+        Generations("B2/S23/C5", size=(24, 20), init=mixed, boundary="dead"),
+        [0, 1, 3, 20],
+    )
+
+    # -- rule texts ----------------------------------------------------------------------------
+    def table_hex(table: bytes) -> str:
+        bits = 0
+        for entry in table:
+            bits = bits << 1 | entry
+        return format(bits, "0128x")
+
+    def rules_case(name: str, texts: list[str], errors: bool) -> None:
+        d = VECTOR_ROOT / "generations-rules" / name
+        d.mkdir(parents=True, exist_ok=True)
+        cases: list[dict[str, Any]] = []
+        for text in texts:
+            rule, reason = try_compile_generations_rule(text)
+            if rule is None:
+                assert errors, text
+                cases.append({"input": text, "error": True, "reason": reason})
+            else:
+                assert not errors, text
+                cases.append(
+                    {
+                        "input": text,
+                        "canonical": rule.canonical,
+                        "states": rule.states,
+                        "life": rule.life.canonical,
+                        "table": table_hex(rule.life.table),
+                    }
+                )
+        meta = {
+            "spec_version": version,
+            "family": "generations-rules",
+            "tier": "bit-exact",
+            "cases": cases,
+        }
+        _gap_save(d, meta)
+
+    rules_case(
+        "canonical",
+        [
+            "345/2/4",
+            "B2/S345/C4",
+            "/2/3",
+            " b2/s/c3\t",
+            "B2/S/C03",
+            "23/3/2",
+            "3/3/2",
+            "//2",
+            "54321/33/7",
+            "0123/45/9",
+            "B2a/S23/C5",
+            "B2-a/S12/C3",
+            "B2/S34H/C5",
+            "B1/S1V/C4",
+            "B2/S345 / c4",
+            f"{life_map}/C4",
+            "B0/S8/C3",
+            "B3/S23/C256",
+            "B3/S23/C2",
+        ],
+        False,
+    )
+    rules_case(
+        "reasons",
+        [
+            "",
+            "   ",
+            "B3/S23",
+            "B3/S23/",
+            "B3/S23/C",
+            "B3/S23/C1",
+            "B3/S23/C257",
+            "B3/S23/C99999999999999999999",
+            "B9/S/C3",
+            "B2/S7H/C3",
+            "B2a/S2V/C3",
+            "B2/Sx/C3",
+            "life/C3",
+            "345/2/1",
+            "345/2/C4",
+            "B2/S/C 4",
+            "B2/S/X3",
+            "9/2/3",
+            "B2/S/C4/C5",
+        ],
+        True,
+    )
+
+    # -- RLE: two-letter tags for states 25..255, and Generations headers ---------------------
+    def gray_png(arr: NDArray[np.uint8]) -> bytes:
+        buf = io.BytesIO()
+        Image.fromarray(arr.astype(np.uint8), mode="L").save(buf, format="PNG")
+        return buf.getvalue()
+
+    def save(family: str, name: str, meta: dict[str, Any]) -> None:
+        d = VECTOR_ROOT / family / name
+        _gap_save(d, {"spec_version": version, "family": family, "tier": "bit-exact", **meta})
+
+    for name, text in [
+        ("rle-two-letter-states", "x = 7, y = 2, rule = B2/S/C256\n.AXpApXqAyO$3C!\n"),
+        ("rle-two-letter-states-spaced", "x = 3, y = 1, rule = B2/S/C100\n2p AqB!\n"),
+        ("rle-generations-survival-birth-count", "x = 4, y = 2, rule = 345/2/4\nABC$.2A!\n"),
+        ("rle-generations-bounded", "x = 3, y = 1, rule = /2/3:T20,10\nAB.A!\n"),
+    ]:
+        d = VECTOR_ROOT / "patterns" / name
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "input.rle").write_text(text, encoding="utf-8", newline="\n")
+        cells, rule = rle_decode(text)
+        (d / "grid.png").write_bytes(gray_png(cells))
+        canonical = rle_encode(cells, rule or "B3/S23")
+        (d / "canonical.rle").write_text(canonical, encoding="utf-8", newline="\n")
+        save(
+            "patterns",
+            name,
+            {
+                "kind": "rle",
+                "input": "input.rle",
+                "rule": rule,
+                "grid": {"file": "grid.png", "shape": list(cells.shape)},
+                "canonical": "canonical.rle",
+            },
+        )
+
+    def notes(m: PatternMetadata) -> dict[str, Any]:
+        return {"name": m.name, "author": m.author, "comments": list(m.comments)}
+
+    for name, text in [
+        (
+            "read-generations-survival-birth-count",
+            "#N Stars\nx = 4, y = 2, rule = 345/2/4\nABC$.2A!\n",
+        ),
+        ("read-generations-two-letter-states", "x = 4, y = 1, rule = B2/S/C256\nApAyOX!\n"),
+        ("read-bounded-generations", "x = 3, y = 2, rule = B2/S345/C4:T20,16\nABC$C.A!\n"),
+    ]:
+        d = VECTOR_ROOT / "formats" / name
+        d.mkdir(parents=True, exist_ok=True)
+        data = text.encode("utf-8")
+        (d / "input.rle").write_bytes(data)
+        f = read_pattern(data)
+        (d / "grid.png").write_bytes(gray_png(f.cells))
+        topology = None if f.bounded_grid is None else f.bounded_grid.topology
+        canonical = rle_encode(f.cells, f.rule or "B3/S23", metadata=f.metadata, topology=topology)
+        (d / "canonical.rle").write_text(canonical, encoding="utf-8", newline="\n")
+        meta: dict[str, Any] = {
+            "kind": "read",
+            "input": "input.rle",
+            "trim": False,
+            "limit": "default",
+            "format": f.format,
+            "x": _signed_text(f.x),
+            "y": _signed_text(f.y),
+            "rule": f.rule,
+            "generation": decimal_text.digits_of(f.generation),
+            "metadata": notes(f.metadata),
+            "grid": {"file": "grid.png", "shape": list(f.cells.shape)},
+            "canonical": "canonical.rle",
+        }
+        if f.bounded_grid is not None:
+            meta["bounded_grid"] = f.bounded_grid.suffix
+        save("formats", name, meta)
+
+    # -- the unbounded plane: Generations rules beside their dead-edged grids -------------------
+    raw = CODECS["generations"]
+
+    def ms_case(name: str, kind: str) -> tuple[Path, dict[str, Any]]:
+        d = VECTOR_ROOT / "hashlife-multistate" / name
+        d.mkdir(parents=True, exist_ok=True)
+        return d, {
+            "spec_version": version,
+            "family": "hashlife-multistate",
+            "tier": "bit-exact",
+            "kind": kind,
+        }
+
+    def grid_case(
+        name: str, rule: str, grid: NDArray[np.uint8], origin: tuple[int, int], gens: list[int]
+    ) -> None:
+        d, meta = ms_case(f"grid-generations-{name}", "grid")
+        (d / "grid.png").write_bytes(raw.encode(grid))
+        height, width = grid.shape
+        x, y = origin
+        u = MultiStateHashLife(rule)
+        u.set_rect(x, y, grid)
+        g = Generations(rule, size=(width, height), init=grid, boundary="dead")
+        checkpoints = []
+        for gen in gens:
+            u.step(gen - u.generation)
+            g.step(gen - g.generation)
+            assert np.array_equal(u.get_rect(x, y, x + width - 1, y + height - 1), g.state), name
+            assert u.population == int(np.count_nonzero(g.state)), name  # nothing grew outside
+            entry = _hashlife_entry(d, u, f"state-{gen}")
+            (d / f"cells-{gen}.png").write_bytes(raw.encode(g.state))
+            entry["cells"] = f"cells-{gen}.png"
+            checkpoints.append(entry)
+        meta.update(
+            {
+                "rule": u.rule,
+                "grid": "grid.png",
+                "origin": [_signed_text(x), _signed_text(y)],
+                "checkpoints": checkpoints,
+            }
+        )
+        _gap_save(d, meta)
+
+    def centered(rule_states: int, side: int, inner: int, seed: int) -> NDArray[np.uint8]:
+        grid = np.zeros((side, side), np.uint8)
+        lo = (side - inner) // 2
+        grid[lo : lo + inner, lo : lo + inner] = _states_soup(inner, inner, rule_states, seed)
+        return grid
+
+    grid_case("star-wars", "B2/S345/C4", centered(4, 72, 20, 21), (-36, 5), [0, 1, 5, 12, 25])
+    grid_case("brians-brain", "/2/3", centered(3, 64, 16, 22), (40, -100), [0, 1, 4, 10, 23])
+    grid_case("256-states", "B3/S23/C256", centered(2, 80, 24, 23), (-1000, -1000), [0, 1, 7, 27])
+    grid_case("hexagonal", "B2/S34H/C5", centered(5, 64, 18, 24), (0, 0), [0, 1, 6, 22])
+
+    def file_case(kind: str, name: str, text: str, error: bool = False) -> None:
+        d, meta = ms_case(f"{kind}-{name}", kind)
+        ext = "mc" if kind == "macrocell" else "rle"
+        (d / f"input.{ext}").write_text(text, encoding="utf-8", newline="\n")
+        meta["input"] = f"input.{ext}"
+        reader = (
+            MultiStateHashLife.from_macrocell
+            if kind == "macrocell"
+            else MultiStateHashLife.from_rle
+        )
+        try:
+            u = reader(text)
+        except ValueError:
+            assert error, name
+            meta["error"] = True
+            _gap_save(d, meta)
+            return
+        assert not error, name
+        meta.update(_hashlife_entry(d, u, "canonical"))
+        try:
+            rle = u.to_rle()
+        except ValueError:
+            meta["rle_error"] = True
+        else:
+            (d / "canonical.rle").write_text(rle, encoding="utf-8", newline="\n")
+            meta["rle"] = "canonical.rle"
+        _gap_save(d, meta)
+
+    file_case(
+        "macrocell",
+        "generations-high-states",
+        "[M2]\n#R B3/S23/C256\n1 200 0 255 1\n1 0 25 49 0\n2 1 2 0 1\n",
+    )
+    file_case("macrocell", "generations-survival-birth-count", "[M2]\n#R 345/2/4\n1 1 2 3 0\n")
+    file_case("macrocell", "error-generations-b0", "[M2]\n#R B0/S/C3\n1 0 1 0 0\n", True)
+    file_case("macrocell", "error-generations-state-past", "[M2]\n#R B2/S/C3\n1 0 3 0 0\n", True)
+    file_case(
+        "rle",
+        "generations-two-letter-tags",
+        "#CXRLE Pos=-3,4 Gen=6\nx = 5, y = 2, rule = B2/S/C256\nApAyO$2.qB!\n",
+    )
+    file_case("rle", "generations-survival-birth-count", "x = 4, y = 2, rule = 345/2/4\nABC$.2A!\n")
+    file_case("rle", "error-bounded", "x = 3, y = 1, rule = WireWorld:T30,20\nCBA!\n", True)
+
+    # A far-away Star Wars soup, stepped: the rule given in survival/birth/count order.
+    far = MultiStateHashLife("B2/S345/C4")
+    far.set_rect(0, 1, _states_soup(12, 12, 4, 25))
+    lines = [line for line in far.to_macrocell().splitlines() if line[0].isdigit()]
+    top = int(lines[-1].split()[0])
+    lines += [f"{k} 0 0 0 {len(lines) + k - top - 1}" for k in range(top + 1, 81)]
+    d, meta = ms_case("evolve-generations-far-away", "evolve")
+    text = "[M2]\n#R 345/2/4\n" + "\n".join(lines) + "\n"
+    (d / "input.mc").write_text(text, encoding="utf-8", newline="\n")
+    from heaton_life.ca.hashlife.multistate import read_multistate_universe
+
+    u = read_multistate_universe(text).universe
+    checkpoints = []
+    for gen in [0, 1, 10, 30, 100]:
+        u.step(gen - u.generation)
+        checkpoints.append(_hashlife_entry(d, u, f"state-{len(checkpoints)}"))
+    meta.update({"input": "input.mc", "checkpoints": checkpoints})
+    _gap_save(d, meta)
+
+    # Rule changes between families: a rule of fewer states is refused while a state it lacks
+    # is present, in the universe and in a snapshot being restored.
+    def run_script(name: str, kind: str, ops: list[dict[str, Any]]) -> None:
+        d, meta = ms_case(name, kind)
+        u = MultiStateHashLife("WireWorld")
+        named: dict[str, Snapshot] = {}
+        for index, op in enumerate(ops):
+            before = (u.to_macrocell(), u.generation, u.rule)
+            try:
+                if op["op"] == "set_rect":
+                    cells = np.array([[int(c, 36) for c in row] for row in op["cells"]], np.uint8)
+                    u.set_rect(op["x"], op["y"], cells, op["mode"])
+                elif op["op"] == "set_rule":
+                    u.rule = op["rule"]
+                elif op["op"] == "clear_rect":
+                    u.clear_rect(op["x0"], op["y0"], op["x1"], op["y1"])
+                elif op["op"] == "step":
+                    u.step(int(op["n"]))
+                elif op["op"] == "snapshot":
+                    named[op["name"]] = u.snapshot()
+                elif op["op"] == "restore":
+                    u.restore(named[op["name"]])
+                    op["expect"] = _hashlife_entry(d, u, f"restore-{index}")
+                else:
+                    raise AssertionError(op)
+            except ValueError:
+                assert op.get("error"), op
+                assert (u.to_macrocell(), u.generation, u.rule) == before, op
+            else:
+                assert not op.get("error"), op
+        meta.update({"rule": "WireWorld", "ops": ops})
+        meta.update(_hashlife_entry(d, u, "final"))
+        _gap_save(d, meta)
+
+    run_script(
+        "edit-generations-rule-changes",
+        "edit",
+        [
+            {"op": "set_rect", "x": 0, "y": 0, "mode": "copy", "cells": ["3301", "0230", "1003"]},
+            {"op": "set_rule", "rule": "B2/S/C3", "error": True},
+            {"op": "clear_rect", "x0": 0, "y0": 0, "x1": 1, "y1": 0},
+            {"op": "clear_rect", "x0": 3, "y0": 2, "x1": 3, "y1": 2},
+            {"op": "set_rule", "rule": "B2/S/C3", "error": True},
+            {"op": "clear_rect", "x0": 2, "y0": 1, "x1": 2, "y1": 1},
+            {"op": "set_rule", "rule": "/2/3"},
+            {"op": "step", "n": "5"},
+            {"op": "set_rule", "rule": "B2/S345/C9"},
+            {"op": "step", "n": "40"},
+            {"op": "set_rect", "x": 10, "y": 10, "mode": "copy", "cells": ["1117", "0100"]},
+            {"op": "set_rule", "rule": "WireWorld", "error": True},
+            {"op": "step", "n": "1"},
+        ],
+    )
+    run_script(
+        "snapshots-generations-rule-changes",
+        "snapshots",
+        [
+            {"op": "set_rule", "rule": "B2/S345/C6"},
+            {"op": "set_rect", "x": -2, "y": -2, "mode": "copy", "cells": ["145", "203", "011"]},
+            {"op": "snapshot", "name": "five"},
+            {"op": "clear_rect", "x0": -2, "y0": -2, "x1": 0, "y1": 0},
+            {"op": "set_rect", "x": 4, "y": 4, "mode": "copy", "cells": ["12", "21"]},
+            {"op": "set_rule", "rule": "B2/S/C3"},
+            {"op": "restore", "name": "five", "error": True},
+            {"op": "set_rule", "rule": "345/2/6"},
+            {"op": "restore", "name": "five"},
+            {"op": "step", "n": "7"},
+        ],
+    )
 
 
 if __name__ == "__main__":

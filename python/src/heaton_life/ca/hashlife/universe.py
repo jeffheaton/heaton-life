@@ -175,11 +175,25 @@ def _tables(rule: str) -> Tables:
 def _hashlife_rule(rule: str, *, presets: bool = True) -> str:
     """The canonical form of a rule the universe can run: any Life-like rule of two states,
     B0 included (spec/hashlife.md "Rules with B0"). A rule with a variant (History) is
-    refused: it has more states than the universe holds. ``presets`` lets a preset name
-    (``life``) stand for its rule, as where a person types one; a rule read from a file
-    passes ``presets=False``, since a file names its rule, never a preset (spec/formats.md
-    "Reading into the unbounded universe")."""
-    compiled = compile_rule(rule, presets=presets, variants=True)
+    refused: it has more states than the universe holds. So is a Generations rule
+    (spec/generations.md); each refusal says that MultiStateHashLife runs it. ``presets``
+    lets a preset name (``life``) stand for its rule, as where a person types one; a rule
+    read from a file passes ``presets=False``, since a file names its rule, never a preset
+    (spec/formats.md "Reading into the unbounded universe")."""
+    try:
+        compiled = compile_rule(rule, presets=presets, variants=True)
+    except ValueError:
+        # Imported here: the Generations family imports from this package's neighbors.
+        from heaton_life.ca.generations import try_compile_generations_rule
+
+        generations, _ = try_compile_generations_rule(rule)
+        if generations is None:
+            raise
+        raise ValueError(
+            f"{generations.canonical} is a Generations rule of {generations.states} states, "
+            "not a Life-like rule: MultiStateHashLife runs it "
+            "(spec/hashlife.md, spec/generations.md)"
+        ) from None
     if compiled.variant:
         raise ValueError(
             f"{compiled.canonical} is a {compiled.variant} rule of {compiled.states} states, "

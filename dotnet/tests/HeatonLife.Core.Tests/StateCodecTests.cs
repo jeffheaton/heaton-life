@@ -17,6 +17,7 @@ namespace HeatonLife.Tests
             new Elementary(30, 16, 8),
             new Cyclic(4, 16, 16),
             new Wireworld(16, 16),
+            new Generations("B2/S345/C4", 16, 16),
             new MergeLife(MergeLife.DefaultRule, 16, 16),
             new GrayScott(16, 16),
             new ClassicLenia(32, 32, radius: 8),

@@ -94,8 +94,10 @@ def _known() -> tuple[StateRule, ...]:
 
 
 def state_rule(text: str) -> StateRule:
-    """The state rule a name gives (spec/hashlife-multistate.md "Names"): whitespace at the
-    two ends is allowed and ASCII case is ignored. Raises ValueError for any other text."""
+    """The state rule a text gives (spec/hashlife-multistate.md "Names"): a name, with
+    whitespace at the two ends allowed and ASCII case ignored, a History rule
+    (spec/history.md), or a Generations rule in either spelling (spec/generations.md).
+    Raises ValueError for any other text."""
     if not isinstance(text, str):
         raise TypeError(f"a rule name is text, not {type(text).__name__}")
     key = _ascii_lower(_trimmed(text))
@@ -108,9 +110,16 @@ def state_rule(text: str) -> StateRule:
     history = history_rule(text)
     if history is not None:
         return history
+    # Generations rules, in either spelling (spec/generations.md).
+    from heaton_life.ca.generations import try_compile_generations_rule
+
+    generations, _ = try_compile_generations_rule(text)
+    if generations is not None:
+        return generations
     names = ", ".join(rule.canonical for rule in _known())
     raise ValueError(
-        f"{text!r} is not a state rule (known: {names}, and History rules such as B3/S23History)"
+        f"{text!r} is not a state rule (known: {names}, History rules such as B3/S23History, "
+        "and Generations rules such as B2/S345/C4)"
     )
 
 

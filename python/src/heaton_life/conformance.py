@@ -9,6 +9,7 @@ the .NET implementation mirrors it. Encodings are per-family and spec'd:
 - elementary:      PNG, 1 x width, pixel = tape * 255             (bit-exact)
 - cyclic:          PNG, pixel = raw state                         (bit-exact)
 - wireworld:       PNG, pixel = state * 85                        (bit-exact)
+- generations:     PNG, pixel = raw state                         (bit-exact)
 - mergelife:       RGB PNG, raw bytes                             (bit-exact)
 - grayscott:       .f64 raw little-endian float64, shape (2,H,W)  (epsilon)
 - lenia-classic:   .f64, shape (H,W)                              (epsilon)
@@ -36,6 +37,8 @@ from heaton_life.ca import (
     CyclicParams,
     Elementary,
     ElementaryParams,
+    Generations,
+    GenerationsParams,
     LifeLike,
     LifeLikeParams,
     MergeLife,
@@ -129,6 +132,18 @@ class _Indexed:
         return (arr // self.scale).astype(np.uint8)
 
     def build(self, params: dict[str, Any], initial: StateArray | None) -> Simulation:
+        if self.family == "generations":
+            if initial is not None:
+                g = GenerationsParams.from_dict(params)
+                return Generations(
+                    g.rule,
+                    size=(g.width, g.height),
+                    init=initial,
+                    boundary=g.boundary,  # type: ignore[arg-type]
+                    shift=g.shift,
+                    axis=g.axis,  # type: ignore[arg-type]
+                )
+            return Generations.from_params(GenerationsParams.from_dict(params))
         if self.family == "wireworld":
             if initial is not None:
                 p = WireworldParams.from_dict(params)
@@ -228,6 +243,7 @@ CODECS: dict[str, Codec] = {
     "elementary": _Binary("elementary"),
     "cyclic": _Indexed("cyclic", scale=1),
     "wireworld": _Indexed("wireworld", scale=85),
+    "generations": _Indexed("generations", scale=1),
     "mergelife": _Rgb(),
     "grayscott": _Float64(lambda p: GrayScott.from_params(GrayScottParams.from_dict(p))),
     "lenia-classic": _Float64(lambda p: ClassicLenia.from_params(LeniaParams.from_dict(p))),
@@ -243,6 +259,7 @@ TIERS: dict[str, tuple[str, float | None]] = {
     "elementary": ("bit-exact", None),
     "cyclic": ("bit-exact", None),
     "wireworld": ("bit-exact", None),
+    "generations": ("bit-exact", None),
     "mergelife": ("bit-exact", None),
     "grayscott": ("epsilon", 1e-9),
     "lenia-classic": ("epsilon", 1e-6),

@@ -277,13 +277,25 @@ namespace HeatonLife
 
         /// <summary>The canonical form of a rule a universe can run: any Life-like rule of two
         /// states (spec/rules.md), B0 included (spec/hashlife.md "Rules with B0"). A rule with a
-        /// variant (History) is refused, since it has more states than the universe holds, and
-        /// anything else throws <see cref="ArgumentException"/> too.</summary>
+        /// variant (History) is refused, since it has more states than the universe holds, and so
+        /// is a Generations rule (spec/generations.md), each saying that
+        /// <see cref="MultiStateHashLife"/> runs it; anything else throws
+        /// <see cref="ArgumentException"/> too.</summary>
         internal static string CheckedRule(string rule)
         {
             if (rule == null)
                 throw new ArgumentNullException(nameof(rule));
-            LifeRule compiled = RuleString.Compile(rule, variants: true);
+            if (!RuleString.TryCompile(rule, true, out LifeRule? compiled, out _))
+            {
+                if (GenerationsRule.TryCompile(rule, out GenerationsRule? generations, out _))
+                {
+                    throw new ArgumentException(
+                        $"{generations.Canonical} is a Generations rule of {generations.States} states, not a "
+                        + "Life-like rule: MultiStateHashLife runs it (spec/hashlife.md, spec/generations.md)",
+                        nameof(rule));
+                }
+                compiled = RuleString.Compile(rule, variants: true); // throws, its message carrying the reason
+            }
             if (compiled.Variant != RuleVariant.None)
                 throw new ArgumentException(
                     $"{compiled.Canonical} is a {compiled.Variant} rule of {compiled.States} states, and this "

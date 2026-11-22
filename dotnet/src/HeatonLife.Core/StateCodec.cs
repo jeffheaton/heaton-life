@@ -33,6 +33,7 @@ namespace HeatonLife
                 case LifeLike life: return life.State.ToArray();
                 case Cyclic cyclic: return cyclic.State.ToArray();
                 case Wireworld wire: return wire.State.ToArray();
+                case Generations generations: return generations.State.ToArray();
                 case MergeLife merge: return merge.State.ToArray();
                 case Elementary elementary: return ElementaryBytes(elementary);
                 case GrayScott gray: return DoubleBytes(gray.State);
@@ -70,6 +71,7 @@ namespace HeatonLife
                 case LifeLike life: life.SetState(bytes, generation, keepStart); break;
                 case Cyclic cyclic: cyclic.SetState(bytes, generation, keepStart); break;
                 case Wireworld wire: wire.SetState(bytes, generation, keepStart); break;
+                case Generations generations: generations.SetState(bytes, generation, keepStart); break;
                 case MergeLife merge: merge.SetState(bytes, generation, keepStart); break;
                 case Elementary elementary: LoadElementary(elementary, bytes, generation, keepStart); break;
                 case GrayScott gray: gray.SetState(Doubles(bytes), generation, keepStart); break;

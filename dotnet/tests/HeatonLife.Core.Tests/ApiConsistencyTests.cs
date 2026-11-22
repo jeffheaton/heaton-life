@@ -15,6 +15,7 @@ namespace HeatonLife.Tests
             new Elementary(30, 16, 8),
             new Cyclic(4, 16, 16),
             new Wireworld(16, 16),
+            new Generations("B2/S345/C4", 16, 16),
             new MergeLife(MergeLife.DefaultRule, 16, 16),
             new GrayScott(16, 16),
             new ClassicLenia(32, 32, radius: 8),
@@ -187,6 +188,7 @@ namespace HeatonLife.Tests
                 new AsymptoticLenia(32, 32, radius: 8),
                 new FlowLenia(32, 32, radius: 8),
                 new Boids(8, 64, 64),
+                new Generations("B2/S345/C4", 16, 16),
             };
             foreach (var sim in sims)
             {
@@ -223,6 +225,7 @@ namespace HeatonLife.Tests
             Assert.IsAssignableFrom<IIndexedFrameSource>(sims[0]);
             Assert.IsAssignableFrom<IRgbFrameSource>(sims[4]);
             Assert.IsAssignableFrom<IFloatFrameSource>(sims[5]);
+            Assert.IsAssignableFrom<IIndexedFrameSource>(sims[10]);
         }
 
         [Fact]
@@ -248,6 +251,11 @@ namespace HeatonLife.Tests
             var grayscottExplicit = new GrayScott(24, 24);
             grayscottExplicit.SeedSpots(20, 0); // Python default is spots, not center
             Assert.Equal(grayscottExplicit.State.ToArray(), grayscott.State.ToArray());
+
+            var generations = new Generations("B2/S/C3", 24, 24);
+            var generationsExplicit = new Generations("B2/S/C3", 24, 24);
+            generationsExplicit.SeedSoup(0.35, 0);
+            Assert.Equal(generationsExplicit.State.ToArray(), generations.State.ToArray());
         }
 
         [Fact]

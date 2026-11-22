@@ -1,8 +1,9 @@
-"""Multi-state HashLife conformance: replay vectors/hashlife-multistate/ — Wireworld and History
-grids run on the plane beside the grid family, evolution from files, Macrocell and RLE reading and
-canonical writing, edits with states, frames under a zoom order, snapshot scripts, and
-timelines. Every state is compared through its canonical Macrocell text
-(spec/hashlife-multistate.md), bit-exact. The .NET suite replays the same files."""
+"""Multi-state HashLife conformance: replay vectors/hashlife-multistate/ — Wireworld, History
+and Generations grids run on the plane beside their grid families, evolution from files,
+Macrocell and RLE reading and canonical writing, edits with states, frames under a zoom
+order, snapshot scripts, and timelines. Every state is compared through its canonical
+Macrocell text (spec/hashlife-multistate.md), bit-exact. The .NET suite replays the same
+files."""
 
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ import pytest
 from PIL import Image
 
 from heaton_life.ca import LifeLike
+from heaton_life.ca.generations import Generations
 from heaton_life.ca.hashlife import LifeView, MultiStateHashLife, Snapshot
 from heaton_life.ca.hashlife.multistate import (
     read_multistate_universe,
@@ -82,8 +84,8 @@ def _expect_state(case_dir: Path, u: MultiStateHashLife, entry: dict[str, Any]) 
 
 
 def _states_png(path: Path, scale: int = 85) -> np.ndarray[Any, np.dtype[np.uint8]]:
-    """A grid stored as the wireworld vectors store one, states × 85, or, with ``scale`` 1,
-    as the lifelike-history vectors store one: the states themselves."""
+    """A grid stored as its family's vectors store one: Wireworld's states × 85, or, with
+    ``scale`` 1, a History or Generations rule's: the states themselves."""
     with Image.open(path) as img:
         return (np.asarray(img.convert("L")) // scale).astype(np.uint8)
 
@@ -207,18 +209,24 @@ def test_multistate_vector(case: Path) -> None:
             u.step(int(entry["generation"]) - u.generation)
             _expect_state(d, u, entry)
     elif kind == "grid":
+        # Wireworld's grid PNGs are states × 85. A History rule's grid is Life-like
+        # (spec/history.md) and a Generations rule's is its own family (spec/generations.md),
+        # their PNGs the states themselves.
+        wire = meta["rule"] == "WireWorld"
         history = _is_history(meta["rule"])
-        scale = 1 if history else 85
+        scale = 85 if wire else 1
         grid = _states_png(d / meta["grid"], scale)
         height, width = grid.shape
         x, y = (int(v) for v in meta["origin"])
         u = MultiStateHashLife(meta["rule"])
         u.set_rect(x, y, grid)
-        w: LifeLike | Wireworld = (
-            LifeLike(meta["rule"], size=(width, height), init=grid, boundary="dead")
-            if history
-            else Wireworld(size=(width, height), init=grid)
-        )
+        w: Wireworld | LifeLike | Generations
+        if wire:
+            w = Wireworld(size=(width, height), init=grid)
+        elif history:
+            w = LifeLike(meta["rule"], size=(width, height), init=grid, boundary="dead")
+        else:
+            w = Generations(meta["rule"], size=(width, height), init=grid, boundary="dead")
         for entry in meta["checkpoints"]:
             assert set(entry) <= _STATE | {"cells"}, entry
             gen = int(entry["generation"])

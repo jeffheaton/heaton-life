@@ -106,5 +106,7 @@ def test_two_state_rle_still_round_trips() -> None:
 
 
 def test_rle_rejects_unencodable_states() -> None:
-    with pytest.raises(ValueError):
-        rle_encode(np.array([[25]], dtype=np.uint8))
+    # Two-letter tags reach state 255 (spec/patterns.md); a value past a byte has none.
+    assert rle_encode(np.array([[25]], dtype=np.uint8)).splitlines()[-1] == "pA!"
+    with pytest.raises(ValueError, match="tops out at 255"):
+        rle_encode(np.array([[256]], dtype=np.uint16))

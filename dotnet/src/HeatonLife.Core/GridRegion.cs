@@ -20,10 +20,10 @@ namespace HeatonLife
 
     /// <summary>
     /// Advance Selection and Advance Outside for the byte-grid families whose blank is 0:
-    /// life-like, wireworld, and cyclic (spec/patterns.md "Editing a region"). A family blanks a
-    /// copy with <see cref="Isolate"/>, runs its own generations on it under its own rule and
-    /// boundary, and takes back what did not advance with <see cref="Merge"/>; <see cref="Advance"/>
-    /// does all three and can be canceled. The Python reference's
+    /// life-like, wireworld, cyclic, and generations (spec/patterns.md "Editing a region"). A
+    /// family blanks a copy with <see cref="Isolate"/>, runs its own generations on it under its
+    /// own rule and boundary, and takes back what did not advance with <see cref="Merge"/>;
+    /// <see cref="Advance"/> does all three and can be canceled. The Python reference's
     /// heaton_life.ca._advance.AdvanceRegion.
     /// </summary>
     internal static class GridRegion

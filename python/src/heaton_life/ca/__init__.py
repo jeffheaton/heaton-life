@@ -7,6 +7,7 @@ theirs `parse_rule`/`canonical_rule`, so the module is the namespace.
 
 from heaton_life.ca.cyclic import Cyclic, CyclicParams
 from heaton_life.ca.elementary import Elementary, ElementaryParams
+from heaton_life.ca.generations import Generations, GenerationsParams
 from heaton_life.ca.hashlife import HashLife, HashLifeParams
 from heaton_life.ca.lifelike import LifeLike, LifeLikeParams
 from heaton_life.ca.mergelife import MergeLife, MergeLifeParams
@@ -22,6 +23,8 @@ __all__ = [
     "Elementary",
     "ElementaryParams",
     "FeaturedRule",
+    "Generations",
+    "GenerationsParams",
     "HashLife",
     "HashLifeParams",
     "LifeLike",

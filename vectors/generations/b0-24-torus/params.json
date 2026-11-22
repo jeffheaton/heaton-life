@@ -1,0 +1,36 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_00001.png",
+      "step": 1
+    },
+    {
+      "file": "state_00002.png",
+      "step": 2
+    },
+    {
+      "file": "state_00003.png",
+      "step": 3
+    },
+    {
+      "file": "state_00010.png",
+      "step": 10
+    }
+  ],
+  "family": "generations",
+  "params": {
+    "boundary": "torus",
+    "density": 0.2,
+    "height": 24,
+    "init": "soup",
+    "rule": "B01/S1/C4",
+    "seed": 7,
+    "width": 24
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}

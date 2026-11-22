@@ -139,9 +139,11 @@ namespace HeatonLife.Tests
         }
 
         [Fact]
-        public void RleRejectsUnencodableStates()
+        public void RleWritesEveryByteState()
         {
-            Assert.Throws<ArgumentException>(() => Patterns.RleEncode(new byte[] { 25 }, 1, 1));
+            // Two-letter tags reach state 255 (spec/patterns.md), so every byte has a tag.
+            Assert.EndsWith("\npA!\n", Patterns.RleEncode(new byte[] { 25 }, 1, 1));
+            Assert.EndsWith("\nyO!\n", Patterns.RleEncode(new byte[] { 255 }, 1, 1));
         }
 
         [Fact]

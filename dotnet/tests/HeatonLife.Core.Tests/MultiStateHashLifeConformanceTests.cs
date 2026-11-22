@@ -11,11 +11,11 @@ using Xunit;
 namespace HeatonLife.Tests
 {
     /// <summary>
-    /// Multi-state HashLife conformance: replay vectors/hashlife-multistate/ — Wireworld grids run
-    /// on the plane beside the grid family, evolution from files, Macrocell and RLE reading and
-    /// canonical writing, edits with states, frames under a zoom order, snapshot scripts and
-    /// timelines (spec/hashlife-multistate.md "Vector encoding"). Every state is compared through
-    /// its canonical Macrocell text. As strict as the Python runner
+    /// Multi-state HashLife conformance: replay vectors/hashlife-multistate/ — Wireworld, History
+    /// and Generations grids run on the plane beside their grid families, evolution from files,
+    /// Macrocell and RLE reading and canonical writing, edits with states, frames under a zoom
+    /// order, snapshot scripts and timelines (spec/hashlife-multistate.md "Vector encoding").
+    /// Every state is compared through its canonical Macrocell text. As strict as the Python runner
     /// (python/tests/test_hashlife_multistate_vectors.py): an unknown key, kind, op, or
     /// spec_version fails the case.
     /// </summary>
@@ -131,23 +131,37 @@ namespace HeatonLife.Tests
                     }
                 case "grid":
                     {
-                        // A History rule's grid is Life-like, its PNGs the states themselves
-                        // (spec/history.md); Wireworld's are states × 85.
-                        string ruleName = Text(meta, "rule");
-                        bool history = RuleString.TryCompile(ruleName, true, out LifeRule? life, out _)
+                        // Wireworld's grid PNGs are states × 85. A History rule's grid is Life-like
+                        // (spec/history.md) and a Generations rule's is its own family
+                        // (spec/generations.md), their PNGs the states themselves.
+                        string rule = Text(meta, "rule");
+                        bool wire = rule == "WireWorld";
+                        bool history = RuleString.TryCompile(rule, true, out LifeRule? life, out _)
                             && life.Variant == RuleVariant.History;
-                        int scale = history ? 1 : 85;
+                        int scale = wire ? 85 : 1;
                         var (width, height, grid) = StatesPng(Path.Combine(dir, Text(meta, "grid")), scale);
                         long x = long.Parse(meta.GetProperty("origin")[0].GetString()!);
                         long y = long.Parse(meta.GetProperty("origin")[1].GetString()!);
-                        var u = new MultiStateHashLife(ruleName);
+                        var u = new MultiStateHashLife(rule);
                         u.SetRect(x, y, grid, width, height);
-                        Wireworld? wire = history ? null : new Wireworld(width, height, grid);
-                        LifeLike? lifeLike = null;
-                        if (history)
+                        ISimulation w;
+                        Func<byte[]> state;
+                        if (wire)
                         {
-                            lifeLike = new LifeLike(ruleName, width, height, Boundary.Dead);
+                            var wireworld = new Wireworld(width, height, grid);
+                            (w, state) = (wireworld, () => wireworld.State.ToArray());
+                        }
+                        else if (history)
+                        {
+                            var lifeLike = new LifeLike(rule, width, height, Boundary.Dead);
                             lifeLike.SetState(grid);
+                            (w, state) = (lifeLike, () => lifeLike.State.ToArray());
+                        }
+                        else
+                        {
+                            var generations = new Generations(rule, width, height, Boundary.Dead);
+                            generations.SetState(grid);
+                            (w, state) = (generations, () => generations.State.ToArray());
                         }
                         foreach (JsonElement entry in meta.GetProperty("checkpoints").EnumerateArray())
                         {
@@ -155,14 +169,10 @@ namespace HeatonLife.Tests
                                 Assert.True(StateKeys.Contains(property.Name) || property.Name == "cells", property.Name);
                             BigInteger gen = BigInteger.Parse(Text(entry, "generation"));
                             u.Step(gen - u.Generation);
-                            if (wire != null)
-                                wire.Step((int)gen - wire.Generation);
-                            else
-                                lifeLike!.Step((int)gen - lifeLike.Generation);
+                            w.Step((int)gen - w.Generation);
                             ExpectState(dir, u, entry);
                             byte[] cells = StatesPng(Path.Combine(dir, Text(entry, "cells")), scale).Cells;
-                            ReadOnlySpan<byte> gridState = wire != null ? wire.State : lifeLike!.State;
-                            Assert.True(gridState.SequenceEqual(cells), $"{caseName}: the grid family at {gen}");
+                            Assert.True(state().SequenceEqual(cells), $"{caseName}: the grid family at {gen}");
                             Assert.True(
                                 u.GetRect(x, y, x + width - 1, y + height - 1).AsSpan().SequenceEqual(cells),
                                 $"{caseName}: the plane under the grid at {gen}");
@@ -286,9 +296,9 @@ namespace HeatonLife.Tests
                 Field("name"), Field("author"), notes.GetProperty("comments").EnumerateArray().Select(c => c.GetString()!).ToArray());
         }
 
-        /// <summary>A grid stored as the wireworld vectors store one, states × 85, or, with a
-        /// <paramref name="scale"/> of 1, as the lifelike-history vectors store one.</summary>
-        private static (int Width, int Height, byte[] Cells) StatesPng(string path, int scale = 85)
+        /// <summary>A grid stored as its family's vectors store one: Wireworld's states × 85
+        /// (<paramref name="scale"/> 85), a History or Generations rule's raw states (1).</summary>
+        private static (int Width, int Height, byte[] Cells) StatesPng(string path, int scale)
         {
             var (width, height, channels, pixels) = Png.Read(path);
             Assert.Equal(1, channels);

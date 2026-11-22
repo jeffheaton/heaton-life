@@ -247,7 +247,7 @@ namespace HeatonLife
             extended = rule != null && !IsLifelikeRule(rule);
             foreach (char c in body)
             {
-                if (c == '.' || (c >= 'A' && c <= 'X' && c != 'B' && c != 'O'))
+                if (MarksExtended(c))
                 {
                     extended = true;
                     break;
@@ -280,9 +280,22 @@ namespace HeatonLife
         private static IEnumerable<RleRun> Walk(string body, bool extended)
         {
             BigInteger x = BigInteger.Zero, y = BigInteger.Zero, count = BigInteger.Zero;
+            char prefix = '\0'; // a two-letter tag's first letter, waiting for its second
             foreach (char c in body)
             {
-                if (c >= '0' && c <= '9')
+                if (prefix != '\0')
+                {
+                    if (TextLines.IsSpace(c)) // whitespace is ignored, inside a tag too
+                        continue;
+                    if (!TryTwoLetterState(prefix, c, out int state))
+                        throw new ArgumentException($"unsupported RLE tag: '{prefix}{c}'");
+                    BigInteger length = BigInteger.Max(count, BigInteger.One);
+                    yield return new RleRun(x, y, length, state);
+                    x += length;
+                    count = BigInteger.Zero;
+                    prefix = '\0';
+                }
+                else if (c >= '0' && c <= '9')
                 {
                     count = count * 10 + (c - '0');
                 }
@@ -307,6 +320,10 @@ namespace HeatonLife
                     x += length;
                     count = BigInteger.Zero;
                 }
+                else if (extended && c >= 'p' && c <= 'y')
+                {
+                    prefix = c; // the first letter of a state 25..255
+                }
                 else if (c == '$')
                 {
                     x = BigInteger.Zero;
@@ -326,6 +343,8 @@ namespace HeatonLife
                     throw new ArgumentException($"unsupported RLE tag: '{c}'");
                 }
             }
+            if (prefix != '\0')
+                throw new ArgumentException($"unsupported RLE tag: '{prefix}'");
             yield return new RleRun(BigInteger.Zero, y + 1, BigInteger.Zero, -1);
         }
 
@@ -413,10 +432,10 @@ namespace HeatonLife
             return false;
         }
 
-        /// <summary>Canonical RLE; dialect chosen by content (cells above 24 are unencodable). The
-        /// header names a Life-like rule in its canonical form (spec/rules.md), so it reads back as
-        /// the same rule (one in survival/birth order, <c>23/3</c>, as <c>B3/S23</c>), and any other
-        /// rule as given.</summary>
+        /// <summary>Canonical RLE; dialect chosen by content (states past 24 as two-letter tags).
+        /// The header names a Life-like rule (with any variant, spec/history.md) or a Generations
+        /// rule (spec/generations.md) in its canonical form, so it reads back as the same rule (one
+        /// in survival/birth order, <c>23/3</c>, as <c>B3/S23</c>), and any other rule as given.</summary>
         public static string RleEncode(ReadOnlySpan<byte> cells, int width, int height, string rule = "B3/S23")
             => RleEncode(cells, width, height, rule, null);
 
@@ -439,12 +458,9 @@ namespace HeatonLife
             string suffix = topology == null ? "" : new BoundedGrid(width, height, topology.Value).Suffix;
             if (cells.Length != width * height)
                 throw new ArgumentException($"expected {width * height} cells, got {cells.Length}");
-            int top = 0;
+            int top = 0; // every byte has a tag: extended RLE's reach 255 (spec/patterns.md)
             foreach (byte cell in cells)
                 top = Math.Max(top, cell);
-            if (top > 24)
-                throw new ArgumentException(
-                    $"cell value {top} not RLE-encodable (extended RLE tops out at 24)");
             bool multistate = top > 1;
 
             var tokens = new List<string>();
@@ -491,9 +507,7 @@ namespace HeatonLife
                 sb.Append(note).Append('\n');
             sb.Append("x = ").Append(width).Append(", y = ").Append(height)
               .Append(", rule = ")
-              .Append(RuleString.TryCompile(PatternFiles.LifeRule(rule), true, out LifeRule? life, out _)
-                  ? life.Canonical
-                  : rule)
+              .Append(HeaderRule(rule))
               .Append(suffix);
             foreach (string bodyLine in body)
                 sb.Append('\n').Append(bodyLine);
@@ -555,7 +569,7 @@ namespace HeatonLife
             bool extended = rule != null && !IsLifelikeRule(rule);
             foreach (char c in body)
             {
-                if (c == '.' || (c >= 'A' && c <= 'X' && c != 'B' && c != 'O'))
+                if (MarksExtended(c))
                     extended = true;
             }
             if (extended)
@@ -1213,8 +1227,8 @@ namespace HeatonLife
 
         /// <summary>
         /// The spec compatibility check: patterns are family-bound (a glider cannot
-        /// enter Wireworld or MergeLife); cyclic patterns must also fit the target's
-        /// state count. Returns the rejection reason, or null when stampable.
+        /// enter Wireworld or MergeLife); cyclic and Generations patterns must also fit the
+        /// target's state count. Returns the rejection reason, or null when stampable.
         /// </summary>
         public static string? Compatible(
             string patternFamily, string targetFamily,
@@ -1222,7 +1236,7 @@ namespace HeatonLife
         {
             if (patternFamily != targetFamily)
                 return $"'{patternFamily}' patterns cannot be stamped into '{targetFamily}'";
-            if (targetFamily == "cyclic" && targetStates > 0)
+            if ((targetFamily == "cyclic" || targetFamily == "generations") && targetStates > 0)
             {
                 int top = 0;
                 foreach (byte cell in patternCells)
@@ -1237,11 +1251,46 @@ namespace HeatonLife
 
         private static string Run(int length, int value, bool multistate)
         {
-            string tag = multistate
-                ? value == 0 ? "." : ((char)('A' + value - 1)).ToString()
-                : value != 0 ? "o" : "b";
+            string tag = multistate ? StateTag(value) : value != 0 ? "o" : "b";
             return length == 1 ? tag : length.ToString() + tag;
         }
+
+        /// <summary>The rule as an RLE header writes it: a Life-like rule in its canonical form,
+        /// with its variant (<c>LifeHistory</c> is written <c>B3/S23History</c>, spec/history.md
+        /// "Files"), or a Generations rule in its canonical form (spec/generations.md), so it reads
+        /// back as the same rule, and any other rule as given.</summary>
+        private static string HeaderRule(string rule)
+        {
+            if (RuleString.TryCompile(PatternFiles.LifeRule(rule), true, out LifeRule? life, out _))
+                return life.Canonical;
+            return GenerationsRule.TryCompile(rule, out GenerationsRule? generations, out _) ? generations.Canonical : rule;
+        }
+
+        /// <summary>Extended RLE's tag for a state (spec/patterns.md): <c>.</c> for 0, <c>A</c>–<c>X</c>
+        /// for 1 to 24, and from 25 to 255 a prefix <c>p</c>–<c>y</c> before the letter (25 is
+        /// <c>pA</c>, 255 <c>yO</c>).</summary>
+        internal static string StateTag(int value)
+        {
+            if (value < 0 || value > 255)
+                throw new ArgumentOutOfRangeException(nameof(value), value, "a state is 0 to 255");
+            if (value == 0)
+                return ".";
+            char letter = (char)('A' + (value - 1) % 24);
+            return value <= 24 ? letter.ToString() : new string(new[] { (char)('o' + (value - 1) / 24), letter });
+        }
+
+        /// <summary>The state of an extended RLE tag <c>pA</c> … <c>yO</c> (spec/patterns.md): 24
+        /// states a prefix, <c>p</c> from 25, so <c>yO</c> is 255. False for any other pair.</summary>
+        internal static bool TryTwoLetterState(char prefix, char letter, out int state)
+        {
+            state = 24 * (prefix - 'o') + letter - 'A' + 1;
+            return prefix >= 'p' && prefix <= 'y' && letter >= 'A' && letter <= 'X' && state <= 255;
+        }
+
+        /// <summary>Whether a body character makes RLE the extended dialect (spec/patterns.md): a
+        /// <c>.</c>, a state letter other than <c>B</c> and <c>O</c>, or a two-letter tag's prefix.</summary>
+        internal static bool MarksExtended(char c)
+            => c == '.' || (c >= 'A' && c <= 'X' && c != 'B' && c != 'O') || (c >= 'p' && c <= 'y');
 
         internal static bool TryParseHeader(
             string line, out BigInteger width, out BigInteger height, out string? rule)

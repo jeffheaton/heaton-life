@@ -78,6 +78,22 @@ namespace HeatonLife.Tests
                                     wire.AdvanceSelection(X0, Y0, X1, Y1, n, token);
                             });
                     }
+                case "generations":
+                    {
+                        // Star Wars: births and survival among live cells, dying states between.
+                        var generations = new Generations("B2/S345/C4", size, size);
+                        generations.SeedSoup(0.35, 15);
+                        return new World(
+                            () => generations.State.ToArray(), () => generations.Generation, n => generations.Step(n),
+                            _ => generations.Reset(),
+                            (n, outside, token) =>
+                            {
+                                if (outside)
+                                    generations.AdvanceOutside(X0, Y0, X1, Y1, n, token);
+                                else
+                                    generations.AdvanceSelection(X0, Y0, X1, Y1, n, token);
+                            });
+                    }
                 default:
                     {
                         var cyclic = new Cyclic(8, size, size, threshold: 2, reach: 2);
@@ -97,7 +113,7 @@ namespace HeatonLife.Tests
 
         public static IEnumerable<object[]> Cases()
         {
-            foreach (string family in new[] { "lifelike", "wireworld", "cyclic" })
+            foreach (string family in new[] { "lifelike", "wireworld", "cyclic", "generations" })
             {
                 yield return new object[] { family, false };
                 yield return new object[] { family, true };

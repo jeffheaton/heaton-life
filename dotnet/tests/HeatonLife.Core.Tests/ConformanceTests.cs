@@ -16,7 +16,7 @@ namespace HeatonLife.Tests
     {
         /// <summary>Bit-exact families the C# port implements; cases are auto-discovered.</summary>
         private static readonly string[] ByteFamilies =
-            { "lifelike", "lifelike-history", "elementary", "cyclic", "wireworld", "mergelife" };
+            { "lifelike", "lifelike-history", "elementary", "cyclic", "wireworld", "mergelife", "generations" };
 
         /// <summary>ε-tier (float64) families the C# port implements.</summary>
         private static readonly string[] FloatFamilies =
@@ -253,6 +253,7 @@ namespace HeatonLife.Tests
                     }
                 case "cyclic": // pixel = raw state
                 case "lifelike-history": // a History rule's states 0–6, raw (spec/history.md)
+                case "generations": // states 0 … C − 1, raw (spec/generations.md)
                     return pixels;
                 case "wireworld": // pixel = state * 85
                     {
@@ -347,6 +348,22 @@ namespace HeatonLife.Tests
                             sim.SeedClock();
                         else
                             throw new InvalidDataException($"unsupported wireworld init '{init}'");
+                        return new Sim(sim.Step, () => sim.State.ToArray());
+                    }
+                case "generations":
+                    {
+                        var sim = new Generations(
+                            p.GetProperty("rule").GetString()!, width, height, ParseTopology(p));
+                        if (initial != null)
+                            sim.SetState(initial);
+                        else if (init == "soup")
+                            sim.SeedSoup(p.GetProperty("density").GetDouble(), p.GetProperty("seed").GetUInt32());
+                        else if (init == "blob")
+                            sim.SeedBlob(p.GetProperty("density").GetDouble(), p.GetProperty("seed").GetUInt32());
+                        else if (init == "single")
+                            sim.SeedSingle();
+                        else
+                            throw new InvalidDataException($"unsupported generations init '{init}'");
                         return new Sim(sim.Step, () => sim.State.ToArray());
                     }
                 case "mergelife":

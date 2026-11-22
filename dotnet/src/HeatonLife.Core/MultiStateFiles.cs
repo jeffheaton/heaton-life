@@ -470,7 +470,6 @@ namespace HeatonLife
         public const string DefaultRule = "WireWorld";
 
         private const long RunCap = 1L << 40; // run counts and offsets saturate here, far past the editing box
-        private const int TopRleState = 24;   // extended RLE's letters run A–X
 
         internal static StateRule Fallback(StateRule? rule) => StateRules.Check(rule ?? StateRules.Compile(DefaultRule));
 
@@ -647,13 +646,21 @@ namespace HeatonLife
             string? named = null;
             if (lines.Count > 0 && Patterns.TryParseHeader(lines[0], out _, out _, out named))
                 lines.RemoveAt(0);
+            if (named != null) // spec/patterns.md "Bounded grids", spec/formats.md "Rules in survival/birth order"
+            {
+                named = PatternFiles.LifeRule(BoundedGrid.SplitRule(named, out BoundedGrid? bounded));
+                if (bounded != null) // spec/patterns.md "RLE in the unbounded universe"
+                    throw new FormatException(
+                        $"the unbounded universe has no bounded grid ('{bounded.Suffix}' in the rule): open the file in a grid world (spec/topology.md)");
+            }
             string body = string.Concat(lines);
             // Dialect detection (spec/patterns.md): extended iff the body holds '.', any state
-            // letter other than B and O, or the header names something other than a Life-like rule.
+            // letter other than B and O, a two-letter tag's prefix, or the header names something
+            // other than a Life-like rule.
             bool extended = named != null && !RuleString.TryCompile(named, out _);
             foreach (char c in body)
             {
-                if (c == '.' || (c >= 'A' && c <= 'X' && c != 'B' && c != 'O'))
+                if (Patterns.MarksExtended(c))
                     extended = true;
             }
             StateRule rule = named == null ? fallback : FileRule(named, fallback);
@@ -664,6 +671,8 @@ namespace HeatonLife
             var blocks = new Dictionary<long, int>();
             long width = 0, height = 0, x = 0, y = 0;
             int top = 0;
+            char prefix = '\0'; // a two-letter tag's first letter, waiting for its second
+            long pending = 1;   // and the count before it
             int i = 0;
             while (i < body.Length)
             {
@@ -681,7 +690,12 @@ namespace HeatonLife
                     i++;
                 if (i > start)
                 {
-                    if (i == body.Length || TextLines.IsSpace(body[i]))
+                    bool dangling = i == body.Length || TextLines.IsSpace(body[i]);
+                    if (prefix != '\0') // no count inside a two-letter tag
+                        throw new FormatException(dangling && i - start == 1
+                            ? $"unsupported RLE tag: '{prefix}{body[i - 1]}'"
+                            : $"unsupported RLE tag: '{prefix}'");
+                    if (dangling)
                         throw new FormatException($"unsupported RLE tag: '{body[i - 1]}'");
                     count = 0;
                     for (int d = start; d < i; d++)
@@ -689,12 +703,25 @@ namespace HeatonLife
                 }
                 char tag = body[i++];
                 int state;
-                if (tag == 'b' || tag == '.' || (!extended && tag == 'B'))
+                if (prefix != '\0')
+                {
+                    if (!Patterns.TryTwoLetterState(prefix, tag, out state))
+                        throw new FormatException($"unsupported RLE tag: '{prefix}{tag}'");
+                    count = pending;
+                    prefix = '\0';
+                }
+                else if (tag == 'b' || tag == '.' || (!extended && tag == 'B'))
                     state = 0;
                 else if (tag == 'o' || (!extended && tag == 'O'))
                     state = 1;
                 else if (extended && tag >= 'A' && tag <= 'X')
                     state = tag - 'A' + 1;
+                else if (extended && tag >= 'p' && tag <= 'y') // the first letter of a state 25..255
+                {
+                    prefix = tag;
+                    pending = count;
+                    continue;
+                }
                 else if (tag == '$')
                 {
                     y = Math.Min(y + count, RunCap);
@@ -724,6 +751,8 @@ namespace HeatonLife
                 }
                 x = Math.Min(x + count, RunCap);
             }
+            if (prefix != '\0')
+                throw new FormatException($"unsupported RLE tag: '{prefix}'");
             if (top >= rule.States)
                 throw new FormatException(
                     $"the file holds state {top}, which {rule.Canonical} doesn't have ({rule.States} states)");
@@ -753,9 +782,9 @@ namespace HeatonLife
 
         /// <summary>
         /// The universe as RLE: <c>#CXRLE Pos=x0,y0</c> (with <c> Gen=n</c> past generation 0), then
-        /// the canonical encoding of the bounding box's states. A pattern reaching outside the
-        /// editing box, or a state above 24, throws <see cref="InvalidOperationException"/>;
-        /// Macrocell carries both.
+        /// the canonical encoding of the bounding box's states, every state from 1 to 255 a tag.
+        /// A pattern reaching outside the editing box throws <see cref="InvalidOperationException"/>;
+        /// Macrocell carries it.
         /// </summary>
         internal static string WriteRle(MultiStateHashLife universe, PatternMetadata? metadata)
         {
@@ -814,9 +843,6 @@ namespace HeatonLife
                     }
                 }
             }
-            if (top > TopRleState)
-                throw new InvalidOperationException(
-                    $"state {top} can't be written as RLE (its letters stop at {TopRleState}); save as Macrocell");
             bool multistate = top > 1;
 
             var text = new StringBuilder();
@@ -834,7 +860,7 @@ namespace HeatonLife
             foreach (long cy in liveRows)
             {
                 if (cy > y0)
-                    AppendToken(text, ref lineLength, cy - previous, '$');
+                    AppendToken(text, ref lineLength, cy - previous, "$");
                 List<long> runs = rows[cy];
                 long pos = x0;
                 for (int r = 0; r < runs.Count; r += 3)
@@ -842,23 +868,23 @@ namespace HeatonLife
                     long start = runs[r], length = runs[r + 1];
                     int state = (int)runs[r + 2];
                     if (start > pos)
-                        AppendToken(text, ref lineLength, start - pos, multistate ? '.' : 'b');
-                    AppendToken(text, ref lineLength, length, multistate ? (char)('A' + state - 1) : 'o');
+                        AppendToken(text, ref lineLength, start - pos, multistate ? "." : "b");
+                    AppendToken(text, ref lineLength, length, multistate ? Patterns.StateTag(state) : "o");
                     pos = start + length;
                 }
                 previous = cy;
             }
-            AppendToken(text, ref lineLength, 1, '!');
+            AppendToken(text, ref lineLength, 1, "!");
             text.Append('\n');
             return text.ToString();
         }
 
         /// <summary>One run token, wrapped as canonical RLE wraps: a token that would pass column
         /// 70 starts a new line.</summary>
-        private static void AppendToken(StringBuilder text, ref int lineLength, long length, char tag)
+        private static void AppendToken(StringBuilder text, ref int lineLength, long length, string tag)
         {
             string count = length == 1 ? "" : length.ToString(CultureInfo.InvariantCulture);
-            int size = count.Length + 1;
+            int size = count.Length + tag.Length;
             if (lineLength + size > 70)
             {
                 text.Append('\n');

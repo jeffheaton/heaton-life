@@ -70,7 +70,7 @@ class PatternFile:
 
     format: PatternFormat
     cells: NDArray[np.uint8]
-    """(height, width) row-major cell values: 0/1, or RLE's states up to 24."""
+    """(height, width) row-major cell values: 0/1, or RLE's states up to 255."""
     x: int
     """Where ``cells[0, 0]`` sits in the file's own coordinates (y grows downward)."""
     y: int

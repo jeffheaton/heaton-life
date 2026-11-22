@@ -1,11 +1,11 @@
 """Run Length Encoded pattern files — the interchange format of the Life community.
 
 Both dialects in common use (spec/patterns.md): two-state ``b``/``o`` and
-extended multi-state ``.``/``A``–``X`` (states 1–24), ``$`` end of row, ``!`` end,
-optional run counts, ``#`` comment lines, and the ``x = …, y = …[, rule = …]``
-header, whose rule may carry a bounded-grid suffix (``B3/S23:T30,20``, spec/topology.md).
-Encoding is canonical: two-state grids emit ``b``/``o``; grids with any cell ≥ 2 emit
-``.``/letters; cells above 24 are unencodable.
+extended multi-state ``.``/``A``–``X`` (states 1–24) with ``pA``–``yO`` (states 25–255),
+``$`` end of row, ``!`` end, optional run counts, ``#`` comment lines, and the
+``x = …, y = …[, rule = …]`` header, whose rule may carry a bounded-grid suffix
+(``B3/S23:T30,20``, spec/topology.md). Encoding is canonical: two-state grids emit
+``b``/``o``; grids with any cell ≥ 2 emit ``.`` and the state tags.
 """
 
 from __future__ import annotations
@@ -56,14 +56,18 @@ def _life_rule(rule: str) -> str | None:
 
 def _written_rule(rule: str) -> str:
     """The rule an encoder writes: a Life-like rule's canonical form, with its variant
-    (``LifeHistory`` is written ``B3/S23History``, spec/history.md "Files"), any other rule
-    as given."""
+    (``LifeHistory`` is written ``B3/S23History``, spec/history.md "Files"), a Generations
+    rule's canonical form (``345/2/4`` is written ``B2/S345/C4``, spec/generations.md), any
+    other rule as given."""
+    # Imported here because heaton_life.ca imports this package.
+    from heaton_life.ca.generations import try_compile_generations_rule
     from heaton_life.ca.rulestring import compile_rule
 
     try:
         return compile_rule(rule, presets=False, variants=True).canonical
     except ValueError:
-        return rule
+        generations, _ = try_compile_generations_rule(rule)
+        return rule if generations is None else generations.canonical
 
 
 def _is_extended(body: str, rule: str | None) -> bool:
@@ -72,7 +76,7 @@ def _is_extended(body: str, rule: str | None) -> bool:
     letter other than B/O, or the header names something other than a Life-like rule."""
     return (
         "." in body
-        or any("A" <= ch <= "X" and ch not in ("B", "O") for ch in body)
+        or any(("A" <= ch <= "X" and ch not in ("B", "O")) or "p" <= ch <= "y" for ch in body)
         or (rule is not None and _life_rule(rule) is None)
     )
 
@@ -167,10 +171,28 @@ def rle_metadata(text: str) -> PatternMetadata:
     return reader.result()
 
 
+def _two_letter_state(prefix: str, letter: str) -> int:
+    """The state of an extended RLE token ``pA``…``yO`` (spec/patterns.md): 24 states a
+    prefix, ``p`` from 25, so ``yO`` is 255. Raises ValueError for any other pair."""
+    state = 24 * (ord(prefix) - ord("o")) + ord(letter) - ord("A") + 1
+    if not ("A" <= letter <= "X" and state <= 255):
+        raise ValueError(f"unsupported RLE tag: {prefix + letter!r}")
+    return state
+
+
 def _scan(body: str, extended: bool) -> Iterator[tuple[int, int, int, int]]:
     x = y = 0
+    count = 1
+    prefix = ""  # a two-letter token's first letter, waiting for its second
     for token in _TOKEN.finditer(body):  # one at a time: a giant file's tokens never pile up
         count_text, tag = token.groups()
+        if prefix:
+            if count_text:
+                raise ValueError(f"unsupported RLE tag: {prefix!r}")
+            yield x, y, count, _two_letter_state(prefix, tag)
+            x += count
+            prefix = ""
+            continue
         count = int(count_text) if count_text else 1
         if tag == "b" or tag == "." or (not extended and tag == "B"):
             x += count
@@ -180,6 +202,8 @@ def _scan(body: str, extended: bool) -> Iterator[tuple[int, int, int, int]]:
         elif extended and "A" <= tag <= "X":
             yield x, y, count, ord(tag) - ord("A") + 1
             x += count
+        elif extended and "p" <= tag <= "y":
+            prefix = tag
         elif tag == "$":
             y += count
             x = 0
@@ -187,6 +211,8 @@ def _scan(body: str, extended: bool) -> Iterator[tuple[int, int, int, int]]:
             return
         else:
             raise ValueError(f"unsupported RLE tag: {tag!r}")
+    if prefix:
+        raise ValueError(f"unsupported RLE tag: {prefix!r}")
 
 
 DEFAULT_MAX_CELLS = 1 << 26
@@ -248,8 +274,15 @@ def _walk(body: str, extended: bool) -> Iterator[tuple[int, int, int, int]]:
     included, and last of all ``(0, rows, 0, -1)``: how many rows it has. Measuring and
     decoding both read this, so they can't disagree, and neither holds more than a run."""
     x = y = count = 0
+    prefix = ""  # a two-letter token's first letter, waiting for its second
     for ch in body:
-        if ch.isdigit():
+        if prefix:
+            if ch.isspace():  # whitespace is ignored, inside a token too
+                continue
+            length = max(count, 1)
+            yield x, y, length, _two_letter_state(prefix, ch)
+            x, count, prefix = x + length, 0, ""
+        elif ch.isdigit():
             count = count * 10 + int(ch)
         elif ch == "b" or ch == "." or (not extended and ch == "B"):
             length = max(count, 1)
@@ -263,6 +296,8 @@ def _walk(body: str, extended: bool) -> Iterator[tuple[int, int, int, int]]:
             length = max(count, 1)
             yield x, y, length, ord(ch) - ord("A") + 1
             x, count = x + length, 0
+        elif extended and "p" <= ch <= "y":  # the first letter of a state 25..255
+            prefix = ch
         elif ch == "$":
             x, y, count = 0, y + max(count, 1), 0
         elif ch == "!":
@@ -271,6 +306,8 @@ def _walk(body: str, extended: bool) -> Iterator[tuple[int, int, int, int]]:
             continue
         else:
             raise ValueError(f"unsupported RLE tag: {ch!r}")
+    if prefix:
+        raise ValueError(f"unsupported RLE tag: {prefix!r}")
     yield 0, y + 1, 0, -1
 
 
@@ -355,16 +392,17 @@ def rle_encode(
     topology: Topology | None = None,
 ) -> str:
     """Encode a grid as canonical RLE; dialect chosen by content (spec/patterns.md).
-    The header names a Life-like rule in its canonical form (spec/rules.md), so it reads
-    back as the same rule, and any other rule as given. ``metadata``'s ``#N``, ``#O`` and
-    ``#C`` lines go before the header. With a ``topology`` the grid is a whole world, and
-    the rule carries its bounded-grid suffix (``rule = B3/S23:T30,20``, spec/topology.md)."""
+    The header names a Life-like rule (with any variant, spec/history.md) or a Generations
+    rule (spec/generations.md) in its canonical form, so it reads back as the same rule, and
+    any other rule as given. ``metadata``'s ``#N``, ``#O`` and ``#C`` lines go before the
+    header. With a ``topology`` the grid is a whole world, and the rule carries its
+    bounded-grid suffix (``rule = B3/S23:T30,20``, spec/topology.md)."""
     notes = metadata_lines(metadata)
     height, width = grid.shape
     suffix = "" if topology is None else BoundedGrid(width, height, topology).suffix
     top = int(grid.max(initial=0))
-    if top > 24:
-        raise ValueError(f"cell value {top} not RLE-encodable (extended RLE tops out at 24)")
+    if top > 255:
+        raise ValueError(f"cell value {top} not RLE-encodable (extended RLE tops out at 255)")
     multistate = top > 1
     tokens: list[str] = []
     for y in range(height):
@@ -413,9 +451,18 @@ def _row_end_runs(tokens: list[str]) -> list[str]:
     return out
 
 
+def state_tag(value: int) -> str:
+    """Extended RLE's tag for a state (spec/patterns.md): ``.`` for 0, ``A``–``X`` for 1 to
+    24, and from 25 to 255 a prefix ``p``–``y`` before the letter (25 is ``pA``, 255 ``yO``)."""
+    if value == 0:
+        return "."
+    prefix = "" if value <= 24 else chr(ord("o") + (value - 1) // 24)
+    return prefix + chr(ord("A") + (value - 1) % 24)
+
+
 def _run(length: int, value: int, multistate: bool) -> str:
     if multistate:
-        tag = "." if value == 0 else chr(ord("A") + value - 1)
+        tag = state_tag(value)
     else:
         tag = "o" if value else "b"
     return tag if length == 1 else f"{length}{tag}"

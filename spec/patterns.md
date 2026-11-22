@@ -20,6 +20,7 @@ A pattern is `(family, width, height, cells, rule)`:
 | life-like | byte 0/1 | 0 | 0 |
 | wireworld | byte 0..3 | 0 (empty) | 0 (empty) |
 | cyclic | byte 0..states−1 | 0 | 0 |
+| generations | byte 0..C−1 ([generations.md](generations.md)) | 0 (dead) | 0 (dead) |
 | mergelife | RGB byte triple | — (opaque only) | (0, 0, 0) black |
 | lenia (each variant its own family) | float64 [0,1] | 0.0 | 0.0 |
 | gray-scott | (u, v) float64 pair | — (opaque only) | (1.0, 0.0) substrate |
@@ -27,14 +28,14 @@ A pattern is `(family, width, height, cells, rule)`:
   Elementary, boids, and fractals have no patterns (a space-time diagram, a
   point cloud, and a coordinate view are not cell regions).
 - `rule` — the origin context, informative: the rulestring (life-like), states
-  count (cyclic), or MergeLife rule. Stamping into the same family under a
+  count (cyclic), the Generations rule (generations), or MergeLife rule. Stamping into the same family under a
   *different* rule is allowed — that is the point of a zoo — but implementations
   surface the origin rule so the user knows the pattern's home.
 
 **Compatibility check** (normative, applied before any stamp):
 1. Pattern family == target family, else reject.
-2. Cyclic: `max(cells) < target.states`, else reject (values outside the target
-   state range would corrupt the world).
+2. Cyclic and Generations: `max(cells) < target.states` (a Generations world's C), else
+   reject (values outside the target state range would corrupt the world).
 3. Life-like: a pattern holding states the target's rule lacks (a
    [History](history.md) pattern under a two-state rule) is converted first, each such
    cell 1 or 0 by its parity (`convert_cells`, [history.md](history.md#two-states-and-seven));
@@ -64,15 +65,20 @@ reads the rule so converted, and so does the encoder: given `23/3`, it writes `B
 
 The two dialects overlap: uppercase `B`/`O` mean dead/alive in two-state files
 but states 2/15 in extended RLE. **Dialect detection** (normative): the pattern
-is extended iff its body contains `.`, or any letter `A`–`X` other than `B`/`O`,
-or its header rule is present and is not a Life-like rule of two states
-([rules.md](rules.md): any of its notations, preset names excluded; a rule with a
-[variant](rules.md#variants), such as `B3/S23History`, makes the file extended).
+is extended iff its body contains `.`, or any letter `A`–`X` other than `B`/`O`, or
+any letter `p`–`y`, or its header rule is present and is not a Life-like rule of two
+states ([rules.md](rules.md): any of its notations, preset names excluded; a rule with a
+[variant](rules.md#variants), such as `B3/S23History`, makes the file extended, and so
+does a [Generations](generations.md) rule).
 Otherwise it is two-state. Then:
 
 - Two-state: `b`/`B` = 0, `o`/`O` = 1.
 - Extended: `.` = 0 (lowercase `b` also accepted as 0, `o` as 1),
-  `A`..`X` = 1..24 (so `B` = 2, `O` = 15).
+  `A`..`X` = 1..24 (so `B` = 2, `O` = 15), and the two-letter tags `pA`..`yO` =
+  25..255: a prefix `p`–`y` and a letter `A`–`X`, the state 24 · (prefix − `o`) +
+  (letter − `A` + 1), so `pA` = 25, `pX` = 48, `qA` = 49 and `yO` = 255 (`y` takes
+  `A`–`O` only). A run count goes before the prefix (`3pA`), whitespace is ignored
+  inside a tag as anywhere, and a prefix not followed by its letter is an error.
 - `$` = end of row (run counts repeat rows) in both dialects.
 
 Rows shorter than the width are padded with 0. The decoded size is the maximum
@@ -107,13 +113,15 @@ It is the decode for loading a pattern file into a world, where what matters is 
 pattern and not the rectangle its author saved around it.
 
 **Encoding** (canonical): header `x = W, y = H, rule = R`; two-state grids
-(max cell ≤ 1) use `b`/`o`; grids with any cell ≥ 2 use `.`/`A`..`X` (cells
-above 24 are unencodable — an error). Runs of length 1 omit the count; trailing
+(max cell ≤ 1) use `b`/`o`; grids with any cell ≥ 2 use `.` and the extended tags,
+`A`..`X` and `pA`..`yO` (every byte is encodable). Runs of length 1 omit the count; trailing
 dead runs in a row are omitted; rows end with `$` (last row with `!`), and k ≥ 2
 consecutive `$` are written as one token `k$`, so a run of empty rows costs one
 token; lines wrap at 70 characters. The header names a Life-like rule in its canonical
 form ([rules.md](rules.md#canonical-form)), so it reads back as the same rule however it
-was spelled (`b3 / s32` is written `B3/S23`), and any other rule as given. Encoding then
+was spelled (`b3 / s32` is written `B3/S23`), a Generations rule in its canonical form
+([generations.md](generations.md#rules); `345/2/4` is written `B2/S345/C4`), and any
+other rule as given. Encoding then
 decoding reproduces the grid exactly. Given [metadata](formats.md#metadata), the
 encoder writes its lines (`#N`, `#O`, then `#C`) before the header; without it, the text
 is exactly the above. Given a [topology](topology.md), the grid is a whole world: the
@@ -200,7 +208,7 @@ torus without a shift wraps; every other topology clips, as dead edges do.
   too, so the pattern's dead cells clear what lies under them. Both are
   two-state operations: every pattern cell, and every target cell the pattern
   lands on, must be 0 or 1, and a stamp that finds another value is an error
-  that changes nothing. The multi-state families (wireworld, cyclic) stamp with
+  that changes nothing. The multi-state families (wireworld, cyclic, generations) stamp with
   `copy` and `or`, and the opaque-only families with `copy` alone.
 - **Clear**`(grid, x0, y0, x1, y1)` — restores every cell of the inclusive
   rectangle to the family **blank** (table above). The blank is a family fact,
@@ -215,8 +223,8 @@ changes nothing, and a region never wraps around a torus. Like stamping, these
 operations leave the generation alone. [HashLife](hashlife.md#editing) has the
 same ones on the unbounded plane.
 
-- **Random fill**`(grid, x0, y0, x1, y1, density, seed)` — life-like only, the
-  one two-state grid family. Every cell of the region becomes the matching cell
+- **Random fill**`(grid, x0, y0, x1, y1, density, seed)` — life-like and
+  generations (whose live cells are state 1), the families of birth and survival. Every cell of the region becomes the matching cell
   of the soup of a world the region's size ([lifelike.md](lifelike.md)
   "Initialization"): [PCG32](rng.md) stream 0 seeded with `seed`, one draw per
   cell of the region in row-major order (y outer, x inner), alive iff
@@ -233,8 +241,8 @@ same ones on the unbounded plane.
   region blank instead, and everything outside the region is copied back; the
   region keeps its cells.
 
-Advance Selection and Advance Outside are defined for life-like, wireworld, and
-cyclic grids. (MergeLife pads its edges with the most common value of the whole
+Advance Selection and Advance Outside are defined for life-like, wireworld, cyclic and
+generations grids. (MergeLife pads its edges with the most common value of the whole
 grid, so no part of a MergeLife world evolves on its own; the continuous
 families don't have them.)
 

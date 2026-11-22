@@ -41,7 +41,7 @@ namespace HeatonLife
 
         public PatternFormat Format { get; }
 
-        /// <summary>Row-major cell values: 0/1, or RLE's states up to 24.</summary>
+        /// <summary>Row-major cell values: 0/1, or RLE's states up to 255.</summary>
         public byte[] Cells { get; }
 
         public int Width { get; }

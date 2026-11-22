@@ -42,8 +42,9 @@ namespace HeatonLife
         /// <summary>Wireworld (spec/wireworld.md), named <c>WireWorld</c>.</summary>
         public static StateRule Wireworld => WireworldRule.Instance;
 
-        /// <summary>The rule a name gives; any text that names no rule throws
-        /// <see cref="ArgumentException"/>.</summary>
+        /// <summary>The rule a name gives: <c>WireWorld</c>, a History rule (spec/history.md), or
+        /// a Generations rule in either spelling (spec/generations.md "Rules"). Any text that
+        /// names no rule throws <see cref="ArgumentException"/>.</summary>
         public static StateRule Compile(string name)
         {
             if (name == null)
@@ -54,9 +55,12 @@ namespace HeatonLife
             HistoryRule? history = HistoryRule.FromText(name);
             if (history != null)
                 return history;
+            // Generations rules, in either spelling (spec/generations.md).
+            if (GenerationsRule.TryCompile(name, out GenerationsRule? generations, out _))
+                return generations;
             throw new ArgumentException(
-                $"'{name}' is not a state rule (known: {WireworldRule.Instance.Canonical}, and History rules "
-                + "such as B3/S23History)",
+                $"'{name}' is not a state rule (known: {WireworldRule.Instance.Canonical}, History rules "
+                + "such as B3/S23History, and Generations rules such as B2/S345/C4)",
                 nameof(name));
         }
 

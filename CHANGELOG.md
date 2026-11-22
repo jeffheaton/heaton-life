@@ -281,6 +281,35 @@ and an RLE header naming any Life-like rule making the file two-state.
   - New vectors: the `lifelike-history/` family, `rules/history*`, and History cases
     under `patterns/`, `render/`, `formats/` and `hashlife-multistate/` (where the plane
     runs beside a History grid inside walls of boundary cells).
+- **Generations** (`heaton_life.ca.Generations`, .NET `Generations`;
+  [spec/generations.md](spec/generations.md)): a grid family whose cells take time to die.
+  A rule pairs any Life-like rule ([spec/rules.md](spec/rules.md)), for births and
+  survival, with a number of states C from 2 to 256: state 1 is alive and 2 … C − 1 are
+  dying; a dying cell counts as a dead neighbor and moves one state on each generation,
+  C − 1 to 0, and a live cell that doesn't survive starts dying. So isotropic, MAP,
+  hexagonal and von Neumann Generations rules come with it, and with C = 2 a rule is its
+  Life-like rule. Rules read in both common spellings, `B2/S345/C4` and survival/birth/count
+  `345/2/4`, are written canonically as `B2/S345/C4`, and every refused text has its reason
+  (`compile_generations_rule`, `try_compile_generations_rule`; .NET
+  `GenerationsRule.Compile` and `TryCompile`). A rule with B0 runs as written. It runs on
+  every topology, with the editing tools of the other grid families: paste modes, Clear,
+  turns, random fill (the life-like soup, each live cell state 1), Advance Selection and
+  Advance Outside (cancelable, as on the other grids), and `set_state` with `keep_start`. A frame fades the dying states toward
+  the background; per-state palettes come later. .NET `Step` and `WriteFrame` allocate
+  nothing.
+- **Generations on the unbounded plane**: a Generations rule is a state rule, so
+  `MultiStateHashLife` runs every one, of any count, named in either spelling, and
+  multi-state Macrocell and RLE files that name one read into it. A rule with B0 is refused
+  there, its background being one that changes. The two-state `HashLife` refuses a
+  Generations rule with that reason, pointing to `MultiStateHashLife`.
+- **RLE states past 24** ([spec/patterns.md](spec/patterns.md)): extended RLE's two-letter
+  tags, `pA` to `yO` for states 25 to 255, read by the grid decoders and by multi-state
+  HashLife, whitespace ignored inside a tag as between tags. A header naming a Generations
+  rule makes a file extended, and a bounded-grid suffix works on it as on any rule:
+  `rule = B2/S345/C4:T64,48` reads as that world.
+- The new `generations/` and `generations-rules/` vectors, and Generations cases in
+  `patterns/`, `formats/` and `hashlife-multistate/`: on the plane a pattern evolves cell
+  for cell as on a grid with dead edges, for as long as it stays inside the grid.
 
 ### Changed
 
@@ -353,6 +382,12 @@ and an RLE header naming any Life-like rule making the file two-state.
   well as a boundary's name; their torus and dead results are unchanged.
 - Python playground: the Life-like and Wireworld forms offer every topology, with its
   shift and axis.
+- **Canonical RLE writes every state up to 255** (`rle_encode`, `Patterns.RleEncode`),
+  those past 24 as two-letter tags. A cell above 24 used to be refused; Python still
+  refuses a value past 255.
+- **Canonical RLE names a Generations rule in its canonical form**, as it does a Life-like
+  rule: a header given `345/2/4` is written `rule = B2/S345/C4`. It used to be written as
+  given.
 
 ## 1.1.0 (2026-09-25)
 

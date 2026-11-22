@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from heaton_life.ca import Cyclic, LifeLike, Wireworld
+from heaton_life.ca import Cyclic, Generations, LifeLike, Wireworld
 from heaton_life.ca._advance import AdvanceRegion
 from heaton_life.ca.hashlife import StepCanceled
 from heaton_life.init import soup
@@ -34,10 +34,16 @@ def _cyclic() -> Cyclic:
     return Cyclic(8, size=(SIZE, SIZE), threshold=2, reach=2, seed=14)
 
 
+def _generations() -> Generations:
+    # Star Wars: births and survival among live cells, dying states between.
+    return Generations("B2/S345/C4", size=(SIZE, SIZE), init="soup", density=0.35, seed=15)
+
+
 WORLDS: dict[str, Callable[[], AdvanceRegion]] = {
     "lifelike": _life,
     "wireworld": _wire,
     "cyclic": _cyclic,
+    "generations": _generations,
 }
 
 

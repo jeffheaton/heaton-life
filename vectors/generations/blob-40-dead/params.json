@@ -1,0 +1,28 @@
+{
+  "checkpoints": [
+    {
+      "file": "state_00000.png",
+      "step": 0
+    },
+    {
+      "file": "state_00001.png",
+      "step": 1
+    },
+    {
+      "file": "state_00010.png",
+      "step": 10
+    }
+  ],
+  "family": "generations",
+  "params": {
+    "boundary": "dead",
+    "density": 0.5,
+    "height": 40,
+    "init": "blob",
+    "rule": "B2/S/C3",
+    "seed": 10,
+    "width": 40
+  },
+  "spec_version": "0.16.0",
+  "tier": "bit-exact"
+}
