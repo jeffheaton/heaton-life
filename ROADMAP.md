@@ -1,6 +1,6 @@
 # Roadmap
 
-Build order for the library — the Python reference implementation, the PyQt6 playground, and the .NET port — sequenced so each phase proves the layer the next one leans on. Phases 0–10 are complete: 1.0.0 of both packages shipped on 2026-08-22 with Phases 0–9, and 1.1.0 carries Phase 10 ([CHANGELOG.md](CHANGELOG.md)); what remains is under "Future work". Every phase also lands its spec pages and conformance vectors — the spec is written *with* the first implementation, not after it.
+Build order for the library — the Python reference implementation, the PyQt6 playground, and the .NET port — sequenced so each phase proves the layer the next one leans on. Phases 0–11 are complete: 1.0.0 of both packages shipped on 2026-08-22 with Phases 0–9, 1.1.0 (2026-09-25) carries Phase 10, and 1.2.0 (2026-11-23) carries Phase 11 ([CHANGELOG.md](CHANGELOG.md)); what remains is under "Future work". Every phase also lands its spec pages and conformance vectors — the spec is written *with* the first implementation, not after it.
 
 ## Phase 0 — Scaffold ✅
 
@@ -120,6 +120,31 @@ Aligning the library with Heaton Fractal's deep zoom, in stages (spec_version 0.
   input's memory as overlapping (numpy#27077) and took a plain C loop, unfused in most
   builds.
 
+## Phase 11 — HashLife, every common rule and file, editing for builders ✅
+
+The unbounded plane and the pattern-building toolkit around it (spec_version 0.13.0 →
+0.16.0, every vector 1.1.0 shipped byte-identical), released as 1.2.0 together with the
+Heaton Life apps that use it (see [CHANGELOG.md](CHANGELOG.md)):
+
+- HashLife ([spec/hashlife.md](spec/hashlife.md)): any Life-like rule, B0 included, on a
+  hash-consed quadtree with big-integer generations, populations and coordinates, a
+  memory budget that changes speed and never results, cancellation, snapshots, views
+  and frames at any distance; and multi-state HashLife for Wireworld, History, Super,
+  Generations and rule tables.
+- Rules ([spec/rules.md](spec/rules.md)): every two-state rule over the 3×3 neighborhood
+  as one 512-entry table (outer-totalistic, isotropic Hensel notation, MAP, hexagonal,
+  von Neumann), with one canonical spelling; the History and Super variants,
+  Generations, Larger than Life, and rule tables from any `.rule` file; the Life-like,
+  Generations, Larger than Life, rule-table and Wireworld grids on every topology.
+- Files ([spec/formats.md](spec/formats.md)): RLE, Macrocell (with rule tables and
+  timelines), MCell, plaintext, Life 1.05 and 1.06, PNG and BMP, recognized by content,
+  gzip or not, measured before they are read, with their metadata.
+- Editing for builders: paste modes, turns both ways, flips, random fill, Advance
+  Selection and Advance Outside, and HashLife rectangle tools that never make a dense
+  copy.
+- The evolver's restart search (PCG32 stream 2), per-state palettes, and a 22nd
+  self-check, `hashlife`.
+
 ## Future work
 
 - Fractals: progressive refinement with cancellation in the playground; optional
@@ -128,8 +153,9 @@ Aligning the library with Heaton Fractal's deep zoom, in stages (spec_version 0.
   rendering movies in the .NET port, where the Unity app would use them.
 - Boids spatial hash if flocks ever need >2k; Lenia multi-channel; Orbium and
   friends as stampable Lenia creatures; MP4/GIF export buttons in the playground.
-- Python 3.13+ in the classifiers once the suite has run there; a project-scoped
-  PyPI token in place of the account-scoped one used for the first upload.
+- A pattern catalog: a builder's parts bin and starters for every new family, which
+  the apps' zoo categories and search would draw on; then builder conveniences that
+  make the library a stronger substitute for scripting.
 
 ## Cross-cutting rules
 

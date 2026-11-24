@@ -63,6 +63,7 @@ server can step into the library's source.
 ```csharp
 using System;
 using System.IO;
+using System.Numerics;
 using HeatonLife;
 
 // A Life-like automaton from a random soup, stepped 500 generations and saved as a PNG.
@@ -88,6 +89,16 @@ double[] field = mandelbrot.Render(1920, 1080, new Viewport(
     zoomLog10: 14.0));
 File.WriteAllBytes("deep.png",
     PngGrid.EncodeRgb(Colormaps.ApplyFloat(field, Colormaps.Get("fire")), 1920, 1080));
+
+// HashLife: the Gosper glider gun on an unbounded plane. One step can jump any number of
+// generations, and populations and coordinates are exact BigIntegers. Any pattern file
+// loads the same way (HashLife.Load reads RLE, Macrocell, plaintext, Life 1.05/1.06, PNG,
+// and BMP bytes, gzip-compressed or not).
+var gun = HashLife.FromRle(
+    "x = 36, y = 9, rule = B3/S23\n24bo$22bobo$12b2o6b2o12b2o$11bo3bo4b2o12b2o$" +
+    "2o8bo5bo3b2o$2o8bo3bob2o4bobo$10bo5bo7bo$11bo3bo$12b2o!");
+gun.Step(BigInteger.Pow(10, 12));
+Console.WriteLine($"{gun.Generation} {gun.Population}");   // 1000000000000 166666666713
 
 // Evolve MergeLife rules with the paper's objective, reproducible from a seed:
 var best = new Evolver(width: 64, height: 64, populationSize: 20, seed: 42).Run(maxEvals: 200);
@@ -133,7 +144,7 @@ color at every zoom, so a dive does not flicker the way a per-frame stretch does
 The identical results rest on IEEE-754 double arithmetic with no fused multiply-add
 contraction, no flush-to-zero, and no extended precision. A host that runs the library
 somewhere unusual (Unity's IL2CPP on a phone, Mono, WebGL) can confirm that its runtime
-keeps that contract with the platform self-check: 21 checks against answers embedded in
+keeps that contract with the platform self-check: 22 checks against answers embedded in
 the assembly, needing no files and taking well under a second on a phone. Run it once,
 and off the main thread wherever the host has threads (WebGL has none, so there it runs
 on the main thread):
@@ -158,8 +169,7 @@ bool deepZoomSafe = SelfCheck.Passed(results, SelfCheckScope.T1 | SelfCheckScope
 
 # Development
 
-Working on the library itself, from the checks to cutting a release, is covered in
-the [development guide](https://github.com/jeffheaton/heaton-life/blob/main/dotnet/DEVELOPMENT.md):
-the build, format, and test gates, how the specifications and conformance vectors
-shape every change, the parity rules with the Python implementation, and the release
-workflow.
+To work on the library itself, see the
+[development guide](https://github.com/jeffheaton/heaton-life/blob/main/dotnet/DEVELOPMENT.md).
+It covers building, running the checks, keeping the port in step with the Python
+implementation, and making a release.

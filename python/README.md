@@ -68,6 +68,17 @@ field = frac.render((1920, 1080), hl.Viewport(
 ))
 hl.render.to_image(field, cmap="fire").save("deep.png")
 
+# HashLife: the Gosper glider gun on an unbounded plane. One step can jump any number
+# of generations, and populations and coordinates are exact integers. Any pattern file
+# loads the same way (hl.ca.HashLife.from_file reads RLE, Macrocell, plaintext, Life
+# 1.05/1.06, PNG, and BMP, gzip-compressed or not).
+gun = hl.ca.HashLife.from_rle(
+    "x = 36, y = 9, rule = B3/S23\n24bo$22bobo$12b2o6b2o12b2o$11bo3bo4b2o12b2o$"
+    "2o8bo5bo3b2o$2o8bo3bob2o4bobo$10bo5bo7bo$11bo3bo$12b2o!"
+)
+gun.step(10**12)
+print(gun.generation, gun.population)   # 1000000000000 166666666713, in a fraction of a second
+
 # Zoom movie: each frame's iteration budget measured down the descent, colors that
 # hold still, frames streamed to disk (an .mp4 needs the video extra; any other path
 # is a folder of PNG frames):
@@ -92,7 +103,7 @@ The identical results rest on IEEE-754 double arithmetic with no fused multiply-
 contraction and no flush-to-zero, and on NumPy fusing its complex multiply the way the
 specifications assume. To confirm that your own installation keeps that contract (an
 unusual NumPy build, or a process that has loaded a library compiled with
-`-ffast-math`), run the platform self-check: 21 checks against answers embedded in the
+`-ffast-math`), run the platform self-check: 22 checks against answers embedded in the
 package, in well under a second.
 
 ```python
@@ -109,8 +120,8 @@ pip install "heaton-life[playground]"
 heaton-life                        # or: python -m heaton_life.playground
 ```
 
-Space = play/pause, N = single step, R = reset, Ctrl+S = save PNG. The parameter
-form is generated from each family's params dataclass — new families get a UI for free.
+Space plays and pauses, N steps once, R resets, and Ctrl+S saves a PNG. Every system's
+parameters can be changed while it runs.
 
 # Helpful Links
 
@@ -123,8 +134,6 @@ form is generated from each family's params dataclass — new families get a UI 
 
 # Development
 
-Working on the library itself, from setting up the environment to cutting a
-release, is covered in the
-[development guide](https://github.com/jeffheaton/heaton-life/blob/main/python/DEVELOPMENT.md):
-the lint, type, and test checks, how the specifications and conformance vectors
-shape every change, adding a family, the tools, and the release workflows.
+To work on the library itself, see the
+[development guide](https://github.com/jeffheaton/heaton-life/blob/main/python/DEVELOPMENT.md).
+It covers setting up, running the checks, adding a new system, and making a release.
