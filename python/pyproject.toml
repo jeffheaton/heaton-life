@@ -5,13 +5,13 @@ build-backend = "hatchling.build"
 [project]
 name = "heaton-life"
 version = "1.2.0"
-description = "Explore emergence in Python: cellular automata (MergeLife, Life-like, Elementary, Cyclic, Wireworld), Lenia, deep-zoom fractals, boids, and Gray-Scott reaction-diffusion under one deterministic API, rendered to images, GIFs, and MP4s, with a MergeLife evolver and a PyQt6 playground."
+description = "Explore emergence in Python: cellular automata (MergeLife, Life-like with History and Super, Generations, Larger than Life, rule tables, Elementary, Cyclic, Wireworld), HashLife on an unbounded plane, Lenia, deep-zoom fractals, boids, and Gray-Scott reaction-diffusion under one deterministic API, with pattern files in every common format, rendering to images, GIFs, and MP4s, a MergeLife evolver, and a PyQt6 playground."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Jeff Heaton", email = "jeff@jeffheaton.com" }]
-keywords = ["cellular-automata", "lenia", "fractals", "boids", "reaction-diffusion", "mergelife", "emergence", "artificial-life"]
+keywords = ["cellular-automata", "game-of-life", "hashlife", "lenia", "fractals", "boids", "reaction-diffusion", "mergelife", "emergence", "artificial-life"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
